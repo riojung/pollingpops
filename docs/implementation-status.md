@@ -8,6 +8,51 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B remaining software follow-ups November 11, 2026
+
+The `codex/option-b-remaining` source preserves Pack practice work and implements the last
+two software follow-ups named in the prior checkpoint: shared practice management and
+creation-locale templates/defaults. Shared practice now has grouped responsive sections,
+ten-locale feedback/date/count rendering, and actor/permission/stale-response guards.
+All 21 Presentation templates and 36 Round starters (17 Survey-compatible) create localized
+editable content in the ten supported languages, with English as default. Presentation
+catalogs load individually. Newly created question/data/Pack headings and local question
+starter scaffolds capture their creation language; UI language changes preserve existing
+content, frozen sources, private links, previews, pending bodies and retry identities.
+
+The [implementation record](option-b-ux-implementation.md#remaining-software-follow-ups--november-11-2026)
+records exact scope and final validation. The repository gate passes **8,339 tests** with
+513 standard opt-in skips, all four production builds and compiled-server startup. All
+**12 distinct selected production-browser cases** pass across desktop Chromium and 320px
+Chromium/WebKit phone viewports, including Axe/overflow and exact-request recovery checks.
+Native-language review, customer observation,
+manual accessibility/device checks, hosted qualification and deferred public launch content
+remain open; the release ledger retains **0 complete / 15 pending** gates.
+
+### Option B Pack practice November 11, 2026
+
+The `codex/option-b-pack-practice` source extends all ten configured UI locales to Pack
+practice setup, frozen previews, private-link receipts and source attribution in Assignments
+and Results, with English as default. Known setup diagnostics follow the selected language;
+unknown diagnostics retain their original English text. Form values, English title defaults,
+authored content, published source identity, private URLs and downloaded CSV bytes retain
+their meanings. Changing language preserves form state, pending creation and exact retry
+identity. Receipt feedback follows the selected language without recopying, refocusing or
+recording a share event. Scoped layout and focus styles accommodate long content and labels.
+
+The repository gate passes 8,160 tests with 513 standard opt-in skips, all four production
+build tasks and compiled-server startup. After browser testing exposed a German visible-label/
+accessible-name mismatch, collection view controls now use matching full labels across all
+ten locales. Final verification passes all 394 web suites / 4,287 tests, web types, scoped
+lint and fresh normal/beta production web builds. Twelve distinct selected production-browser
+cases pass across desktop Chromium and 320px phone Chromium/WebKit, including the new
+localized creation/receipt journey and unchanged Pack practice regressions. The
+[implementation record](option-b-ux-implementation.md#pack-practice-follow-up--november-11-2026)
+records the verification scope. Shared `/practice/[id]` management and creation-locale
+templates/default content remain implementation follow-ups. Hosted qualification, customer
+observation, native-language review, manual accessibility/physical-device checks and the
+deferred launch-facing content remain release work.
+
 ### Round live workspace refinement November 11, 2026
 
 The `codex/round-live-workspace` source improves the Round host and participant layouts.

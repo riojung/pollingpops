@@ -1217,7 +1217,9 @@ export function NativeSceneEditor({
             <button
               type="button"
               disabled={!canAdd}
-              onClick={(event) => insertFromMenu(createNativeTableNode(), event?.currentTarget)}
+              onClick={(event) =>
+                insertFromMenu(createNativeTableNode(locale), event?.currentTarget)
+              }
             >
               <EditorIcon name="table" />
               <span>{copy("Add table")}</span>
@@ -1228,7 +1230,7 @@ export function NativeSceneEditor({
                 type="button"
                 disabled={!canAdd}
                 onClick={(event) =>
-                  insertFromMenu(createNativeChartNode(kind), event?.currentTarget)
+                  insertFromMenu(createNativeChartNode(kind, locale), event?.currentTarget)
                 }
               >
                 <EditorIcon name="chart" />

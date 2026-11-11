@@ -661,4 +661,29 @@ describe("reviewed local question starters", () => {
       expect(starters).toEqual(snapshot);
     },
   );
+  it("captures the opening language, retains it through a locale change and uses the new language on reopening", () => {
+    const h = harness("ko-KR");
+    h.open();
+    const reviewed = h.nodes.find((node) => node.type === QuestionStarterPreview)!.props
+      .starter as ReturnType<typeof createPresentationQuestionStarters>[number];
+    expect(reviewed.creationLocale).toBe("ko-KR");
+    expect(reviewed.prompt).toContain("어떤 질문이나 의견");
+    h.props.locale = "fr-FR";
+    h.render();
+    h.flush();
+    expect(h.nodes.find((node) => node.type === QuestionStarterPreview)!.props.starter).toBe(
+      reviewed,
+    );
+    (
+      h.button(questionStartersCopy("fr-FR")("Insert reviewed question")).props
+        .onClick as () => void
+    )();
+    h.flush();
+    expect(h.props.onInsert).toHaveBeenCalledWith(reviewed);
+    h.open();
+    const fresh = h.nodes.find((node) => node.type === QuestionStarterPreview)!.props
+      .starter as typeof reviewed;
+    expect(fresh.creationLocale).toBe("fr-FR");
+    expect(fresh.prompt).toContain("Quelles questions");
+  });
 });

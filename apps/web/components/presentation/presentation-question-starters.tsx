@@ -110,7 +110,7 @@ export function QuestionStarterPreview({
             ? copy("Clarity rating")
             : copy("Priority poll")}
       </p>
-      <p className={styles.prompt} lang="en-CA">
+      <p className={styles.prompt} lang={starter.creationLocale ?? "en-CA"}>
         {prompt}
       </p>
       <p className={styles.settings}>{copy("Opinion · 0 points · no correct answer")}</p>
@@ -130,13 +130,13 @@ export function QuestionStarterPreview({
         <dl className={styles.rating}>
           <div>
             <dt>{copy("Lowest value")}</dt>
-            <dd lang="en-CA">
+            <dd lang={starter.creationLocale ?? "en-CA"}>
               {starter.rating.min} — {starter.rating.minLabel}
             </dd>
           </div>
           <div>
             <dt>{copy("Highest value")}</dt>
-            <dd lang="en-CA">
+            <dd lang={starter.creationLocale ?? "en-CA"}>
               {starter.rating.max} — {starter.rating.maxLabel}
             </dd>
           </div>
@@ -223,7 +223,10 @@ export function PresentationQuestionStarters(props: Props) {
   }
   function suggest() {
     if (!mounted.current || latest.current.disabled || active.current) return;
-    const starters = createPresentationQuestionStarters(latest.current.block);
+    const starters = createPresentationQuestionStarters(
+      latest.current.block,
+      latest.current.locale ?? "en-CA",
+    );
     if (!starters.length) {
       setError(
         presentationQuestionStarterAvailability(latest.current.block).reason ??
@@ -329,7 +332,7 @@ export function PresentationQuestionStarters(props: Props) {
           </p>
           <p className={styles.help}>
             {copy(
-              "Created locally. No AI service or allowance is used. Prompts use English scaffolding and your slide’s wording. Other objects, images, tables, charts and closed interaction content are not interpreted.",
+              "Created locally. No AI service or allowance is used. Prompts use the language selected when you open this review and your slide’s exact wording. Other objects, images, tables, charts and closed interaction content are not interpreted.",
             )}
           </p>
           <fieldset className={styles.choices} disabled={!current}>

@@ -1,5 +1,6 @@
 import {
   PresentationDraftSchema,
+  type SupportedLocale,
   type ContentSlideDraft,
   type PresentationDraft,
   type PresentationScene,
@@ -10,6 +11,7 @@ import {
 } from "@openround/contracts";
 import content from "./presentation-native-template-content.json";
 import { clientUuid } from "./uuid";
+import { presentationTemplateLocaleCatalog } from "./presentation-template-locales";
 
 const scenarioLabels = {
   "native-startup-pitch": "Startup pitch",
@@ -73,14 +75,89 @@ export function isNativePresentationTemplateId(id: string): id is NativePresenta
   return Object.hasOwn(scenarioLabels, id);
 }
 
-function templateFor(id: NativePresentationTemplateId) {
-  const template = nativePresentationTemplates.find((entry) => entry.id === id);
+function localizeNativeTemplate(
+  template: NativePresentationTemplate,
+  templateIndex: number,
+  locale: SupportedLocale,
+): NativePresentationTemplate {
+  const catalog = presentationTemplateLocaleCatalog(locale);
+  if (!catalog) return structuredClone(template);
+  const localized = catalog.native[templateIndex]!;
+  return {
+    ...template,
+    title: localized.title,
+    description: localized.description,
+    scenarioLabel: localized.scenarioLabel,
+    blocks: template.blocks.map((block, slideIndex) => {
+      const copy = localized.slides[slideIndex]!;
+      const extra = catalog.nativeData[`${templateIndex}.${slideIndex}`] ?? [];
+      let cursor = 0;
+      const text = (value: string): string => {
+        // Preserve actual figures and currency tokens; every word-bearing label is authored.
+        if (/^[\d\s$%,.–—:+/()-]+$/u.test(value)) return value;
+        const translated = extra[cursor++];
+        if (!translated)
+          throw new Error(`Incomplete ${locale} template data: ${template.id}/${slideIndex}`);
+        return translated;
+      };
+      const result = {
+        ...structuredClone(block),
+        ...copy,
+        ...(block.columns ? { columns: block.columns.map(text) } : {}),
+        ...(block.illustrativeTable
+          ? {
+              illustrativeTable: {
+                caption: text(block.illustrativeTable.caption),
+                headers: block.illustrativeTable.headers.map(text),
+                rows: block.illustrativeTable.rows.map((row) => row.map(text)),
+              },
+            }
+          : {}),
+        ...(block.illustrativeChart
+          ? {
+              illustrativeChart: {
+                ...block.illustrativeChart,
+                title: text(block.illustrativeChart.title),
+                summary: text(block.illustrativeChart.summary),
+                categories: block.illustrativeChart.categories.map(text),
+                series: block.illustrativeChart.series.map((series) => ({
+                  ...series,
+                  name: text(series.name),
+                  values: [...series.values],
+                })),
+              },
+            }
+          : {}),
+      };
+      if (cursor !== extra.length)
+        throw new Error(`Unexpected ${locale} template data: ${template.id}/${slideIndex}`);
+      return result;
+    }),
+  };
+}
+
+/** Derive gallery/creation copy without mutating either catalog or any stored draft. */
+export function nativePresentationTemplatesForLocale(
+  locale: SupportedLocale = "en-CA",
+): readonly NativePresentationTemplate[] {
+  return nativePresentationTemplates.map((template, index) =>
+    localizeNativeTemplate(template, index, locale),
+  );
+}
+
+/** Select before deriving copy so one thumbnail or creation never rebuilds unrelated scenarios. */
+export function nativePresentationTemplateForLocale(
+  id: NativePresentationTemplateId,
+  locale: SupportedLocale = "en-CA",
+): NativePresentationTemplate {
+  const index = nativePresentationTemplates.findIndex((entry) => entry.id === id);
+  const template = nativePresentationTemplates[index];
   if (!template) throw new Error("Presentation template not found");
-  return template;
+  return localizeNativeTemplate(template, index, locale);
 }
 
 function openingSentence(body: string) {
-  const sentence = /^.*?[.!?](?=\s|$)/u.exec(body)?.[0];
+  const sentence = /^.*?(?:[.!?](?=\s|$)|[。！？])/u.exec(body)?.[0];
   return sentence ?? body;
 }
 
@@ -88,6 +165,7 @@ function createSlide(
   template: NativePresentationTemplate,
   copy: NativeTemplateSlide,
   createId: () => string,
+  locale: SupportedLocale = "en-CA",
 ): ContentSlideDraft {
   const hasData = Boolean(copy.illustrativeTable || copy.illustrativeChart);
   const hasChart = Boolean(copy.illustrativeChart);
@@ -141,7 +219,7 @@ function createSlide(
     const gap = 4;
     const width = (86 - gap * (copy.columns.length - 1)) / copy.columns.length;
     copy.columns.forEach((text, index) => {
-      const colon = text.indexOf(":");
+      const colon = text.search(/[:：]/u);
       nodes.push({
         id: createId(),
         type: "text",
@@ -187,7 +265,7 @@ function createSlide(
     speakerNotes:
       !hasChart && lead === copy.body
         ? copy.notes
-        : `${copy.body}\n\nPresenter notes: ${copy.notes}`,
+        : `${copy.body}\n\n${presentationTemplateLocaleCatalog(locale)?.presenterNotes ?? "Presenter notes:"} ${copy.notes}`,
     scene,
   };
 }
@@ -196,8 +274,9 @@ function createSlide(
 export function instantiateNativePresentationTemplate(
   id: NativePresentationTemplateId,
   createId: () => string = clientUuid,
+  locale: SupportedLocale = "en-CA",
 ): PresentationDraft {
-  const template = templateFor(id);
+  const template = nativePresentationTemplateForLocale(id, locale);
   return PresentationDraftSchema.parse({
     title: template.title,
     description: template.description,
@@ -206,17 +285,18 @@ export function instantiateNativePresentationTemplate(
       id: template.category === "business" ? "studio" : "focus",
       version: 1,
     },
-    blocks: template.blocks.map((block) => createSlide(template, block, createId)),
+    blocks: template.blocks.map((block) => createSlide(template, block, createId, locale)),
   });
 }
 
 /** Deterministic read-only thumbnail IDs keep server rendering and hydration identical. */
 export function nativePresentationTemplateThumbnail(
   id: NativePresentationTemplateId,
+  locale: SupportedLocale = "en-CA",
 ): ContentSlideDraft {
   const index = nativePresentationTemplates.findIndex((template) => template.id === id);
   let sequence = (index + 1) * 1_000;
   const createId = () => `00000000-0000-4000-8000-${(++sequence).toString(16).padStart(12, "0")}`;
-  const template = templateFor(id);
-  return createSlide(template, template.blocks[0]!, createId);
+  const template = nativePresentationTemplateForLocale(id, locale);
+  return createSlide(template, template.blocks[0]!, createId, locale);
 }

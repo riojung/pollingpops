@@ -1,0 +1,1332 @@
+{
+  "presenterNotes": "Note per chi presenta:",
+  "facilitatedScenario": "Apprendimento e discussione facilitati",
+  "pollExplanation": "Usa la distribuzione delle risposte per discutere e concordare il prossimo passo.",
+  "scaleExplanation": "Usa gli estremi della scala per individuare supporto e prossimi passi.",
+  "native": [
+    {
+      "title": "HarborTask: riparazioni con responsabilità chiare",
+      "description": "Presentazione di un'impresa fittizia per laboratori condivisi. Domanda, prezzi e dati pilota sono ipotesi illustrative.",
+      "scenarioLabel": "Presentazione di startup",
+      "slides": [
+        {
+          "title": "Una richiesta, un responsabile",
+          "body": "HarborTask propone una coda visibile di riparazioni per piccoli laboratori condivisi.",
+          "notes": "Adatta il pubblico e dichiara che il servizio è proposto."
+        },
+        {
+          "title": "Tra un messaggio e l'altro",
+          "body": "Una sedia viene segnalata tre volte; una lampada resta senza responsabile.",
+          "notes": "Sostituisci gli episodi inventati con osservazioni autorizzate."
+        },
+        {
+          "title": "Rendere visibile la domanda",
+          "body": "18, 27 e 35 richieste settimanali sono carichi inventati, non domanda verificata.",
+          "notes": "Definisci la richiesta e usa conteggi documentati prima di generalizzare."
+        },
+        {
+          "title": "Tre passaggi chiari",
+          "body": "Registra contesto, assegna responsabilità e documenta la soluzione; rendi visibili le attese.",
+          "notes": "Mostra tutti i passaggi con una sola richiesta."
+        },
+        {
+          "title": "Confrontare le alternative",
+          "body": "Una coda condivisa potrebbe chiarire le responsabilità con meno configurazione.",
+          "notes": "I vantaggi sono ipotesi, non superiorità dimostrata."
+        },
+        {
+          "title": "Un'ipotesi commerciale",
+          "body": "Un pilota assistito di sei settimane precede una quota fissa proposta per sede.",
+          "notes": "Distingui ipotesi di prezzo, contratti e ricavi."
+        },
+        {
+          "title": "Provare comportamenti, non complimenti",
+          "body": "Misura assegnazioni, richieste ferme e impegno; conserva un'uscita se il costo aumenta.",
+          "notes": "Concorda misure, responsabili e verifica prima del pilota."
+        },
+        {
+          "title": "Una collaborazione delimitata",
+          "body": "Cerca sponsor e referente operativo per decidere il pilota di sei settimane.",
+          "notes": "L'espansione dipende dalle prove del pilota."
+        }
+      ]
+    },
+    {
+      "title": "Northline Museum: preparare la visita",
+      "description": "Proposta per un museo fittizio. Ambito, compensi e tempi sono esempi, non un preventivo reale.",
+      "scenarioLabel": "Proposta al cliente",
+      "slides": [
+        {
+          "title": "Una prima visita serena",
+          "body": "Collega orari, accessibilità, trasporti e biglietti in un percorso comprensibile.",
+          "notes": "Adatta museo e decisione richiesta al cliente."
+        },
+        {
+          "title": "Partire dalla visita",
+          "body": "Un'uscita del sabato con bambino e accesso senza gradini richiede risposte pratiche.",
+          "notes": "Dichiara lo scenario fittizio e verifica gli accessi reali."
+        },
+        {
+          "title": "Delimitare l'ambito",
+          "body": "La visita è inclusa; ricerca delle collezioni, iscrizioni e nuova identità restano esclusi.",
+          "notes": "Conferma esclusioni contrattuali e dipendenze."
+        },
+        {
+          "title": "Risultati legati alle decisioni",
+          "body": "Approva la struttura prima delle schermate e le attività prima del lancio.",
+          "notes": "Nomina revisori e consolida i riscontri."
+        },
+        {
+          "title": "Cinque settimane indicative",
+          "body": "Ricerca, struttura, prototipo, assistenza tecnica e controlli occupano cinque settimane.",
+          "notes": "Adatta il calendario a contenuti e disponibilità del cliente."
+        },
+        {
+          "title": "Scegliere l'assistenza",
+          "body": "Confronta consegna del progetto e implementazione assistita; licenze e gestione continuativa sono escluse.",
+          "notes": "Sostituisci gli importi con un preventivo autorizzato."
+        },
+        {
+          "title": "Risolvere i rischi prima delle promesse",
+          "body": "Contenuti, biglietteria e accesso al sito richiedono responsabili e alternative.",
+          "notes": "Specifica dipendenze, impatti e modalità di escalation."
+        },
+        {
+          "title": "Decidere e iniziare",
+          "body": "Scegli opzione, responsabile cliente, esclusioni e prima sessione operativa.",
+          "notes": "Documenta l'ambito; una discussione non è un contratto."
+        }
+      ]
+    },
+    {
+      "title": "Migrazione Canopy: aggiornamento per decidere",
+      "description": "Aggiornamento su un portale interno fittizio. Conteggi e date sono dati illustrativi di pianificazione.",
+      "scenarioLabel": "Aggiornamento del progetto",
+      "slides": [
+        {
+          "title": "La decisione sugli accessi è aperta",
+          "body": "La mappa dei contenuti è pronta, il pilota avanza e le regole d'accesso attendono approvazione.",
+          "notes": "Sostituisci lo stato con prove attuali del progetto."
+        },
+        {
+          "title": "Dall'ultima verifica",
+          "body": "Inventario e pilota avanzano; emergono regole d'accesso discordanti.",
+          "notes": "Documenta l'avanzamento e distingui scoperte da ampliamenti dell'ambito."
+        },
+        {
+          "title": "Avanzamento rispetto al piano",
+          "body": "Ricerca e mappatura sono complete; migrazione pilota parziale e rilascio in attesa.",
+          "notes": "Definisci le unità accettate prima del confronto."
+        },
+        {
+          "title": "Il lavoro residuo è una previsione",
+          "body": "Quattro verifiche seguono un insieme fisso; un calo lento invita a esaminare i blocchi.",
+          "notes": "Mostra variazioni d'ambito ed evita giudizi sulle persone."
+        },
+        {
+          "title": "Serve una decisione della direzione",
+          "body": "Sospendi solo le pagine coinvolte e assegna l'approvazione del modello d'accesso.",
+          "notes": "Spiega costo dell'attesa e questioni di sicurezza aperte."
+        },
+        {
+          "title": "Le prossime due settimane",
+          "body": "Approva accessi, completa i controlli pilota e prova un ripristino.",
+          "notes": "Conferma responsabilità e date effettive."
+        },
+        {
+          "title": "Cosa cambierebbe la previsione",
+          "body": "Si ipotizzano ambito stabile e revisione entro due giorni lavorativi.",
+          "notes": "Dichiara ipotesi verificabili e condizioni di ripianificazione."
+        },
+        {
+          "title": "Confermare e proseguire",
+          "body": "Nomina l'approvatore e conferma il perimetro pilota; poi riporta esiti e prove di ripristino.",
+          "notes": "Registra decisione, scadenza e canale di aggiornamento."
+        }
+      ]
+    },
+    {
+      "title": "Aster: concentrarsi prima di ampliare",
+      "description": "Strategia trimestrale di un rivenditore fittizio di accessori riparabili. Capacità e obiettivi sono illustrativi.",
+      "scenarioLabel": "Strategia trimestrale",
+      "slides": [
+        {
+          "title": "Un riacquisto affidabile",
+          "body": "Aster migliora comprensione, acquisto e assistenza; una nuova categoria viene rinviata.",
+          "notes": "Dichiara anche quali iniziative aspetteranno."
+        },
+        {
+          "title": "Partire dai vincoli",
+          "body": "Prodotto, contenuti e assistenza non possono valutare tutto contemporaneamente.",
+          "notes": "Distingui limiti misurati e ipotesi."
+        },
+        {
+          "title": "Un solo percorso cliente",
+          "body": "Collega comprensione del prodotto, scelta d'acquisto e assistenza dopo la consegna.",
+          "notes": "Usa un prodotto concreto e azioni assegnabili."
+        },
+        {
+          "title": "Allocare prima di promettere",
+          "body": "Su 100 unità illustrative, 50 vanno all'acquisto, 30 all'assistenza e 20 alle operazioni.",
+          "notes": "Non sono ore misurate né budget approvato."
+        },
+        {
+          "title": "Risultati verificabili",
+          "body": "Definisci domande sul prodotto, dubbi d'acquisto e richieste di cura prima degli obiettivi.",
+          "notes": "Misura i valori iniziali senza inventarli."
+        },
+        {
+          "title": "Imparare guida la sequenza",
+          "body": "Raccogli la base, prova un prodotto ed estendi soltanto i cambiamenti utili.",
+          "notes": "Fissa una verifica precoce capace di fermare lavoro inutile."
+        },
+        {
+          "title": "Regole per mantenere il focus",
+          "body": "Sospendi l'espansione se l'assistenza satura, mancano ricambi o aumenta la confusione.",
+          "notes": "Concorda condizioni e responsabile della decisione."
+        },
+        {
+          "title": "Approvare e verificare",
+          "body": "Conferma tre priorità, capacità operativa protetta e verifica mensile delle prove.",
+          "notes": "Nomina sponsor e prima revisione."
+        }
+      ]
+    },
+    {
+      "title": "Cedar Station: spiegare l'orientamento",
+      "description": "Caso di progettazione fittizio su decisioni e valutazione, senza inventare risultati dei clienti.",
+      "scenarioLabel": "Caso di portfolio",
+      "slides": [
+        {
+          "title": "Capire il prossimo passo",
+          "body": "Aiuta chi arriva a trovare il binario e reagire ai cambi di percorso.",
+          "notes": "Indica ruolo personale e natura reale o speculativa del progetto."
+        },
+        {
+          "title": "Ruolo e confini",
+          "body": "Gerarchia, prototipi e valutazione spettano al progetto; lavori e politica sono dipendenze.",
+          "notes": "Attribuisci correttamente contributi e vincoli."
+        },
+        {
+          "title": "Attività prima dello stile",
+          "body": "Trovare binario, cambiare servizio e chiedere aiuto guidano la ricerca proposta.",
+          "notes": "Distingui metodi previsti e ricerca davvero svolta."
+        },
+        {
+          "title": "Individuare vuoti informativi",
+          "body": "Il numero precede la direzione e il cambio senza gradini resta poco chiaro.",
+          "notes": "Usa osservazioni tracciabili, senza citazioni inventate."
+        },
+        {
+          "title": "Una gerarchia ripetibile",
+          "body": "Destinazione, percorso e dettaglio; il colore aiuta senza essere l'unico significato.",
+          "notes": "Mostra un prototipo autorizzato e spiega la gerarchia."
+        },
+        {
+          "title": "Confrontare senza risultati inventati",
+          "body": "Direzione visibile, percorso accessibile nominato e aiuto coerente sono proposte.",
+          "notes": "Descrivi gli effetti come ipotesi da verificare."
+        },
+        {
+          "title": "Valutare la navigazione",
+          "body": "Osserva svolte errate, richieste d'aiuto e comprensione dell'accessibilità in sicurezza.",
+          "notes": "Non presentare osservazioni previste come risultati."
+        },
+        {
+          "title": "Cosa dimostra il caso",
+          "body": "Inquadramento, gerarchia e piano di valutazione guidano la prossima iterazione.",
+          "notes": "Concludi con contributo, limite e apprendimento documentabile."
+        }
+      ]
+    },
+    {
+      "title": "Piccole decisioni, conseguenze visibili",
+      "description": "Intervento sui registri decisionali con una biblioteca fittizia. Nessuna attività obbligatoria del pubblico.",
+      "scenarioLabel": "Intervento a un evento",
+      "slides": [
+        {
+          "title": "Le conseguenze proseguono",
+          "body": "Una biblioteca confronta nuovo strumento, processo semplificato e pilota manuale.",
+          "notes": "Dichiara la finzione e cosa serve imparare."
+        },
+        {
+          "title": "Tre domande diverse",
+          "body": "Meno amministrazione, disponibilità chiara e supporto rappresentano obiettivi differenti.",
+          "notes": "Racconta preoccupazioni senza inventare citazioni personali."
+        },
+        {
+          "title": "Una decisione con responsabile",
+          "body": "Un pilota di prestito di quattro settimane sarà verificato dal coordinamento del servizio.",
+          "notes": "Specifica scelta, responsabile e termine."
+        },
+        {
+          "title": "Domande di confronto comuni",
+          "body": "Confronta configurazione, attenzione continua e reversibilità delle tre opzioni.",
+          "notes": "I giudizi sono illustrativi, non confronti misurati."
+        },
+        {
+          "title": "L'incertezza diventa un compito",
+          "body": "Osserva disponibilità e impegno prima di assumere obblighi maggiori.",
+          "notes": "Cerca prove capaci di cambiare la scelta."
+        },
+        {
+          "title": "Una pagina per iniziare",
+          "body": "Registra decisione, alternative, motivi, responsabile, revisione e segnale di riesame.",
+          "notes": "Mostra come un collega futuro capirebbe il ragionamento."
+        },
+        {
+          "title": "Documentazione proporzionata",
+          "body": "Una scelta reversibile richiede brevità; accesso, denaro e responsabilità maggiore chiarezza.",
+          "notes": "Mostra un caso leggero e uno più impegnativo."
+        },
+        {
+          "title": "Facilitare la decisione successiva",
+          "body": "Risultato, incertezza e motivi conducono a un pilota delimitato e alla verifica.",
+          "notes": "Invita una riflessione privata senza risposta obbligatoria."
+        }
+      ]
+    },
+    {
+      "title": "Mapline: dalla richiesta alla chiusura",
+      "description": "Dimostrazione di uno spazio fittizio per passaggi di responsabilità. Funzioni e registrazioni sono illustrative.",
+      "scenarioLabel": "Dimostrazione del prodotto",
+      "slides": [
+        {
+          "title": "Un compito, un risultato visibile",
+          "body": "Mapline segue una richiesta fittizia di allestimento sala fino alla chiusura esplicita.",
+          "notes": "Distingui funzioni disponibili, sperimentali e proposte."
+        },
+        {
+          "title": "Preparare un caso leggibile",
+          "body": "Data, coordinamento, contatto sala e lista di controllo definiscono un evento inventato.",
+          "notes": "Prepara dati autorizzati senza informazioni personali."
+        },
+        {
+          "title": "Raccogliere contesto sufficiente",
+          "body": "Descrivi risultato, tempi, accesso e disposizione invece di un titolo vago.",
+          "notes": "Mostra campi reali oppure chiarisci che è un concetto."
+        },
+        {
+          "title": "Rendere visibile il responsabile",
+          "body": "Il coordinamento assegna al contatto sala e indica il prossimo aggiornamento.",
+          "notes": "Spiega permessi e notifiche reali senza automazioni inventate."
+        },
+        {
+          "title": "Mostrare l'eccezione",
+          "body": "Una disposizione non disponibile richiede alternativa e nuova decisione del coordinamento.",
+          "notes": "Usa un'eccezione sicura e indica la scelta umana."
+        },
+        {
+          "title": "Rispondere alla richiesta originale",
+          "body": "Documenta alternativa accettata, risultato ottenuto e compiti ancora aperti.",
+          "notes": "Mantieni coerenza con l'eccezione precedente."
+        },
+        {
+          "title": "Cosa dimostra la demo",
+          "body": "Il flusso non prova integrazioni, certificazioni, prestazioni o risultati clienti.",
+          "notes": "Indica limiti attuali e prove separate necessarie."
+        },
+        {
+          "title": "Valutare con un compito proprio",
+          "body": "Una prova delimitata segue una richiesta rappresentativa a basso rischio e raccoglie attriti.",
+          "notes": "Offri un percorso reale senza dati sensibili di produzione."
+        }
+      ]
+    },
+    {
+      "title": "Wren Studio: una prima settimana utile",
+      "description": "Accoglienza in un gruppo fittizio di servizi. Ruoli, calendario e attività sono esempi modificabili.",
+      "scenarioLabel": "Accoglienza clienti",
+      "slides": [
+        {
+          "title": "Un contributo accompagnato",
+          "body": "Wren Studio chiarisce informazioni di servizio; conosci il flusso, prova un compito e trova aiuto.",
+          "notes": "Adatta il ruolo e chiarisci cosa ancora non è richiesto sapere."
+        },
+        {
+          "title": "Come scorre il lavoro",
+          "body": "Richiesta, incarico, prima versione, revisione e passaggio documentato formano il flusso.",
+          "notes": "Mostra un esempio autorizzato e dove leggere lo stato."
+        },
+        {
+          "title": "Una settimana con supporto",
+          "body": "Accessi e contesto precedono il primo compito accompagnato.",
+          "notes": "Adatta giorni, orari, esigenze ed esperienza."
+        },
+        {
+          "title": "L'accesso è un prerequisito",
+          "body": "Canale, spazio di progetto ed esempi devono essere pronti prima di iniziare.",
+          "notes": "Conferma gli accessi; non condividere account o segreti."
+        },
+        {
+          "title": "Chiarire un avviso di prenotazione",
+          "body": "Riscrivi un avviso fittizio su chi prenota, quali dati servono e dove chiedere.",
+          "notes": "Scegli un compito reale poco rischioso e un esempio approvato."
+        },
+        {
+          "title": "Una revisione utile",
+          "body": "Controlla prossima azione, accuratezza e ipotesi; motiva cambiamenti concreti.",
+          "notes": "Mostra riscontri precisi e indica chi approva i fatti."
+        },
+        {
+          "title": "Dove chiedere aiuto",
+          "body": "Revisore, collega di accoglienza e assistenza seguono lavoro, abitudini e accessi.",
+          "notes": "Sostituisci i ruoli con contatti aggiornati o un elenco mantenuto."
+        },
+        {
+          "title": "Un seguito chiaro",
+          "body": "Il bilancio concorda il prossimo compito e un miglioramento dell'accoglienza.",
+          "notes": "Fissa un incontro reale e consenti riscontri privati."
+        }
+      ]
+    },
+    {
+      "title": "Dalla prenotazione confusa all'esperimento",
+      "description": "Workshop completo su un servizio fittizio di prenotazione sale, senza sondaggi obbligatori.",
+      "scenarioLabel": "Workshop pratico",
+      "slides": [
+        {
+          "title": "Un esperimento fattibile",
+          "body": "Un cambiamento limitato, un responsabile e una verifica devono chiarire la prenotazione.",
+          "notes": "Adatta il servizio; la spiegazione funziona senza attività."
+        },
+        {
+          "title": "Uno scenario condiviso",
+          "body": "Una persona riceve una ricevuta ma non sa se la prenotazione è confermata.",
+          "notes": "Presenta la finzione con neutralità e senza colpe."
+        },
+        {
+          "title": "Mappare il passaggio",
+          "body": "Separa ciò che vede il richiedente dal lavoro interno per trovare l'ambiguità.",
+          "notes": "Spiega ogni colonna con la stessa richiesta."
+        },
+        {
+          "title": "Manca una distinzione",
+          "body": "Ricezione e conferma si somigliano; prova un messaggio chiaro prima di cambiare piattaforma.",
+          "notes": "Indica la causa come ipotesi, non certezza."
+        },
+        {
+          "title": "Un piccolo esperimento",
+          "body": "Chiarisci ricezione, conferma in attesa, prossimo passo, tempi e dati mancanti.",
+          "notes": "Prometti solo tempi che il servizio può rispettare."
+        },
+        {
+          "title": "Prove adatte alla domanda",
+          "body": "Valuta comprensione e richieste di chiarimento, non soltanto prenotazioni concluse.",
+          "notes": "Pianifica osservazioni autorizzate senza dati personali."
+        },
+        {
+          "title": "Prevedere i vincoli",
+          "body": "Messaggio, condizioni esatte e assistenza richiedono manutenzione e responsabilità.",
+          "notes": "Modifica promesse insostenibili o interrompi il pilota."
+        },
+        {
+          "title": "Una decisione assegnata",
+          "body": "Prova un avviso chiaro, conserva l'originale e verifica le prove prima di ampliare.",
+          "notes": "Registra date e segnale d'arresto; accordo non significa attuazione."
+        }
+      ]
+    },
+    {
+      "title": "Un cambiamento non è ancora una spiegazione",
+      "description": "Lezione su confronti e causalità con dati di biblioteca inventati, senza quiz obbligatorio.",
+      "scenarioLabel": "Lezione esplicativa",
+      "slides": [
+        {
+          "title": "Cosa mostra il prima e dopo?",
+          "body": "Le restituzioni puntuali aumentano dopo un promemoria; i numeri non ne stabiliscono la causa.",
+          "notes": "Dichiara fittizi biblioteca e valori."
+        },
+        {
+          "title": "Descrivere il cambiamento",
+          "body": "Da 60% a 75% sono 15 punti percentuali, non un effetto causale dimostrato.",
+          "notes": "Mostra 75 meno 60 e distingui la percentuale relativa."
+        },
+        {
+          "title": "Cos'altro può cambiare?",
+          "body": "Persone, libri, vacanze o regole di misura offrono altre spiegazioni.",
+          "notes": "Presenta possibilità senza affermare che siano accadute."
+        },
+        {
+          "title": "Aggiungere un confronto",
+          "body": "Un'altra sede comparabile nello stesso periodo aiuta a riconoscere tendenze generali.",
+          "notes": "Verifica le ipotesi prima di attribuire causalità."
+        },
+        {
+          "title": "Progettare secondo l'affermazione",
+          "body": "Definisci gruppi, risultati e dati mancanti prima dell'analisi; considera assegnazione casuale.",
+          "notes": "Anche esecuzione, numerosità e analisi contano."
+        },
+        {
+          "title": "Esplicitare i limiti",
+          "body": "Persone, messaggio e periodo limitano il risultato; generalizzare richiede altre prove.",
+          "notes": "Usa i limiti dello studio reale."
+        },
+        {
+          "title": "Formulare secondo le prove",
+          "body": "«Aumentato dopo» descrive; «causato dal promemoria» richiede maggior sostegno.",
+          "notes": "Leggi entrambe le frasi e individua l'aggiunta causale."
+        },
+        {
+          "title": "Descrivere, confrontare, precisare",
+          "body": "Indica cambiamento, confronto pertinente e portata della conclusione.",
+          "notes": "Ripercorri l'esempio senza imporre risposte al pubblico."
+        }
+      ]
+    },
+    {
+      "title": "Note offline: resoconto illustrativo",
+      "description": "Prova di presentazione con registrazioni sintetiche. Nessuna intervista o scoperta validata è spacciata per reale.",
+      "scenarioLabel": "Risultati della ricerca",
+      "slides": [
+        {
+          "title": "Cosa preservare offline?",
+          "body": "Registrazioni sintetiche esplorano appunti di campo con connessione instabile.",
+          "notes": "Sostituisci la finzione con prove tracciabili autorizzate."
+        },
+        {
+          "title": "Separare piano e prove",
+          "body": "Acquisizione, interruzione e riconnessione sono previste; esistono solo copioni.",
+          "notes": "Non chiamare mai interviste svolte questi copioni."
+        },
+        {
+          "title": "Rendere verificabile l'analisi",
+          "body": "Raggruppa incertezze di salvataggio, allegati e duplicati senza attribuirle a utenti reali.",
+          "notes": "Collega codici alle fonti e conserva ambiguità."
+        },
+        {
+          "title": "Spiegare il denominatore",
+          "body": "Dodici registrazioni sintetiche contengono otto percorsi normali e quattro interruzioni.",
+          "notes": "La proporzione non misura il successo degli utenti."
+        },
+        {
+          "title": "Tre ipotesi progettuali",
+          "body": "Rendi visibili salvataggio locale, sincronizzazione e ripresa; devono ancora essere validati.",
+          "notes": "Collega ogni ipotesi a prove e a un test che possa smentirla."
+        },
+        {
+          "title": "Domande ancora aperte",
+          "body": "Frequenza, destinatari e comprensione degli stati richiedono ricerca reale.",
+          "notes": "Usa i limiti per dare priorità allo studio successivo."
+        },
+        {
+          "title": "Una valutazione mirata",
+          "body": "Prova stati salvato, in attesa e sincronizzato durante interruzioni realistiche.",
+          "notes": "Pianifica partecipazione, conservazione delle fonti e responsabilità."
+        },
+        {
+          "title": "Chiedere le prossime prove",
+          "body": "Studia la comprensione degli stati prima di ampliare funzioni e mostra osservazioni reali.",
+          "notes": "Rimuovi grafici sintetici da presentazioni che dichiarano risultati validati."
+        }
+      ]
+    },
+    {
+      "title": "Sala stampa: riparare, sostituire o condividere?",
+      "description": "Nota decisionale per un centro artistico fittizio. Costi e compromessi vanno verificati prima di acquistare.",
+      "scenarioLabel": "Nota decisionale aziendale",
+      "slides": [
+        {
+          "title": "Stampa affidabile",
+          "body": "Il centro confronta riparazione, sostituzione e servizio condiviso per esigenze ordinarie.",
+          "notes": "Dichiara che è pianificazione illustrativa, non consiglio d'acquisto."
+        },
+        {
+          "title": "Criteri prima dei prezzi",
+          "body": "Disponibilità, impegno, costo e reversibilità contano oltre al prezzo iniziale.",
+          "notes": "Conferma requisiti obbligatori e percorso di approvazione."
+        },
+        {
+          "title": "Tre opzioni delimitate",
+          "body": "Riparare richiede diagnosi, sostituire installazione e condividere coordinamento e spostamenti.",
+          "notes": "Confronta offerte verificate ed esclusioni."
+        },
+        {
+          "title": "Ipotesi confrontabili",
+          "body": "Il primo anno fittizio include avvio e gestione, senza imposte o lavori non indicati.",
+          "notes": "Sostituisci gli importi con fonti datate e comparabili."
+        },
+        {
+          "title": "Confrontare anche l'impegno",
+          "body": "Riparazione richiede attenzione; il servizio condiviso necessita coordinamento.",
+          "notes": "Non confondere ore stimate con risparmi osservati."
+        },
+        {
+          "title": "Cosa invertirebbe la scelta?",
+          "body": "Diagnosi, materiali o orari possono cambiare l'opzione preferita.",
+          "notes": "Chiedi prove decisive prima di affinare piccole differenze."
+        },
+        {
+          "title": "Una raccomandazione condizionata",
+          "body": "Esamina prima la riparazione solo se una diagnosi credibile sostiene uso e assistenza.",
+          "notes": "Conserva alternative; non è una raccomandazione reale d'acquisto."
+        },
+        {
+          "title": "Approvare il prossimo esame",
+          "body": "Autorizza una valutazione limitata e raccogli informazioni operative confrontabili.",
+          "notes": "Registra responsabile, autorità di spesa e data di ritorno."
+        }
+      ]
+    }
+  ],
+  "nativeData": {
+    "0.1": [
+      "Ingresso: richieste su più canali, con dettagli disomogenei.",
+      "Responsabilità: dopo l’inoltro non è chiaro chi debba agire.",
+      "Chiusura: chi segnala non sa se il problema sia risolto o solo ricevuto."
+    ],
+    "0.2": [
+      "Richieste settimanali illustrative per laboratorio",
+      "Tre carichi inventati da 18 a 35 richieste settimanali: intervallo progettuale, non domanda convalidata.",
+      "Piccolo laboratorio",
+      "Laboratorio in crescita",
+      "Laboratorio molto attivo",
+      "Richieste settimanali d’esempio"
+    ],
+    "0.3": [
+      "Raccogliere: luogo, problema, urgenza e immagine approvata facoltativa.",
+      "Assegnare: un responsabile e prossimo aggiornamento visibile.",
+      "Risolvere: registrare l’intervento e comunicare il cambiamento."
+    ],
+    "0.4": [
+      "Alternative operative illustrative; ipotesi da verificare",
+      "Approccio",
+      "Punto di forza",
+      "Compromesso da esaminare",
+      "Casella condivisa",
+      "Già familiare",
+      "Stato e responsabilità possono richiedere regole manuali",
+      "Bacheca generica delle attività",
+      "Flusso flessibile",
+      "La raccolta può restare frammentata",
+      "Coda HarborTask proposta",
+      "Passaggio dedicato",
+      "Nuova abitudine e altro strumento da mantenere"
+    ],
+    "0.5": [
+      "Ipotesi illustrative d’offerta, non vendite o ricavi",
+      "Ipotesi",
+      "Esempio",
+      "Prova necessaria",
+      "Durata del pilota",
+      "6 settimane",
+      "Osservare usi ripetuti",
+      "Canone mensile proposto per sede",
+      "Un vero colloquio d’acquisto",
+      "Impegno iniziale di configurazione",
+      "2 ore di personale",
+      "Tentativo d’inserimento misurato"
+    ],
+    "1.1": [
+      "Possiamo venire? Orari, chiusure, accesso e contatti d’aiuto.",
+      "Come arriviamo? Indicazioni, trasporti e ingresso giusto.",
+      "Cosa prenotiamo? Biglietti, condizioni e prossima azione chiari."
+    ],
+    "1.2": [
+      "Inclusi: percorso, struttura delle pagine, guida ai contenuti, prototipo adattabile e supporto all’implementazione.",
+      "Esclusi dall’esempio: piattaforma pagamenti, catalogazione, foto e rifacimento completo del marchio."
+    ],
+    "1.3": [
+      "Risultati e approvazioni illustrativi",
+      "Consegna",
+      "Domanda risolta",
+      "Revisore",
+      "Percorso di visita e piano dei contenuti",
+      "Cosa devono trovare i visitatori?",
+      "Responsabile servizi ai visitatori",
+      "Prototipo adattabile",
+      "Le attività si completano chiaramente?",
+      "Responsabile progetto del cliente",
+      "Passaggio all’implementazione",
+      "Il progetto è realizzabile e mantenibile?",
+      "Responsabile web",
+      "Lista di lancio",
+      "Attività e contenuti concordati pronti?",
+      "Responsabile di lancio designato"
+    ],
+    "1.4": [
+      "Calendario illustrativo, senza impegno di consegna",
+      "Settimana",
+      "Lavoro principale",
+      "Contributo del cliente",
+      "Esplorazione e definizione delle attività",
+      "Contenuti esistenti e accesso agli interessati",
+      "Struttura e bozza dei contenuti",
+      "Una revisione consolidata dei contenuti",
+      "Prototipo e percorso delle attività",
+      "Decisione sul percorso proposto",
+      "Supporto all’implementazione e passaggio",
+      "Accesso tecnico e tempo del responsabile web",
+      "Verifiche e preparazione al lancio",
+      "Contenuti approvati e decisione di lancio"
+    ],
+    "1.5": [
+      "Compensi illustrativi in dollari d’esempio",
+      "Solo progetto: $8,000; implementazione assistita: $12,000. Valori inventati di pianificazione, non un preventivo.",
+      "Consegna del progetto",
+      "Implementazione assistita",
+      "Compenso illustrativo"
+    ],
+    "2.1": [
+      "Completato: inventario pagine e regole di migrazione del pilota concordati.",
+      "Appreso: i permessi originali differiscono tra due gruppi operativi.",
+      "Decisione necessaria: un approvatore responsabile del modello d’accesso finale."
+    ],
+    "2.2": [
+      "Unità di lavoro accettate illustrative al controllo",
+      "Esplorazione e mappatura raggiungono i volumi previsti; migrazione pilota: 8 unità accettate su 12 previste. Il rilascio non è ancora dovuto.",
+      "Esplorazione",
+      "Mappatura contenuti",
+      "Migrazione pilota",
+      "Rilascio",
+      "Previsto al controllo",
+      "Accettato nell’esempio"
+    ],
+    "2.3": [
+      "Elementi pilota non accettati nelle revisioni settimanali illustrative",
+      "Il residuo scende da 24 a 10 in quattro revisioni; solo due elementi accettati tra la seconda e la terza.",
+      "Revisione 1",
+      "Revisione 2",
+      "Revisione 3",
+      "Revisione 4",
+      "Elementi residui d’esempio"
+    ],
+    "2.5": [
+      "Piano illustrativo dei risultati di due settimane",
+      "Risultato",
+      "Ruolo responsabile",
+      "Prova di completamento",
+      "Approvare modello d’accesso",
+      "Responsabile del servizio",
+      "Decisione d’accesso registrata",
+      "Completare verifiche pilota",
+      "Responsabile migrazione",
+      "Lista accettata e registro problemi",
+      "Provare il ripristino precedente",
+      "Responsabile operativo",
+      "Prova di ripristino registrata",
+      "Decidere la prontezza del rilascio",
+      "Committente del progetto",
+      "Decisione esplicita di procedere o rinviare"
+    ],
+    "3.2": [
+      "Capire: spiegare semplicemente materiale, riparabilità e idoneità.",
+      "Scegliere: chiarire compatibilità, prezzo totale e consegna.",
+      "Continuare l’uso: rendere reperibili ricambi, cura e assistenza."
+    ],
+    "3.3": [
+      "Ripartizione trimestrale illustrativa della capacità",
+      "Metà della capacità all’acquisto, 30% ai miglioramenti successivi e 20% all’operatività ordinaria.",
+      "Percorso d’acquisto",
+      "Assistenza dopo l’acquisto",
+      "Operatività ordinaria",
+      "Unità di pianificazione"
+    ],
+    "3.4": [
+      "Risultati illustrativi; valori iniziali ancora da misurare",
+      "Priorità",
+      "Segnale da stabilire",
+      "Fonte di prove da predisporre",
+      "Comprensione del prodotto",
+      "Domande d’idoneità per ordine esaminato",
+      "Codifica autorizzata delle richieste d’aiuto",
+      "Acquisto più chiaro",
+      "Dove le attività si fermano o richiedono aiuto",
+      "Percorsi delle attività osservati",
+      "Assistenza dopo l’acquisto",
+      "Domande di cura ripetute per tema",
+      "Campione datato di assistenza"
+    ],
+    "3.5": [
+      "Prima: definire i termini e analizzare un prodotto rappresentativo.",
+      "Poi: provare il percorso rivisto ed estendere solo modifiche utili.",
+      "Infine: valutare risultati, impegno d’assistenza e compromessi del prossimo trimestre."
+    ],
+    "4.1": [
+      "Responsabilità nell’esempio: attività dei visitatori, gerarchia dei segnali e scelte del prototipo.",
+      "Dipendenze: termini dell’operatore, percorsi accessibili, regole d’installazione e informazioni corrette."
+    ],
+    "4.3": [
+      "Lacune illustrative del percorso per spiegare il progetto",
+      "Momento",
+      "Domanda",
+      "Informazione proposta",
+      "Ingresso",
+      "In quale direzione devo andare?",
+      "Destinazione e direzione prima del binario",
+      "Cambio",
+      "Raggiungo il prossimo binario senza gradini?",
+      "Esplicitare il percorso accessibile",
+      "Disservizio",
+      "Dove trovo assistenza aggiornata?",
+      "Indicare un canale d’aiuto affidabile"
+    ],
+    "4.4": [
+      "Principale: destinazione o direzione in parole semplici.",
+      "Secondario: binario, cambio o percorso accessibile.",
+      "Di supporto: identificatori locali e prossima fonte d’aiuto."
+    ],
+    "4.5": [
+      "Confronto illustrativo del progetto, non risultati misurati",
+      "Scenario precedente",
+      "Risposta proposta",
+      "Da valutare",
+      "Identificatore del binario per primo",
+      "Destinazione in cima alla gerarchia",
+      "I visitatori scelgono il percorso giusto?",
+      "Percorso accessibile implicito",
+      "Percorso nominato visibile",
+      "Il percorso è corretto e comprensibile?",
+      "Informazioni d’aiuto disperse",
+      "Indicazione d’assistenza coerente",
+      "I visitatori raggiungono aiuto utile?"
+    ],
+    "5.1": [
+      "Risultato: cosa rendere più facile o affidabile?",
+      "Vincolo: cosa deve rispettare la soluzione?",
+      "Incertezza: cosa imparare prima di impegnarsi?"
+    ],
+    "5.3": [
+      "Opzioni illustrative del pilota di prestito bibliotecario",
+      "Opzione",
+      "Impegno principale",
+      "Apprendimento possibile",
+      "Nuovo strumento di prestito",
+      "Configurazione e formazione",
+      "Il flusso è adatto al servizio?",
+      "Semplificare il processo attuale",
+      "Concordare e documentare passaggi più chiari",
+      "L’ambiguità è il problema principale?",
+      "Pilota manuale di quattro settimane",
+      "Registrazione e revisione costanti",
+      "Quali informazioni e controlli servono davvero"
+    ],
+    "5.5": [
+      "Decisione e motivo: pilota manuale limitato per capire il flusso.",
+      "Responsabile e revisione: il coordinatore verifica dopo quattro settimane.",
+      "Segnale di riesame: processo insostenibile o esigenza essenziale trascurata."
+    ],
+    "6.1": [
+      "Scheda dimostrativa illustrativa",
+      "Campo",
+      "Valore d’esempio",
+      "Richiesta",
+      "Preparare la sala riunioni della comunità",
+      "Ruolo responsabile",
+      "Coordinatore eventi",
+      "Risultato necessario",
+      "Disposizione e accessi verificati",
+      "Prova di completamento",
+      "Lista e breve nota di risoluzione"
+    ],
+    "6.3": [
+      "Prima del passaggio: richiesta esistente, responsabilità non ancora accettata.",
+      "Dopo: ruolo responsabile e prossimo aggiornamento visibili."
+    ],
+    "7.1": [
+      "Capire l’incarico: risultato, pubblico e vincoli.",
+      "Creare una prima versione utile, piccola per ricevere riscontri rapidi.",
+      "Rivedere e passare: registrare decisione e lavoro residuo."
+    ],
+    "7.2": [
+      "Piano illustrativo della prima settimana",
+      "Quando",
+      "Risultato principale",
+      "Ruolo di supporto",
+      "Giorno 1",
+      "Conoscere scopo del gruppo e contatti d’aiuto",
+      "Collega d’inserimento",
+      "Giorno 2",
+      "Trovare strumenti e incarico modello",
+      "Responsabile del gruppo",
+      "Giorni 3–4",
+      "Completare una prima attività assistita",
+      "Revisore dell’attività",
+      "Giorno 5",
+      "Valutare gli aiuti e scegliere la prossima attività",
+      "Responsabile e nuovo arrivato"
+    ],
+    "7.5": [
+      "Chiarezza: il lettore previsto trova la prossima azione.",
+      "Accuratezza: affermazioni e istruzioni corrispondono alle fonti approvate.",
+      "Passaggio: il revisore vede questioni aperte e prossimo responsabile."
+    ],
+    "8.2": [
+      "Schema illustrativo del servizio prenotazioni",
+      "Fase",
+      "Cosa vede il richiedente",
+      "Cosa fa il personale",
+      "Richiesta",
+      "Modulo inviato",
+      "Verificare le informazioni obbligatorie",
+      "Ricezione",
+      "Messaggio di ricezione del modulo",
+      "Distinguere ricezione e conferma",
+      "Chiarimento",
+      "Richiesta di dettagli mancanti",
+      "Registrare cosa manca",
+      "Conferma",
+      "Decisione di prenotazione chiara",
+      "Aggiornare il calendario e avvisare il richiedente"
+    ],
+    "8.4": [
+      "Modifica: distinguere ricezione e conferma in un messaggio.",
+      "Imparare: il richiedente sa spiegare stato e prossimo passo?",
+      "Confine: un canale prenotazioni in un breve periodo di verifica concordato."
+    ],
+    "9.1": [
+      "Percentuali illustrative di restituzioni puntuali",
+      "Il tasso inventato sale da 60% prima del promemoria a 75% dopo: 15 punti percentuali. La causalità non è dimostrata.",
+      "Prima del promemoria",
+      "Dopo il promemoria",
+      "Restituzioni puntuali illustrative (%)"
+    ],
+    "9.2": [
+      "Persone: stessi tipi di utenti del prestito?",
+      "Contesto: sono cambiati tempi, prestiti o altri servizi?",
+      "Misurazione: puntualità definita e registrata allo stesso modo?"
+    ],
+    "9.3": [
+      "Confronto illustrativo; nessuna conclusione causale",
+      "Sede d’esempio",
+      "Periodo precedente",
+      "Periodo successivo",
+      "Sede con promemoria",
+      "Sede di confronto"
+    ],
+    "9.5": [
+      "Chi: persone e contesti effettivamente inclusi.",
+      "Cosa: promemoria esatto e risultato misurato.",
+      "Quando: periodo osservato e durata ancora sconosciuta."
+    ],
+    "9.6": [
+      "Affermazioni illustrative e portata delle prove",
+      "Enunciato",
+      "Cosa afferma",
+      "Restituzioni puntuali da 60% a 75% dopo l’introduzione",
+      "Sequenza e differenza misurate",
+      "Il promemoria ha causato tutto l’aumento",
+      "Spiegazione causale che richiede prove più solide",
+      "Il promemoria migliorerà le restituzioni ovunque",
+      "Generalizzazione ampia che richiede altre prove"
+    ],
+    "10.1": [
+      "Inventario delle prove di questa lettura sintetica",
+      "Materiale",
+      "Stato nell’esempio",
+      "Conclusione consentita",
+      "Scenari delle attività",
+      "Piano illustrativo",
+      "Cosa propone di esaminare il gruppo",
+      "Dodici registrazioni di attività sceneggiate",
+      "Dati di prova sintetici",
+      "Coerenza della struttura del rapporto",
+      "Osservazioni di partecipanti reali",
+      "Non fornite",
+      "Nessun risultato sui partecipanti sostenibile",
+      "Dati d’uso o dei clienti",
+      "Non forniti",
+      "Nessuna affermazione di prevalenza o risultato"
+    ],
+    "10.2": [
+      "Codifica illustrativa di problemi simulati del flusso",
+      "Codice",
+      "Situazione simulata",
+      "Domanda progettuale",
+      "Incertezza sul salvataggio",
+      "Connessione interrotta dopo l’acquisizione",
+      "L’autore riconosce cosa è conservato?",
+      "Incertezza sull’allegato",
+      "Immagine non ancora disponibile offline",
+      "L’indisponibilità è chiara?",
+      "Incertezza sui duplicati",
+      "La riconnessione ripete un’azione in attesa",
+      "Un’azione accettata è registrata una sola volta?"
+    ],
+    "10.3": [
+      "Esiti di attività sintetiche, non risultati di partecipanti",
+      "Otto di dodici registrazioni inventate seguono il percorso previsto; quattro hanno interruzioni simulate. Si illustra solo la struttura del rapporto.",
+      "Percorso previsto",
+      "Interruzione simulata",
+      "Registrazioni di attività sintetiche"
+    ],
+    "10.4": [
+      "Conservazione: l’autore riconosce cosa è salvato localmente in sicurezza.",
+      "Sincronizzazione: l’interfaccia distingue versioni locali e condivise.",
+      "Ripresa: il lavoro in attesa ha un prossimo passo comprensibile."
+    ],
+    "10.6": [
+      "Domande illustrative per il prossimo studio",
+      "Domanda",
+      "Osservazione cercata",
+      "Decisione informata",
+      "Si riconosce una nota salvata localmente?",
+      "Spiegazione dopo un’interruzione simulata",
+      "Testo dello stato salvato",
+      "Si distingue la sincronizzazione in attesa?",
+      "Prossima azione scelta",
+      "Controlli di stato e ripresa",
+      "Si riprende senza duplicare il lavoro?",
+      "Percorso dell’attività dopo riconnessione",
+      "Progetto del flusso di ripresa"
+    ],
+    "11.1": [
+      "Servizio: disponibilità, accesso e attività necessarie al centro.",
+      "Operatività: impegno del personale, materiali e responsabilità d’aiuto.",
+      "Decisione: sostenibilità economica, incertezza e costo del ripensamento."
+    ],
+    "11.3": [
+      "Costi illustrativi del primo anno, non preventivi",
+      "Opzione",
+      "Azione iniziale",
+      "Gestione annuale d’esempio",
+      "Totale d’esempio del primo anno",
+      "Riparare la stampante esistente",
+      "Sostituire la stampante",
+      "Usare un servizio condiviso"
+    ],
+    "11.4": [
+      "Ore mensili illustrative del personale per opzione",
+      "Esempio: 4 ore per riparare, 2 per sostituire, 3 per coordinare un servizio condiviso. Nessun risultato operativo misurato.",
+      "Riparare",
+      "Sostituire",
+      "Servizio condiviso",
+      "Ore mensili del personale d’esempio"
+    ],
+    "11.5": [
+      "Incertezze illustrative rilevanti per la decisione",
+      "Opzione",
+      "Incertezza",
+      "Prova da richiedere",
+      "Riparare",
+      "Guasto e durata prevista sono compresi?",
+      "Valutazione scritta qualificata",
+      "Sostituire",
+      "Sono inclusi configurazione e materiali correnti?",
+      "Offerta completa confrontabile",
+      "Servizio condiviso",
+      "La disponibilità copre le attività richieste?",
+      "Condizioni scritte e prova di attività"
+    ]
+  },
+  "facilitated": [
+    {
+      "title": "Esame delle evidenze",
+      "description": "Esamina un’affermazione, il ragionamento e le prossime evidenze necessarie.",
+      "blocks": [
+        [
+          "Dall’affermazione alle evidenze",
+          "Un team segnala che un promemoria porta il completamento dal 60% al 75%. Che cosa possiamo concludere?",
+          "Raccogli una prima interpretazione prima del confronto."
+        ],
+        [
+          "Che cosa dimostra questo confronto prima-dopo?",
+          "Il promemoria ha certamente causato il miglioramento",
+          "Il completamento è aumentato, ma sono possibili altre spiegazioni",
+          "Il promemoria non può aver aiutato",
+          "Il cambiamento nel tempo non esclude differenze nei partecipanti, nel periodo o nelle condizioni."
+        ],
+        [
+          "Cos’altro è cambiato?",
+          "Chi era incluso, come si misurava il completamento e quali altri cambiamenti sono avvenuti?",
+          "Collega i ragionamenti alle spiegazioni alternative; l’aumento non prova la causa."
+        ],
+        [
+          "Quale evidenza aiuterebbe di più ora?",
+          "Un gruppo comparabile senza promemoria",
+          "Un titolo più sicuro",
+          "Solo aneddoti positivi",
+          "Un logo più grande"
+        ],
+        [
+          "Colmare la lacuna",
+          "Indica affermazione, evidenze attuali, un’incertezza e un’indagine fattibile.",
+          "Registra l’evidenza scelta e un responsabile."
+        ]
+      ]
+    },
+    {
+      "title": "Formazione e recupero",
+      "description": "Individua un errore, spiega con un esempio e verifica il trasferimento.",
+      "blocks": [
+        [
+          "Riconoscere o ricordare?",
+          "Come verificare ciò che ricordi dopo lo studio?",
+          "Rifletti sulle abitudini di studio senza pressione sulla prima risposta."
+        ],
+        [
+          "Quale attività verifica meglio il ricordo di un’idea?",
+          "Rileggere lo stesso paragrafo",
+          "Spiegarla con gli appunti chiusi",
+          "Riconoscere l’impaginazione",
+          "Recuperare senza appunti mostra ciò che ricordi autonomamente."
+        ],
+        [
+          "Far lavorare la memoria",
+          "Chiudi gli appunti, spiega l’idea e riaprili per controllare le lacune.",
+          "Mostra un esempio familiare e lascia provare un breve recupero."
+        ],
+        [
+          "Dopo una dimostrazione, quale passo verifica il ricordo?",
+          "Rivedere lo stesso segmento",
+          "Elencare i passi a memoria e verificarli",
+          "Salvare il collegamento al video",
+          "Ricostruire i passi verifica il ricordo; controllarli corregge le lacune."
+        ],
+        [
+          "Ti senti pronto per provare il recupero attivo?",
+          "Mi serve un esempio",
+          "Pronto a provare"
+        ],
+        [
+          "Una pratica da portare con te",
+          "Scegli un argomento, ricordalo senza appunti e rivedi le lacune domani.",
+          "Separa questa riflessione dalle verifiche di comprensione con punteggio."
+        ]
+      ]
+    },
+    {
+      "title": "Riunione di squadra",
+      "description": "Chiarisci agenda, ostacoli, decisioni e responsabilità.",
+      "blocks": [
+        [
+          "Una riunione utile",
+          "Obiettivo: una decisione chiara e un passo successivo con responsabile.",
+          "Indica la decisione possibile e il tempo disponibile."
+        ],
+        [
+          "A cosa dedichiamo la discussione?",
+          "Una decisione in attesa",
+          "Un ostacolo comune",
+          "Le prossime priorità",
+          "Domande che richiedono contesto"
+        ],
+        [
+          "Discutere per decidere",
+          "Che cosa sappiamo, cosa resta incerto e quali opzioni rispettano i vincoli?",
+          "Invita chi non è ancora intervenuto e rendi visibili i compromessi."
+        ],
+        ["Quanto è chiaro il passo successivo dopo la discussione?", "Poco chiaro", "Molto chiaro"],
+        [
+          "Chiudere il cerchio",
+          "Scrivi decisione, responsabile, scadenza e luogo degli aggiornamenti.",
+          "Rileggi le azioni e conferma le responsabilità."
+        ]
+      ]
+    },
+    {
+      "title": "Avvio del progetto",
+      "description": "Allinea risultati, dipendenze e una prima tappa realizzabile.",
+      "blocks": [
+        [
+          "Partire dal risultato",
+          "Chiarisci perché il lavoro conta, come appare il successo e la prima tappa significativa.",
+          "Aggiungi nome, pubblico e risultato del progetto."
+        ],
+        [
+          "Che cosa va chiarito prima di iniziare?",
+          "Misure di successo",
+          "Ruoli e responsabilità",
+          "Ambito e calendario",
+          "Dipendenze"
+        ],
+        [
+          "Definire i confini",
+          "Che cosa include la tappa, cosa resta per dopo e quali dipendenze cambiano il piano?",
+          "Definisci una tappa misurabile e riconoscibile dal team."
+        ],
+        [
+          "Quanto ritieni realizzabile la prima tappa?",
+          "Restano grandi lacune",
+          "Chiara e realizzabile"
+        ],
+        [
+          "La prima settimana",
+          "Concorda un risultato, un responsabile, una verifica e dove segnalare presto gli ostacoli.",
+          "I valori bassi rivelano supporto mancante o ipotesi poco chiare."
+        ]
+      ]
+    },
+    {
+      "title": "Dalla retrospettiva all’azione",
+      "description": "Scegli un esperimento misurabile per il prossimo ciclo.",
+      "blocks": [
+        [
+          "Imparare dall’ultimo ciclo",
+          "Esamina lavoro e condizioni; scegli un miglioramento davvero verificabile.",
+          "Definisci il periodo e osserva pratiche e sistemi senza colpevolizzare."
+        ],
+        ["Quanto era sostenibile il ritmo del team?", "Insostenibile", "Molto sostenibile"],
+        [
+          "Quale attrito discutiamo prima?",
+          "Priorità poco chiare",
+          "Riscontri lenti",
+          "Passaggi e dipendenze",
+          "Interruzioni"
+        ],
+        [
+          "Dall’osservazione all’esperimento",
+          "Abbiamo osservato… Pensiamo… Nel prossimo ciclo proveremo… Cercheremo…",
+          "Mantieni l’esperimento piccolo e assegna un responsabile visibile."
+        ],
+        [
+          "Quale segnale ne mostrerebbe meglio l’utilità?",
+          "Meno attese",
+          "Meno domande ripetute",
+          "Completamento più prevedibile",
+          "Passaggi di qualità migliore"
+        ],
+        [
+          "Tornare al risultato",
+          "Annota esperimento, responsabile, segnale e data di verifica.",
+          "Inizia la prossima retrospettiva da questa verifica."
+        ]
+      ]
+    },
+    {
+      "title": "Benvenuto e primi passi",
+      "description": "Accogli nuovi colleghi, trova i supporti necessari e facilita il primo compito.",
+      "blocks": [
+        [
+          "Non devi sapere tutto oggi",
+          "Parti dallo scopo del team, da un piccolo compito e dalle persone che aiutano.",
+          "Presenta lo scopo e un contatto reale."
+        ],
+        [
+          "Che cosa ti aiuterebbe di più all’inizio?",
+          "Una mappa degli strumenti",
+          "Un buon esempio di lavoro",
+          "Una persona a cui chiedere",
+          "Una lista per la prima settimana"
+        ],
+        [
+          "Un primo piccolo compito",
+          "Scegli un compito a basso rischio, segui un esempio, prova con aiuto e chiedi riscontro prima di ripeterlo da solo.",
+          "Adattalo al ruolo e verifica gli accessi."
+        ],
+        ["È chiaro dove chiedere aiuto?", "Poco chiaro", "Molto chiaro"],
+        [
+          "La prossima conversazione",
+          "Indica contatto, primo compito e un breve confronto su utilità e dubbi.",
+          "Consenti domande private e nel gruppo."
+        ]
+      ]
+    },
+    {
+      "title": "Laboratorio pratico",
+      "description": "Collega aspettative, esercizio, riflessione e applicazione.",
+      "blocks": [
+        [
+          "Uscire con qualcosa di utile",
+          "Guarda un esempio, prova un piccolo compito, confronta metodi e pianifica un’applicazione.",
+          "Prepara un compito concreto e un esempio."
+        ],
+        [
+          "Che cosa renderebbe utile il laboratorio?",
+          "Una tecnica pratica",
+          "Fiducia per iniziare",
+          "Riscontro su un approccio",
+          "Esempi da adattare"
+        ],
+        [
+          "Provare prima di perfezionare",
+          "Lavora sulla minima versione utile; annota una decisione e ciò su cui vuoi riscontro.",
+          "Definisci un tempo e sostieni i principianti."
+        ],
+        [
+          "Che cosa migliorerebbe il primo tentativo?",
+          "Un altro esempio",
+          "Più tempo per esercitarsi",
+          "Il riscontro di un collega",
+          "Un criterio di successo più chiaro"
+        ],
+        [
+          "Ti senti pronto ad applicarlo nel tuo contesto?",
+          "Mi serve supporto",
+          "Pronto ad applicare"
+        ],
+        [
+          "Concretizzare il prossimo tentativo",
+          "Scegli dove e quando usare la tecnica e come valutarne l’utilità.",
+          "Proponi una nota privata o una condivisione volontaria."
+        ]
+      ]
+    },
+    {
+      "title": "Laboratorio decisionale",
+      "description": "Chiarisci la decisione, confronta opzioni e individua evidenze necessarie.",
+      "blocks": [
+        [
+          "Dare un nome alla decisione",
+          "Che cosa decidiamo oggi, chi decide e quali vincoli valgono per tutti?",
+          "Indica una decisione precisa e il responsabile finale."
+        ],
+        [
+          "Quale criterio richiede più discussione?",
+          "Impatto sull’obiettivo",
+          "Impegno e costo",
+          "Rischio e reversibilità",
+          "Tempo per imparare"
+        ],
+        [
+          "Confrontare equamente",
+          "Per ogni opzione indica beneficio, compromesso e ipotesi che potrebbe cambiare la tua opinione.",
+          "Includi un’opzione di base fattibile e separa evidenze e ipotesi."
+        ],
+        [
+          "Abbiamo abbastanza evidenze per il prossimo passo?",
+          "Grandi incognite",
+          "Abbastanza per procedere"
+        ],
+        [
+          "Qual è la prossima mossa più utile?",
+          "Decidere con data di verifica",
+          "Un piccolo esperimento",
+          "Raccogliere l’evidenza mancante",
+          "Chiarire i vincoli"
+        ],
+        [
+          "Registrare le motivazioni",
+          "Annota scelta, motivi, responsabile, verifica e segnale per riconsiderare.",
+          "Registra anche dissenso e incertezza."
+        ]
+      ]
+    },
+    {
+      "title": "Dimostrazione del prodotto e riscontri",
+      "description": "Mostra un percorso realistico e individua i dubbi del pubblico.",
+      "blocks": [
+        [
+          "Seguire un compito reale",
+          "Parti dall’obiettivo dell’utente, mostra il percorso utile più breve e il risultato.",
+          "Prepara un esempio realistico e dichiara le limitazioni importanti."
+        ],
+        [
+          "Quale parte conta di più per te?",
+          "Iniziare",
+          "Completare il compito principale",
+          "Condividere il risultato",
+          "Capire il risultato"
+        ],
+        [
+          "Mostrare percorso e risultato",
+          "Dimostra un compito completo, fermati alla decisione chiave e mostra il successo.",
+          "Usa il percorso reale senza far dedurre il risultato da un elenco di funzioni."
+        ],
+        ["È chiaro come si integra nel tuo lavoro?", "Poco chiaro", "Molto chiaro"],
+        [
+          "Che cosa aiuterebbe a valutarlo meglio?",
+          "Una prova pratica",
+          "Un esempio pertinente",
+          "Guida alla configurazione",
+          "Dettagli sulle limitazioni"
+        ],
+        [
+          "Concordare un seguito utile",
+          "Registra la principale domanda aperta e un passo concreto per risolverla.",
+          "Distingui le richieste di funzioni dal problema sottostante."
+        ]
+      ]
+    }
+  ]
+}

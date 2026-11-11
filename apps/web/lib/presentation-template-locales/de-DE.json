@@ -1,0 +1,1328 @@
+{
+  "presenterNotes": "Vortragsnotizen:",
+  "facilitatedScenario": "Moderiertes Lernen und Diskutieren",
+  "pollExplanation": "Nutzen Sie die Antwortverteilung für die Diskussion und vereinbaren Sie einen nächsten Schritt.",
+  "scaleExplanation": "Nutzen Sie die Skalenbeschriftung, um Unterstützung und nächste Schritte zu bestimmen.",
+  "native": [
+    {
+      "title": "HarborTask: Reparaturen klar zuordnen",
+      "description": "Gründungsvortrag über fiktive Gemeinschaftswerkstätten. Nachfrage, Preise und Pilotwerte sind illustrative Annahmen.",
+      "scenarioLabel": "Gründungsvortrag",
+      "slides": [
+        {
+          "title": "Eine Anfrage braucht Verantwortung",
+          "body": "HarborTask bündelt Reparaturanfragen kleiner Gemeinschaftswerkstätten mit Zuständigkeit und dokumentiertem Abschluss.",
+          "notes": "Beschreiben Sie einen Vorschlag und passen Sie die Zielgruppe an."
+        },
+        {
+          "title": "Zwischen den Nachrichten",
+          "body": "Ein Stuhl wird dreimal gemeldet, eine Lampe bleibt ohne Zuständigkeit.",
+          "notes": "Ersetzen Sie erfundene Vorfälle durch zulässige Beobachtungen."
+        },
+        {
+          "title": "Nachfrage sichtbar machen",
+          "body": "18, 27 und 35 wöchentliche Anfragen sind erfundene Planungswerte.",
+          "notes": "Definieren Sie Anfragen; leiten Sie keine Marktnachfrage daraus ab."
+        },
+        {
+          "title": "Drei klare Übergänge",
+          "body": "Erfassen, zuordnen, lösen; ein Wartestatus erklärt fehlende Teile oder Hilfe.",
+          "notes": "Demonstrieren Sie alle Übergänge an einer Anfrage."
+        },
+        {
+          "title": "Alternativen fair vergleichen",
+          "body": "Die gemeinsame Warteschlange könnte Zuständigkeit mit wenig Einrichtung klären.",
+          "notes": "Die Vorteile sind Hypothesen, keine belegte Überlegenheit."
+        },
+        {
+          "title": "Wirtschaftliche Annahmen prüfen",
+          "body": "Ein betreuter sechswöchiger Pilot geht einer vorgeschlagenen Standortgebühr voraus.",
+          "notes": "Trennen Sie Preisannahmen von Verträgen und Umsatz."
+        },
+        {
+          "title": "Verhalten statt Lob prüfen",
+          "body": "Messen Sie Zuordnung, alte Anfragen und Aufwand; halten Sie einen Ausstieg offen.",
+          "notes": "Vereinbaren Sie Messung, Verantwortliche und Auswertung vorab."
+        },
+        {
+          "title": "Eine begrenzte Lernpartnerschaft",
+          "body": "Gesucht werden Sponsor und Betriebskontakt für den sechswöchigen Pilot.",
+          "notes": "Eine Ausweitung braucht erst belastbare Pilotbelege."
+        }
+      ]
+    },
+    {
+      "title": "Northline Museum: den Besuch planen",
+      "description": "Angebot für ein fiktives Museum. Umfang, Gebühren und Termine sind Planungsbeispiele, kein verbindliches Angebot.",
+      "scenarioLabel": "Kundenangebot",
+      "slides": [
+        {
+          "title": "Sicher zum ersten Besuch",
+          "body": "Öffnungszeiten, Barrierefreiheit, Anreise und Tickets bilden einen verständlichen Weg.",
+          "notes": "Passen Sie Museum und gewünschte Kundenentscheidung an."
+        },
+        {
+          "title": "Vom Besuch ausgehen",
+          "body": "Ein Samstagsausflug mit Kind und stufenlosem Zugang braucht praktische Antworten.",
+          "notes": "Kennzeichnen Sie das Szenario und prüfen Sie reale Zugangsmöglichkeiten."
+        },
+        {
+          "title": "Den Umfang begrenzen",
+          "body": "Besuchsplanung ist enthalten; Sammlungssuche, Mitgliedschaft und Markenumbau bleiben ausgeschlossen.",
+          "notes": "Bestätigen Sie Vertragsgrenzen und Abhängigkeiten."
+        },
+        {
+          "title": "Ergebnisse unterstützen Entscheidungen",
+          "body": "Prüfen Sie Struktur vor Bildschirmdetails und Aufgaben vor dem Start.",
+          "notes": "Benennen Sie Freigaben und bündeln Sie Rückmeldungen."
+        },
+        {
+          "title": "Fünf illustrative Wochen",
+          "body": "Erkundung, Struktur, Prototyp, Umsetzungshilfe und Startprüfung folgen aufeinander.",
+          "notes": "Ersetzen Sie Wochen durch realistische Termine und Zulieferungen."
+        },
+        {
+          "title": "Unterstützung bewusst wählen",
+          "body": "Designübergabe oder begleitete Umsetzung; Lizenzen und laufende Betreuung sind ausgeschlossen.",
+          "notes": "Verwenden Sie autorisierte Angebote statt Beispielpreise."
+        },
+        {
+          "title": "Risiken vor Zusagen klären",
+          "body": "Inhalte, Ticketanbieter und Websitezugang brauchen Verantwortliche und Ausweichwege.",
+          "notes": "Klären Sie Zugang, Auswirkungen und Eskalation."
+        },
+        {
+          "title": "Entscheiden und beginnen",
+          "body": "Wählen Sie Angebot, Kundenverantwortung, Grenzen und ersten Arbeitstermin.",
+          "notes": "Dokumentieren Sie Annahmen; das Gespräch ersetzt keinen Vertrag."
+        }
+      ]
+    },
+    {
+      "title": "Canopy-Migration: entscheidungsreifer Stand",
+      "description": "Projektbericht über ein fiktives internes Portal. Mengen und Daten sind illustrative Planungswerte.",
+      "scenarioLabel": "Projektbericht",
+      "slides": [
+        {
+          "title": "Die Zugangsentscheidung ist offen",
+          "body": "Inhaltsplanung ist fertig, die Pilotmigration läuft; Zugangsregeln brauchen Freigabe.",
+          "notes": "Ersetzen Sie den Stand durch aktuelle Projektbelege."
+        },
+        {
+          "title": "Seit der letzten Prüfung",
+          "body": "Inventar und Pilot sind vorangekommen; widersprüchliche Zugangsregeln wurden entdeckt.",
+          "notes": "Belegen Sie Fortschritt und unterscheiden Sie neue Erkenntnisse vom Umfang."
+        },
+        {
+          "title": "Fortschritt gegen den Plan",
+          "body": "Erkundung und Zuordnung sind fertig; der Pilot ist teilweise übernommen, Rollout ausstehend.",
+          "notes": "Definieren Sie abgenommene Einheiten vor Mengenvergleichen."
+        },
+        {
+          "title": "Restarbeit ist eine Prognose",
+          "body": "Vier Wochenprüfungen zeigen Restarbeit; langsamerer Abbau fordert eine Blockadeprüfung.",
+          "notes": "Zeigen Sie Umfangsänderungen und vermeiden Sie persönliche Schuldzuweisungen."
+        },
+        {
+          "title": "Eine Führungsentscheidung fehlt",
+          "body": "Pausieren Sie betroffene Seiten und benennen Sie die Zugangsfreigabe.",
+          "notes": "Erklären Sie Wartekosten und offene Sicherheitsfragen."
+        },
+        {
+          "title": "Die nächsten zwei Wochen",
+          "body": "Zugänge freigeben, Pilot prüfen und einen umkehrbaren Rollout proben.",
+          "notes": "Bestätigen Sie Zuständigkeiten und tatsächliche Termine."
+        },
+        {
+          "title": "Was die Prognose verändert",
+          "body": "Stabiler Umfang und Rückmeldung binnen zwei Arbeitstagen sind Annahmen.",
+          "notes": "Benennen Sie überprüfbare Annahmen und Auslöser neuer Planung."
+        },
+        {
+          "title": "Bestätigen und weiterliefern",
+          "body": "Benennen Sie die Freigabe und bestätigen Sie den Pilotumfang.",
+          "notes": "Dokumentieren Sie Termin, Kanal und nächste Nachweise."
+        }
+      ]
+    },
+    {
+      "title": "Aster: Fokus vor Erweiterung",
+      "description": "Quartalsstrategie eines fiktiven Händlers reparierbarer Schreibtischartikel. Kapazitäten und Ziele sind illustrativ.",
+      "scenarioLabel": "Quartalsstrategie",
+      "slides": [
+        {
+          "title": "Verlässlicher wieder kaufen",
+          "body": "Aster verbessert Verstehen, Kauf und Unterstützung; neue Produktgruppen warten.",
+          "notes": "Benennen Sie auch ausdrücklich, was verschoben wird."
+        },
+        {
+          "title": "Mit Grenzen beginnen",
+          "body": "Produkt-, Inhalts- und Supportkapazität reichen nicht für alle Vorhaben zugleich.",
+          "notes": "Trennen Sie gemessene Engpässe von Annahmen."
+        },
+        {
+          "title": "Ein zusammenhängender Kundenweg",
+          "body": "Verbinden Sie Produktverständnis, Kaufentscheidung und Hilfe nach der Lieferung.",
+          "notes": "Zeigen Sie ein Produkt und konkret verantwortete Aufgaben."
+        },
+        {
+          "title": "Kapazität zuerst verteilen",
+          "body": "Von 100 Beispieleinheiten gehen 50 an Kauf, 30 an Support und 20 an Betrieb.",
+          "notes": "Die Werte sind weder gemessene Arbeitszeit noch genehmigtes Budget."
+        },
+        {
+          "title": "Prüfbare Ergebnisse definieren",
+          "body": "Messen Sie Produktfragen, Kaufunsicherheit und Pflegefragen vor Verbesserungszielen.",
+          "notes": "Erfinden Sie keine fehlenden Ausgangswerte."
+        },
+        {
+          "title": "Lernen steuert die Reihenfolge",
+          "body": "Erheben Sie Grundlagen, testen Sie ein Produkt und erweitern Sie nur hilfreiche Änderungen.",
+          "notes": "Setzen Sie eine frühe Prüfung gegen unnötige Arbeit."
+        },
+        {
+          "title": "Stoppregeln schützen den Fokus",
+          "body": "Pausieren Sie bei überlastetem Support, fehlenden Teilen oder neuer Kaufverwirrung.",
+          "notes": "Vereinbaren Sie Auslöser und Entscheidungsverantwortung."
+        },
+        {
+          "title": "Fokus und Prüfungen bestätigen",
+          "body": "Drei Prioritäten, geschützter Betrieb und monatliche Nachweise bestimmen das Quartal.",
+          "notes": "Bestätigen Sie Sponsor und ersten Prüftermin."
+        }
+      ]
+    },
+    {
+      "title": "Cedar Station: Orientierung erklären",
+      "description": "Fiktive Portfoliofallstudie über Entscheidungen und Evaluation ohne erfundene Kundenergebnisse.",
+      "scenarioLabel": "Portfoliofallstudie",
+      "slides": [
+        {
+          "title": "Den nächsten Schritt verstehen",
+          "body": "Erstbesucher sollen Bahnsteig und Vorgehen bei Routenänderungen verstehen.",
+          "notes": "Benennen Sie Projektstatus und tatsächlichen eigenen Beitrag."
+        },
+        {
+          "title": "Rolle und Grenzen",
+          "body": "Informationshierarchie, Prototypen und Testplan gehören zum Entwurf; Bau und Betrieb nicht.",
+          "notes": "Ordnen Sie Beiträge korrekt zu und benennen Sie Abhängigkeiten."
+        },
+        {
+          "title": "Aufgaben vor Gestaltung",
+          "body": "Bahnsteig finden, umsteigen und Hilfe suchen strukturieren die geplante Untersuchung.",
+          "notes": "Verwechseln Sie geplante Methoden nicht mit abgeschlossener Forschung."
+        },
+        {
+          "title": "Informationslücken erkennen",
+          "body": "Bahnsteignummer vor Richtung und unklarer stufenloser Umstieg sind erfundene Beispiele.",
+          "notes": "Nutzen Sie nachvollziehbare Beobachtungen statt erfundener Zitate."
+        },
+        {
+          "title": "Eine wiederholbare Hierarchie",
+          "body": "Ziel, Weg, Detail; Farbe unterstützt, trägt die Bedeutung aber nicht allein.",
+          "notes": "Zeigen Sie einen freigegebenen Prototyp und erklären Sie die Reihenfolge."
+        },
+        {
+          "title": "Änderungen ohne Ergebnisfiktion",
+          "body": "Klarere Richtung, benannter Zugang und einheitliche Hilfe sind Vorschläge.",
+          "notes": "Beschreiben Sie Wirkungen als noch zu prüfende Hypothesen."
+        },
+        {
+          "title": "Navigation passend prüfen",
+          "body": "Beobachten Sie Fehlwege, Hilfe und Verständnis barrierefreier Wege sicher.",
+          "notes": "Berichten Sie geplante Beobachtungen nicht als Ergebnisse."
+        },
+        {
+          "title": "Was der Fall zeigt",
+          "body": "Problemrahmen, Hierarchie und Prüfplan führen zur nächsten begründeten Überarbeitung.",
+          "notes": "Nennen Sie Beitrag, Grenze und belegbare Erkenntnis."
+        }
+      ]
+    },
+    {
+      "title": "Kleine Entscheidungen, sichtbare Folgen",
+      "description": "Vortrag über Entscheidungsnotizen mit fiktiver Bibliotheksausleihe. Keine Publikumsaktivität erforderlich.",
+      "scenarioLabel": "Veranstaltungsvortrag",
+      "slides": [
+        {
+          "title": "Auch kleine Entscheidungen wirken",
+          "body": "Eine Bibliothek vergleicht neues Werkzeug, vereinfachten Prozess und manuellen Pilot.",
+          "notes": "Kennzeichnen Sie die Geschichte als fiktiv."
+        },
+        {
+          "title": "Drei verschiedene Fragen",
+          "body": "Weniger Verwaltung, klare Verfügbarkeit und Unterstützung sind unterschiedliche Ziele.",
+          "notes": "Erzählen Sie Sorgen ohne erfundene persönliche Zitate."
+        },
+        {
+          "title": "Eine verantwortete Entscheidung",
+          "body": "Ein vierwöchiger Ausleihpilot wird von der Servicekoordination ausgewertet.",
+          "notes": "Benennen Sie Wahl, Verantwortung und Zeitgrenze."
+        },
+        {
+          "title": "Gleiche Vergleichsfragen",
+          "body": "Vergleichen Sie Einrichtung, laufenden Aufwand und Umkehrbarkeit der drei Optionen.",
+          "notes": "Urteile sind illustrativ, keine gemessenen Produktvorteile."
+        },
+        {
+          "title": "Unsicherheit wird zur Aufgabe",
+          "body": "Beobachten Sie Verfügbarkeit und Aufwand vor einer größeren Verpflichtung.",
+          "notes": "Suchen Sie Belege, die die Wahl ändern könnten."
+        },
+        {
+          "title": "Eine Seite zum Beginnen",
+          "body": "Notieren Sie Wahl, Alternativen, Gründe, Verantwortung, Prüfung und Änderungssignal.",
+          "notes": "Erklären Sie den Nutzen für später hinzukommende Kollegen."
+        },
+        {
+          "title": "Den Aufwand angemessen halten",
+          "body": "Umkehrbare Routine braucht kurze Notizen; Geld, Zugang und Verantwortung mehr Klarheit.",
+          "notes": "Zeigen Sie einen leichten und einen aufwendigeren Fall."
+        },
+        {
+          "title": "Die nächste Entscheidung erleichtern",
+          "body": "Ergebnis, Unsicherheit und Gründe führen zum begrenzten Pilot und zur Prüfung.",
+          "notes": "Private Reflexion genügt; eine Antwort ist nicht erforderlich."
+        }
+      ]
+    },
+    {
+      "title": "Mapline: von Anfrage zu Abschluss",
+      "description": "Produktgeschichte eines fiktiven Übergabewerkzeugs. Funktionen und Datensätze sind illustrative Vorschläge.",
+      "scenarioLabel": "Produktdemo",
+      "slides": [
+        {
+          "title": "Eine Aufgabe, sichtbarer Ausgang",
+          "body": "Mapline verfolgt eine fiktive Raumanfrage bis zum nachvollziehbaren Abschluss.",
+          "notes": "Trennen Sie verfügbare, experimentelle und vorgeschlagene Funktionen."
+        },
+        {
+          "title": "Einen verständlichen Datensatz vorbereiten",
+          "body": "Termin, Koordination, Raumkontakt und Checkliste rahmen ein erfundenes Gemeinschaftstreffen.",
+          "notes": "Bereiten Sie zulässige Daten ohne persönliche Angaben vor."
+        },
+        {
+          "title": "Handlungsfähigen Kontext erfassen",
+          "body": "Beschreiben Sie Ziel, Zeit, Zugang und Aufbau statt eines vagen Titels.",
+          "notes": "Zeigen Sie echte Felder oder erklären Sie das Konzept."
+        },
+        {
+          "title": "Verantwortung sichtbar machen",
+          "body": "Die Koordination übergibt an den Raumkontakt und nennt die nächste Rückmeldung.",
+          "notes": "Erklären Sie Rechte und tatsächliche Benachrichtigungen."
+        },
+        {
+          "title": "Den Ausnahmeweg zeigen",
+          "body": "Ein Aufbau ist nicht verfügbar; eine Alternative geht zur Entscheidung zurück.",
+          "notes": "Zeigen Sie eine sichere Ausnahme und die menschliche Entscheidung."
+        },
+        {
+          "title": "Die ursprüngliche Anfrage beantworten",
+          "body": "Der akzeptierte Aufbau und noch offene Aufgaben werden im Abschluss dokumentiert.",
+          "notes": "Halten Sie den Abschluss mit der Ausnahme konsistent."
+        },
+        {
+          "title": "Was die Demo belegt",
+          "body": "Der Ablauf beweist weder Integrationen noch Sicherheit, Leistung oder Kundenerfolg.",
+          "notes": "Nennen Sie aktuelle Grenzen und gesonderte Nachweise."
+        },
+        {
+          "title": "Mit einer eigenen Aufgabe testen",
+          "body": "Ein begrenzter Versuch verfolgt eine repräsentative Anfrage mit geringem Risiko.",
+          "notes": "Bieten Sie einen realen Testweg ohne sensible Produktionsdaten."
+        }
+      ]
+    },
+    {
+      "title": "Wren Studio: eine nützliche erste Woche",
+      "description": "Einarbeitung in ein fiktives Serviceteam. Rollen, Zeitplan und Aufgaben sind anpassbare Beispiele.",
+      "scenarioLabel": "Kundeneinarbeitung",
+      "slides": [
+        {
+          "title": "Ein unterstützter Beitrag",
+          "body": "Wren Studio verbessert Serviceinformation; lernen Sie Ablauf, erste Aufgabe und Hilfswege.",
+          "notes": "Passen Sie Rolle und noch nicht erwartetes Wissen an."
+        },
+        {
+          "title": "So fließt die Arbeit",
+          "body": "Anfrage, Briefing, Entwurf, Prüfung und dokumentierte Übergabe bilden den Ablauf.",
+          "notes": "Zeigen Sie ein erlaubtes Beispiel und den aktuellen Status."
+        },
+        {
+          "title": "Eine Woche mit Unterstützung",
+          "body": "Zugang und Kontext gehen einer betreuten ersten Aufgabe voraus.",
+          "notes": "Passen Sie Tage, Arbeitszeiten und Unterstützungsbedarf an."
+        },
+        {
+          "title": "Zugang ist Voraussetzung",
+          "body": "Kommunikationskanal, Projektbereich und Beispiele müssen vor Aufgabenbeginn bereitstehen.",
+          "notes": "Bestätigen Sie Zugänge; teilen Sie keine Konten oder Geheimnisse."
+        },
+        {
+          "title": "Einen Buchungshinweis klären",
+          "body": "Ein fiktiver Hinweis erklärt Berechtigung, benötigte Angaben und Kontakt.",
+          "notes": "Wählen Sie eine echte risikoarme Aufgabe und ein freigegebenes Muster."
+        },
+        {
+          "title": "Eine hilfreiche Prüfung",
+          "body": "Prüfen Sie nächste Handlung, Richtigkeit und Annahmen; begründen Sie Änderungen.",
+          "notes": "Zeigen Sie konkretes Feedback und die fachliche Freigabe."
+        },
+        {
+          "title": "Bei Unklarheit Hilfe finden",
+          "body": "Aufgabenprüfung, Einarbeitungspartner und Zugangssupport helfen bei verschiedenen Fragen.",
+          "notes": "Ersetzen Sie Rollen durch aktuelle Kontakte oder Verzeichnislinks."
+        },
+        {
+          "title": "Die nächste Woche vorbereiten",
+          "body": "Besprechen Sie Aufgabe, offene Fragen, nächste Arbeit und verbesserte Unterstützung.",
+          "notes": "Vereinbaren Sie einen echten Termin und vertrauliche Rückmeldung."
+        }
+      ]
+    },
+    {
+      "title": "Von Buchungsfrust zum kleinen Experiment",
+      "description": "Vollständiger Workshop über eine fiktive Raumbuchung ohne erforderliche Abstimmungen.",
+      "scenarioLabel": "Praktischer Workshop",
+      "slides": [
+        {
+          "title": "Ein durchführbares Experiment",
+          "body": "Eine begrenzte Änderung mit Verantwortung soll Buchungsstatus verständlicher machen.",
+          "notes": "Passen Sie den Service an; die Erklärung bleibt ohne Aktivität vollständig."
+        },
+        {
+          "title": "Ein gemeinsames Szenario",
+          "body": "Eine Anfrage wird empfangen, aber der Buchende erkennt fehlende Bestätigung nicht.",
+          "notes": "Erklären Sie das Szenario neutral und ausdrücklich als Beispiel."
+        },
+        {
+          "title": "Übergabe zuerst darstellen",
+          "body": "Trennen Sie sichtbare Schritte und interne Arbeit, um die Mehrdeutigkeit zu finden.",
+          "notes": "Erklären Sie jede Spalte anhand derselben Anfrage."
+        },
+        {
+          "title": "Die fehlende Unterscheidung",
+          "body": "Empfang ähnelt Bestätigung; klarere Mitteilungen sind vor einem Plattformwechsel testbar.",
+          "notes": "Bezeichnen Sie die Ursache als Hypothese."
+        },
+        {
+          "title": "Ein kleines Experiment",
+          "body": "Erklären Sie Eingang, fehlende Bestätigung, nächste Schritte, Frist und fehlende Angaben.",
+          "notes": "Versprechen Sie nur verlässlich leistbare Antwortzeiten."
+        },
+        {
+          "title": "Passende Nachweise wählen",
+          "body": "Prüfen Sie Verständnis und Klärungsanfragen statt nur Abschlusszahlen.",
+          "notes": "Planen Sie zulässige Beobachtungen ohne personenbezogene Artefakte."
+        },
+        {
+          "title": "Grenzen vorab einplanen",
+          "body": "Mitteilung, korrekte Bedingungen und Hilfsweg brauchen Pflege und Zuständigkeit.",
+          "notes": "Ändern Sie unhaltbare Zusagen oder stoppen Sie den Pilot."
+        },
+        {
+          "title": "Eine verantwortete Entscheidung",
+          "body": "Testen Sie eine klarere Nachricht, bewahren Sie den Vergleich und prüfen Sie vor Ausweitung.",
+          "notes": "Notieren Sie Termine und Stoppsignal; Zustimmung ist noch keine Umsetzung."
+        }
+      ]
+    },
+    {
+      "title": "Eine Veränderung erklärt noch nichts",
+      "description": "Lektion über Vergleiche und Kausalität mit erfundenen Bibliothekswerten, ohne Pflichtquiz.",
+      "scenarioLabel": "Lektion und Erklärung",
+      "slides": [
+        {
+          "title": "Was zeigt vorher und nachher?",
+          "body": "Pünktliche Rückgaben steigen nach einer Erinnerung; Zahlen allein erklären die Ursache nicht.",
+          "notes": "Kennzeichnen Sie Bibliothek und sämtliche Werte als erfunden."
+        },
+        {
+          "title": "Die Veränderung genau beschreiben",
+          "body": "60% werden zu 75%: 15 Prozentpunkte, kein belegter kausaler Effekt.",
+          "notes": "Zeigen Sie 75 minus 60 und unterscheiden Sie relative Prozente."
+        },
+        {
+          "title": "Was änderte sich noch?",
+          "body": "Andere Menschen, Bücher, Ferien oder Messregeln können Unterschiede erklären.",
+          "notes": "Beschreiben Sie Möglichkeiten, keine behaupteten Ereignisse."
+        },
+        {
+          "title": "Eine Vergleichsgruppe hinzufügen",
+          "body": "Eine ähnliche Filiale im gleichen Zeitraum hilft, weitere Trends zu erkennen.",
+          "notes": "Prüfen Sie Vergleichbarkeit vor kausalen Schlüssen."
+        },
+        {
+          "title": "Die Studie auf die Aussage ausrichten",
+          "body": "Definieren Sie Gruppen, Ergebnis und fehlende Daten vor der Analyse; erwägen Sie Zufallszuweisung.",
+          "notes": "Auch Durchführung, Stichprobe und Auswertung bleiben wichtig."
+        },
+        {
+          "title": "Grenzen zum Ergebnis nennen",
+          "body": "Menschen, Nachricht und Zeitraum begrenzen die Aussage; Verallgemeinerung braucht mehr Belege.",
+          "notes": "Ersetzen Sie Beispielgrenzen durch den tatsächlichen Studienrahmen."
+        },
+        {
+          "title": "Passend formulieren",
+          "body": "„Nach der Erinnerung gestiegen“ beschreibt; „durch sie verursacht“ behauptet mehr.",
+          "notes": "Lesen Sie beide Aussagen und benennen Sie den Kausalzusatz."
+        },
+        {
+          "title": "Beschreiben, vergleichen, eingrenzen",
+          "body": "Benennen Sie Veränderung, stützenden Vergleich und Reichweite der Schlussfolgerung.",
+          "notes": "Gehen Sie das Beispiel ohne verpflichtende Publikumsantwort durch."
+        }
+      ]
+    },
+    {
+      "title": "Offline-Notizen: illustrative Forschungsauswertung",
+      "description": "Probevortrag mit synthetischen Aufgabenaufzeichnungen. Keine Interviews oder validierten Ergebnisse werden vorgetäuscht.",
+      "scenarioLabel": "Forschungsergebnisse",
+      "slides": [
+        {
+          "title": "Was muss offline erhalten bleiben?",
+          "body": "Synthetische Datensätze untersuchen Notizen bei unzuverlässiger Verbindung.",
+          "notes": "Ersetzen Sie Fiktion durch nachvollziehbare erlaubte Belege."
+        },
+        {
+          "title": "Plan und vorhandene Belege trennen",
+          "body": "Erfassung, Unterbrechung und Wiederverbindung sind geplant; tatsächlich liegen nur Skripte vor.",
+          "notes": "Bezeichnen Sie Skripte niemals als durchgeführte Interviews."
+        },
+        {
+          "title": "Interpretation überprüfbar machen",
+          "body": "Gruppieren Sie Speicher-, Anhangs- und Duplikatunsicherheit, ohne Nutzerbefunde zu behaupten.",
+          "notes": "Verknüpfen Sie Codes mit Quellen und erhalten Sie Mehrdeutigkeit."
+        },
+        {
+          "title": "Den Nenner erklären",
+          "body": "Zwölf synthetische Aufgaben enthalten acht Normalverläufe und vier Unterbrechungen.",
+          "notes": "Die Anteile sind keine gemessene Nutzererfolgsquote."
+        },
+        {
+          "title": "Drei Gestaltungshypothesen",
+          "body": "Lokales Speichern, Synchronisierung und Wiederaufnahme sollen verständlich sichtbar werden.",
+          "notes": "Verbinden Sie jede Hypothese mit einem widerlegbaren Test."
+        },
+        {
+          "title": "Offene Fragen benennen",
+          "body": "Häufigkeit, Zielgruppen und Statusverständnis erfordern Forschung im tatsächlichen Umfeld.",
+          "notes": "Nutzen Sie Grenzen zur Priorisierung der nächsten Studie."
+        },
+        {
+          "title": "Gezielt evaluieren",
+          "body": "Prüfen Sie gespeicherte, wartende und synchronisierte Zustände bei realistischen Unterbrechungen.",
+          "notes": "Planen Sie Teilnahme, Quellenbewahrung und Verantwortung."
+        },
+        {
+          "title": "Die nächste Beleganforderung klären",
+          "body": "Untersuchen Sie Statusverständnis vor Funktionsausbau und berichten Sie echte Beobachtungen.",
+          "notes": "Entfernen Sie synthetische Diagramme aus angeblich validierten Ergebnissen."
+        }
+      ]
+    },
+    {
+      "title": "Gemeinschaftsdruckraum: reparieren, ersetzen oder teilen?",
+      "description": "Entscheidungsvorlage eines fiktiven Kunstzentrums. Kosten und Abwägungen sind vor einem Kauf zu verifizieren.",
+      "scenarioLabel": "Geschäftliche Entscheidungsvorlage",
+      "slides": [
+        {
+          "title": "Verlässlich drucken können",
+          "body": "Verglichen werden Reparatur, Ersatz und ein geteilter Druckdienst.",
+          "notes": "Kennzeichnen Sie die Planung als Beispiel, nicht als Kaufberatung."
+        },
+        {
+          "title": "Kriterien vor Preisen",
+          "body": "Verfügbarkeit, Aufwand, Kosten und Umkehrbarkeit zählen neben dem Kaufpreis.",
+          "notes": "Bestätigen Sie Pflichtanforderungen und Freigabeprozess."
+        },
+        {
+          "title": "Drei abgegrenzte Optionen",
+          "body": "Reparatur braucht Diagnose, Ersatz Einrichtung, geteilte Dienste Koordination und Anreise.",
+          "notes": "Vergleichen Sie verifizierte Angebote und Ausschlüsse."
+        },
+        {
+          "title": "Vergleichbare Annahmen verwenden",
+          "body": "Erfundene Erstjahreskosten umfassen Start und Betrieb, ohne Steuern und ungenannte Umbauten.",
+          "notes": "Ersetzen Sie Beträge durch datierte vergleichbare Quellen."
+        },
+        {
+          "title": "Betriebsaufwand gesondert vergleichen",
+          "body": "Reparatur verlangt mehr Aufmerksamkeit, ein geteilter Dienst mehr Koordination.",
+          "notes": "Verwechseln Sie geschätzte Stunden nicht mit gemessenen Einsparungen."
+        },
+        {
+          "title": "Was könnte die Wahl umkehren?",
+          "body": "Diagnose, Verbrauchsmaterial oder Öffnungszeiten können den Vorrang verändern.",
+          "notes": "Beschaffen Sie entscheidende Belege vor kleinen Kostenverfeinerungen."
+        },
+        {
+          "title": "Bedingt empfehlen",
+          "body": "Prüfen Sie Reparatur zuerst nur bei glaubwürdiger Diagnose und tragfähigem Betrieb.",
+          "notes": "Halten Sie Alternativen offen; dies ist keine reale Kaufempfehlung."
+        },
+        {
+          "title": "Den nächsten Belegschritt freigeben",
+          "body": "Genehmigen Sie eine begrenzte Prüfung und vergleichbare Betriebsinformationen.",
+          "notes": "Notieren Sie Verantwortung, Ausgabenbefugnis und Wiedervorlagetermin."
+        }
+      ]
+    }
+  ],
+  "nativeData": {
+    "0.1": [
+      "Eingang: mehrere Kanäle, unterschiedlich genaue Anfragen.",
+      "Verantwortung: nach Weiterleitung bleibt die nächste Zuständigkeit unklar.",
+      "Abschluss: Meldende erkennen nicht, ob das Problem gelöst oder nur bestätigt wurde."
+    ],
+    "0.2": [
+      "Beispielanfragen je Werkstatt und Woche",
+      "Drei erfundene Auslastungen von 18 bis 35 Wochenanfragen zeigen einen Gestaltungsrahmen, keine bestätigte Nachfrage.",
+      "Kleine Werkstatt",
+      "Wachsende Werkstatt",
+      "Stark ausgelastete Werkstatt",
+      "Beispielhafte Wochenanfragen"
+    ],
+    "0.3": [
+      "Erfassen: Ort, Problem, Dringlichkeit und optional ein freigegebenes Bild.",
+      "Zuweisen: eine verantwortliche Person und sichtbare nächste Rückmeldung.",
+      "Lösen: Maßnahme dokumentieren und Meldende über Änderungen informieren."
+    ],
+    "0.4": [
+      "Beispielhafte Abläufe; Annahmen prüfen",
+      "Ansatz",
+      "Stärke",
+      "Zu prüfender Nachteil",
+      "Gemeinsames Postfach",
+      "Bereits vertraut",
+      "Status und Zuständigkeit brauchen eventuell manuelle Regeln",
+      "Allgemeine Aufgabentafel",
+      "Flexibler Ablauf",
+      "Anfrageeingang bleibt eventuell verstreut",
+      "Vorgeschlagene HarborTask-Warteschlange",
+      "Gezielte Übergabe",
+      "Neue Gewohnheit und zusätzliches Werkzeug zur Pflege"
+    ],
+    "0.5": [
+      "Beispielhafte Angebotsannahmen, keine Verkäufe oder Umsätze",
+      "Annahme",
+      "Rechenbeispiel",
+      "Benötigter Nachweis",
+      "Pilotdauer",
+      "6 Wochen",
+      "Wiederholte Nutzung beobachten",
+      "Vorgeschlagene monatliche Standortgebühr",
+      "Echtes Kaufgespräch",
+      "Anfänglicher Einrichtungsaufwand",
+      "2 Personalstunden",
+      "Gemessener Einführungsversuch"
+    ],
+    "1.1": [
+      "Können wir kommen? Zeiten, Schließungen, Zugang und Hilfekontakte.",
+      "Wie kommen wir hin? Weg, Verkehrsmittel und richtiger Eingang.",
+      "Was buchen wir? Klare Tickets, Bedingungen und nächste Aktion."
+    ],
+    "1.2": [
+      "Enthalten: Besuchsweg, Seitenstruktur, Inhaltshilfe, anpassungsfähiger Prototyp und Umsetzungshilfe.",
+      "Nicht enthalten: Zahlungssystemwechsel, Katalogisierung, Fotos und vollständige Markenüberarbeitung."
+    ],
+    "1.3": [
+      "Beispielhafte Ergebnisse und Freigaben",
+      "Ergebnis",
+      "Geklärte Frage",
+      "Prüfende Rolle",
+      "Besuchsweg und Inhaltsplan",
+      "Was müssen Besucher finden?",
+      "Leitung Besucherservice",
+      "Anpassungsfähiger Prototyp",
+      "Sind Aufgaben klar ausführbar?",
+      "Projektverantwortung beim Kunden",
+      "Übergabe zur Umsetzung",
+      "Ist der Entwurf umsetzbar und wartbar?",
+      "Web-Leitung",
+      "Startcheckliste",
+      "Sind vereinbarte Aufgaben und Inhalte bereit?",
+      "Benannte Startverantwortung"
+    ],
+    "1.4": [
+      "Beispielzeitplan, keine Lieferzusage",
+      "Woche",
+      "Hauptarbeit",
+      "Kundenbeitrag",
+      "Erkundung und Aufgabendefinition",
+      "Vorhandene Inhalte und Zugang zu Beteiligten",
+      "Struktur und Inhaltsentwurf",
+      "Eine gebündelte Inhaltsprüfung",
+      "Prototyp und Aufgabendurchlauf",
+      "Entscheidung zum vorgeschlagenen Besuchsweg",
+      "Umsetzungshilfe und Übergabe",
+      "Technischer Zugang und Zeit der Web-Leitung",
+      "Prüfungen und Startvorbereitung",
+      "Freigegebene Inhalte und Startentscheidung"
+    ],
+    "1.5": [
+      "Beispielhonorare in Beispieldollar",
+      "Nur Entwurf: $8,000; begleitete Umsetzung: $12,000. Erfundene Planwerte, kein Angebot.",
+      "Entwurfsübergabe",
+      "Begleitete Umsetzung",
+      "Beispielhonorar"
+    ],
+    "2.1": [
+      "Erledigt: Seiteninventar und Migrationsregeln für den Piloten vereinbart.",
+      "Gelernt: Quellberechtigungen unterscheiden sich zwischen zwei Betriebsteams.",
+      "Entscheidung nötig: eine zuständige Freigabeinstanz für das Zielzugriffsmodell."
+    ],
+    "2.2": [
+      "Beispielhaft abgenommene Arbeitseinheiten am Prüfpunkt",
+      "Erkundung und Zuordnung erreichen die Planmengen; Pilotmigration: 8 abgenommene von 12 geplanten Einheiten. Einführung noch nicht fällig.",
+      "Erkundung",
+      "Inhaltszuordnung",
+      "Pilotmigration",
+      "Einführung",
+      "Bis Prüfpunkt geplant",
+      "Im Beispiel abgenommen"
+    ],
+    "2.3": [
+      "Nicht abgenommene Pilotpunkte bei wöchentlichen Beispielprüfungen",
+      "Restmenge sinkt in vier Prüfungen von 24 auf 10; zwischen zweiter und dritter Prüfung werden nur zwei Punkte abgenommen.",
+      "Prüfung 1",
+      "Prüfung 2",
+      "Prüfung 3",
+      "Prüfung 4",
+      "Beispielhafte Restpunkte"
+    ],
+    "2.5": [
+      "Beispielhafter Zweiwochenplan",
+      "Ergebnis",
+      "Verantwortliche Rolle",
+      "Abschlussnachweis",
+      "Zugriffsmodell freigeben",
+      "Serviceverantwortung",
+      "Dokumentierte Zugriffsentscheidung",
+      "Pilotprüfungen abschließen",
+      "Migrationsleitung",
+      "Abgenommene Checkliste und Problemliste",
+      "Rücksetzung proben",
+      "Betriebsleitung",
+      "Dokumentierte Wiederherstellungsprobe",
+      "Einführungsbereitschaft entscheiden",
+      "Projektauftraggeber",
+      "Ausdrückliche Start- oder Verschiebungsentscheidung"
+    ],
+    "3.2": [
+      "Verstehen: Material, Reparierbarkeit und Produkteignung einfach erklären.",
+      "Auswählen: Kompatibilität, Gesamtpreis und Lieferbedingungen klären.",
+      "Weiternutzen: Ersatzteile, Pflegehinweise und Hilfe leicht auffindbar machen."
+    ],
+    "3.3": [
+      "Beispielhafte Kapazitätsverteilung im Quartal",
+      "Die Hälfte für den Kaufablauf, 30% für Verbesserungen nach dem Kauf und 20% für den laufenden Betrieb.",
+      "Kaufablauf",
+      "Hilfe nach dem Kauf",
+      "Laufender Betrieb",
+      "Planungseinheiten"
+    ],
+    "3.4": [
+      "Beispielhafte Ergebnisdefinitionen; Ausgangswerte noch messen",
+      "Priorität",
+      "Zu bestimmendes Signal",
+      "Zu organisierende Nachweisquelle",
+      "Produktverständnis",
+      "Eignungsfragen je geprüfter Bestellung",
+      "Genehmigte Auswertung von Hilfeanfragen",
+      "Klarerer Kauf",
+      "Abbrüche oder Hilfebedarf bei Aufgaben",
+      "Beobachtete Aufgabendurchläufe",
+      "Hilfe nach dem Kauf",
+      "Wiederholte Pflegefragen nach Thema",
+      "Datierte Stichprobe von Hilfeanfragen"
+    ],
+    "3.5": [
+      "Zuerst: Begriffe bestimmen und ein typisches Produkt durcharbeiten.",
+      "Dann: neuen Ablauf testen und nur hilfreiche Änderungen ausweiten.",
+      "Schließlich: Ergebnisse, Hilfeaufwand und Abwägungen fürs nächste Quartal prüfen."
+    ],
+    "4.1": [
+      "Im Beispiel verantwortet: Besucheraufgaben, Schildhierarchie und Prototypentscheidungen.",
+      "Abhängigkeiten: Betreiberbegriffe, barrierefreie Wege, Installationsregeln und korrekte Serviceinfos."
+    ],
+    "4.3": [
+      "Beispielhafte Orientierungslücken zur Entwurfserklärung",
+      "Zeitpunkt",
+      "Frage",
+      "Vorgeschlagene Information",
+      "Eingang",
+      "In welche Richtung muss ich?",
+      "Ziel und Richtung vor Bahnsteigdetails zeigen",
+      "Umstieg",
+      "Erreiche ich den nächsten Bahnsteig stufenlos?",
+      "Barrierefreien Weg ausdrücklich zeigen",
+      "Störung",
+      "Wo bekomme ich aktuelle Hilfe?",
+      "Verlässlichen Hilfeweg zeigen"
+    ],
+    "4.4": [
+      "Vorrangig: Ziel oder Richtung in einfacher Sprache.",
+      "Nachgeordnet: Bahnsteig, Umstieg oder barrierefreier Weg.",
+      "Ergänzend: lokale Kennungen und nächste Hilfestelle."
+    ],
+    "4.5": [
+      "Beispielhafter Entwurfsvergleich, keine Messergebnisse",
+      "Vorheriges Szenario",
+      "Vorschlag",
+      "Noch zu prüfen",
+      "Bahnsteigkennung zuerst",
+      "Ziel führt die Hierarchie an",
+      "Wählen Besucher den richtigen Weg?",
+      "Barrierefreier Weg nur angedeutet",
+      "Benannter Weg sichtbar",
+      "Ist der Weg korrekt und verständlich?",
+      "Hilfeinfos verstreut",
+      "Einheitlicher Hilfehinweis",
+      "Erreichen Besucher nützliche Hilfe?"
+    ],
+    "5.1": [
+      "Ergebnis: Was soll leichter oder zuverlässiger werden?",
+      "Grenze: Was muss die Lösung beachten?",
+      "Ungewissheit: Was vor einer Zusage lernen?"
+    ],
+    "5.3": [
+      "Beispieloptionen für den Bibliotheks-Ausleihpiloten",
+      "Wahlmöglichkeit",
+      "Hauptaufwand",
+      "Mögliche Erkenntnis",
+      "Neues Ausleihwerkzeug",
+      "Einrichtung und Schulung",
+      "Passt der Ablauf zum Service?",
+      "Bestehenden Ablauf vereinfachen",
+      "Klarere Schritte vereinbaren und dokumentieren",
+      "Ist Unklarheit das Hauptproblem?",
+      "Manueller Vierwochenpilot",
+      "Einheitliche Erfassung und Prüfung",
+      "Welche Infos und Kontrollen sind wirklich nötig?"
+    ],
+    "5.5": [
+      "Entscheidung und Grund: begrenzter manueller Pilot zum Ablaufverständnis.",
+      "Verantwortung und Prüfung: Servicekoordination prüft nach vier Wochen.",
+      "Neubewertung: Ablauf nicht durchhaltbar oder wesentlicher Servicebedarf verfehlt."
+    ],
+    "6.1": [
+      "Beispielhafter Demonstrationsdatensatz",
+      "Feld",
+      "Beispielwert",
+      "Anfrage",
+      "Gemeinschaftlichen Besprechungsraum vorbereiten",
+      "Verantwortliche Rolle",
+      "Veranstaltungskoordination",
+      "Benötigtes Ergebnis",
+      "Raumanordnung und Zugang geprüft",
+      "Abschlussnachweis",
+      "Checkliste und kurze Lösungsnotiz"
+    ],
+    "6.3": [
+      "Vor Übergabe: Anfrage vorhanden, Verantwortung noch nicht übernommen.",
+      "Nach Übergabe: verantwortliche Rolle und nächste Rückmeldung sichtbar."
+    ],
+    "7.1": [
+      "Auftrag verstehen: Ergebnis, Zielgruppe und Grenzen.",
+      "Nützliche Erstversion: klein genug für zeitnahe Rückmeldung.",
+      "Prüfen und übergeben: Entscheidung und Restarbeit dokumentieren."
+    ],
+    "7.2": [
+      "Beispielplan der ersten Woche",
+      "Wann",
+      "Hauptergebnis",
+      "Unterstützende Rolle",
+      "Tag 1",
+      "Teamauftrag und Hilfekontakte kennen",
+      "Einarbeitungspartner",
+      "Tag 2",
+      "Werkzeuge und Musterauftrag finden",
+      "Teamleitung",
+      "Tage 3–4",
+      "Erste Aufgabe mit Unterstützung abschließen",
+      "Aufgabenprüfung",
+      "Tag 5",
+      "Hilfreiches prüfen und nächste Aufgabe wählen",
+      "Teamleitung und neues Mitglied"
+    ],
+    "7.5": [
+      "Klarheit: Zielgruppe findet die nächste Aktion.",
+      "Korrektheit: Aussagen und Anweisungen entsprechen freigegebenen Quellen.",
+      "Übergabe: Prüfung erkennt offene Fragen und nächste Zuständigkeit."
+    ],
+    "8.2": [
+      "Beispielhafter Buchungsserviceplan",
+      "Phase",
+      "Anfragende sehen",
+      "Personalaufgabe",
+      "Anfrage",
+      "Abgesendetes Formular",
+      "Pflichtangaben prüfen",
+      "Eingangsbestätigung",
+      "Nachricht über Formulareingang",
+      "Eingang von Zusage unterscheiden",
+      "Klärung",
+      "Nachfrage nach fehlenden Angaben",
+      "Weiteren Informationsbedarf erfassen",
+      "Zusage",
+      "Klare Buchungsentscheidung",
+      "Zeitplan aktualisieren und Anfragende informieren"
+    ],
+    "8.4": [
+      "Änderung: Eingang und Zusage in einer Nachricht unterscheiden.",
+      "Lernen: Können Anfragende Status und nächsten Schritt erklären?",
+      "Grenze: ein Buchungskanal im kurzen vereinbarten Prüfzeitraum."
+    ],
+    "9.1": [
+      "Beispielhafte pünktliche Rückgaben in Prozent",
+      "Erfundene Quote steigt von 60% vor der Erinnerung auf 75% danach: 15 Prozentpunkte. Kausalität ist nicht belegt.",
+      "Vor Erinnerung",
+      "Nach Erinnerung",
+      "Beispielhafte pünktliche Rückgaben (%)"
+    ],
+    "9.2": [
+      "Menschen: dieselben Gruppen von Ausleihenden?",
+      "Kontext: Zeiten, Ausleihmuster oder andere Dienste verändert?",
+      "Messung: pünktliche Rückgabe gleich definiert und erfasst?"
+    ],
+    "9.3": [
+      "Beispielvergleich; keine Kausalität belegt",
+      "Beispielfiliale",
+      "Früherer Zeitraum",
+      "Späterer Zeitraum",
+      "Filiale mit Erinnerung",
+      "Vergleichsfiliale"
+    ],
+    "9.5": [
+      "Wer: tatsächlich einbezogene Menschen und Umgebungen.",
+      "Was: genaue Erinnerung und gemessenes Ergebnis.",
+      "Wann: beobachteter Zeitraum und noch unbekannte Dauer."
+    ],
+    "9.6": [
+      "Beispielaussagen und ihre Belegreichweite",
+      "Aussage",
+      "Behauptung",
+      "Pünktliche Rückgaben steigen nach Einführung von 60% auf 75%",
+      "Gemessene Abfolge und Differenz",
+      "Die Erinnerung verursachte den gesamten Anstieg",
+      "Kausalerklärung braucht stärkere Belege",
+      "Die Erinnerung verbessert Rückgaben überall",
+      "Breite Verallgemeinerung braucht weitere Belege"
+    ],
+    "10.1": [
+      "Beleginventar dieser synthetischen Auswertung",
+      "Unterlagen",
+      "Status im Beispiel",
+      "Zulässiger Schluss",
+      "Aufgabenskripte",
+      "Beispielplan",
+      "Was das Team untersuchen möchte",
+      "Zwölf geskriptete Aufgabendatensätze",
+      "Synthetische Testdaten",
+      "Ob die Berichtsstruktur stimmig ist",
+      "Reale Teilnehmerbeobachtungen",
+      "Nicht vorhanden",
+      "Keine Teilnehmendenbefunde ableitbar",
+      "Nutzungs- oder Kundendaten",
+      "Nicht vorhanden",
+      "Keine Häufigkeits- oder Ergebnisbehauptung möglich"
+    ],
+    "10.2": [
+      "Beispielkodierung geskripteter Ablaufprobleme",
+      "Kürzel",
+      "Geskriptete Beispielsituation",
+      "Gestaltungsfrage",
+      "Speicherunsicherheit",
+      "Verbindungsabbruch nach Erfassung",
+      "Erkennt der Autor, was erhalten bleibt?",
+      "Anhangsunsicherheit",
+      "Bild noch nicht offline verfügbar",
+      "Ist Nichtverfügbarkeit klar?",
+      "Duplikatunsicherheit",
+      "Wiederverbindung wiederholt wartende Aktion",
+      "Wird eine angenommene Aktion nur einmal erfasst?"
+    ],
+    "10.3": [
+      "Synthetische Aufgabenergebnisse, keine Teilnehmerergebnisse",
+      "Acht von zwölf erfundenen Datensätzen folgen dem Sollweg, vier enthalten geskriptete Unterbrechungen. Gezeigt wird nur die Berichtsstruktur.",
+      "Sollweg",
+      "Geskriptete Unterbrechung",
+      "Synthetische Aufgabendatensätze"
+    ],
+    "10.4": [
+      "Speicherstand: Autor erkennt sicher lokal gespeicherte Inhalte.",
+      "Synchronisation: Oberfläche unterscheidet lokale und gemeinsame Versionen.",
+      "Wiederaufnahme: wartende Arbeit hat einen verständlichen nächsten Schritt."
+    ],
+    "10.6": [
+      "Beispielfragen für die nächste Studie",
+      "Frage",
+      "Gesuchte Beobachtung",
+      "Gestützte Entscheidung",
+      "Erkennt jemand eine lokal gespeicherte Notiz?",
+      "Erklärung nach geskripteter Unterbrechung",
+      "Wortlaut des Speicherstatus",
+      "Erkennt jemand wartende Synchronisation?",
+      "Gewählte nächste Aktion",
+      "Status- und Wiederaufnahmekontrollen",
+      "Fortsetzen ohne Doppelarbeit?",
+      "Aufgabendurchlauf nach Wiederverbindung",
+      "Gestaltung des Wiederaufnahmeablaufs"
+    ],
+    "11.1": [
+      "Serviceeignung: Verfügbarkeit, Zugang und Aufgaben des Zentrums.",
+      "Betriebseignung: Personalaufwand, Material und Hilfszuständigkeit.",
+      "Entscheidungseignung: Bezahlbarkeit, Ungewissheit und Rücknahmekosten."
+    ],
+    "11.3": [
+      "Beispielkosten im ersten Jahr, keine Angebote",
+      "Wahlmöglichkeit",
+      "Erstmaßnahme",
+      "Beispielhafter Jahresbetrieb",
+      "Beispielsumme im ersten Jahr",
+      "Bestehenden Drucker reparieren",
+      "Drucker ersetzen",
+      "Gemeinsamen Dienst nutzen"
+    ],
+    "11.4": [
+      "Beispielhafte monatliche Personalstunden je Option",
+      "Beispiel: 4 Stunden für Reparatur, 2 für Ersatz, 3 für Koordination eines gemeinsamen Dienstes. Keine gemessenen Betriebsergebnisse.",
+      "Reparatur",
+      "Ersatz",
+      "Gemeinsamer Dienst",
+      "Beispielhafte Personalstunden pro Monat"
+    ],
+    "11.5": [
+      "Beispielhafte entscheidungsrelevante Ungewissheiten",
+      "Wahlmöglichkeit",
+      "Ungewissheit",
+      "Anzufordernder Nachweis",
+      "Reparatur",
+      "Sind Fehler und erwartete Lebensdauer bekannt?",
+      "Qualifizierte schriftliche Bewertung",
+      "Ersatz",
+      "Sind Einrichtung und laufendes Material enthalten?",
+      "Vollständiges vergleichbares Angebot",
+      "Gemeinsamer Dienst",
+      "Passt die Verfügbarkeit zu den Aufgaben?",
+      "Schriftliche Bedingungen und Aufgabenversuch"
+    ]
+  },
+  "facilitated": [
+    {
+      "title": "Evidenz prüfen",
+      "description": "Prüfen Sie Aussage, Begründung und die nächste benötigte Evidenz.",
+      "blocks": [
+        [
+          "Von der Aussage zur Evidenz",
+          "Ein Team berichtet: Nach einer Erinnerung steigt die Abschlussquote von 60% auf 75%. Was folgt daraus?",
+          "Sammeln Sie erste Deutungen vor dem Vergleich."
+        ],
+        [
+          "Was zeigt dieser Vorher-Nachher-Vergleich?",
+          "Die Erinnerung hat die Verbesserung sicher verursacht",
+          "Die Quote steigt, doch andere Erklärungen sind möglich",
+          "Die Erinnerung kann nicht geholfen haben",
+          "Eine zeitliche Änderung schließt andere Teilnehmende, Zeitpunkte oder Bedingungen nicht aus."
+        ],
+        [
+          "Was hat sich sonst geändert?",
+          "Wer war beteiligt, wie wurde gemessen und was änderte sich gleichzeitig?",
+          "Verbinden Sie Überlegungen mit Alternativerklärungen; ein Anstieg beweist keine Ursache."
+        ],
+        [
+          "Welche Evidenz hilft als Nächstes am meisten?",
+          "Eine vergleichbare Gruppe ohne Erinnerung",
+          "Eine selbstbewusstere Überschrift",
+          "Nur positive Anekdoten",
+          "Ein größeres Logo"
+        ],
+        [
+          "Die Evidenzlücke schließen",
+          "Benennen Sie Aussage, vorhandene Evidenz, eine Unsicherheit und eine machbare Untersuchung.",
+          "Halten Sie Evidenz und Zuständigkeit fest."
+        ]
+      ]
+    },
+    {
+      "title": "Schulung und Wiederholung",
+      "description": "Erkennen Sie einen Fehler, erklären Sie ein Beispiel und prüfen Sie den Transfer.",
+      "blocks": [
+        [
+          "Erkennen oder erinnern?",
+          "Wie prüfen Sie nach dem Lernen, woran Sie sich erinnern?",
+          "Reflektieren Sie Lerngewohnheiten ohne hohen Bewertungsdruck."
+        ],
+        [
+          "Welche Tätigkeit prüft den Abruf einer Idee am besten?",
+          "Den Absatz erneut lesen",
+          "Die Idee mit geschlossenen Notizen erklären",
+          "Das Seitenlayout erkennen",
+          "Abrufen ohne Notizen zeigt, was selbstständig erinnert wird."
+        ],
+        [
+          "Das Gedächtnis arbeiten lassen",
+          "Schließen Sie die Notizen, erklären Sie die Idee und prüfen Sie danach Lücken.",
+          "Zeigen Sie ein bekanntes Beispiel und lassen Sie kurz üben."
+        ],
+        [
+          "Was prüft nach einer Produktvorführung das Erinnern?",
+          "Den Abschnitt erneut ansehen",
+          "Schritte aus dem Gedächtnis auflisten und prüfen",
+          "Den Videolink speichern",
+          "Rekonstruieren prüft den Abruf; anschließendes Prüfen korrigiert Lücken."
+        ],
+        ["Wie bereit sind Sie für Abrufübungen?", "Brauche ein Beispiel", "Bereit zum Versuch"],
+        [
+          "Eine Übung mitnehmen",
+          "Wählen Sie ein Thema, erinnern Sie sich kurz ohne Notizen und prüfen Sie morgen die Lücken.",
+          "Trennen Sie Reflexion und bewertete Wissensfragen."
+        ]
+      ]
+    },
+    {
+      "title": "Teambesprechung",
+      "description": "Klären Sie Agenda, Hindernisse, Entscheidungen und Zuständigkeiten.",
+      "blocks": [
+        [
+          "Eine nützliche Besprechung",
+          "Ziel ist eine klare Entscheidung und ein nächster Schritt mit verantwortlicher Person.",
+          "Benennen Sie Entscheidung und verfügbare Zeit."
+        ],
+        [
+          "Wofür sollten wir die Diskussion nutzen?",
+          "Eine offene Entscheidung",
+          "Ein gemeinsames Hindernis",
+          "Kommende Prioritäten",
+          "Fragen mit Kontextbedarf"
+        ],
+        [
+          "Mit Blick auf eine Entscheidung",
+          "Was wissen wir, was ist unklar und welche Optionen passen zu den Grenzen?",
+          "Hören Sie bisher stille Stimmen und halten Sie Abwägungen sichtbar fest."
+        ],
+        ["Wie klar ist der nächste Schritt nach dieser Diskussion?", "Unklar", "Sehr klar"],
+        [
+          "Den Kreis schließen",
+          "Notieren Sie Entscheidung, Verantwortung, Termin und Ort der Rückmeldung.",
+          "Lesen Sie Aufgaben vor und bestätigen Sie die Zuständigkeit."
+        ]
+      ]
+    },
+    {
+      "title": "Projektstart",
+      "description": "Stimmen Sie Ergebnisse, Abhängigkeiten und einen ersten machbaren Meilenstein ab.",
+      "blocks": [
+        [
+          "Beim Ergebnis beginnen",
+          "Klären Sie Nutzen, Erfolg und ersten sinnvollen Meilenstein des Projekts.",
+          "Ergänzen Sie Projektname, Zielgruppe und Ergebnis."
+        ],
+        [
+          "Was braucht vor dem Start mehr Klarheit?",
+          "Erfolgsmaße",
+          "Rollen und Verantwortung",
+          "Umfang und Zeitplan",
+          "Abhängigkeiten"
+        ],
+        [
+          "Grenzen bestimmen",
+          "Was umfasst der Meilenstein, was folgt später und welche Abhängigkeiten ändern den Plan?",
+          "Formulieren Sie einen messbaren und erkennbaren Meilenstein."
+        ],
+        [
+          "Wie zuversichtlich sind Sie, dass der erste Meilenstein erreichbar ist?",
+          "Große Lücken bestehen",
+          "Klar und erreichbar"
+        ],
+        [
+          "Die erste Woche",
+          "Vereinbaren Sie Ergebnis, Verantwortung, Prüftermin und einen Ort für frühe Hindernisse.",
+          "Niedrige Bewertungen zeigen fehlende Unterstützung oder unklare Annahmen."
+        ]
+      ]
+    },
+    {
+      "title": "Vom Rückblick zur Aktion",
+      "description": "Wählen Sie ein messbares Experiment für den nächsten Zyklus.",
+      "blocks": [
+        [
+          "Aus dem letzten Zyklus lernen",
+          "Prüfen Sie Arbeit und Rahmenbedingungen und wählen Sie eine testbare Verbesserung.",
+          "Grenzen Sie den Zeitraum ein; besprechen Sie Systeme ohne Schuldzuweisung."
+        ],
+        ["Wie nachhaltig war das Arbeitstempo?", "Nicht nachhaltig", "Sehr nachhaltig"],
+        [
+          "Welche Reibung sollten wir zuerst besprechen?",
+          "Unklare Prioritäten",
+          "Langsame Rückmeldungen",
+          "Übergaben und Abhängigkeiten",
+          "Unterbrechungen"
+        ],
+        [
+          "Beobachtung als Experiment",
+          "Wir beobachteten… Wir vermuten… Im nächsten Zyklus testen wir… Wir achten auf…",
+          "Halten Sie den Versuch klein und benennen Sie eine verantwortliche Person."
+        ],
+        [
+          "Welches Signal zeigt den Nutzen am besten?",
+          "Weniger Warten",
+          "Weniger wiederholte Fragen",
+          "Planbarere Fertigstellung",
+          "Bessere Übergabequalität"
+        ],
+        [
+          "Zum Ergebnis zurückkehren",
+          "Notieren Sie Experiment, Verantwortung, Signal und Prüftermin.",
+          "Beginnen Sie den nächsten Rückblick mit dieser Auswertung."
+        ]
+      ]
+    },
+    {
+      "title": "Willkommen und erste Schritte",
+      "description": "Begrüßen Sie neue Teammitglieder und erleichtern Sie die erste Aufgabe.",
+      "blocks": [
+        [
+          "Heute müssen Sie nicht alles wissen",
+          "Beginnen Sie mit Teamzweck, einer kleinen Aufgabe und hilfreichen Kontakten.",
+          "Nennen Sie den Teamzweck und eine echte Ansprechperson."
+        ],
+        [
+          "Was hilft Ihnen am Anfang am meisten?",
+          "Eine Übersicht der Werkzeuge",
+          "Ein gutes Arbeitsbeispiel",
+          "Eine Ansprechperson",
+          "Eine Checkliste für Woche eins"
+        ],
+        [
+          "Eine kleine erste Aufgabe",
+          "Wählen Sie eine risikoarme Aufgabe, folgen Sie einem Beispiel und holen Sie vor selbstständiger Wiederholung Feedback.",
+          "Passen Sie die Aufgabe an die Rolle an und prüfen Sie Zugänge."
+        ],
+        ["Wie klar ist, wo Sie Hilfe bekommen?", "Unklar", "Sehr klar"],
+        [
+          "Ihr nächstes Gespräch",
+          "Benennen Sie Kontakt, erste Aufgabe und einen kurzen Austausch über Hilfreiches und Unklares.",
+          "Ermöglichen Sie private Fragen und Gruppenfragen."
+        ]
+      ]
+    },
+    {
+      "title": "Praktischer Workshop",
+      "description": "Verbinden Sie Erwartungen, Übung, Reflexion und Anwendung.",
+      "blocks": [
+        [
+          "Etwas Nutzbares mitnehmen",
+          "Sehen Sie ein Beispiel, üben Sie eine kleine Aufgabe, vergleichen Sie Wege und planen Sie eine Anwendung.",
+          "Bereiten Sie eine konkrete Aufgabe und ein Beispiel vor."
+        ],
+        [
+          "Was macht diesen Workshop nützlich?",
+          "Eine praktische Technik",
+          "Zuversicht für den Start",
+          "Feedback zu einem Ansatz",
+          "Anpassbare Beispiele"
+        ],
+        [
+          "Erst versuchen, dann verbessern",
+          "Bearbeiten Sie die kleinste nützliche Aufgabe; notieren Sie eine Entscheidung und Ihren Feedbackwunsch.",
+          "Setzen Sie ein Zeitlimit und unterstützen Sie Neulinge."
+        ],
+        [
+          "Was verbessert Ihren ersten Versuch?",
+          "Ein weiteres Beispiel",
+          "Mehr Übungszeit",
+          "Feedback einer anderen Person",
+          "Ein klareres Erfolgskriterium"
+        ],
+        [
+          "Wie bereit sind Sie für die eigene Anwendung?",
+          "Brauche Unterstützung",
+          "Bereit zur Anwendung"
+        ],
+        [
+          "Den nächsten Versuch konkret machen",
+          "Wählen Sie Ort, Zeitpunkt und ein Signal für den Nutzen der Technik.",
+          "Bieten Sie eine private Notiz oder freiwilliges Teilen an."
+        ]
+      ]
+    },
+    {
+      "title": "Entscheidungsworkshop",
+      "description": "Klären Sie Entscheidung, Optionen und nötige Evidenz.",
+      "blocks": [
+        [
+          "Die Entscheidung benennen",
+          "Was entscheiden wir heute, wer ist verantwortlich und welche Grenzen gelten?",
+          "Nennen Sie eine konkrete Entscheidung und die endgültige Zuständigkeit."
+        ],
+        [
+          "Welches Kriterium braucht die meiste Diskussion?",
+          "Wirkung auf das Ziel",
+          "Aufwand und Kosten",
+          "Risiko und Umkehrbarkeit",
+          "Zeit zum Lernen"
+        ],
+        [
+          "Optionen fair vergleichen",
+          "Benennen Sie Nutzen, Abwägung und die Annahme, die Ihre Sicht ändern könnte.",
+          "Beziehen Sie eine machbare Basisoption ein; trennen Sie Evidenz und Annahmen."
+        ],
+        [
+          "Wie viel Evidenz haben wir für den nächsten Schritt?",
+          "Große Unbekannte",
+          "Genug zum Weitergehen"
+        ],
+        [
+          "Was ist der nützlichste nächste Schritt?",
+          "Mit Prüftermin entscheiden",
+          "Ein kleines Experiment",
+          "Fehlende Evidenz sammeln",
+          "Grenzen klären"
+        ],
+        [
+          "Die Begründung festhalten",
+          "Notieren Sie Wahl, Gründe, Verantwortung, Prüftermin und Signal für Neubewertung.",
+          "Halten Sie auch Uneinigkeit und Unsicherheit fest."
+        ]
+      ]
+    },
+    {
+      "title": "Produktvorführung und Feedback",
+      "description": "Zeigen Sie einen realistischen Ablauf und finden Sie offene Fragen.",
+      "blocks": [
+        [
+          "Eine echte Aufgabe verfolgen",
+          "Beginnen Sie beim Nutzerziel, zeigen Sie den kürzesten nützlichen Ablauf und sein Ergebnis.",
+          "Bereiten Sie ein realistisches Beispiel vor und nennen Sie wichtige Grenzen."
+        ],
+        [
+          "Welcher Teil ist für Sie am wichtigsten?",
+          "Der Einstieg",
+          "Die Kernaufgabe",
+          "Das Ergebnis teilen",
+          "Das Ergebnis verstehen"
+        ],
+        [
+          "Weg und Ergebnis zeigen",
+          "Führen Sie eine Aufgabe vollständig vor, halten Sie an der Schlüsselentscheidung an und zeigen Sie Erfolg.",
+          "Nutzen Sie den echten Ablauf statt einer Funktionsliste, aus der das Ergebnis erschlossen werden muss."
+        ],
+        ["Wie klar passt dies zu Ihrer Arbeit?", "Unklar", "Sehr klar"],
+        [
+          "Was hilft bei der weiteren Bewertung?",
+          "Ein praktischer Versuch",
+          "Ein passendes Beispiel",
+          "Einrichtungshilfe",
+          "Informationen zu Grenzen"
+        ],
+        [
+          "Eine nützliche Fortsetzung",
+          "Notieren Sie die wichtigste offene Frage und einen machbaren nächsten Schritt.",
+          "Trennen Sie Funktionswünsche vom zugrunde liegenden Problem."
+        ]
+      ]
+    }
+  ]
+}

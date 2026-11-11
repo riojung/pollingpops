@@ -755,8 +755,9 @@ export function NativeSceneEditor({
             <p>{copy("Arrange the slide and refine the selected object.")}</p>
           </div>
         </div>
-        <div className={inspectorStyles.suggestionCard} lang="en-CA">
+        <div className={inspectorStyles.suggestionCard} lang={locale}>
           <NativeSceneLayoutSuggestions
+            locale={locale}
             scene={scene}
             sourceKey={layoutSuggestionsSourceKey}
             disabled={layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending}

@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 12px;
-  background: rgb(0 0 0 / 55%);
+  background: var(--ui-overlay);
 }
 .dialog {
   box-sizing: border-box;
@@ -15,6 +15,8 @@
   min-width: 0;
   padding: clamp(14px, 3vw, 28px);
   border-radius: 16px;
+  border: 1px solid var(--ui-border);
+  box-shadow: var(--ui-shadow-lg);
   background: var(--ui-surface-raised);
   color: var(--ui-text);
   overflow-wrap: anywhere;
@@ -24,6 +26,11 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.heading > div {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 .heading h2 {
   margin: 0;
@@ -44,6 +51,9 @@
   background: var(--ui-surface);
   font: inherit;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-inline-size: 100%;
 }
 .dialog button:disabled {
   opacity: 0.55;

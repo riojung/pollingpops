@@ -8,6 +8,30 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B assistance review and recovery November 10, 2026
+
+The `codex/option-b-assistance-recovery` source extends all ten configured locales to
+outline proposals, text rewrite/shorten/translation review and recovery, and local layout
+comparison. Resume controls and the latest-text-edit attribution follow the selected UI
+language; authored/generated wording, source excerpts and provenance stay unchanged.
+The three typed catalogs expose 218 keys, including 22 references to existing translations.
+
+UI language stays outside controller, actor, storage and request identity. Explicit source
+and target languages, review/selection state, source/revision fences and exact receipt
+retries keep their existing meanings. Local layout review retains authored content,
+reading order, geometry semantics and ordinary history. Dialogs share surface/focus tokens
+and wrap long controls on narrow screens.
+
+The repository gate passes 7,790 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup; web validation covers 381 suites / 3,907 tests. The
+fresh beta production build passes. Fifty-one distinct selected production-browser cases
+pass across desktop Chromium and phone Chromium/WebKit, including nine new localized
+review/recovery/layout cases. The [Option B implementation record](option-b-ux-implementation.md)
+preserves scope, corrected fixture reruns and pending hosted acceptance. Creation-locale
+template/default content, discussion/source-import assistance and Pack library/editor tools
+remain follow-ups. Hosted, native-language/customer, manual accessibility/device and
+deferred launch-facing acceptance remain release work.
+
 ### Option B audience and navigation follow-up November 10, 2026
 
 The `codex/option-b-audience-navigation` source extends all ten configured locales to

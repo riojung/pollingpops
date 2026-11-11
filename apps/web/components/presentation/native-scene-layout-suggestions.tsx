@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { PresentationScene } from "@openround/contracts";
+import type { PresentationScene, SupportedLocale } from "@openround/contracts";
 import {
   nativeLayoutSuggestionAvailability,
   suggestNativeLayouts,
@@ -11,6 +11,11 @@ import { NativeSceneView } from "./native-scene-view";
 import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
 import { NativeRichTextView } from "./native-rich-text-view";
 import { NativeSceneDataView } from "./native-scene-data-view";
+import {
+  isLayoutAssistanceCopyKey,
+  layoutAssistanceCopy,
+  layoutAssistanceSystemMessage,
+} from "./layout-assistance-copy";
 import styles from "./native-scene-layout-suggestions.module.css";
 
 interface Props {
@@ -18,6 +23,7 @@ interface Props {
   onChange: (scene: PresentationScene, historyField?: string) => boolean | void;
   disabled?: boolean;
   sourceKey?: string;
+  locale?: SupportedLocale;
 }
 interface Review {
   source: PresentationScene;
@@ -33,10 +39,13 @@ const PLANE_HEIGHT = 720;
 function LayoutPreview({
   scene,
   kind,
+  locale,
 }: {
   scene: PresentationScene;
   kind: "current" | "selected";
+  locale: SupportedLocale;
 }) {
+  const copy = layoutAssistanceCopy(locale);
   const root = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.25);
@@ -60,11 +69,12 @@ function LayoutPreview({
   }, []);
   return (
     <section
-      aria-label={kind === "current" ? "Current layout preview" : "Selected layout preview"}
+      aria-label={copy(kind === "current" ? "Current layout preview" : "Selected layout preview")}
+      lang={locale}
       className={styles.preview}
       data-layout-preview={kind}
     >
-      <h3>{kind === "current" ? "Current layout" : "Selected layout"}</h3>
+      <h3>{copy(kind === "current" ? "Current layout" : "Selected layout")}</h3>
       <div ref={root}>
         <div ref={viewport} className={styles.viewport} aria-hidden="true" inert>
           <div
@@ -72,38 +82,47 @@ function LayoutPreview({
             data-layout-plane="true"
             style={{ width: PLANE_WIDTH, height: PLANE_HEIGHT, transform: `scale(${scale})` }}
           >
-            <NativeSceneView scene={scene} fixedLayout />
+            <NativeSceneView scene={scene} fixedLayout locale={locale} />
           </div>
         </div>
-        <NativeSceneFitFeedback root={root} scene={scene} />
+        <NativeSceneFitFeedback root={root} scene={scene} locale={locale} />
       </div>
     </section>
   );
 }
 
 /** A complete, unscaled reading copy accompanies the decorative geometry previews. */
-export function NativeLayoutReadingContent({ scene }: { scene: PresentationScene }) {
+export function NativeLayoutReadingContent({
+  scene,
+  locale = "en-CA",
+}: {
+  scene: PresentationScene;
+  locale?: SupportedLocale;
+}) {
+  const copy = layoutAssistanceCopy(locale);
   return (
-    <section aria-label="Complete slide content" className={styles.reading}>
-      <h3>Complete slide content</h3>
-      <p>The wording, data and reading order are the same in every alternative.</p>
+    <section aria-label={copy("Complete slide content")} lang={locale} className={styles.reading}>
+      <h3>{copy("Complete slide content")}</h3>
+      <p>{copy("The wording, data and reading order are the same in every alternative.")}</p>
       {scene.readingOrder.map((id) => {
         const node = scene.nodes.find((candidate) => candidate.id === id);
         if (node?.type === "text")
           return (
             <div key={id} className={styles.readingText} data-layout-reading-node={id}>
-              <h4>{node.role === "title" ? "Title" : "Body text"}</h4>
+              <h4>{copy(node.role === "title" ? "Title" : "Body text")}</h4>
               {node.richText ? (
-                <NativeRichTextView richText={node.richText} lang={node.lang} />
+                <NativeRichTextView richText={node.richText} lang={node.lang ?? ""} />
               ) : (
-                <p lang={node.text ? node.lang : undefined}>{node.text || "Empty text object"}</p>
+                <p lang={node.text ? (node.lang ?? "") : locale}>
+                  {node.text || copy("Empty text object")}
+                </p>
               )}
             </div>
           );
         if (node?.type === "table")
           return (
             <div key={id} className={styles.readingTable} data-layout-reading-node={id}>
-              <NativeSceneDataView node={node} />
+              <NativeSceneDataView node={node} locale={locale} />
             </div>
           );
         return null;
@@ -113,7 +132,9 @@ export function NativeLayoutReadingContent({ scene }: { scene: PresentationScene
 }
 
 export function NativeSceneLayoutSuggestions(props: Props) {
-  const { scene, disabled = false } = props;
+  const { scene, disabled = false, locale = "en-CA" } = props;
+  const copy = layoutAssistanceCopy(locale);
+  const systemMessage = (message: string) => layoutAssistanceSystemMessage(locale, message);
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState("");
   const active = useRef<Review | null>(null);
@@ -222,24 +243,39 @@ export function NativeSceneLayoutSuggestions(props: Props) {
   }
   const selected = review?.suggestions.find((candidate) => candidate.id === review.selectedId);
   return (
-    <section className={styles.controls} aria-label="Local layout suggestions">
+    <section
+      className={styles.controls}
+      lang={locale}
+      aria-label={copy("Local layout suggestions")}
+    >
       <button
         ref={trigger}
         type="button"
         disabled={disabled || !availability.supported}
         onClick={suggest}
       >
-        Suggest layouts
+        {copy("Suggest layouts")}
       </button>
-      <p className={styles.help}>
-        {availability.reason ??
-          "Compare layouts for this slide before applying one. No AI credits needed."}
+      <p
+        className={styles.help}
+        lang={
+          availability.reason && !isLayoutAssistanceCopyKey(availability.reason) ? "en-CA" : locale
+        }
+      >
+        {availability.reason
+          ? systemMessage(availability.reason)
+          : copy("Compare layouts for this slide before applying one. No AI credits needed.")}
       </p>
-      {!review && error ? <p role="alert">{error}</p> : null}
+      {!review && error ? (
+        <p role="alert" lang={isLayoutAssistanceCopyKey(error) ? locale : "en-CA"}>
+          {systemMessage(error)}
+        </p>
+      ) : null}
       {review && selected ? (
         <dialog
           ref={dialog}
           className={styles.dialog}
+          lang={locale}
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descriptionId}
@@ -250,22 +286,23 @@ export function NativeSceneLayoutSuggestions(props: Props) {
           onClose={close}
         >
           <header className={styles.heading}>
-            <h2 id={titleId}>Review layout suggestions</h2>
-            <button type="button" aria-label="Close layout review" onClick={close}>
-              Close
+            <h2 id={titleId}>{copy("Review layout suggestions")}</h2>
+            <button type="button" aria-label={copy("Close layout review")} onClick={close}>
+              {copy("Close")}
             </button>
           </header>
           <p id={descriptionId}>
-            Choose an alternative, compare it with your current layout, then apply it when you are
-            ready. Your text, data and reading order stay the same.
+            {copy(
+              "Choose an alternative, compare it with your current layout, then apply it when you are ready. Your text, data and reading order stay the same.",
+            )}
           </p>
           <p className={styles.help}>
-            Content counts only guide available space; they do not prove fit. Each preview checks
-            rendered content at 1280 × 720 after its fonts load. Read the complete slide content
-            below at a comfortable size.
+            {copy(
+              "Content counts only guide available space; they do not prove fit. Each preview checks rendered content at 1280 × 720 after its fonts load. Read the complete slide content below at a comfortable size.",
+            )}
           </p>
           <fieldset className={styles.choices} disabled={!current}>
-            <legend>Choose a layout</legend>
+            <legend>{copy("Choose a layout")}</legend>
             {review.suggestions.map((suggestion) => (
               <label key={suggestion.id}>
                 <input
@@ -276,28 +313,36 @@ export function NativeSceneLayoutSuggestions(props: Props) {
                   onChange={() => select(review, suggestion.id)}
                 />
                 <span>
-                  <strong>{suggestion.label}</strong>
-                  <span>{suggestion.description}</span>
+                  <strong lang={isLayoutAssistanceCopyKey(suggestion.label) ? locale : "en-CA"}>
+                    {systemMessage(suggestion.label)}
+                  </strong>
+                  <span lang={isLayoutAssistanceCopyKey(suggestion.description) ? locale : "en-CA"}>
+                    {systemMessage(suggestion.description)}
+                  </span>
                 </span>
               </label>
             ))}
           </fieldset>
           <div className={styles.previews}>
-            <LayoutPreview scene={review.snapshot} kind="current" />
-            <LayoutPreview scene={selected.scene} kind="selected" />
+            <LayoutPreview scene={review.snapshot} kind="current" locale={locale} />
+            <LayoutPreview scene={selected.scene} kind="selected" locale={locale} />
           </div>
-          <NativeLayoutReadingContent scene={review.snapshot} />
+          <NativeLayoutReadingContent scene={review.snapshot} locale={locale} />
           {error ? (
-            <p role="alert" className={styles.error}>
-              {error}
+            <p
+              role="alert"
+              className={styles.error}
+              lang={isLayoutAssistanceCopyKey(error) ? locale : "en-CA"}
+            >
+              {systemMessage(error)}
             </p>
           ) : null}
           <div className={styles.actions}>
             <button type="button" disabled={!current} onClick={() => apply(review)}>
-              Apply reviewed layout
+              {copy("Apply reviewed layout")}
             </button>
             <button type="button" onClick={close}>
-              Cancel
+              {copy("Cancel")}
             </button>
           </div>
         </dialog>

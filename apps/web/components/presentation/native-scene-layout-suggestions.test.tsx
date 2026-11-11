@@ -2,10 +2,11 @@ import { isValidElement, type ComponentProps, type ReactElement, type ReactNode 
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PresentationScene } from "@openround/contracts";
+import { supportedLocales, type PresentationScene } from "@openround/contracts";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { createNativeTableNode } from "../../lib/presentation-native-data";
 import { suggestNativeLayouts } from "../../lib/presentation-layout-suggestions";
+import * as layoutSuggestions from "../../lib/presentation-layout-suggestions";
 interface Slot {
   value?: unknown;
   deps?: readonly unknown[];
@@ -78,6 +79,8 @@ import {
   NativeSceneLayoutSuggestions,
 } from "./native-scene-layout-suggestions";
 import { NativeSceneView } from "./native-scene-view";
+import { layoutAssistanceCopy } from "./layout-assistance-copy";
+import { nativeControlsCopy } from "./native-controls-copy";
 
 function nodes(tree: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
@@ -130,7 +133,9 @@ function harness() {
     }
     const elements = nodes(tree);
     const button = elements.find(
-      (node) => node.type === "button" && node.props.children === "Suggest layouts",
+      (node) =>
+        node.type === "button" &&
+        node.props.children === layoutAssistanceCopy(props.locale)("Suggest layouts"),
     )!;
     trigger.disabled = Boolean(button.props.disabled);
     (button.props.ref as { current: unknown }).current = trigger;
@@ -163,7 +168,7 @@ function harness() {
     flush,
     button,
     open() {
-      (button("Suggest layouts").props.onClick as () => void)();
+      (button(layoutAssistanceCopy(props.locale)("Suggest layouts")).props.onClick as () => void)();
       flush();
     },
     get elements() {
@@ -171,6 +176,9 @@ function harness() {
     },
     get dialog() {
       return nodes(tree).find((node) => node.type === "dialog");
+    },
+    get markup() {
+      return renderToStaticMarkup(<>{tree}</>);
     },
     unmount() {
       for (const slot of hooks.slots) slot.cleanup?.();
@@ -356,5 +364,206 @@ describe("reviewed local native layout suggestions", () => {
     expect(markup).toContain('<p lang="fr">Une proposition</p>');
     expect(markup).toMatch(/<div[^>]*lang="de"[^>]*><p>Ein Vorschlag<\/p><\/div>/);
     expect(markup).toContain("<h4>Title</h4>");
+  });
+
+  it.each(supportedLocales)(
+    "renders comparison and full reading content in %s without rewriting authored data",
+    (locale) => {
+      const h = harness();
+      const copy = layoutAssistanceCopy(locale);
+      h.props.locale = locale;
+      h.props.scene.schemaVersion = 7;
+      const title = h.props.scene.nodes[0]!;
+      const body = h.props.scene.nodes[1]!;
+      if (title.type !== "text" || body.type !== "text") throw new Error("Expected text");
+      title.text = "Wide text";
+      title.lang = "fr";
+      body.text = "Body text · Exact citation 12.50 {title}";
+      body.richText = {
+        paragraphs: [
+          {
+            kind: "paragraph",
+            runs: [
+              { text: body.text, href: "https://example.com/source?loc=ExactCase", bold: true },
+            ],
+          },
+        ],
+      };
+      const table = createNativeTableNode();
+      table.caption = "Data table";
+      table.headers = ["Wide text", "Raw amount"];
+      table.rows = [["Selected layout", "0012.500 {title}"]];
+      h.props.scene.nodes.push(table);
+      h.props.scene.readingOrder = [body.id, table.id, title.id];
+      const before = structuredClone(h.props.scene);
+      h.render();
+      h.open();
+      const markup = h.markup;
+      expect(markup).toContain(`lang="${locale}" aria-label="${copy("Local layout suggestions")}"`);
+      expect(markup).toContain(copy("Review layout suggestions"));
+      expect(markup).toContain(copy("Complete slide content"));
+      expect(markup).toContain(`aria-label="${copy("Current layout preview")}"`);
+      expect(markup).toContain(`aria-label="${copy("Selected layout preview")}"`);
+      expect(markup).toContain(
+        nativeControlsCopy(locale)(
+          "Check text fit after changing a layout or design. Text that exceeds a wide slide frame remains scrollable. Narrow screens show full text and uncropped images in reading order.",
+        ),
+      );
+      const reading = markup.slice(
+        markup.indexOf(`aria-label="${copy("Complete slide content")}"`),
+      );
+      expect(reading).toContain('<p lang="fr">Wide text</p>');
+      expect(reading).toMatch(
+        /<div[^>]*lang=""[^>]*><p><a[^>]*href="https:\/\/example.com\/source\?loc=ExactCase"/,
+      );
+      expect(reading).toContain('<caption lang="">Data table</caption>');
+      expect(reading).toContain('<th lang="" scope="col">Wide text</th>');
+      expect(reading).toContain("0012.500 {title}");
+      expect(reading.indexOf(body.text)).toBeLessThan(reading.indexOf("<caption"));
+      expect(reading.indexOf("<caption")).toBeLessThan(reading.indexOf('<p lang="fr">'));
+      expect(markup.match(/aria-hidden="true" inert=""/g)).toHaveLength(2);
+      expect(h.props.scene).toEqual(before);
+      expect(h.props.onChange).not.toHaveBeenCalled();
+      h.unmount();
+    },
+  );
+
+  it("changes language during a rejected review without changing selection, staged scene, or exact apply", () => {
+    const h = harness();
+    const source = structuredClone(h.props.scene);
+    (h.props.onChange as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    h.open();
+    const chosen = h.elements.filter((node) => node.type === "input").at(-1)!;
+    (chosen.props.onChange as () => void)();
+    h.flush();
+    (h.button("Apply reviewed layout").props.onClick as () => void)();
+    h.flush();
+    const staged = h.elements.find((node) => node.props.kind === "selected")!.props.scene;
+    h.props.locale = "ko-KR";
+    h.render();
+    h.flush();
+    const copy = layoutAssistanceCopy("ko-KR");
+    expect(h.nativeDialog.showModal).toHaveBeenCalledOnce();
+    expect(h.nativeDialog.close).not.toHaveBeenCalled();
+    expect(
+      h.elements.find((node) => node.type === "input" && node.props.checked)?.props.value,
+    ).toBe(chosen.props.value);
+    expect(h.elements.find((node) => node.props.kind === "selected")!.props.scene).toBe(staged);
+    expect(h.markup).toContain(
+      copy(
+        "This layout could not be applied within the presentation’s limits. Your current slide is retained.",
+      ),
+    );
+    (h.button(copy("Apply reviewed layout")).props.onClick as () => void)();
+    h.flush();
+    expect(h.props.onChange).toHaveBeenCalledTimes(2);
+    const expected = suggestNativeLayouts(source).find(
+      (item) => item.id === chosen.props.value,
+    )!.scene;
+    expect(
+      (h.props.onChange as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]),
+    ).toEqual([expected, expected]);
+    expect(h.props.scene).toEqual(source);
+    expect(h.dialog).toBeUndefined();
+    expect(h.trigger.focus).toHaveBeenCalled();
+  });
+
+  it.each(["in-place-source", "permission"] as const)(
+    "keeps the currentness guard after a language switch and %s change",
+    (change) => {
+      const h = harness();
+      h.open();
+      h.props.locale = "de-DE";
+      h.render();
+      const staleApply = h.button(layoutAssistanceCopy("de-DE")("Apply reviewed layout")).props
+        .onClick as () => void;
+      if (change === "permission") h.props.disabled = true;
+      else {
+        const title = h.props.scene.nodes[0]!;
+        if (title.type === "text") title.text = "Changed exact source";
+      }
+      h.render();
+      staleApply();
+      h.flush();
+      expect(h.props.onChange).not.toHaveBeenCalled();
+      expect(h.dialog).toBeUndefined();
+    },
+  );
+
+  it("keeps read-only controls inert and translates known availability while retaining unknown error text", () => {
+    const h = harness();
+    h.props.locale = "ko-KR";
+    h.props.disabled = true;
+    h.render();
+    h.open();
+    expect(h.dialog).toBeUndefined();
+    expect(h.props.onChange).not.toHaveBeenCalled();
+    h.props.disabled = false;
+    h.props.scene = {
+      ...h.props.scene,
+      schemaVersion: 4,
+      groups: [{ id: "group", nodeIds: h.props.scene.nodes.map((node) => node.id) }],
+    };
+    h.render();
+    expect(h.markup).toContain(
+      layoutAssistanceCopy("ko-KR")(
+        "Layout alternatives are unavailable for grouped objects. Ungroup them first.",
+      ),
+    );
+    h.props.scene = scene();
+    h.render();
+    (h.props.onChange as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error("Custom diagnostic: {source} <ExactCase>");
+    });
+    h.open();
+    (
+      h.button(layoutAssistanceCopy("ko-KR")("Apply reviewed layout")).props.onClick as () => void
+    )();
+    h.flush();
+    expect(h.markup).toContain('role="alert"');
+    expect(h.markup).toContain('lang="en-CA">Custom diagnostic: {source} &lt;ExactCase&gt;');
+    h.props.locale = "de-DE";
+    h.render();
+    expect(h.markup).toContain('lang="en-CA">Custom diagnostic: {source} &lt;ExactCase&gt;');
+    expect(h.dialog).toBeDefined();
+  });
+
+  it("retains the original English language boundary for unrecognized system descriptors and availability", () => {
+    const original = layoutSuggestions.suggestNativeLayouts;
+    const alternatives = vi
+      .spyOn(layoutSuggestions, "suggestNativeLayouts")
+      .mockImplementation((source) =>
+        original(source).map((suggestion, index) =>
+          index
+            ? suggestion
+            : {
+                ...suggestion,
+                label: "Future English layout label",
+                description: "Future English layout description.",
+              },
+        ),
+      );
+    const availability = vi
+      .spyOn(layoutSuggestions, "nativeLayoutSuggestionAvailability")
+      .mockReturnValue({
+        supported: true,
+        reason: "Future English availability message.",
+      });
+    try {
+      const h = harness();
+      h.props.locale = "ko-KR";
+      h.render();
+      expect(h.markup).toContain('lang="en-CA">Future English availability message.</p>');
+      h.open();
+      expect(h.markup).toContain('<strong lang="en-CA">Future English layout label</strong>');
+      expect(h.markup).toContain('<span lang="en-CA">Future English layout description.</span>');
+      expect(h.props.onChange).not.toHaveBeenCalled();
+      h.unmount();
+    } finally {
+      alternatives.mockRestore();
+      availability.mockRestore();
+    }
   });
 });

@@ -1,5 +1,6 @@
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
@@ -38,6 +39,19 @@ afterEach(() => {
 });
 
 describe("measured native text fit feedback", () => {
+  it("uses an explicit comparison locale with the provider language as its default", () => {
+    const scene = createNativeContentBlock().scene!;
+    const root = { current: null };
+    const selected = renderToStaticMarkup(
+      <NativeSceneFitFeedback root={root} scene={scene} locale="ko-KR" />,
+    );
+    const fallback = renderToStaticMarkup(<NativeSceneFitFeedback root={root} scene={scene} />);
+    expect(selected).toContain('lang="ko-KR"');
+    expect(selected).not.toContain("Check text fit after changing");
+    expect(selected).toContain("텍스트");
+    expect(fallback).toContain('lang="en-CA"');
+    expect(fallback).toContain("Check text fit after changing");
+  });
   it("reports actual data overflow by caption and rechecks it after resize", () => {
     const scene = createNativeContentBlock().scene!;
     const table = createNativeTableNode();

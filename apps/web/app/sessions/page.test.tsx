@@ -934,7 +934,7 @@ describe("Sessions workspace", () => {
   it("stores a Sessions view per workspace separately from the Library preference", async () => {
     const harness = sessionsHarness();
     await harness.settle();
-    clickButton("List");
+    clickButton("List view");
     expect(harness.render()).toContain('data-view="list"');
     expect(window.localStorage.setItem).toHaveBeenCalledWith(
       "openround:sessions-view:v1:workspace-a",

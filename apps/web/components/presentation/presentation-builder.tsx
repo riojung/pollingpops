@@ -3412,7 +3412,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   </span>
                 </button>
                 <button
-                  onClick={(event) => addBlock(createQuestionBlock(), event.currentTarget)}
+                  onClick={(event) =>
+                    addBlock(createQuestionBlock("single_select", locale), event.currentTarget)
+                  }
                   type="button"
                 >
                   <EditorIcon name="interaction" />
@@ -3698,7 +3700,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
                 </button>
-                <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                <button
+                  onClick={() => addBlock(createQuestionBlock("single_select", locale))}
+                  type="button"
+                >
                   {t("delivery.presentationBuilder.addAudienceQuestion")}
                 </button>
                 <button
@@ -4565,7 +4570,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                         onChange={(event) => {
                           const type = event.target.value as QuestionType;
                           commit((current) =>
-                            changePresentationQuestionType(current, selectedBlock.id, type),
+                            changePresentationQuestionType(current, selectedBlock.id, type, locale),
                           );
                         }}
                         value={selectedBlock.question.type}

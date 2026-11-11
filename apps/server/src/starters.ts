@@ -10,7 +10,9 @@ import {
   type StarterId,
   type StarterSummary,
   type RoundCategory,
+  type SupportedLocale,
 } from "@openround/contracts";
+import { localizedStarter, localizedStarterDescription } from "./starter-localization.js";
 
 const ids = {
   q1: "00000000-0000-4000-8000-000000000001",
@@ -1165,8 +1167,9 @@ export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map(
   });
 });
 
-export function instantiateStarter(id: StarterId): QuizDraft {
-  const source = starterDrafts[id]!;
+/** Locale is chosen only for a new copy; canonical originals and existing records are immutable. */
+export function instantiateStarter(id: StarterId, locale: SupportedLocale = "en-CA"): QuizDraft {
+  const source = localizedStarter(starterDrafts[id]!, id, locale);
   const questionIds = new Map(source.questions.map((question) => [question.id, randomUUID()]));
   return QuizDraftSchema.parse({
     ...structuredClone(source),
@@ -1185,5 +1188,18 @@ export function instantiateStarter(id: StarterId): QuizDraft {
           }
         : {}),
     })),
+  });
+}
+
+export function starterSummariesForLocale(locale: SupportedLocale = "en-CA"): StarterSummary[] {
+  if (locale === "en-CA") return structuredClone(starterSummaries);
+  return starterSummaries.map((summary) => {
+    const draft = localizedStarter(starterDrafts[summary.id]!, summary.id, locale);
+    return StarterSummarySchema.parse({
+      ...summary,
+      title: draft.title,
+      description: localizedStarterDescription(summary.description, draft, locale),
+      previewPrompt: draft.questions[0]!.prompt,
+    });
   });
 }

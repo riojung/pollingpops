@@ -745,6 +745,136 @@ Validation:
   manual accessibility/physical-device checks and hosted qualification remain release work.
   The release ledger remains valid and unchanged at **0 complete / 15 pending**.
 
+## Pack practice follow-up — November 11, 2026
+
+The `codex/option-b-pack-practice` slice extends the ten configured UI locales to Pack
+practice setup, frozen content previews, private-link receipts and Pack source attribution
+in Assignments and Results. English remains the default. Its 85 display-copy entries cover
+setup and its known diagnostics, mode explanations, previews, receipt guidance and actions,
+and source attribution. Unknown diagnostics retain their exact English content rather than
+matching a translated substring or an unrelated UI key.
+
+- Switching language preserves entered titles, personal labels, pacing and schedule values,
+  selected mode, source/version identity, pending state and exact retry bytes. The existing
+  English default assignment titles remain unchanged. Dates and counters use the selected
+  locale; schedule guidance identifies device time and retention limits.
+- Delayed-probe and full-sequence previews preserve frozen authored text, choices, cards and
+  their order. Permission, feature, plan, missing-content, conflict and loading states retain
+  their existing controllers and explicit actions. Scoped spacing, wrapping and focus styles
+  support long values and translated controls.
+- Private-link receipts retain exact URLs, CSV bytes and filenames. Canonical copy/download
+  feedback is rendered in the current locale; changing locale does not copy, download, move
+  focus or record a share event. Authored labels remain separate from translated templates,
+  including labels that happen to match UI keys. The receipt still focuses its heading once.
+- Attribution uses the current workspace locale while preserving the frozen source title,
+  published version and role in both collections. It does not fetch the live Pack, disclose
+  source bodies/answers or expose private links. Existing search, layout and pagination state
+  survive language changes.
+
+Validation:
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **8,160 tests**, with 513 standard opt-in
+  integration skips. Formatting, Docker-context checks, lint, type checks, all four production
+  build tasks and compiled-server startup pass. All **394 web suites / 4,277 tests** pass,
+  including setup/catalog, receipt/preview/attribution and Results integration cases. A fresh
+  beta production web build also passes.
+- The first repository-gate attempt exposed the pre-existing beta-sign-in fixture convention
+  failure in two Round browser helpers. Naming their local page parameter `page` satisfies
+  the existing contract without changing authentication, routes or storage behavior. The
+  unchanged contract test and the final complete repository gate pass after this correction.
+- The initial browser run caught German collection controls whose short visible labels did
+  not match their accessible names. Results, Sessions, Library and the shared Round view
+  switcher now display their existing full accessible labels. All ten locales retain matching
+  text/names and both pressed states. The affected page/switcher tests pass **98 cases**;
+  fixture selectors use the intentional full visible label. Final web types, scoped lint and
+  fresh normal/beta production web builds pass after this correction. The final complete web
+  suite passes **394 suites / 4,287 tests**.
+- **12 distinct selected production-browser cases pass** on the final bundle: three new
+  localized cases and nine unchanged Pack practice cases across desktop Chromium and 320px
+  phone Chromium/WebKit. The localized phase and each legacy profile use a fresh API fixture.
+  Checks retain both assignment modes, English title defaults, populated form/schedule values, exact mutation
+  identity and serialized retry bytes after a lost acknowledgement, a single created
+  assignment, clipboard/CSV bytes and filenames, one-time focus, canonical status feedback,
+  and nine explicit share events per localized case with no language-change events. Original
+  Pack deletion, collection attribution, participant privacy, card replay, accountless recovery and scoped
+  Axe/overflow assertions pass. Corrected fixture reruns count once; the stale-source alert
+  assertion is scoped to the actual main region rather than Next's empty route announcer.
+- Desktop and 320px screenshot review covers populated Korean setup and Korean/German/English
+  receipts. Controls align, long original content wraps, raw labels remain unchanged and
+  translated actions remain legible. Captures reset scroll so sticky chrome does not obscure
+  page content. Changed-file formatting/diff checks pass; the release ledger remains valid
+  and unchanged at **0 complete / 15 pending** gates.
+
+Shared `/practice/[id]` management and creation-locale templates/default content remain
+implementation follow-ups. Native-language review, customer observation, manual
+accessibility/physical-device checks, exact-candidate hosted qualification and deferred
+public launch content remain release work. This slice does not complete release readiness.
+
+## Remaining software follow-ups — November 11, 2026
+
+The `codex/option-b-remaining` source preserves the Pack practice work above and closes
+its two named implementation follow-ups: shared `/practice/[id]` management and
+creation-locale templates/default content. English remains the default and all ten
+configured locale choices are retained.
+
+- **Shared practice management:** grouped source/schedule, progress, private-access,
+  timing-accommodation and close sections use scoped responsive theme styles. Known
+  diagnostics, confirmations, counts and dates follow the UI locale; unknown diagnostics
+  remain verbatim English. Actor/route changes isolate private receipts and pending work;
+  role/feature/entitlement changes invalidate stale mutation, clipboard and focus callbacks.
+  Existing access remains manageable under the existing server-authoritative permissions.
+- **Presentation creation:** all 21 templates (12 native scenarios and nine facilitated
+  sequences) have localized titles, descriptions, slide copy, speaker notes, columns,
+  tables/charts and audience-question content. The nine translated catalogs contain 864
+  native slides and 3,114 data/column strings. Only the requested creation-language catalog
+  loads; English does not download translated catalogs. Explicit load failure/retry never
+  advertises English fallback as localized content. Gallery metadata, thumbnails and new
+  drafts agree; an open preview retains its reviewed content and language.
+- **Round and Survey creation:** all 36 Round starters, including 17 Survey-compatible
+  starters, have localized metadata, prompts, choices, explanations and scale labels.
+  Optional validated locale inputs default to English. Localized catalog provenance is
+  additive; existing artifact/schema versions, correct answers and recheck relationships
+  remain intact. Explicit Survey retries retain the original request language and bytes.
+- **Small authored defaults:** newly inserted true/false and rating questions, Survey
+  options, native tables/charts and added data rows/columns use their action language.
+  Blank Round titles, generated Pack-card headings and Pack practice title prefixes follow
+  creation language. Existing titles and edited defaults are preserved when UI language
+  changes. Local discussion/clarity/priority starters capture the review-opening language,
+  quote exact original source text, and retain reviewed wording until insertion or dismissal.
+- **Content boundaries:** no locale change rewrites a saved draft, published snapshot,
+  source excerpt, numeric answer, scoring rule, citation, private URL or existing retry
+  envelope. Imported/source-authored content retains its original language and provenance.
+  These deterministic catalogs make no model requests and consume no AI allowance.
+
+Validation:
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **8,339 tests**, with 513 standard opt-in
+  skips, all four production build tasks and compiled-server startup/configuration smoke.
+  The final web suite contains **401 suites / 4,440 tests**; the server suite contains
+  **149 passing suites / 1,488 passing tests**, plus its standard opt-in skips.
+- Pure content checks validate all **210 Presentation / locale combinations**, **360 Round
+  combinations** and **170 Survey combinations**. Numbers, answer keys, recheck identities,
+  schema versions, clone independence, English compatibility and immutable source records
+  are checked. Selected-template derivation avoids rebuilding unrelated decks for thumbnails.
+- A fresh beta production artifact on loopback ports 3294/4294 passes **12 distinct selected
+  browser cases**: Pack practice setup/receipt recovery, shared practice private-access
+  management, Presentation creation/recovery, and Round/Survey creation/recovery, each on
+  desktop Chromium and 320px Chromium/WebKit phone viewports. Corrected fixture path/selector
+  reruns count once. Axe and document-overflow assertions pass for these cases.
+- Browser checks exercise a deliberately unavailable template catalog followed by explicit
+  retry, accepted writes with lost responses, byte-identical creation retries after a UI
+  language change, private link copy/revoke/close, unchanged saved content/revisions, and
+  retained labels/accommodation settings. Mobile access cells use a bounded scroll region
+  instead of squeezing translated actions into individual characters.
+- Desktop/phone captures were reviewed with private URLs masked and scroll reset so sticky
+  chrome does not obscure the content. The two selected browser specs pass a separate strict
+  TypeScript check. See local captures under `artifacts/option-b-remaining/`.
+
+Native-language editorial review, customer observation, manual assistive-technology and
+physical-device checks, exact-candidate hosted qualification and the user-deferred public
+launch content remain release work. The release ledger stays at **0 complete / 15 pending**;
+software completion does not satisfy release acceptance.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.
@@ -764,6 +894,9 @@ Local source/browser verification does not complete these checks.
       operations and release-governance gates in `release-readiness.json`.
 
 ## Completion verification
+
+These counts describe the original Option B completion gate. Later follow-up validation
+is recorded in the dated sections above.
 
 - `VITEST_MAX_WORKERS=1 pnpm check` passes: **7,217 tests pass**, with 513 standard
   opt-in integration skips. Formatting, lint, type checks, Docker-context checks, all

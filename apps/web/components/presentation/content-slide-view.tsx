@@ -68,6 +68,8 @@ type ContentSlideViewBlock = {
 interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
   locale?: SupportedLocale;
+  /** Display-only language for known, otherwise unmarked authored content. */
+  contentLocale?: SupportedLocale;
   /** Contextual rendering only; imported source records are never rewritten. */
   designOverride?: PresentationSceneDesign;
   media?: ReactNode;
@@ -280,6 +282,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
   return props.block.scene ? (
     <NativeSceneView
       locale={props.locale ?? locale}
+      contentLocale={props.contentLocale}
       scene={
         props.block.scene.design || !design
           ? props.block.scene
@@ -303,6 +306,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
 
 function LegacyContentSlideView({
   block,
+  contentLocale,
   designOverride,
   media,
   variant,
@@ -602,7 +606,7 @@ function LegacyContentSlideView({
       data-static-thumbnail={staticThumbnail || undefined}
       inert={staticThumbnail || undefined}
       aria-hidden={staticThumbnail || undefined}
-      lang="en-CA"
+      lang={contentLocale ?? "en-CA"}
     >
       <div className={styles.regions} ref={regionsRef}>
         {showGuides ? (
@@ -676,7 +680,7 @@ function LegacyContentSlideView({
                       <AutosizingTextarea
                         aria-label="Slide title"
                         className={styles.titleInput}
-                        lang={element.text.trim() ? "" : "en-CA"}
+                        lang={element.text.trim() ? (contentLocale ?? "") : "en-CA"}
                         maxLength={160}
                         onChange={(event) => onChangeElement?.(element.id, event.target.value)}
                         onFocus={() => onSelectElement?.(element.id)}
@@ -688,7 +692,7 @@ function LegacyContentSlideView({
                       <AutosizingTextarea
                         aria-label={label}
                         className={styles.bodyInput}
-                        lang={element.text.trim() ? "" : "en-CA"}
+                        lang={element.text.trim() ? (contentLocale ?? "") : "en-CA"}
                         maxLength={4_000}
                         onChange={(event) => onChangeElement?.(element.id, event.target.value)}
                         onFocus={() => onSelectElement?.(element.id)}
@@ -698,11 +702,11 @@ function LegacyContentSlideView({
                       />
                     )
                   ) : element.role === "title" ? (
-                    <h1 lang={element.text ? "" : "en-CA"} tabIndex={0}>
+                    <h1 lang={element.text ? (contentLocale ?? "") : "en-CA"} tabIndex={0}>
                       {element.text || (variant === "preview" ? "Untitled slide" : "")}
                     </h1>
                   ) : element.text ? (
-                    <p lang="" tabIndex={0}>
+                    <p lang={contentLocale ?? ""} tabIndex={0}>
                       {element.text}
                     </p>
                   ) : null}

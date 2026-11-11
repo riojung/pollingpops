@@ -106,7 +106,7 @@ function AssignmentsWorkspace() {
             <div className={styles.rowTopline}>
               <div>
                 <h2 lang="">{assignment.title}</h2>
-                <PackPracticeAttribution source={assignment.recoveryPackSource} />
+                <PackPracticeAttribution source={assignment.recoveryPackSource} locale={locale} />
                 <p className={styles.summaryLine}>
                   {t("pages.assignments.created", {
                     date: formatDateTime(locale, assignment.createdAt),

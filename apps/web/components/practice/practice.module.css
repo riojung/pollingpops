@@ -231,6 +231,70 @@
   color: var(--ui-text-subtle);
 }
 
+.packPracticePreview,
+.packPracticeAttribution,
+.packPracticeReceipt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.packPracticePreview h3,
+.packPracticePreview h4,
+.packPracticeReceipt h2,
+.packPracticeReceipt h3 {
+  color: var(--ui-text-strong);
+}
+
+.packPracticePreview ol,
+.packPracticePreview ul {
+  padding-inline-start: 1.5rem;
+}
+
+.packPracticePreview > ol > li + li {
+  border-top: 1px solid var(--ui-border-subtle);
+  margin-top: 1rem;
+  padding-top: 0.25rem;
+}
+
+.packPracticeBody {
+  white-space: pre-wrap;
+}
+
+.packPracticeAttribution {
+  color: var(--ui-text-subtle);
+  line-height: 1.55;
+}
+
+.packPracticeReceipt h2 {
+  margin-top: 0;
+  letter-spacing: -0.025em;
+}
+
+.packPracticeReceipt h2:focus,
+.packPracticeReceipt :is(button, a, input):focus-visible,
+.packPracticeAttribution a:focus-visible {
+  border-radius: 0.25rem;
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.packPracticeReceipt .linkRow > button {
+  align-self: end;
+  min-height: 48px;
+  white-space: normal;
+}
+
+.packPracticeReceipt .linkRow input {
+  min-width: 0;
+}
+
+.packPracticeReceipt .receiptActions > :is(a, button) {
+  max-width: 100%;
+  min-height: 48px;
+  text-align: center;
+  white-space: normal;
+}
+
 @media (max-width: 680px) {
   .sourceHeader,
   .receiptHeader,

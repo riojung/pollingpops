@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  supportedLocales,
   PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES,
   PresentationContentSchema,
   PresentationDraftSchema,
@@ -563,4 +564,42 @@ describe("local reviewed presentation question starters", () => {
     expect(insertPresentationQuestionStarter(current, candidate, ids(candidate)).ok).toBe(false);
     expect(JSON.stringify(current)).toBe(before);
   });
+});
+
+describe("captured question-starter creation language", () => {
+  it.each(supportedLocales)(
+    "preserves exact source and inserts the reviewed %s scaffold",
+    (locale) => {
+      const source = slide("Original alpha\nOriginal beta");
+      const draft = deck(source);
+      const original = structuredClone(draft);
+      const candidates = createPresentationQuestionStarters(source, locale);
+      expect(candidates).toHaveLength(3);
+      for (const candidate of candidates) {
+        expect(candidate.prompt).toContain("Research priorities");
+        expect(candidate.source).toEqual(createPresentationQuestionStarters(source)[0]!.source);
+        const result = insertPresentationQuestionStarter(
+          draft,
+          structuredClone(candidate),
+          ids(candidate),
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error(result.reason);
+        expect(result.draft.blocks[1]).toMatchObject({
+          kind: "question",
+          question: { prompt: candidate.prompt, basePoints: 0, purpose: "opinion" },
+        });
+        if (locale !== "en-CA") {
+          expect(candidate.prompt).not.toBe(
+            createPresentationQuestionStarters(source).find((item) => item.id === candidate.id)!
+              .prompt,
+          );
+          const tampered = { ...candidate, creationLocale: "en-CA" as const };
+          expect(insertPresentationQuestionStarter(draft, tampered, ids(candidate)).ok).toBe(false);
+        }
+      }
+      expect(candidates[2]!.choices).toEqual(["Original alpha", "Original beta"]);
+      expect(draft).toEqual(original);
+    },
+  );
 });

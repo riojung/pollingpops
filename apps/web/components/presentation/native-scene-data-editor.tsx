@@ -1,5 +1,7 @@
 "use client";
 
+import { creationContent } from "../../lib/i18n/creation-content";
+
 import { useState } from "react";
 import {
   PRESENTATION_SCENE_MAX_BYTES,
@@ -37,6 +39,7 @@ export function NativeSceneDataEditor({
   locale?: SupportedLocale;
 }) {
   const copy = nativeDataCopy(locale);
+  const defaults = creationContent(locale);
   const revision = nativeDataRevision(node);
   const [staged, setStaged] = useState<DraftState | null>(null);
   // An undo/redo round trip must not revive a draft from an obsolete source.
@@ -71,7 +74,7 @@ export function NativeSceneDataEditor({
       grid: [
         ...draft.grid,
         Array.from({ length: columns }, (_, column) =>
-          chart ? (column === 0 ? `Category ${rowCount + 1}` : "0") : "",
+          chart ? (column === 0 ? `${defaults("category")} ${rowCount + 1}` : "0") : "",
         ),
       ],
     });
@@ -83,7 +86,7 @@ export function NativeSceneDataEditor({
       grid: draft.grid.map((row, index) => [
         ...row,
         index === 0
-          ? `${chart ? "Series" : "Column"} ${chart ? columns : columns + 1}`
+          ? defaults(chart ? "series" : "column", chart ? columns : columns + 1)
           : chart
             ? "0"
             : "",

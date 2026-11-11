@@ -1,7 +1,10 @@
+import type { SupportedLocale } from "@openround/contracts";
+import { presentationTemplateCopy } from "../../lib/i18n/presentation-template-copy";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadPresentationTemplateLocale } from "../../lib/presentation-template-locales";
 import { PresentationTemplateGallery } from "./presentation-template-gallery";
 import { PresentationTemplatePreview } from "./presentation-template-preview";
 import { instantiatePresentationTemplate } from "../../lib/presentation-templates";
@@ -17,11 +20,14 @@ const mocked = vi.hoisted(() => ({
   push: vi.fn(),
   canEdit: true,
   presentations: true,
+  locale: "en-CA" as SupportedLocale,
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
+    useMemo: <T,>(factory: () => T, deps: ReactModule.DependencyList) =>
+      mocked.hooks ? factory() : react.useMemo(factory, deps),
     useState: <T,>(initial: T | (() => T)) => {
       if (!mocked.hooks) return react.useState(initial);
       const hooks = mocked.hooks;
@@ -54,7 +60,7 @@ vi.mock("../../lib/api", () => ({
   humanError: (error: Error) => error.message,
 }));
 vi.mock("../locale-provider", () => ({
-  useLocale: () => ({ locale: "en-CA", t: (key: string) => key }),
+  useLocale: () => ({ locale: mocked.locale, t: (key: string) => key }),
 }));
 vi.mock("./workspace-provider", () => ({
   useWorkspace: () => ({
@@ -109,8 +115,13 @@ function button(card: ReactNode, label: string) {
 async function settle() {
   for (let index = 0; index < 12; index++) await Promise.resolve();
 }
-beforeEach(() => {
+beforeEach(async () => {
+  await Promise.all([
+    loadPresentationTemplateLocale("fr-FR"),
+    loadPresentationTemplateLocale("ko-KR"),
+  ]);
   vi.clearAllMocks();
+  mocked.locale = "en-CA";
   mocked.canEdit = true;
   mocked.presentations = true;
 });
@@ -119,6 +130,31 @@ afterEach(() => {
 });
 
 describe("Presentation template gallery", () => {
+  it("localizes catalog metadata and freezes reviewed content across interface language changes", () => {
+    mocked.locale = "fr-FR";
+    const view = harness(() => PresentationTemplateGallery());
+    view.render();
+    const expected = instantiatePresentationTemplate("native-startup-pitch", "fr-FR");
+    expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain(expected.title);
+    (
+      button(view.card("native-startup-pitch"), "templateLibrary.previewStructure").props
+        .onClick as (event: unknown) => void
+    )({ currentTarget: { focus: vi.fn() } });
+    view.render();
+    const preview = view.find((node) => node.type === PresentationTemplatePreview);
+    const frozen = preview.props.draft;
+    mocked.locale = "ko-KR";
+    view.render();
+    expect(view.find((node) => node.type === PresentationTemplatePreview).props).toMatchObject({
+      draft: frozen,
+      contentLocale: "fr-FR",
+    });
+    expect(view.find((node) => node.type === PresentationTemplatePreview).props.draft).toBe(frozen);
+    expect(view.markup()).toContain(presentationTemplateCopy("ko-KR")("All templates"));
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    expect(recordCreationEvent).not.toHaveBeenCalled();
+  });
+
   it("retries the exact accepted native draft request without creating another blank artifact", async () => {
     const id = "00000000-0000-4000-8000-000000000019";
     let saves = 0;
@@ -139,6 +175,8 @@ describe("Presentation template gallery", () => {
     await settle();
     view.render();
     expect(view.markup()).toContain("The acknowledgement was lost");
+    mocked.locale = "ko-KR";
+    view.render();
     useTemplate();
     await settle();
     view.render();
@@ -201,12 +239,12 @@ describe("Presentation template gallery", () => {
     expect(html.match(/data-thumbnail-scene=/g)).toHaveLength(12);
     expect(html).not.toContain("data-native-scene=");
     expect(html.match(/aria-hidden="true" inert=""/g)).toHaveLength(21);
-    expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain("8 content slides");
+    expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain("Content slides: 8");
     expect(renderToStaticMarkup(view.card("native-startup-pitch"))).toContain(
-      "0 audience activities",
+      "Audience activities: 0",
     );
-    expect(renderToStaticMarkup(view.card("meeting"))).toContain("3 content slides");
-    expect(renderToStaticMarkup(view.card("meeting"))).toContain("2 audience activities");
+    expect(renderToStaticMarkup(view.card("meeting"))).toContain("Content slides: 3");
+    expect(renderToStaticMarkup(view.card("meeting"))).toContain("Audience activities: 2");
     expect(html).not.toContain("Native scenario");
     expect(html).not.toContain(">Facilitated<");
     expect(html).not.toContain("Replace HarborTask and the workshop segment");

@@ -1,0 +1,176 @@
+.stack {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 74rem;
+}
+.summaryCard,
+.accessCard,
+.closeCard,
+.receipt {
+  min-width: 0;
+  padding: clamp(1.1rem, 2.8vw, 2rem);
+  border: 1px solid var(--ui-border);
+  border-radius: 1.2rem;
+  background: var(--ui-surface);
+}
+.summaryCard {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ui-accent-ink) 6%, var(--ui-surface)),
+    var(--ui-surface) 62%
+  );
+}
+.summaryHeader,
+.sectionHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.summaryHeader h2,
+.sectionHeading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.statusGroup,
+.managementActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1.5rem 0;
+}
+.metric {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+}
+.metric strong {
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  font-variant-numeric: tabular-nums;
+}
+.metric span,
+.muted {
+  color: var(--ui-text-subtle);
+}
+.schedule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  font-weight: 650;
+}
+.schedule p {
+  margin: 0;
+}
+.sourceNote {
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid var(--ui-accent-ink);
+  color: var(--ui-text-subtle);
+  line-height: 1.6;
+}
+.managementActions {
+  margin-top: 1.25rem;
+}
+.receipt {
+  border-color: var(--ui-accent-ink);
+  background: color-mix(in srgb, var(--ui-accent-ink) 7%, var(--ui-surface));
+}
+.linkRow,
+.personalForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+.linkRow label,
+.personalForm label {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.linkRow input {
+  font-family: var(--font-mono, monospace);
+}
+.personalForm {
+  padding: 1rem;
+  margin: 1.25rem 0;
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  border-radius: 0.8rem;
+}
+.accessTable {
+  max-width: 100%;
+  overflow: auto;
+  margin-top: 1.25rem;
+}
+.accessTable table {
+  width: 100%;
+  min-width: 32rem;
+  border-collapse: collapse;
+  text-align: start;
+}
+.accessTable th,
+.accessTable td {
+  padding: 0.9rem 0.7rem;
+  border-bottom: 1px solid var(--ui-border);
+  text-align: start;
+  vertical-align: middle;
+}
+.accessTable th {
+  color: var(--ui-text-subtle);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.accessTable td:first-child {
+  max-width: 20rem;
+  overflow-wrap: anywhere;
+}
+.controlGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.fields {
+  display: grid;
+  gap: 1rem;
+}
+.fields button {
+  justify-self: start;
+}
+.closeCard {
+  border-color: color-mix(in srgb, var(--ui-danger-text) 30%, var(--ui-border));
+}
+.empty {
+  padding: 1.3rem;
+  color: var(--ui-text-subtle);
+  border: 1px dashed var(--ui-border);
+  border-radius: 0.8rem;
+}
+@media (max-width: 760px) {
+  .controlGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .metric {
+    padding: 0.75rem;
+  }
+  .metric span {
+    font-size: 0.85rem;
+  }
+}
+
+.accessTable :global(.status-pill),
+.accessTable button {
+  white-space: nowrap;
+}
+.accessTable button {
+  min-width: 4.5rem;
+  min-height: 44px;
+}

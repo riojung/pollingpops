@@ -132,6 +132,8 @@ function NativePlainText({
 interface NativeSceneViewProps {
   scene: PresentationScene;
   locale?: SupportedLocale;
+  /** Display-only fallback; an authored text node language always takes precedence. */
+  contentLocale?: SupportedLocale;
   /** Scaled previews retain the authored coordinate plane even on phone viewports. */
   fixedLayout?: boolean;
   renderImage?: SceneImageRenderer;
@@ -187,6 +189,7 @@ export function NativeSceneView(props: NativeSceneViewProps) {
 function NativeSceneSurface({
   scene,
   locale = "en-CA",
+  contentLocale,
   renderImage,
   fixedLayout = false,
   selectedNodeId,
@@ -383,7 +386,7 @@ function NativeSceneSurface({
                     richText={node.richText}
                     title={node.role === "title"}
                     editing={editing}
-                    lang={node.lang ?? ""}
+                    lang={node.lang ?? contentLocale ?? ""}
                     layoutKey={JSON.stringify([node.frame, design])}
                   />
                 ) : (
@@ -394,7 +397,13 @@ function NativeSceneSurface({
                     }
                     title={node.role === "title"}
                     layoutKey={JSON.stringify([node.frame, design])}
-                    lang={node.text ? (node.lang ?? "") : editing ? locale : (node.lang ?? "")}
+                    lang={
+                      node.text
+                        ? (node.lang ?? contentLocale ?? "")
+                        : editing
+                          ? locale
+                          : (node.lang ?? contentLocale ?? "")
+                    }
                   />
                 )
               ) : null}
@@ -408,7 +417,12 @@ function NativeSceneSurface({
                 />
               ) : null}
               {node.type === "table" || node.type === "chart" ? (
-                <NativeSceneDataView node={node} fixedLayout={fixedLayout} locale={locale} />
+                <NativeSceneDataView
+                  node={node}
+                  fixedLayout={fixedLayout}
+                  locale={locale}
+                  contentLocale={contentLocale}
+                />
               ) : null}
               {node.type === "image" ? (
                 <div

@@ -1,15 +1,19 @@
 import {
   PresentationDraftSchema,
+  type SupportedLocale,
   type ContentSlideDraft,
   type PresentationDraft,
   type QuestionDraft,
 } from "@openround/contracts";
+import { presentationTemplateLocaleCatalog } from "./presentation-template-locales";
 import { createContentBlock } from "./presentation-builder";
 import { clientUuid } from "./uuid";
 import {
   instantiateNativePresentationTemplate,
   isNativePresentationTemplateId,
   nativePresentationTemplates,
+  nativePresentationTemplatesForLocale,
+  nativePresentationTemplateForLocale,
   type NativePresentationTemplateId,
 } from "./presentation-native-templates";
 
@@ -407,9 +411,80 @@ export const allPresentationTemplates = [
 export type PresentationTemplateId =
   (typeof presentationTemplates)[number]["id"] | NativePresentationTemplateId;
 
-export function instantiatePresentationTemplate(id: PresentationTemplateId): PresentationDraft {
-  if (isNativePresentationTemplateId(id)) return instantiateNativePresentationTemplate(id);
-  const template = presentationTemplates.find((entry) => entry.id === id)!;
+function facilitatedTemplateForLocale(
+  template: (typeof presentationTemplates)[number],
+  index: number,
+  locale: SupportedLocale,
+) {
+  const catalog = presentationTemplateLocaleCatalog(locale);
+  const copy = catalog?.facilitated[index];
+  if (catalog && !copy)
+    throw new Error(`Incomplete ${locale} facilitated template: ${template.id}`);
+  return {
+    ...template,
+    title: copy?.title ?? template.title,
+    description: copy?.description ?? template.description,
+    blocks: template.blocks.map((source, blockIndex): TemplateBlock => {
+      const block: TemplateBlock = source;
+      if (!copy) return structuredClone(block);
+      const values = copy.blocks[blockIndex]!;
+      if (block.kind === "content")
+        return { ...block, title: values[0]!, body: values[1]!, notes: values[2]! };
+      if (block.kind === "rating")
+        return { ...block, prompt: values[0]!, low: values[1]!, high: values[2]! };
+      return {
+        ...block,
+        prompt: values[0]!,
+        labels: values.slice(1, 1 + block.labels.length),
+        explanation: values[1 + block.labels.length] ?? catalog!.pollExplanation,
+      };
+    }),
+  };
+}
+
+function facilitatedTemplatesForLocale(locale: SupportedLocale) {
+  return presentationTemplates.map((template, index) =>
+    facilitatedTemplateForLocale(template, index, locale),
+  );
+}
+
+/** Return only the selected authored definition, with independent nested arrays for the caller. */
+export function presentationTemplateForLocale(
+  id: PresentationTemplateId,
+  locale: SupportedLocale = "en-CA",
+) {
+  if (isNativePresentationTemplateId(id)) return nativePresentationTemplateForLocale(id, locale);
+  const index = presentationTemplates.findIndex((entry) => entry.id === id);
+  const template = presentationTemplates[index];
+  if (!template) throw new Error("Presentation template not found");
+  return {
+    ...facilitatedTemplateForLocale(template, index, locale),
+    collection: "facilitated" as const,
+    scenarioLabel:
+      presentationTemplateLocaleCatalog(locale)?.facilitatedScenario ??
+      "Facilitated learning and discussion",
+  };
+}
+
+export function allPresentationTemplatesForLocale(locale: SupportedLocale = "en-CA") {
+  const catalog = presentationTemplateLocaleCatalog(locale);
+  return [
+    ...nativePresentationTemplatesForLocale(locale),
+    ...facilitatedTemplatesForLocale(locale).map((template) => ({
+      ...template,
+      collection: "facilitated" as const,
+      scenarioLabel: catalog?.facilitatedScenario ?? "Facilitated learning and discussion",
+    })),
+  ];
+}
+
+export function instantiatePresentationTemplate(
+  id: PresentationTemplateId,
+  locale: SupportedLocale = "en-CA",
+): PresentationDraft {
+  if (isNativePresentationTemplateId(id))
+    return instantiateNativePresentationTemplate(id, clientUuid, locale);
+  const template = presentationTemplateForLocale(id, locale);
   const blocks: readonly TemplateBlock[] = template.blocks;
   const questionIds = new Map(
     blocks
@@ -459,7 +534,8 @@ export function instantiatePresentationTemplate(id: PresentationTemplateId): Pre
         explanation:
           block.kind === "check"
             ? block.explanation
-            : "Use the labeled scale to identify useful support and next steps.",
+            : (presentationTemplateLocaleCatalog(locale)?.scaleExplanation ??
+              "Use the labeled scale to identify useful support and next steps."),
         mediaId: null,
         mediaAlt: null,
       };

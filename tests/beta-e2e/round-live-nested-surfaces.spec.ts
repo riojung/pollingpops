@@ -16,16 +16,16 @@ type Room = { sessionId: string; code: string; hostToken: string };
 
 test.use({ actionTimeout: 15_000 });
 
-async function createRoom(host: Page): Promise<Room> {
-  await signInBeta(host);
-  const created = await host.request.post(`${api}/v1/quizzes`, {
+async function createRoom(page: Page): Promise<Room> {
+  await signInBeta(page);
+  const created = await page.request.post(`${api}/v1/quizzes`, {
     data: { title: "Populated Round conversation surfaces" },
   });
   expect(created.status()).toBe(201);
   const quizId = (await created.json()).quiz.id as string;
   expect(
     (
-      await host.request.patch(`${api}/v1/quizzes/${quizId}`, {
+      await page.request.patch(`${api}/v1/quizzes/${quizId}`, {
         data: {
           title: "Populated Round conversation surfaces",
           description: "Real nested conversation and staff controls.",
@@ -52,10 +52,10 @@ async function createRoom(host: Page): Promise<Room> {
       })
     ).ok(),
   ).toBe(true);
-  expect((await host.request.post(`${api}/v1/quizzes/${quizId}/publish`, { data: {} })).ok()).toBe(
+  expect((await page.request.post(`${api}/v1/quizzes/${quizId}/publish`, { data: {} })).ok()).toBe(
     true,
   );
-  const hosted = await host.request.post(`${api}/v1/sessions`, {
+  const hosted = await page.request.post(`${api}/v1/sessions`, {
     data: {
       quizId,
       clientCapabilities: currentRoundClientCapabilities(),
@@ -71,12 +71,12 @@ async function createRoom(host: Page): Promise<Room> {
   expect(hosted.status()).toBe(201);
   const session = await hosted.json();
   expect(session.snapshot.experienceTheme.preset.id).toBe("spark");
-  await host.evaluate(
+  await page.evaluate(
     ({ sessionId, hostToken }) => sessionStorage.setItem(`openround:host:${sessionId}`, hostToken),
     session,
   );
-  await host.goto(`/host/${session.sessionId}`);
-  await expect(host.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
+  await page.goto(`/host/${session.sessionId}`);
+  await expect(page.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
   return session;
 }
 

@@ -688,7 +688,7 @@ function SessionsContent() {
             onClick={() => chooseView("grid")}
             type="button"
           >
-            {t("pages.library.grid")}
+            {t("pages.library.gridView")}
           </button>
           <button
             aria-label={t("pages.library.listView")}
@@ -696,7 +696,7 @@ function SessionsContent() {
             onClick={() => chooseView("list")}
             type="button"
           >
-            {t("pages.library.list")}
+            {t("pages.library.listView")}
           </button>
         </div>
       </section>

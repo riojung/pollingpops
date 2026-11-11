@@ -28,8 +28,10 @@ import {
   type PresentationSection,
   type QuestionDraft,
   type QuestionType,
+  type SupportedLocale,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { creationContent } from "./i18n/creation-content";
 import { duplicateNativeScene } from "./presentation-native-scene";
 
 export interface PresentationIssue {
@@ -87,11 +89,12 @@ export function normalizePresentationRecoveryDraft(value: unknown): Presentation
 
 function choiceSet(
   type: Extract<QuestionType, "single_select" | "true_false" | "multi_select" | "poll" | "ranking">,
+  locale: SupportedLocale,
 ) {
   if (type === "true_false") {
     return [
-      { id: clientUuid(), label: "True", isCorrect: true },
-      { id: clientUuid(), label: "False", isCorrect: false },
+      { id: clientUuid(), label: creationContent(locale)("true"), isCorrect: true },
+      { id: clientUuid(), label: creationContent(locale)("false"), isCorrect: false },
     ];
   }
   return [
@@ -102,7 +105,10 @@ function choiceSet(
   ];
 }
 
-export function createPresentationQuestion(type: QuestionType): QuestionDraft {
+export function createPresentationQuestion(
+  type: QuestionType,
+  locale: SupportedLocale = "en-CA",
+): QuestionDraft {
   const opinionOnly = !questionTypeDefinition(type).scored;
   const common = {
     id: clientUuid(),
@@ -122,10 +128,17 @@ export function createPresentationQuestion(type: QuestionType): QuestionDraft {
     return { ...common, type, correctValue: "", tolerance: "0", unit: null };
   }
   if (type === "rating") {
-    return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
+    return {
+      ...common,
+      type,
+      min: 1,
+      max: 5,
+      minLabel: creationContent(locale)("low"),
+      maxLabel: creationContent(locale)("high"),
+    };
   }
   if (type === "open_text" || type === "word_cloud") return { ...common, type };
-  return { ...common, type, choices: choiceSet(type) };
+  return { ...common, type, choices: choiceSet(type, locale) };
 }
 
 /** New formats opt in on write; edits and history retain the highest document version. */
@@ -649,14 +662,16 @@ export function contentSlideTitle(block: ContentSlideDraft): string {
 
 export function createQuestionBlock(
   type: QuestionType = "single_select",
+  locale: SupportedLocale = "en-CA",
 ): InteractiveQuestionBlockDraft {
-  return { id: clientUuid(), kind: "question", question: createPresentationQuestion(type) };
+  return { id: clientUuid(), kind: "question", question: createPresentationQuestion(type, locale) };
 }
 
 export function changePresentationQuestionType(
   draft: PresentationDraft,
   blockId: string,
   type: QuestionType,
+  locale: SupportedLocale = "en-CA",
 ): PresentationDraft {
   const selected = draft.blocks.find(
     (block): block is InteractiveQuestionBlockDraft =>
@@ -668,7 +683,7 @@ export function changePresentationQuestionType(
   const opinionOnly = !questionTypeDefinition(type).scored;
   const previousOpinionOnly = !questionTypeDefinition(previous.type).scored;
   const next: QuestionDraft = {
-    ...createPresentationQuestion(type),
+    ...createPresentationQuestion(type, locale),
     id: previous.id,
     prompt: previous.prompt,
     explanation: previous.explanation,

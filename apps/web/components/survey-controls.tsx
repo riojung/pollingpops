@@ -1,10 +1,16 @@
 "use client";
 
+import type { SupportedLocale } from "@openround/contracts";
+import { creationContent } from "../lib/i18n/creation-content";
 import type { SurveyQuestionDraft, SurveyResponse } from "@openround/contracts/surveys";
 import { surveyMutationKey } from "../lib/survey-client";
 import styles from "./survey-controls.module.css";
 
-export function newSurveyQuestion(type: "poll" | "rating"): SurveyQuestionDraft {
+export function newSurveyQuestion(
+  type: "poll" | "rating",
+  locale: SupportedLocale = "en-CA",
+): SurveyQuestionDraft {
+  const copy = creationContent(locale);
   const common = {
     id: surveyMutationKey(),
     prompt: "",
@@ -21,13 +27,13 @@ export function newSurveyQuestion(type: "poll" | "rating"): SurveyQuestionDraft 
     ? {
         ...common,
         type,
-        choices: ["Option 1", "Option 2"].map((label) => ({
+        choices: [copy("option", 1), copy("option", 2)].map((label) => ({
           id: surveyMutationKey(),
           label,
           isCorrect: false,
         })),
       }
-    : { ...common, type, min: 1, max: 5, minLabel: "Not at all", maxLabel: "Very much" };
+    : { ...common, type, min: 1, max: 5, minLabel: copy("notAtAll"), maxLabel: copy("veryMuch") };
 }
 
 /** Shared opinion-response renderer: surveys have no timer, score or correctness projection. */

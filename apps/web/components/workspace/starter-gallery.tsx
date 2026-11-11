@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { QuestionType, RoundCategory, QuizDraft } from "@openround/contracts";
+import type { QuestionType, RoundCategory, QuizDraft, SupportedLocale } from "@openround/contracts";
 import { apiFetch, humanError, ApiClientError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
 import { formatNumber, pluralCategory } from "../../lib/i18n/format";
@@ -56,57 +56,84 @@ export function StarterGallery({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<RoundCategory | "all">("all");
   const [type, setType] = useState(roundType);
-  const [preview, setPreview] = useState<{ id: string; draft: QuizDraft } | null>(null);
-  const surveyKeys = useRef(new Map<string, string>());
+  const [preview, setPreview] = useState<{
+    id: string;
+    draft: QuizDraft;
+    contentLocale: SupportedLocale;
+  } | null>(null);
+  const [contentLocale, setContentLocale] = useState(locale);
+  const surveyRequests = useRef(new Map<string, string>());
+  const creating = useRef(false);
+  const listRequest = useRef(0);
+  const previewRequest = useRef(0);
+  const latestLocale = useRef(locale);
+  latestLocale.current = locale;
+  const catalogCurrent = !loading && contentLocale === locale;
 
   const refresh = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoadError("");
     setLoading(true);
     try {
-      const response = await apiFetch<{ starters: StarterSummary[] }>("/v1/starters");
+      const response = await apiFetch<{ starters: StarterSummary[] }>(
+        `/v1/starters?locale=${locale}`,
+      );
+      if (request !== listRequest.current || latestLocale.current !== locale) return;
       setStarters(response.starters);
+      setContentLocale(locale);
     } catch (caught) {
+      if (request !== listRequest.current || latestLocale.current !== locale) return;
       setLoadError(humanError(caught));
     } finally {
-      setLoading(false);
+      if (request === listRequest.current && latestLocale.current === locale) setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      listRequest.current++;
+      previewRequest.current++;
+    };
   }, [refresh]);
 
   async function useStarter(starter: StarterSummary) {
+    if (creating.current || !canEdit || !catalogCurrent || latestLocale.current !== locale) return;
+    creating.current = true;
     setBusyId(starter.id);
     setActionError("");
     if (!survey) recordCreationEvent("creation_started", "starter", "round");
     try {
       if (survey) {
-        const key = surveyKeys.current.get(starter.id) ?? surveyMutationKey();
-        surveyKeys.current.set(starter.id, key);
+        // A lost response is retried with exactly the originally submitted content language.
+        const body =
+          surveyRequests.current.get(starter.id) ??
+          JSON.stringify({ idempotencyKey: surveyMutationKey(), templateId: starter.id, locale });
+        surveyRequests.current.set(starter.id, body);
         const response = await apiFetch<{ survey: { id: string } }>("/v1/surveys", {
           method: "POST",
-          body: JSON.stringify({ idempotencyKey: key, templateId: starter.id }),
+          body,
         });
         router.push(`/surveys/${response.survey.id}`);
         return;
       }
       const response = await apiFetch<{ quiz: { id: string } }>(`/v1/starters/${starter.id}/use`, {
         method: "POST",
-        body: "{}",
+        body: JSON.stringify({ locale }),
       });
       recordCreationEvent("creation_completed", "starter", "round");
       if (starter.questionCount > 0) recordAuthoringEvent("first_block_created", "round");
       router.push(`/quiz/${response.quiz.id}`);
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
-        surveyKeys.current.delete(starter.id);
+        surveyRequests.current.delete(starter.id);
       setActionError(humanError(caught));
       setBusyId("");
+      creating.current = false;
     }
   }
 
-  if (loading)
+  if (loading && starters.length === 0)
     return (
       <p className={styles.muted} lang={locale} role="status">
         {t("starter.loading")}
@@ -125,7 +152,7 @@ export function StarterGallery({
   );
 
   return (
-    <div lang={locale}>
+    <div lang={locale} aria-busy={loading}>
       <div className={galleryStyles.gallerySummary}>
         <strong>
           {t("templateLibrary.count", { count: formatNumber(locale, orderedStarters.length) })}
@@ -209,12 +236,12 @@ export function StarterGallery({
                   <span className={styles.recommended}>{t("starter.recommended")}</span>
                 ) : null}
               </div>
-              <h3 lang="en-CA">{starter.title}</h3>
-              <p lang="en-CA">{starter.description}</p>
+              <h3 lang={contentLocale}>{starter.title}</h3>
+              <p lang={contentLocale}>{starter.description}</p>
               {starter.previewPrompt && preview?.id !== starter.id ? (
                 <div className={galleryStyles.questionSample}>
                   <small>{t("templateLibrary.questionPreview")}</small>
-                  <p lang="en-CA">{starter.previewPrompt}</p>
+                  <p lang={contentLocale}>{starter.previewPrompt}</p>
                 </div>
               ) : null}
               <div className={styles.metaLine}>
@@ -234,22 +261,29 @@ export function StarterGallery({
               <button
                 className="button-quiet small-button"
                 type="button"
+                disabled={preview?.id !== starter.id && !catalogCurrent}
                 aria-expanded={preview?.id === starter.id}
                 aria-controls={
                   preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
                 }
                 onClick={async () => {
+                  const request = ++previewRequest.current;
                   if (preview?.id === starter.id) {
                     setPreview(null);
                     return;
                   }
+                  if (!catalogCurrent || latestLocale.current !== locale) return;
                   setActionError("");
                   try {
                     const result = await apiFetch<{ draft: QuizDraft }>(
-                      `/v1/starters/${starter.id}`,
+                      `/v1/starters/${starter.id}?locale=${locale}`,
                     );
-                    setPreview({ id: starter.id, draft: result.draft });
+                    if (request !== previewRequest.current || latestLocale.current !== locale)
+                      return;
+                    setPreview({ id: starter.id, draft: result.draft, contentLocale: locale });
                   } catch (caught) {
+                    if (request !== previewRequest.current || latestLocale.current !== locale)
+                      return;
                     setActionError(humanError(caught));
                   }
                 }}
@@ -260,7 +294,7 @@ export function StarterGallery({
                 <ol
                   className={galleryStyles.preview}
                   id={`starter-preview-${starter.id}`}
-                  lang="en-CA"
+                  lang={preview.contentLocale}
                 >
                   {preview.draft.questions.map((question) => (
                     <li key={question.id}>
@@ -284,7 +318,7 @@ export function StarterGallery({
               {canEdit && (!survey || productFeatures?.surveys) ? (
                 <button
                   className="button small-button"
-                  disabled={Boolean(busyId)}
+                  disabled={Boolean(busyId) || !catalogCurrent}
                   onClick={() => void useStarter(starter)}
                   type="button"
                 >

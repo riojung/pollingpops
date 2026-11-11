@@ -2,7 +2,7 @@ import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { StarterIdSchema } from "@openround/contracts";
+import { StarterIdSchema, SupportedLocaleSchema } from "@openround/contracts";
 import {
   SurveyDraftSchema,
   SurveyMutationSchema,
@@ -27,7 +27,9 @@ import {
 import { hashToken } from "./security.js";
 import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 import { roomCreationPolicy } from "./room-entitlements.js";
-import { instantiateStarter, starterSummaries } from "./starters.js";
+import { instantiateStarter, starterSummariesForLocale } from "./starters.js";
+import { STARTER_CONTENT_VERSION, surveyCreationCopy } from "./starter-localization.js";
+import { StarterLocaleRequestSchema } from "./starter-locale-request.js";
 
 const Id = z.object({ id: z.string().uuid() }).strict();
 const Key = z
@@ -36,7 +38,8 @@ const Key = z
 const Create = z
   .object({
     idempotencyKey: z.string().uuid(),
-    title: z.string().trim().min(1).max(160).default("Untitled survey"),
+    title: z.string().trim().min(1).max(160).optional(),
+    locale: SupportedLocaleSchema.default("en-CA"),
     templateId: StarterIdSchema.optional(),
     sourceId: z.string().uuid().optional(),
   })
@@ -179,9 +182,14 @@ export async function registerSurveyRoutes(
       const actor = await creator(request, reply, true, true);
       if (!actor) return;
       const input = Create.parse(request.body);
-      let draft = SurveyDraftSchema.parse({ schemaVersion: 2, title: input.title, items: [] });
+      const copy = surveyCreationCopy(input.locale);
+      let draft = SurveyDraftSchema.parse({
+        schemaVersion: 2,
+        title: input.title ?? copy.title,
+        items: [],
+      });
       if (input.templateId) {
-        const template = instantiateStarter(input.templateId);
+        const template = instantiateStarter(input.templateId, input.locale);
         if (!template.questions.every((q) => q.type === "poll" || q.type === "rating"))
           throw new SurveyError(
             "VALIDATION_ERROR",
@@ -190,7 +198,7 @@ export async function registerSurveyRoutes(
         draft = SurveyDraftSchema.parse({
           schemaVersion: 2,
           title: template.title,
-          description: "Answer independently at your own pace. This Survey is unscored.",
+          description: copy.description,
           category: template.category,
           experiencePreset: template.experiencePreset,
           items: template.questions.map((question) => ({ required: true, question })),
@@ -201,7 +209,7 @@ export async function registerSurveyRoutes(
         if (!source) throw new SurveyError("NOT_FOUND", "Survey not found");
         draft = structuredClone(source.draft);
         draft.schemaVersion = 2;
-        draft.title = `${draft.title.slice(0, 150)} (copy)`;
+        draft.title = `${draft.title.slice(0, 150)} ${copy.copy}`;
       }
       // Stable IDs make a lost creation response retryable without exposing credentials.
       for (const [index, item] of draft.items.entries()) {
@@ -224,14 +232,21 @@ export async function registerSurveyRoutes(
         targetType: "survey",
         targetId: survey.id,
         requestId: request.id,
-        metadata: {},
+        metadata: {
+          contentLocale: input.locale,
+          contentVersion: STARTER_CONTENT_VERSION,
+          ...(input.templateId ? { starterId: input.templateId, starterVersion: 1 } : {}),
+        },
       });
       return reply.code(201).send({ survey });
     });
     scoped.get("/v1/surveys/templates", async (request, reply) => {
       if (!(await creator(request, reply))) return;
+      const { locale } = StarterLocaleRequestSchema.parse(request.query);
       return {
-        templates: starterSummaries.filter((starter) =>
+        contentLocale: locale,
+        contentVersion: STARTER_CONTENT_VERSION,
+        templates: starterSummariesForLocale(locale).filter((starter) =>
           starter.responseTypes.every((type) => type === "poll" || type === "rating"),
         ),
       };

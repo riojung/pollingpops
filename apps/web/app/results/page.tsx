@@ -65,7 +65,7 @@ function ResultsSummary({
             onClick={() => onLayoutChange(value)}
             type="button"
           >
-            {t(value === "grid" ? "pages.library.grid" : "pages.library.list")}
+            {t(value === "grid" ? "pages.library.gridView" : "pages.library.listView")}
           </button>
         ))}
       </div>
@@ -568,7 +568,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <h2 lang="">{followup.title}</h2>
-                <PackPracticeAttribution source={followup.recoveryPackSource} />
+                <PackPracticeAttribution source={followup.recoveryPackSource} locale={locale} />
                 <p className={styles.summaryLine}>
                   {t("pages.assignments.created", {
                     date: formatDateTime(locale, followup.createdAt),

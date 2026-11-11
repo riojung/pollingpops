@@ -583,6 +583,7 @@ function PackLibrary() {
                             pair.diagnostic,
                             pair.recheck,
                             clientUuid(),
+                            locale,
                           ),
                         }),
                       });

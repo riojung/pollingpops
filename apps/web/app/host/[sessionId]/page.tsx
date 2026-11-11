@@ -72,6 +72,9 @@ import {
   type LegacyHostCommand,
 } from "../../../lib/legacy-host-phase";
 
+import styles from "./host-workspace.module.css";
+import liveTheme from "../../../components/round-live-theme.module.css";
+
 type Ack<T> = { data?: T; error?: { code: string; message: string } };
 type StaffAction = "cohost" | "embed" | "presenter" | "revoke";
 const STAFF_ERROR_KEYS = {
@@ -135,15 +138,6 @@ export default function HostPage() {
   const confidenceCopy = confidenceControlCopy[locale];
   const socket = useMemo(createRealtimeClient, []);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
-  const timeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
-    [locale],
-  );
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
@@ -823,7 +817,7 @@ export default function HostPage() {
 
   return (
     <div
-      className="live-shell"
+      className={`live-shell ${styles.shell} ${liveTheme.shell}`}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
@@ -831,7 +825,7 @@ export default function HostPage() {
       data-ux-beta={uxBeta}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
-      <header className="shell live-topbar" inert={audienceOpen}>
+      <header className={`shell live-topbar ${styles.topbar}`} inert={audienceOpen}>
         <span lang="">
           <Brand href={creatorHref} inverted name={snapshot?.brandTheme?.organizationName} />
         </span>
@@ -845,24 +839,41 @@ export default function HostPage() {
             aria-describedby={
               staffActionError?.action === "presenter" ? "staff-presenter-error" : undefined
             }
-            className="button-quiet small-button"
+            className="button-quiet small-button round-presenter-button"
+            aria-label={
+              presenterOperation === "presenter"
+                ? staffCopy("Opening presenter view…")
+                : copy("Presenter view")
+            }
             disabled={presenterPending}
             lang={locale}
             onClick={() => void presenter()}
             type="button"
           >
-            {presenterOperation === "presenter"
-              ? staffCopy("Opening presenter view…")
-              : copy("Presenter view")}
+            <svg
+              aria-hidden="true"
+              className="round-presenter-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+            >
+              <rect x="3" y="4" width="18" height="13" rx="2" />
+              <path d="M8 21h8M12 17v4M8 9h8M8 12h5" />
+            </svg>
+            <span className="round-presenter-label">
+              {presenterOperation === "presenter"
+                ? staffCopy("Opening presenter view…")
+                : copy("Presenter view")}
+            </span>
           </button>
           {staffError("presenter")}
         </div>
       </header>
       <main
-        className={uxBeta ? "shell host-command-center" : "shell"}
+        className={`shell ${styles.workspace}${uxBeta ? " host-command-center" : ""}`}
         id="main"
         inert={audienceOpen}
-        style={uxBeta ? undefined : { padding: "26px 0 70px" }}
       >
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {phaseView ? (
@@ -887,69 +898,40 @@ export default function HostPage() {
           </section>
         ) : (
           <>
-            {uxBeta && !standingsStage ? (
-              <section aria-label={copy("Room readiness")} className="room-readiness" lang={locale}>
-                <span>
-                  <strong lang={locale}>
-                    {connected ? t("live.common.connected") : copy("Reconnecting…")}
-                  </strong>
-                  <small>{copy("connection")}</small>
-                </span>
-                <span>
+            {uxBeta ? (
+              <section
+                aria-label={copy("Room readiness")}
+                className={`round-session-summary ${styles.sessionSummary}`}
+                lang={locale}
+              >
+                <div className={styles.roomCode}>
+                  <span>{copy("Round code")}</span>
                   <strong>{snapshot.code}</strong>
-                  <small>{copy("Round code")}</small>
-                </span>
-                <span>
-                  <strong>{numberFormatter.format(snapshot.participants.length)}</strong>
-                  <small lang={locale}>{t("live.host.joined")}</small>
-                </span>
-                <span>
-                  <strong>{numberFormatter.format(snapshot.answerCount)}</strong>
-                  <small lang={locale}>{t("live.host.answered")}</small>
-                </span>
-                <span>
-                  {snapshot.settings.timeMode === "flex" ? (
-                    <>
-                      <strong lang={locale}>{t("live.common.flexMode")}</strong>
-                      <small lang={locale}>{t("live.common.timeMode")}</small>
-                    </>
-                  ) : (
-                    <>
-                      <strong
-                        lang={
-                          snapshot.questionPosition === null ||
-                          snapshot.questionPosition === undefined
-                            ? locale
-                            : undefined
-                        }
-                      >
-                        {snapshot.deadline
-                          ? timeFormatter.format(new Date(snapshot.deadline))
-                          : copy("None")}
-                      </strong>
-                      <small>{copy("deadline")}</small>
-                    </>
-                  )}
-                </span>
-                <span>
+                </div>
+                <div>
+                  <span>{copy("progress")}</span>
                   <strong>
                     {snapshot.questionPosition === null || snapshot.questionPosition === undefined
                       ? t("live.host.phase.lobby")
-                      : `${numberFormatter.format(snapshot.questionPosition + 1)}/${numberFormatter.format(snapshot.questionCount)}`}
+                      : `${numberFormatter.format(snapshot.questionPosition + 1)} / ${numberFormatter.format(snapshot.questionCount)}`}
                   </strong>
-                  <small>{copy("progress")}</small>
-                </span>
-                <span>
-                  <strong lang={phaseMessageKey ? locale : "en-CA"}>
-                    {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
-                  </strong>
-                  <small>{copy("phase")}</small>
-                </span>
+                </div>
+                <div>
+                  <span>{t("live.host.joined")}</span>
+                  <strong>{numberFormatter.format(snapshot.participants.length)}</strong>
+                </div>
+                <div>
+                  <span>{t("live.host.answered")}</span>
+                  <strong>{numberFormatter.format(snapshot.answerCount)}</strong>
+                </div>
               </section>
             ) : null}
             {uxBeta && phaseView ? (
               <HostCommandBar
                 compact
+                context={
+                  <span lang={phaseMessageKey ? locale : "en-CA"}>{localizedPhaseLabel}</span>
+                }
                 busy={commandPending}
                 fallback={
                   reportId ? (
@@ -961,20 +943,6 @@ export default function HostPage() {
                 leading={
                   <>
                     {confidenceControl}
-                    <button
-                      aria-controls="host-audience-drawer"
-                      aria-expanded={audienceOpen}
-                      className="button-quiet"
-                      lang={locale}
-                      onClick={() => {
-                        if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
-                        setAudienceOpen((open) => !open);
-                      }}
-                      ref={audienceButtonRef}
-                      type="button"
-                    >
-                      {copy("Audience")}
-                    </button>
                     {snapshot.phase === "lobby" ? (
                       <button
                         className="button-quiet"
@@ -989,6 +957,22 @@ export default function HostPage() {
                       </button>
                     ) : null}
                   </>
+                }
+                quickActions={
+                  <button
+                    aria-controls="host-audience-drawer"
+                    aria-expanded={audienceOpen}
+                    className="button-quiet"
+                    lang={locale}
+                    onClick={() => {
+                      if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
+                      setAudienceOpen((open) => !open);
+                    }}
+                    ref={audienceButtonRef}
+                    type="button"
+                  >
+                    {copy("Audience")}
+                  </button>
                 }
                 onCommand={runPhaseCommand}
                 phaseView={phaseView}
@@ -1013,179 +997,207 @@ export default function HostPage() {
               />
             ) : null}
             <div
-              className={uxBeta ? "host-grid host-layout" : "host-grid"}
+              className={`host-grid ${styles.workGrid}${uxBeta ? " host-layout" : ""}`}
               data-phase={snapshot.phase}
               data-results-stage={standingsStage || undefined}
               data-testid="host-session"
             >
-              <HostStage enhanced={uxBeta} className={standingsStage ? "host-results-stage" : ""}>
-                {snapshot.phase === "lobby" ? (
-                  <>
-                    <p className="eyebrow" lang={locale}>
-                      {copy("Round code")}
-                    </p>
-                    <h1 className="live-lobby-heading" lang={locale}>
-                      {copy("Join this round")}
-                    </h1>
-                    <div
-                      className="session-code"
-                      aria-label={`${copy("Round code")} ${snapshot.code.split("").join(" ")}`}
-                      lang={locale}
-                    >
-                      {snapshot.code}
-                    </div>
-                    <p className="lead" lang={locale}>
-                      {copy("Share the code or QR. Start when the room is ready.")}
-                    </p>
-                    <ul className="roster" aria-label={copy("Participant roster")} lang={locale}>
-                      {snapshot.participants.map((participant) => (
-                        <li key={participant.id}>
-                          <span>
-                            <span lang="">
-                              <ParticipantIdentity
-                                avatarId={participant.avatarId}
-                                nickname={participant.nickname}
-                              />
-                            </span>
-                            {participant.connected ? "" : ` · ${t("live.audience.offline")}`}
-                          </span>
-                          <button
-                            aria-label={`Remove ${participant.nickname}`}
-                            className="roster-kick"
-                            disabled={commandPending}
-                            onClick={() => command("kick", { participantId: participant.id })}
-                            type="button"
-                          >
-                            {t("live.audience.remove")}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
-                {snapshot.question && !standingsStage ? (
-                  <>
-                    <div
-                      className="page-heading"
-                      style={{ alignItems: "center", marginBottom: 18 }}
-                    >
-                      <span className="status-pill" lang={phaseMessageKey ? locale : "en-CA"}>
-                        {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
-                      </span>
-                      {snapshot.phase === "question_open" ? (
-                        snapshot.settings.timeMode === "flex" ? (
-                          <span className="muted" lang={locale} role="status">
-                            {t("live.common.flexOpen")}
-                          </span>
-                        ) : (
-                          <Countdown deadline={snapshot.deadline} />
-                        )
-                      ) : null}
-                    </div>
-                    <h1 className="host-question-prompt" lang="">
-                      {snapshot.question.prompt}
-                    </h1>
-                    <QuestionMedia
-                      altText={snapshot.question.mediaAlt}
-                      credential={mediaCredential}
-                      mediaId={snapshot.question.mediaId}
-                      sessionId={sessionId}
-                    />
-                    {snapshot.question.type === "poll" &&
-                    (snapshot.question.maxSelections ?? 1) > 1 ? (
-                      <p className="muted">
-                        {t("live.roundPlay.pollSelectionInstructions", {
-                          limit: snapshot.question.maxSelections ?? 1,
-                        })}
+              <div className={styles.mainColumn}>
+                <HostStage
+                  enhanced={uxBeta}
+                  className={`${styles.stage}${standingsStage ? ` host-results-stage ${styles.resultsStage}` : ""}`}
+                >
+                  {snapshot.phase === "lobby" ? (
+                    <>
+                      <p className="eyebrow" lang={locale}>
+                        {copy("Round code")}
                       </p>
-                    ) : null}
-                    {snapshot.question.type === "ranking" ? (
-                      <p className="muted">
-                        {t("live.ranking.instructions", {
-                          count: snapshot.question.rankCount ?? snapshot.question.choices.length,
-                          total: snapshot.question.choices.length,
-                        })}
-                      </p>
-                    ) : null}
-                    {snapshot.question.choices.length > 0 ? (
-                      <div className="answer-grid">
-                        {snapshot.question.choices.map((choice, index) => (
-                          <div
-                            className="answer-button"
-                            data-correct={
-                              snapshot.correctResponse?.kind === "choice" &&
-                              snapshot.correctResponse.choiceIds.includes(choice.id)
-                                ? true
-                                : undefined
-                            }
-                            key={choice.id}
-                          >
-                            <span aria-hidden="true">{String.fromCharCode(65 + index)}.</span>{" "}
-                            <span lang="">{choice.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : snapshot.question.type === "numeric" ? (
-                      <p className="notice" lang={locale}>
-                        {copy("Numeric response")}
-                        {snapshot.question.unit ? (
-                          <>
-                            {" "}
-                            · <span lang="">{snapshot.question.unit}</span>
-                          </>
-                        ) : null}
-                        {snapshot.correctResponse?.kind === "numeric" ? (
-                          <>
-                            {" "}
-                            · {copy("Accepted value")}:{" "}
-                            <span lang="">{snapshot.correctResponse.value}</span>
-                          </>
-                        ) : null}
-                      </p>
-                    ) : snapshot.question.rating ? (
-                      <p className="notice" lang={locale}>
-                        {copy("Rating")} {numberFormatter.format(snapshot.question.rating.min)}–
-                        {numberFormatter.format(snapshot.question.rating.max)}:{" "}
-                        <span lang="">{snapshot.question.rating.minLabel}</span> →{" "}
-                        <span lang="">{snapshot.question.rating.maxLabel}</span>.
-                      </p>
-                    ) : null}
-                    {snapshot.explanation ? (
-                      <p className="notice" lang="">
-                        {snapshot.explanation}
-                      </p>
-                    ) : null}
-                    {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
-                      <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
-                    ) : null}
-                  </>
-                ) : null}
-                {snapshot.phase === "finished" && !(uxBeta && snapshot.competitionStandings) ? (
-                  <div className="host-completion-summary">
-                    <div>
-                      <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-                      <h1 className="host-complete-heading" lang={locale}>
-                        {copy("Results are ready.")}
+                      <h1 className="live-lobby-heading" lang={locale}>
+                        {copy("Join this round")}
                       </h1>
+                      <div
+                        className="session-code"
+                        aria-label={`${copy("Round code")} ${snapshot.code.split("").join(" ")}`}
+                        lang={locale}
+                      >
+                        {snapshot.code}
+                      </div>
                       <p className="lead" lang={locale}>
-                        {copy("{count} participants completed this live round.", {
-                          count: numberFormatter.format(snapshot.participants.length),
-                        })}
+                        {copy("Share the code or QR. Start when the room is ready.")}
                       </p>
+                      <ul className="roster" aria-label={copy("Participant roster")} lang={locale}>
+                        {snapshot.participants.map((participant) => (
+                          <li key={participant.id}>
+                            <span>
+                              <span lang="">
+                                <ParticipantIdentity
+                                  avatarId={participant.avatarId}
+                                  nickname={participant.nickname}
+                                />
+                              </span>
+                              {participant.connected ? "" : ` · ${t("live.audience.offline")}`}
+                            </span>
+                            <button
+                              aria-label={`Remove ${participant.nickname}`}
+                              className="roster-kick"
+                              disabled={commandPending}
+                              onClick={() => command("kick", { participantId: participant.id })}
+                              type="button"
+                            >
+                              {t("live.audience.remove")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {snapshot.question && !standingsStage ? (
+                    <>
+                      <div
+                        className="page-heading"
+                        style={{ alignItems: "center", marginBottom: 18 }}
+                      >
+                        <span className="status-pill" lang={phaseMessageKey ? locale : "en-CA"}>
+                          {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
+                        </span>
+                        {snapshot.phase === "question_open" ? (
+                          snapshot.settings.timeMode === "flex" ? (
+                            <span className="muted" lang={locale} role="status">
+                              {t("live.common.flexOpen")}
+                            </span>
+                          ) : (
+                            <Countdown deadline={snapshot.deadline} />
+                          )
+                        ) : null}
+                      </div>
+                      <h1 className="host-question-prompt" lang="">
+                        {snapshot.question.prompt}
+                      </h1>
+                      <QuestionMedia
+                        altText={snapshot.question.mediaAlt}
+                        credential={mediaCredential}
+                        mediaId={snapshot.question.mediaId}
+                        sessionId={sessionId}
+                      />
+                      {snapshot.question.type === "poll" &&
+                      (snapshot.question.maxSelections ?? 1) > 1 ? (
+                        <p className="muted">
+                          {t("live.roundPlay.pollSelectionInstructions", {
+                            limit: snapshot.question.maxSelections ?? 1,
+                          })}
+                        </p>
+                      ) : null}
+                      {snapshot.question.type === "ranking" ? (
+                        <p className="muted">
+                          {t("live.ranking.instructions", {
+                            count: snapshot.question.rankCount ?? snapshot.question.choices.length,
+                            total: snapshot.question.choices.length,
+                          })}
+                        </p>
+                      ) : null}
+                      {snapshot.question.choices.length > 0 ? (
+                        <div className="answer-grid">
+                          {snapshot.question.choices.map((choice, index) => (
+                            <div
+                              className="answer-button"
+                              data-correct={
+                                snapshot.correctResponse?.kind === "choice" &&
+                                snapshot.correctResponse.choiceIds.includes(choice.id)
+                                  ? true
+                                  : undefined
+                              }
+                              key={choice.id}
+                            >
+                              <span aria-hidden="true">{String.fromCharCode(65 + index)}.</span>{" "}
+                              <span lang="">{choice.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : snapshot.question.type === "numeric" ? (
+                        <p className="notice" lang={locale}>
+                          {copy("Numeric response")}
+                          {snapshot.question.unit ? (
+                            <>
+                              {" "}
+                              · <span lang="">{snapshot.question.unit}</span>
+                            </>
+                          ) : null}
+                          {snapshot.correctResponse?.kind === "numeric" ? (
+                            <>
+                              {" "}
+                              · {copy("Accepted value")}:{" "}
+                              <span lang="">{snapshot.correctResponse.value}</span>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : snapshot.question.rating ? (
+                        <p className="notice" lang={locale}>
+                          {copy("Rating")} {numberFormatter.format(snapshot.question.rating.min)}–
+                          {numberFormatter.format(snapshot.question.rating.max)}:{" "}
+                          <span lang="">{snapshot.question.rating.minLabel}</span> →{" "}
+                          <span lang="">{snapshot.question.rating.maxLabel}</span>.
+                        </p>
+                      ) : null}
+                      {snapshot.explanation ? (
+                        <p className="notice" lang="">
+                          {snapshot.explanation}
+                        </p>
+                      ) : null}
+                      {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
+                        <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
+                      ) : null}
+                    </>
+                  ) : null}
+                  {snapshot.phase === "finished" ? (
+                    <div className={`host-completion-summary ${styles.completion}`}>
+                      <div>
+                        <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
+                        <h1 className="host-complete-heading" lang={locale}>
+                          {copy("Results are ready.")}
+                        </h1>
+                        <p className="lead" lang={locale}>
+                          {copy("{count} participants completed this live round.", {
+                            count: numberFormatter.format(snapshot.participants.length),
+                          })}
+                        </p>
+                      </div>
+                      {reportId ? (
+                        !uxBeta ? (
+                          <Link className="button" href={`/report/${reportId}`}>
+                            {copy("Open report")}
+                          </Link>
+                        ) : null
+                      ) : (
+                        <p className="notice">{copy("Finalizing the report…")}</p>
+                      )}
                     </div>
-                    {reportId ? (
-                      <Link className="button" href={`/report/${reportId}`}>
-                        {copy("Open report")}
-                      </Link>
-                    ) : (
-                      <p className="notice">{copy("Finalizing the report…")}</p>
-                    )}
-                  </div>
-                ) : null}
+                  ) : null}
+                  {snapshot.roundProtocol?.requiredCapabilities.some(
+                    (capability) =>
+                      capability === "response.open_text" || capability === "response.word_cloud",
+                  ) ? (
+                    <TextModerationPanel
+                      sessionId={sessionId}
+                      roundId={
+                        snapshot.question && isTextQuestion(snapshot.question.type)
+                          ? snapshot.roundId
+                          : null
+                      }
+                      version={snapshot.version}
+                      phase={snapshot.phase}
+                      credential={textReadAuthorized ? mediaCredential : ""}
+                      freshness={textReadEpoch}
+                      disabled={commandPending || !connected || snapshot.phase === "finished"}
+                      onModerate={(answerId, responseStatus) =>
+                        command("response.moderate", { answerId, responseStatus })
+                      }
+                    />
+                  ) : null}
+                </HostStage>
                 {snapshot.competitionStandings && snapshot.phase !== "lobby" ? (
                   <CompetitionDashboard
                     variant="host"
-                    headingLevel={standingsStage ? 1 : 2}
+                    headingLevel={snapshot.phase === "leaderboard" ? 1 : 2}
                     standings={snapshot.competitionStandings}
                     finished={snapshot.phase === "finished"}
                     compact={!standingsStage}
@@ -1206,28 +1218,7 @@ export default function HostPage() {
                     ))}
                   </ol>
                 ) : null}
-                {snapshot.roundProtocol?.requiredCapabilities.some(
-                  (capability) =>
-                    capability === "response.open_text" || capability === "response.word_cloud",
-                ) ? (
-                  <TextModerationPanel
-                    sessionId={sessionId}
-                    roundId={
-                      snapshot.question && isTextQuestion(snapshot.question.type)
-                        ? snapshot.roundId
-                        : null
-                    }
-                    version={snapshot.version}
-                    phase={snapshot.phase}
-                    credential={textReadAuthorized ? mediaCredential : ""}
-                    freshness={textReadEpoch}
-                    disabled={commandPending || !connected || snapshot.phase === "finished"}
-                    onModerate={(answerId, responseStatus) =>
-                      command("response.moderate", { answerId, responseStatus })
-                    }
-                  />
-                ) : null}
-              </HostStage>
+              </div>
               <RecoveryCompass
                 showCounts={!uxBeta}
                 collapsible={uxBeta && standingsStage}

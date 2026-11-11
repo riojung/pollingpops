@@ -124,6 +124,10 @@ export function CompetitionDashboard({
   const number = (value: number) => formatNumber(locale, value);
   const Heading = headingLevel === 1 ? "h1" : headingLevel === 3 ? "h3" : "h2";
   const isFinal = finished || standings.status === "final";
+  const participantFinal = variant === "participant" && isFinal;
+  const compactParticipant =
+    variant === "participant" && (compact || (isFinal && standings.entries.length < 2));
+  const condensedPersonal = compactParticipant || participantFinal;
   const unscored = standings.status === "unscored";
   const released =
     !unscored &&
@@ -134,7 +138,7 @@ export function CompetitionDashboard({
     ? text("unscoredTitle")
     : isFinal
       ? text("finalTitle")
-      : text(released ? "liveTitle" : "waitingTitle");
+      : text(released ? (compactParticipant ? "standings" : "liveTitle") : "waitingTitle");
   const personal = released
     ? standings.entries.find((entry) => entry.id === participantId)
     : undefined;
@@ -143,8 +147,12 @@ export function CompetitionDashboard({
   // Presence/answer acknowledgements do not change this key or restart the celebration.
   const releaseKey = `${status}:${standings.completedScoredQuestions}`;
   const leader = released ? standings.entries[0] : undefined;
-  const podiumAvailable = (leader?.score ?? 0) > 0;
+  const pointsAvailable = (leader?.score ?? 0) > 0;
+  const podiumAvailable = pointsAvailable && standings.entries.length > 1;
   const celebrationAvailable = isFinal && podiumAvailable;
+  const compactEntries = released ? standings.entries.slice(0, 3) : [];
+  if (personal && !compactEntries.some((entry) => entry.id === personal.id))
+    compactEntries.push(personal);
   const biggestGain = released
     ? Math.max(
         0,
@@ -269,6 +277,16 @@ export function CompetitionDashboard({
     );
   }
 
+  const scoringPolicy = (
+    <footer className={styles.policy}>
+      <strong>{text(standings.scoringMode === "speed" ? "speed" : "accuracy")}</strong>
+      <p>
+        {text(policy)} {standings.entries.some((entry) => entry.tied) ? text("tieNote") : ""}
+      </p>
+      <p>{text("releasedOnly")}</p>
+    </footer>
+  );
+
   const dashboardOptions = (
     <>
       <div className={styles.effectsControls}>
@@ -293,40 +311,34 @@ export function CompetitionDashboard({
         ) : null}
         <small>{text(preference === "reduced" ? "reducedMotion" : "motionHelp")}</small>
       </div>
-      <footer className={styles.policy}>
-        <strong>{text(standings.scoringMode === "speed" ? "speed" : "accuracy")}</strong>
-        <p>
-          {text(policy)} {standings.entries.some((entry) => entry.tied) ? text("tieNote") : ""}
-        </p>
-        <p>{text("releasedOnly")}</p>
-      </footer>
+      {scoringPolicy}
     </>
   );
 
-  const releasedContent = released ? (
-    <>
-      {personal ? (
-        <section
-          className={styles.personal}
-          aria-label={text("personalTitle")}
-          data-testid="competition-personal"
-        >
-          <div className={styles.personalHeading}>
-            <span>{text("personalTitle")}</span>
-            {movementBadge(personal)}
-          </div>
-          <dl className={styles.personalStats}>
-            <div>
-              <dt>{text("position")}</dt>
-              <dd>
-                {competitionPlace(locale, personal.rank)}
-                {personal.tied ? <small>{text("tied")}</small> : null}
-              </dd>
-            </div>
-            <div>
-              <dt>{text("points")}</dt>
-              <dd>{number(personal.score)}</dd>
-            </div>
+  const personalContent = personal ? (
+    <section
+      className={styles.personal}
+      aria-label={text("personalTitle")}
+      data-testid="competition-personal"
+    >
+      <div className={styles.personalHeading}>
+        <span>{text("personalTitle")}</span>
+        {movementBadge(personal)}
+      </div>
+      <dl className={styles.personalStats}>
+        <div>
+          <dt>{text("position")}</dt>
+          <dd>
+            {competitionPlace(locale, personal.rank)}
+            {personal.tied ? <small>{text("tied")}</small> : null}
+          </dd>
+        </div>
+        <div>
+          <dt>{text("points")}</dt>
+          <dd>{number(personal.score)}</dd>
+        </div>
+        {!condensedPersonal ? (
+          <>
             <div>
               <dt>{text("leaderGap")}</dt>
               <dd>{number(Math.max(0, personal.pointsToLeader))}</dd>
@@ -341,31 +353,65 @@ export function CompetitionDashboard({
                 )}
               </dd>
             </div>
-          </dl>
-          {personal.lastScoreDelta !== undefined || (personal.correctStreak ?? 0) >= 2 ? (
-            <div className={styles.personalHighlights}>
-              {personal.lastScoreDelta !== undefined ? (
-                <span className={styles.questionGain} data-testid="competition-question-gain">
-                  <span>{text("questionGain")}</span>
-                  <strong>
-                    {text("pointsEarned", { count: number(personal.lastScoreDelta) })}
-                  </strong>
-                </span>
-              ) : null}
-              {streakBadge(personal)}
-            </div>
+          </>
+        ) : null}
+      </dl>
+      {personal.lastScoreDelta !== undefined || (personal.correctStreak ?? 0) >= 2 ? (
+        <div className={styles.personalHighlights}>
+          {personal.lastScoreDelta !== undefined ? (
+            <span className={styles.questionGain} data-testid="competition-question-gain">
+              <span>{text("questionGain")}</span>
+              <strong>{text("pointsEarned", { count: number(personal.lastScoreDelta) })}</strong>
+            </span>
           ) : null}
-          {variant === "participant" ? (
-            <ScoredResponseReceipt responseSummary={responseSummary} />
-          ) : null}
-        </section>
+          {streakBadge(personal)}
+        </div>
       ) : null}
-      {!podiumAvailable ? (
+      {variant === "participant" ? (
+        <ScoredResponseReceipt responseSummary={responseSummary} />
+      ) : null}
+    </section>
+  ) : variant === "participant" ? (
+    <ScoredResponseReceipt responseSummary={responseSummary} />
+  ) : null;
+
+  const compactContent = released ? (
+    <>
+      {personalContent}
+      {!pointsAvailable ? (
         <p className={styles.empty} data-testid="competition-zero-points" role="status">
           {scoredResponseCopy[locale].zeroPoints}
         </p>
       ) : null}
-      {(isFinal ? celebrationAvailable : climbers.length > 0) ? (
+      {standings.entries.length > 1 || !personal ? (
+        <section className={styles.compactStandings} aria-label={text("standings")}>
+          {standingsTable(compactEntries, text(isFinal ? "finalTitle" : "standings"))}
+          {standings.entries.length > compactEntries.length ? (
+            <details className={styles.fullStandings}>
+              <summary>
+                {text("allStandings")} <span>({number(standings.entries.length)})</span>
+              </summary>
+              {standingsTable(standings.entries, text("allStandings"))}
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+      <details className={styles.displayOptions} data-testid="competition-display-options">
+        <summary>{text(standings.scoringMode === "speed" ? "speed" : "accuracy")}</summary>
+        {scoringPolicy}
+      </details>
+    </>
+  ) : null;
+
+  const releasedContent = released ? (
+    <>
+      {personalContent}
+      {!pointsAvailable ? (
+        <p className={styles.empty} data-testid="competition-zero-points" role="status">
+          {scoredResponseCopy[locale].zeroPoints}
+        </p>
+      ) : null}
+      {!participantFinal && (isFinal ? celebrationAvailable : climbers.length > 0) ? (
         <aside
           className={styles.spotlight}
           data-testid="competition-spotlight"
@@ -451,28 +497,34 @@ export function CompetitionDashboard({
         ) : null}
         <section
           className={styles.scoreboard}
-          aria-label={text("race")}
+          aria-label={text(participantFinal ? "standings" : "race")}
           style={podiumAvailable ? undefined : { gridColumn: "1 / -1" }}
         >
           <div className={styles.scoreboardHeading}>
             <div>
-              <strong>{text("race")}</strong>
-              <p>{text("raceHelp")}</p>
+              <strong>{text(participantFinal ? "standings" : "race")}</strong>
+              {!participantFinal ? <p>{text("raceHelp")}</p> : null}
             </div>
-            <div className={styles.viewControls} role="group" aria-label={text("scoreboardView")}>
-              <button type="button" aria-pressed={view === "race"} onClick={() => setView("race")}>
-                {text("raceView")}
-              </button>
-              <button
-                type="button"
-                aria-pressed={view === "table"}
-                onClick={() => setView("table")}
-              >
-                {text("tableView")}
-              </button>
-            </div>
+            {!participantFinal ? (
+              <div className={styles.viewControls} role="group" aria-label={text("scoreboardView")}>
+                <button
+                  type="button"
+                  aria-pressed={view === "race"}
+                  onClick={() => setView("race")}
+                >
+                  {text("raceView")}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={view === "table"}
+                  onClick={() => setView("table")}
+                >
+                  {text("tableView")}
+                </button>
+              </div>
+            ) : null}
           </div>
-          {view === "race" ? (
+          {!participantFinal && view === "race" ? (
             <ol
               className={styles.race}
               data-testid="competition-race"
@@ -540,7 +592,7 @@ export function CompetitionDashboard({
           ) : null}
         </section>
       </div>
-      {variant === "host" || variant === "presenter" ? (
+      {variant === "host" || variant === "presenter" || participantFinal ? (
         <details className={styles.displayOptions} data-testid="competition-display-options">
           <summary>
             {text(standings.scoringMode === "speed" ? "speed" : "accuracy")} · {text("motion")}
@@ -555,16 +607,19 @@ export function CompetitionDashboard({
 
   return (
     <section
-      className={`${styles.dashboard}${compact ? ` ${styles.compact}` : ""}${summary ? ` ${styles.summary}` : ""}`}
+      className={`${styles.dashboard}${compact ? ` ${styles.compact}` : ""}${summary ? ` ${styles.summary}` : ""}${compactParticipant ? ` ${styles.compactParticipant}` : ""}${participantFinal ? ` ${styles.participantFinal}` : ""}`}
       aria-labelledby={`${id}-title`}
       data-testid="competition-dashboard"
       data-status={status}
-      data-motion={motion && (!isFinal || celebrationAvailable) ? "on" : "off"}
+      data-motion={
+        !compactParticipant && motion && (!isFinal || celebrationAvailable) ? "on" : "off"
+      }
+      data-compact-participant={compactParticipant || undefined}
       data-variant={variant}
       data-summary={summary || undefined}
       lang={locale}
     >
-      {celebrationAvailable ? (
+      {celebrationAvailable && !compactParticipant ? (
         <div
           key={`${releaseKey}:${replay}`}
           className={styles.celebration}
@@ -589,7 +644,7 @@ export function CompetitionDashboard({
       ) : null}
       <header className={styles.header}>
         <div>
-          {!summary ? (
+          {!summary && !compactParticipant && !participantFinal ? (
             <p className={styles.eyebrow}>
               <span aria-hidden="true">✦</span> {text(status)}
             </p>
@@ -611,7 +666,7 @@ export function CompetitionDashboard({
               total: number(standings.totalScoredQuestions),
             })}
           </p>
-          {!summary ? (
+          {!summary && !compactParticipant ? (
             <progress
               aria-label={text("progress", {
                 completed: number(standings.completedScoredQuestions),
@@ -627,6 +682,8 @@ export function CompetitionDashboard({
         <p className={styles.empty}>
           {text(unscored ? "unscoredBody" : isFinal ? "noResults" : "waitingBody")}
         </p>
+      ) : compactParticipant ? (
+        compactContent
       ) : summary ? (
         <>
           <ol className={styles.summaryLeaders} aria-label={text("standings")}>

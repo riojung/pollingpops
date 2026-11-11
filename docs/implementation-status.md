@@ -8,6 +8,38 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Round live workspace refinement November 11, 2026
+
+The `codex/round-live-workspace` source improves the Round host and participant layouts.
+Hosts get a four-part room summary, visible Audience access, secondary tools that expand
+in normal flow, separate question/standings cards and a guidance column that stacks below
+1024px. Desktop primary, Audience and More controls share one header row whether tools are
+open or closed. Controls use centered 44px targets; narrow screens use accessible icons and
+wrap complete controls for long translations. A shared modern live interface uses crisp
+sans-serif type, slate surfaces, restrained violet accents and coherent light/dark/high-contrast
+states. Participant review and completion use a continuous aligned column with restrained
+headings, compact live standings, a modest single-person result and bounded multi-person
+final standings. Stored experience themes and presenter appearance remain unchanged.
+
+All 392 web suites / 4,192 tests pass, alongside web lint/types and fresh normal, beta and
+core production web builds. Fifteen distinct selected production-browser cases pass: six
+core competition/privacy/recheck cases and nine beta cases across desktop Chromium and
+phone Chromium/WebKit. Checks include the full save/reload/reveal/final journey, retained
+receipts, 320px overflow/Axe, control geometry and the 1024px sidebar crossover. Browser
+review caught and corrected an overly tall phone command bar; fixture expectations now
+reflect the intentional absence of a single-person podium. The
+[implementation record](option-b-ux-implementation.md#round-live-workspace-refinement--november-11-2026)
+keeps this local verification separate from pending release qualification. No server,
+protocol, scoring, authored content or stored theme contract changes are included.
+
+The Round review follow-up corrects nested-surface contrast in Audience/chat/Q&A, staff and
+responsive participant rows, reactions and Pulse. Three additional populated-surface browser
+cases pass across desktop Chromium and 320px phone Chromium/WebKit, with scoped Axe,
+computed palette checks and real conversation/staff data. Desktop covers light, dark and
+app/system high contrast. Fresh normal/beta builds and scoped static checks pass. The
+independent focused reviewer confirms the original finding is resolved; the implementation
+record includes corrected rerun scope.
+
 ### Option B Pack tools November 11, 2026
 
 The `codex/option-b-pack-tools` source extends selected-language guidance to Pack library/

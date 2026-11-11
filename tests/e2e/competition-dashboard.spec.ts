@@ -181,27 +181,24 @@ async function dashboardTheme(page: Page, colorScheme: "light" | "dark") {
     window.dispatchEvent(new Event("openround:color-mode-change"));
   }, colorScheme);
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", colorScheme);
-  const appearance = await dashboard(page).evaluate((element) => ({
-    surface: getComputedStyle(element).getPropertyValue("--ui-surface").trim(),
-    background: getComputedStyle(element).backgroundColor,
-  }));
-  const channels =
-    appearance.background
-      .match(/[\d.]+/g)
-      ?.slice(0, 3)
-      .map(Number) ?? [];
-  expect(channels).toHaveLength(3);
-  if (colorScheme === "dark") {
-    expect(
-      Math.max(...channels),
-      `Dark dashboard uses a dark actual surface (${appearance.surface})`,
-    ).toBeLessThan(100);
-  } else {
-    expect(
-      Math.min(...channels),
-      `Light dashboard uses a light actual surface (${appearance.surface})`,
-    ).toBeGreaterThan(180);
-  }
+  const appearance = await dashboard(page).evaluate((element) => {
+    const shell = element.closest(".live-shell")!;
+    const surface = getComputedStyle(shell).getPropertyValue("--experience-surface").trim();
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = surface;
+    return {
+      surface: getComputedStyle(element).getPropertyValue("--ui-surface").trim(),
+      background: getComputedStyle(element).backgroundColor,
+      experienceSurface: surface,
+      normalizedSurface: probe.style.backgroundColor,
+    };
+  });
+  expect(appearance.surface, "Live standings inherit the validated session surface").toBe(
+    appearance.experienceSurface,
+  );
+  expect(appearance.background, "Workspace appearance does not split the live theme").toBe(
+    appearance.normalizedSurface,
+  );
 }
 
 async function publicScores(host: Page, session: SessionFixture, guest: GuestFixture) {
@@ -246,6 +243,26 @@ async function expectPodium(page: Page, scores: string[], names: readonly string
   }
 }
 
+async function expectReleasedStandings(
+  page: Page,
+  scores: string[],
+  names: readonly string[] = aliases,
+) {
+  const root = dashboard(page);
+  if ((await root.getAttribute("data-compact-participant")) !== "true") {
+    await expectPodium(page, scores, names);
+    return;
+  }
+  await expect(root.getByTestId("competition-podium")).toHaveCount(0);
+  await expect(root.getByTestId("competition-race")).toHaveCount(0);
+  const table = root.getByRole("table");
+  for (const [index, nickname] of names.entries()) {
+    const row = table.getByRole("row").filter({ has: page.getByText(nickname, { exact: true }) });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(scores[index]!);
+  }
+}
+
 test("competition standings release after reveal and remain on the final projector and participant screens", async ({
   page: host,
   browser,
@@ -278,11 +295,7 @@ test("competition standings release after reveal and remain on the final project
     await hostAction(host, "Reveal answer", "question_reveal");
     for (const audience of [host, presenter, participant]) {
       await expect(dashboard(audience)).toBeVisible();
-      const podium = dashboard(audience).getByTestId("competition-podium");
-      await expect(podium.locator('[data-rank="1"]')).toContainText("Ada");
-      await expect(podium.locator('[data-rank="1"]')).toContainText("1,000");
-      await expect(podium).toContainText("Bea");
-      await expect(podium).toContainText("Cy");
+      await expectReleasedStandings(audience, ["1,000", "0", "0"]);
     }
     const releasedScores = await publicScores(host, session, guests[1]!);
     await hostAction(host, "Show standings", "leaderboard");
@@ -300,12 +313,16 @@ test("competition standings release after reveal and remain on the final project
     await hostAction(host, "Lock answers", "question_locked");
     await hostAction(host, "Reveal answer", "question_reveal");
     for (const audience of [host, presenter, participant]) {
-      await expectPodium(audience, ["2,000", "1,000", "0"], ["Bea", "Ada", "Cy"]);
-      const race = dashboard(audience).getByTestId("competition-race");
-      await expect(race).toContainText("Bea");
-      await expect(race.getByTestId("competition-race-fill")).toHaveCount(3);
-      await expect(race.locator('[data-score="2000"]')).toHaveCount(1);
-      await expect(dashboard(audience).getByTestId("competition-spotlight")).toContainText("Bea");
+      await expectReleasedStandings(audience, ["2,000", "1,000", "0"], ["Bea", "Ada", "Cy"]);
+      if (audience === participant) {
+        await expect(dashboard(audience).getByTestId("competition-spotlight")).toHaveCount(0);
+      } else {
+        const race = dashboard(audience).getByTestId("competition-race");
+        await expect(race).toContainText("Bea");
+        await expect(race.getByTestId("competition-race-fill")).toHaveCount(3);
+        await expect(race.locator('[data-score="2000"]')).toHaveCount(1);
+        await expect(dashboard(audience).getByTestId("competition-spotlight")).toContainText("Bea");
+      }
     }
     if (testInfo.project.name === "chromium") {
       for (const colorScheme of ["light", "dark"] as const) {
@@ -341,7 +358,7 @@ test("competition standings release after reveal and remain on the final project
     await hostAction(host, "Lock answers", "question_locked");
     await hostAction(host, "Reveal answer", "question_reveal");
     for (const audience of [host, presenter, participant]) {
-      await expectPodium(audience, ["3,000", "1,000", "0"], ["Bea", "Ada", "Cy"]);
+      await expectReleasedStandings(audience, ["3,000", "1,000", "0"], ["Bea", "Ada", "Cy"]);
     }
     const finalRelease = await publicScores(host, session, guests[0]!);
     expect(
@@ -355,9 +372,9 @@ test("competition standings release after reveal and remain on the final project
     const personal = dashboard(participant).getByTestId("competition-personal");
     await expect(personal).toContainText("Your position");
     await expect(personal).toContainText("2");
-    await expect(personal).toContainText("Points behind leader");
-    await expect(personal).toContainText("Points to next place");
-    await expect(personal).toContainText("2,000");
+    await expect(personal).toContainText("Points");
+    await expect(personal).toContainText("1,000");
+    await expect(personal.getByTestId("scored-response-receipt")).toBeVisible();
     await hostAction(host, "Finish round", "finished");
     for (const audience of [host, presenter, participant]) {
       await expect(
@@ -573,7 +590,18 @@ for (const mode of ["revote", "linked"] as const) {
       await hostAction(host, "Continue after recheck", "finished");
       for (const audience of [presenter, participant]) {
         await expect(dashboard(audience)).toBeVisible();
-        await expectPodium(audience, ["1,000"], ["Ada"]);
+        await expect(dashboard(audience).getByTestId("competition-podium")).toHaveCount(0);
+        if (audience === participant) {
+          await expect(dashboard(audience).getByTestId("competition-personal")).toContainText(
+            "1,000",
+          );
+          await expect(dashboard(audience).getByTestId("competition-personal")).toContainText(
+            "1st",
+          );
+        } else {
+          await expect(dashboard(audience).getByTestId("competition-race")).toContainText("Ada");
+          await expect(dashboard(audience).getByTestId("competition-race")).toContainText("1,000");
+        }
       }
     } finally {
       await presenter.close();

@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@openround/contracts": ["../packages/contracts/src/index.ts"],
+      "@openround/contracts/surveys": ["../packages/contracts/src/surveys.ts"],
+      "@openround/experience": ["../packages/experience/src/index.ts"]
+    }
+  },
+  "include": ["localization-review.ts", "../tests/support/localization-review.test.ts"]
+}

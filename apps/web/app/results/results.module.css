@@ -21,6 +21,7 @@
 
 .topline {
   align-items: start;
+  flex-wrap: wrap;
 }
 
 .topline > div {
@@ -114,9 +115,6 @@
 @media (max-width: 620px) {
   .card {
     padding: 18px;
-  }
-  .topline {
-    flex-wrap: wrap;
   }
   .collection[data-view="list"] .card {
     display: flex;

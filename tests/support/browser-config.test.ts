@@ -45,7 +45,7 @@ describe("browser CI scheduling and serving", () => {
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),
     ) as { scripts: Record<string, string> };
     expect(manifest.scripts["test:e2e:beta"]).toBe(
-      "playwright test --config=playwright.beta.config.ts",
+      "node scripts/test-browser.mjs --config=playwright.beta.config.ts",
     );
     const [, beta] = await browserConfigs(true, false);
     expect(beta.workers).toBe(1);

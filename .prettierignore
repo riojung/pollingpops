@@ -7,3 +7,7 @@ dist
 admin-dist
 node_modules
 pnpm-lock.yaml
+
+# Deterministic generated packets and human-owned review records.
+artifacts/localization-review/
+artifacts/option-b-acceptance/review-renderer-qa/

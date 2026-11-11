@@ -15,6 +15,7 @@ import { useLocale } from "../locale-provider";
 import { presentationTemplateCopy } from "../../lib/i18n/presentation-template-copy";
 import { formatNumber } from "../../lib/i18n/format";
 import { ContentSlideView } from "../presentation/content-slide-view";
+import { handleModalKeyDown } from "../presentation/presentation-modal-focus";
 import styles from "./presentation-template-preview.module.css";
 
 function templateThumbnail(
@@ -156,7 +157,16 @@ export function PresentationTemplatePreview({
         onClose();
       }}
       onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+        if (
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        handleModalKeyDown(event, onClose);
+        if (event.defaultPrevented) return;
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("a,input,textarea,select,summary,[contenteditable='true']")) return;
         const next =

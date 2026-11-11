@@ -77,6 +77,8 @@ import {
   participantSubmissionRecovery,
   type AckRecoveryController,
 } from "../../../lib/realtime-mutation-recovery";
+import styles from "./participant-page.module.css";
+import liveTheme from "../../../components/round-live-theme.module.css";
 
 type Ack<T> = { data?: T; error?: { code: string; message: string } };
 type ParticipantSubmission = {
@@ -677,7 +679,7 @@ export default function PlayerPage() {
 
   return (
     <div
-      className="live-shell participant-shell"
+      className={`live-shell participant-shell ${liveTheme.shell}`}
       data-submit-docked={submitDocked || undefined}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
@@ -702,7 +704,7 @@ export default function PlayerPage() {
         </div>
       </header>
       <main
-        className="shell live-stage"
+        className={`shell live-stage ${styles.stage}`}
         style={submitDocked ? { paddingBottom: submitBarHeight + 32 } : undefined}
       >
         {snapshot && uxBeta ? (
@@ -743,7 +745,7 @@ export default function PlayerPage() {
           )}
         </p>
         {error && !showSubmitControls ? (
-          <section className="live-card">
+          <section className={`live-card ${styles.card}`}>
             <p className="error" lang={locale} role="alert">
               {errorIsEnglish ? (
                 <>
@@ -762,16 +764,16 @@ export default function PlayerPage() {
           </section>
         ) : null}
         {!snapshot && !error ? (
-          <section className="live-card">
+          <section className={`live-card ${styles.card}`}>
             <p>{t("live.roundPlay.syncing")}</p>
           </section>
         ) : null}
         {snapshot?.phase === "lobby" ? (
-          <section className="live-card">
+          <section className={`live-card ${styles.card}`}>
             <p className="eyebrow">{t("live.roundPlay.youAreIn")}</p>
             <div className="participant-hero-identity">
               <ParticipantAvatar avatarId={myRow?.avatarId} size="large" />
-              <h1 style={{ fontSize: "clamp(2.6rem, 10vw, 5rem)" }}>
+              <h1 className={styles.title}>
                 {myRow?.nickname ? (
                   <span lang="">{myRow.nickname}</span>
                 ) : (
@@ -788,8 +790,12 @@ export default function PlayerPage() {
           </section>
         ) : null}
         {snapshot?.question && snapshot.phase !== "finished" ? (
-          <section className="live-card" data-testid="participant-task">
-            <div className="page-heading" style={{ alignItems: "center", marginBottom: 20 }}>
+          <section
+            className={`live-card ${styles.card} ${styles.task}`}
+            data-testid="participant-task"
+            data-review={revealed || undefined}
+          >
+            <div className={`page-heading ${styles.taskHeading}`}>
               <span className="status-pill" lang={locale}>
                 {copy(
                   snapshot.roundKind === "main"
@@ -816,7 +822,7 @@ export default function PlayerPage() {
                 )
               ) : null}
             </div>
-            <h1 lang="" style={{ fontSize: "clamp(2rem, 7vw, 4rem)" }}>
+            <h1 className={styles.title} lang="">
               {snapshot.question.prompt}
             </h1>
             <span lang="">
@@ -1120,9 +1126,9 @@ export default function PlayerPage() {
           </section>
         ) : null}
         {snapshot?.phase === "finished" ? (
-          <section className="live-card">
+          <section className={`live-card ${styles.card} ${styles.completion}`}>
             <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-            <h1>{t("live.roundPlay.complete")}</h1>
+            <h1 className={styles.title}>{t("live.roundPlay.complete")}</h1>
             {myRow ? (
               <p>
                 <ParticipantIdentity
@@ -1148,7 +1154,7 @@ export default function PlayerPage() {
             finished={snapshot.phase === "finished"}
             participantId={snapshot.myParticipantId ?? undefined}
             responseSummary={snapshot.myScoredResponseSummary}
-            compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
+            compact={snapshot.phase !== "finished"}
           />
         ) : null}
         {snapshot && mediaCredential && uxBeta ? (

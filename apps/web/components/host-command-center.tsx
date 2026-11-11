@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { SessionSnapshot } from "@openround/contracts";
 import type { HostPhaseCommand, HostPhaseView } from "../lib/host-phase";
 import { useLocale } from "./locale-provider";
@@ -141,22 +141,20 @@ export function RecoveryCompass({
   return (
     <Container
       aria-label={synthetic ? t("live.host.syntheticCompassAria") : t("live.host.compassAria")}
-      className={`panel recovery-rail${collapsible ? " recovery-rail-collapsible" : ""}`}
+      className={`panel recovery-rail${collapsible ? " recovery-rail-collapsible" : ""}${synthetic ? "" : ` ${styles.compass}`}`}
       data-synthetic={synthetic || undefined}
       data-testid="recovery-rail"
     >
       {collapsible ? <summary>{t("live.host.compass")}</summary> : null}
       <p className="eyebrow">{t("live.host.compass")}</p>
-      <h2 style={{ fontSize: "1.35rem" }}>{phaseLabel}</h2>
+      <h2
+        className={synthetic ? undefined : styles.compassHeading}
+        style={synthetic ? { fontSize: "1.35rem" } : undefined}
+      >
+        {phaseLabel}
+      </h2>
       {synthetic ? <p className="synthetic-label">{t("live.host.syntheticEvidence")}</p> : null}
-      {synthetic ? (
-        steps
-      ) : (
-        <details className="recovery-process">
-          <summary>{t("live.host.recoveryProcess")}</summary>
-          {steps}
-        </details>
-      )}
+      {synthetic ? steps : null}
       {showCounts ? (
         <div className="metric-grid recovery-compass-metrics">
           <div className="metric">
@@ -170,7 +168,10 @@ export function RecoveryCompass({
         </div>
       ) : null}
       {guidance ? (
-        <div className="notice recovery-guidance" aria-live="polite">
+        <div
+          className={`notice recovery-guidance${synthetic ? "" : ` ${styles.guidance}`}`}
+          aria-live="polite"
+        >
           <p className="eyebrow">
             {phaseView.suggestionKind === "guidance"
               ? t("live.host.guidanceOnly")
@@ -191,6 +192,12 @@ export function RecoveryCompass({
         </div>
       ) : null}
       {children}
+      {!synthetic ? (
+        <details className={`recovery-process ${styles.process}`}>
+          <summary>{t("live.host.recoveryProcess")}</summary>
+          {steps}
+        </details>
+      ) : null}
     </Container>
   );
 }
@@ -203,6 +210,8 @@ export function HostCommandBar({
   primary = phaseView.primary,
   secondary = phaseView.secondary,
   primaryDisabled = false,
+  context,
+  quickActions,
   leading,
   trailing,
   fallback,
@@ -217,6 +226,8 @@ export function HostCommandBar({
   primary?: HostPhaseCommand | null;
   secondary?: HostPhaseCommand[];
   primaryDisabled?: boolean;
+  context?: ReactNode;
+  quickActions?: ReactNode;
   leading?: ReactNode;
   trailing?: ReactNode;
   fallback?: ReactNode;
@@ -226,77 +237,136 @@ export function HostCommandBar({
 }) {
   const { locale, t } = useLocale();
   const copy = liveWorkflowCopy(locale);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsId = useId();
+  const commandBarRef = useRef<HTMLElement>(null);
+  const toolsToggleRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!compact || !toolsOpen) return;
+    const bar = commandBarRef.current;
+    if (!bar) return;
+    const { top } = bar.getBoundingClientRect();
+    if (top < 0 || top >= window.innerHeight) {
+      bar.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }, [compact, toolsOpen]);
   const commandLabel = (command: HostPhaseCommand | null | undefined) => {
     if (!command) return "";
     const commandKey = commandKeys[command.label as keyof typeof commandKeys];
     return getCommandLabel?.(command) ?? (commandKey ? t(commandKey) : command.label);
   };
+  const phaseKey = phaseKeys[phaseView.phaseLabel as keyof typeof phaseKeys];
+  const primaryControl = primary ? (
+    <button
+      className="button"
+      disabled={busy || primaryDisabled}
+      onClick={() => onCommand(primary)}
+      type="button"
+    >
+      {busy ? t("live.host.applying") : commandLabel(primary)}
+    </button>
+  ) : (
+    fallback
+  );
+  const secondaryControls = secondary.map((item) => (
+    <button
+      className="button-quiet"
+      disabled={busy}
+      key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
+      onClick={() => onCommand(item)}
+      type="button"
+    >
+      {commandLabel(item)}
+    </button>
+  ));
   return (
     <nav
       aria-label={synthetic ? t("live.host.syntheticCommandsAria") : t("live.host.commandsAria")}
       className={`host-command-bar${compact ? ` ${styles.commandBar}` : ""}`}
       data-synthetic={synthetic || undefined}
       data-testid="host-command-bar"
+      data-tools-open={compact && toolsOpen ? true : undefined}
       inert={inert}
+      ref={commandBarRef}
+      onKeyDown={
+        compact
+          ? (event) => {
+              if (event.key !== "Escape" || !toolsOpen) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setToolsOpen(false);
+              toolsToggleRef.current?.focus();
+            }
+          : undefined
+      }
     >
-      <div>
+      <div className={compact ? styles.context : undefined}>
         <span className="eyebrow">
           {synthetic ? t("live.host.guidedNextAction") : t("live.host.nextAction")}
         </span>
-        <strong>{primary ? commandLabel(primary) : t("live.host.reviewResults")}</strong>
+        <strong>
+          {compact
+            ? (context ?? (phaseKey ? t(phaseKey) : phaseView.phaseLabel))
+            : primary
+              ? commandLabel(primary)
+              : t("live.host.reviewResults")}
+        </strong>
       </div>
       <div className={`button-row${compact ? ` ${styles.actions}` : ""}`}>
         <div className={`host-command-primary${compact ? ` ${styles.primary}` : ""}`}>
-          {primary ? (
-            <button
-              className="button"
-              disabled={busy || primaryDisabled}
-              onClick={() => onCommand(primary)}
-              type="button"
-            >
-              {busy ? t("live.host.applying") : commandLabel(primary)}
-            </button>
-          ) : (
-            fallback
-          )}
+          {primaryControl}
         </div>
+        {compact && quickActions ? <div className={styles.quickActions}>{quickActions}</div> : null}
         {compact ? (
-          <details className={styles.more}>
-            <summary>{copy.moreControls}</summary>
-            <div className={`host-command-overflow ${styles.overflow}`}>
-              {leading}
-              {secondary.map((item) => (
-                <button
-                  className="button-quiet"
-                  disabled={busy}
-                  key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
-                  onClick={() => onCommand(item)}
-                  type="button"
-                >
-                  {commandLabel(item)}
-                </button>
-              ))}
-              {trailing}
-            </div>
-          </details>
-        ) : (
+          <button
+            aria-controls={toolsId}
+            aria-expanded={toolsOpen}
+            aria-label={copy.moreControls}
+            className={`button-quiet ${styles.more}`}
+            data-testid="host-command-tools-toggle"
+            id={`${toolsId}-toggle`}
+            onClick={() => setToolsOpen((open) => !open)}
+            ref={toolsToggleRef}
+            type="button"
+          >
+            <span aria-hidden="true" className={styles.disclosureIcon}>
+              {toolsOpen ? "▾" : "▸"}
+            </span>
+            <span className={styles.moreLabel}>{copy.moreControls}</span>
+            <svg
+              aria-hidden="true"
+              className={styles.moreIcon}
+              viewBox="0 0 20 20"
+              focusable="false"
+            >
+              <circle cx="4" cy="10" r="1.5" fill="currentColor" />
+              <circle cx="10" cy="10" r="1.5" fill="currentColor" />
+              <circle cx="16" cy="10" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+        ) : null}
+        {!compact ? (
           <div className="host-command-overflow">
             {leading}
-            {secondary.map((item) => (
-              <button
-                className="button-quiet"
-                disabled={busy}
-                key={`${item.action}:${item.interventionType ?? item.recheckMode ?? ""}`}
-                onClick={() => onCommand(item)}
-                type="button"
-              >
-                {commandLabel(item)}
-              </button>
-            ))}
+            {secondaryControls}
             {trailing}
           </div>
-        )}
+        ) : null}
       </div>
+      {compact ? (
+        <div
+          aria-labelledby={`${toolsId}-toggle`}
+          className={`host-command-overflow ${styles.overflow}`}
+          data-testid="host-command-tools"
+          hidden={!toolsOpen}
+          id={toolsId}
+          role="group"
+        >
+          {leading ? <div className={styles.toolSettings}>{leading}</div> : null}
+          {secondaryControls}
+          {trailing ? <div className={styles.trailing}>{trailing}</div> : null}
+        </div>
+      ) : null}
     </nav>
   );
 }

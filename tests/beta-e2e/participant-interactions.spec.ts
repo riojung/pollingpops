@@ -661,6 +661,11 @@ for (const suffix of ["desktop", "@mobile"]) {
       await clickHostCommand(host, "Show standings");
       await host.getByRole("button", { name: "Finish round", exact: true }).click();
       await expect(guest.getByText("Your final score is 1,000.", { exact: true })).toBeVisible();
+      const finalStandings = guest.getByTestId("competition-dashboard");
+      await expect(finalStandings).toHaveAttribute("data-compact-participant", "true");
+      await expect(finalStandings.getByTestId("competition-podium")).toHaveCount(0);
+      await expect(finalStandings.getByTestId("competition-race")).toHaveCount(0);
+      await expect(finalStandings.getByTestId("competition-personal")).toContainText("1,000");
       const receipt = guest.getByTestId("scored-response-receipt");
       await expect(receipt).toContainText("Saved answers1 / 1");
       await expect(receipt).toContainText("Correct1");

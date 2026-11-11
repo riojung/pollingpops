@@ -91,7 +91,59 @@ describe("host command center", () => {
       <HostCommandBar
         compact
         busy={false}
-        leading={<button type="button">Audience</button>}
+        context={<span>Question open</span>}
+        leading={
+          <label>
+            <input type="checkbox" />
+            Ask for confidence
+          </label>
+        }
+        onCommand={() => undefined}
+        phaseView={{
+          phaseLabel: "Question open",
+          primary: { action: "lock", label: "Lock answers" },
+          secondary: [{ action: "pause", label: "Pause" }],
+          suggestionKind: "none",
+        }}
+        quickActions={
+          <button aria-controls="host-audience-drawer" aria-expanded={false} type="button">
+            Audience
+          </button>
+        }
+      />,
+    );
+    const toggle = markup.match(/<button[^>]*data-testid="host-command-tools-toggle"[^>]*>/)?.[0];
+    const toolsOpeningTag = markup.match(/<div[^>]*data-testid="host-command-tools"[^>]*>/)?.[0];
+    expect(toggle).toBeDefined();
+    expect(toggle).toContain('aria-expanded="false"');
+    expect(toggle).toContain('aria-label="More controls"');
+    expect(toggle).toContain('type="button"');
+    expect(toolsOpeningTag).toContain('hidden=""');
+    const toolsId = toolsOpeningTag?.match(/ id="([^"]+)"/)?.[1];
+    expect(toolsId).toBeTruthy();
+    expect(toggle).toContain(`aria-controls="${toolsId}"`);
+    expect(toolsOpeningTag).toContain(`aria-labelledby="${toolsId}-toggle"`);
+    expect(markup).not.toContain("<details");
+    expect(markup).toContain("More controls</span>");
+    expect(markup.match(/Lock answers/g)).toHaveLength(1);
+    expect(markup).toContain("<strong><span>Question open</span></strong>");
+    expect(markup.indexOf("Lock answers")).toBeLessThan(markup.indexOf(toggle!));
+    expect(markup.indexOf("Audience")).toBeLessThan(markup.indexOf(toggle!));
+    const tools = markup.slice(markup.indexOf(toolsOpeningTag!));
+    expect(tools).toContain('data-testid="host-command-tools"');
+    expect(tools).toContain("Ask for confidence");
+    expect(tools).toContain("Pause");
+    expect(tools).not.toContain("Audience");
+    expect(tools).not.toContain('role="menu"');
+    expect(tools).not.toContain("tabindex=");
+  });
+
+  it("defaults compact context to the phase and preserves pending command protection", () => {
+    const markup = renderLocalized(
+      <HostCommandBar
+        compact
+        busy
+        inert
         onCommand={() => undefined}
         phaseView={{
           phaseLabel: "Question open",
@@ -101,12 +153,32 @@ describe("host command center", () => {
         }}
       />,
     );
-    expect(markup).toContain("More controls</summary>");
-    expect(markup).toContain("<details");
-    expect(markup).not.toContain("<details open");
-    expect(markup.indexOf("Lock answers")).toBeLessThan(markup.indexOf("<details"));
-    expect(markup).toContain("Audience");
-    expect(markup).toContain("Pause");
+    expect(markup).toContain("<strong>Question open</strong>");
+    expect(markup).toMatch(/<nav[^>]*inert=""/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Applying…<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Pause<\/button>/);
+  });
+
+  it("keeps the report fallback available before the compact disclosure", () => {
+    const markup = renderLocalized(
+      <HostCommandBar
+        compact
+        busy={false}
+        context="Complete"
+        fallback={<a href="/report/test">Open report</a>}
+        onCommand={() => undefined}
+        phaseView={{
+          phaseLabel: "Complete",
+          primary: null,
+          secondary: [],
+          suggestionKind: "none",
+        }}
+      />,
+    );
+    expect(markup).toContain("<strong>Complete</strong>");
+    expect(markup.indexOf("Open report")).toBeLessThan(
+      markup.indexOf('data-testid="host-command-tools-toggle"'),
+    );
   });
 
   it("discloses secondary host tools without removing recovery guidance", () => {
@@ -123,6 +195,25 @@ describe("host command center", () => {
     expect(markup).toContain("Recovery process");
     expect(markup).toContain("Try peer discussion");
     expect(markup).toContain("Staff controls");
+    expect(markup.indexOf("Try peer discussion")).toBeLessThan(
+      markup.indexOf("Round staff</summary>"),
+    );
+    expect(markup.indexOf("Staff controls")).toBeLessThan(
+      markup.indexOf("Recovery process</summary>"),
+    );
+  });
+
+  it("keeps the synthetic recovery steps visible without disclosure", () => {
+    const locked = snapshot("question_locked");
+    const markup = renderLocalized(
+      <RecoveryCompass synthetic phaseView={getHostPhaseView(locked)} snapshot={locked} />,
+    );
+    expect(markup).toContain('data-synthetic="true"');
+    expect(markup).toContain('aria-label="Recovery process"');
+    expect(markup).not.toContain("<details");
+    expect(markup.indexOf('aria-label="Recovery process"')).toBeLessThan(
+      markup.indexOf("Try peer discussion"),
+    );
   });
 
   it("hides recommendations that are illegal in the current phase", () => {

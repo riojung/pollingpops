@@ -1,7 +1,7 @@
 .card {
   border: 1px solid var(--ui-border);
-  background: var(--experience-surface-strong, var(--ui-surface-soft));
-  color: var(--experience-text, var(--ui-text));
+  background: var(--round-soft, var(--experience-surface-strong, var(--ui-surface-soft)));
+  color: var(--round-text, var(--experience-text, var(--ui-text)));
   border-radius: 12px;
   padding: 18px;
   margin: 18px 0;
@@ -9,7 +9,7 @@
   min-width: 0;
 }
 .card :global(.eyebrow) {
-  color: var(--experience-muted, var(--ui-text-muted));
+  color: var(--round-muted, var(--experience-muted, var(--ui-text-muted)));
 }
 .card h2,
 .card h4 {

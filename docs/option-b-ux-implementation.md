@@ -668,6 +668,83 @@ templates/default content, exact-candidate hosted qualification, native-language
 review, manual accessibility/physical-device checks and deferred public launch pages remain
 release work. The release ledger remains unchanged.
 
+## Round live workspace refinement — November 11, 2026
+
+The `codex/round-live-workspace` slice responds to live Round screenshot feedback about
+prototype-like hierarchy, overlapping tools, oversized standings and disconnected themes.
+It builds on the merged Pack tools source without changing the remaining Option B work.
+
+- The enhanced host summary shows code, question progress, joined and answered counts.
+  Connection status stays in the header; question timing stays beside the active question.
+  Primary, Audience and More controls occupy one desktop header row in both disclosure states.
+  More is a localized, accessible button with a controlled, retained panel below that row;
+  Enter/Space toggle it and Escape closes it with focus restoration. Confidence, teaching
+  actions and End use auto-sized controls in normal flow. Expanded tools remain static at
+  every width; opening from a scrolled position brings the toolbar onscreen only if needed.
+  Redundant phase context is hidden on small phones while the task label and screen-reader
+  phase remain. Compact icon controls preserve complete action labels
+  and avoid an unnecessary extra row; longer locale groups wrap between controls.
+- Host question and standings are separate aligned cards. A bounded guidance column sits
+  alongside at 1024px and above, then stacks below the main column. The operational canvas
+  suppresses the decorative pattern and uses restrained shadows and consistent card edges.
+  The existing legacy command path and feature gates remain available.
+- Participant state, task, results and optional tools occupy one continuous 840px column.
+  Question/review/completion headings and padding are restrained. Compact live standings
+  show personal rank/score, last released gain and the saved/correct receipt; a short table
+  includes top entrants and the participant's own row, with full standings/policy disclosed.
+  Single-person finals keep the useful result without a podium, race or celebration.
+  Multi-person finals retain smaller celebrations and standings with effects disclosed.
+- Host/participant UI shares a modern live skin: crisp sans-serif typography, slate surfaces,
+  an ink header, restrained violet accents, consistent card edges and centered 44px action
+  controls. Light/dark palettes cover question, results, guidance, settings and timing; both
+  app and system high-contrast choices retain readable controls. The Display & sound trigger
+  uses a centered icon/label and a bounded themed popover. Phone headers use accessible
+  icon controls with the full localized names available to assistive technology. Nested
+  Audience drawer tabs, chat/reply/reaction surfaces, Q&A questions/replies, staff/participant
+  rows and Pulse cards use matching live foreground/background tokens in light, dark and
+  high contrast.
+- Stored experience themes, presenter appearance and standalone standings retain their
+  existing roles. Authored prompts, choices, aliases, saved-answer truth, released scores,
+  recheck suppression, ties, motion preferences and all request/controller/protocol identities
+  retain their meanings.
+
+Validation:
+
+- All **392 web suites / 4,192 tests** pass. Web lint/types, scoped browser-spec types/lint,
+  changed-file formatting and diff whitespace pass. Fresh normal, beta and core production
+  web builds pass; final builds include the shared modern skin, centered controls and compact
+  phone padding. After the last toolbar scroll refinement, 30 focused host tests also pass.
+- **15 distinct selected production-browser cases pass**: six core Chromium competition
+  cases, plus nine beta cases across desktop Chromium and phone Chromium/WebKit. They cover
+  score privacy before reveal, private/unscored/early-end results, linked/revote recovery,
+  real answer save/reload/receipt/final scoring, one-tap failure/retry, closed/open control
+  geometry, actual rendered-text centering, shared action baselines, disclosure keyboard and
+  focus restoration, German controls at 320px, light/dark/high-contrast palettes, open/revealed/
+  final Axe checks, long question/name wrapping and the 1024px sidebar crossover.
+- The initial phone layout check caught a 170px closed command bar. Removing its redundant
+  narrow-screen context makes the existing 150px limit pass on both phone engines. Core
+  fixtures were updated to assert actual compact standings and single-person results while
+  retaining released-score, rank and recheck assertions. Corrected reruns count once.
+- Follow-up alignment checks measure actual rendered text/icon centers and shared action
+  baselines. They caught inherited phone padding, two legacy dark-mode text colors and the
+  OS high-contrast selector priority; fixes retain all original geometry/Axe assertions.
+  Five unaffected browser cases plus the selectively rerun affected desktop case count as
+  six cases. The docked submit bar and Recovery Pack card also use matching modern tokens.
+- Review follow-up fixes the nested-surface contrast regression in the Audience drawer,
+  chat/reply/reaction cards, Q&A replies, staff and responsive participant rows, and Pulse
+  controls. Three additional populated-surface production-browser cases pass on desktop
+  Chromium and 320px phone Chromium/WebKit. They verify real messages, published replies,
+  active/revoked staff credentials, selected tabs, reply controls, matching computed palettes,
+  scoped Axe and overflow. Desktop also covers app/system high contrast; fresh normal/beta
+  builds and browser-spec types/lint pass. An independent focused check passes 4.5:1 for all
+  19 sampled text/surface combinations across all four appearance modes. Corrected fixture
+  normalization and responsive-row reruns count once.
+- Desktop/phone screenshot review confirms inline tools push content down, the primary and
+  Audience actions stay distinct, and completion retains the score and own response receipt.
+  On phones the guidance follows compact standings; native-language/customer observation,
+  manual accessibility/physical-device checks and hosted qualification remain release work.
+  The release ledger remains valid and unchanged at **0 complete / 15 pending**.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.

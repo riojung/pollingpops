@@ -4,6 +4,9 @@ import type { PresentationDraft, SupportedLocale } from "@openround/contracts";
 import type * as ApiModule from "../../lib/api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
+import { createQuestionBlock } from "../../lib/presentation-builder";
+import { recoveryPackContentHash } from "@openround/contracts";
+import { sourcePackFixtures } from "../../test-utils/recovery-pack-source";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as {
@@ -87,6 +90,8 @@ import { PresentationQuestionSuggestions } from "./presentation-question-suggest
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { AuthoringAssistant } from "../authoring-assistant";
 import { sourceWorkflowsCopy } from "./source-workflows-copy";
+import { PresentationRecoveryPackUpdateReview } from "./recovery-pack-update-review";
+import { RecoveryPackPresentationReferences } from "./recovery-pack-insertion";
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
@@ -140,6 +145,42 @@ beforeEach(() => {
 });
 
 describe("source workflow editor integration", () => {
+  it("retains exact Pack comparison signatures and frozen references across UI locale changes", () => {
+    const { pack, draft: content } = sourcePackFixtures();
+    const diagnostic = createQuestionBlock();
+    diagnostic.question = content.diagnostic;
+    const recheck = createQuestionBlock();
+    recheck.question = content.recheck;
+    const original = draft([createNativeContentBlock(), diagnostic, recheck]);
+    original.recoveryPackInsertions = [
+      {
+        id: "10000000-0000-4000-8000-000000000010",
+        packId: pack.id,
+        packVersionId: "10000000-0000-4000-8000-000000000011",
+        packVersion: 1,
+        contentHash: recoveryPackContentHash(content),
+        diagnosticQuestionId: content.diagnostic.id,
+        recheckQuestionId: content.recheck.id,
+        originalContent: content,
+      },
+    ];
+    const before = structuredClone(original);
+    const view = editor(original);
+    for (const locale of ["ko-KR", "de-DE", "en-CA"] as const) {
+      mocked.locale = locale;
+      const nodes = view.render();
+      const update = nodes.find((node) => node.type === PresentationRecoveryPackUpdateReview)!;
+      expect(update.props.locale).toBe(locale);
+      expect(update.props.draftSignature).toBe(JSON.stringify(before));
+      expect(update.props.insertionId).toBe(before.recoveryPackInsertions![0]!.id);
+      expect(update.props.title).toBe(content.title);
+      const references = nodes.find((node) => node.type === RecoveryPackPresentationReferences)!;
+      expect(references.props.locale).toBe(locale);
+      expect(references.props.insertions).toBe(original.recoveryPackInsertions);
+    }
+    expect(original).toEqual(before);
+    expect(mocked.request).not.toHaveBeenCalled();
+  });
   it("projects locale into the three review tools without changing the authored draft", () => {
     const block = createNativeContentBlock();
     const original = draft([block]);

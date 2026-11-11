@@ -608,6 +608,66 @@ work. The release ledger is unchanged.
   manual accessibility/physical-device or hosted acceptance. The release ledger remains
   valid at **0 complete / 15 pending** gates; deferred public launch content stays open.
 
+## Pack tools follow-up — November 11, 2026
+
+The `codex/option-b-pack-tools` slice extends the ten configured UI locales to the Pack
+library and editor, private source review/approval, checkpoint export review, Round and
+Presentation insertion/update tools, frozen facilitator references and practice entry points.
+English remains the default. Six typed catalogs contain 355 UI entries alongside 24
+canonical export-finding reason translations. Existing generated/default content remains
+unchanged; creation-language templates and sample/default content remain a separate follow-up.
+
+UI language stays outside source approval, frozen content hashes, published version identity,
+request/recovery bytes, update choices, mutation IDs, revision fences and ordinary history.
+Known system labels and diagnostics translate at display time. Authored/source wording,
+concept and misconception keys, answer data, citations, technical paths and exported JSON
+retain their stored values and language boundaries. Roles, publication approval and retained
+receipt retry semantics keep their existing meanings.
+
+### Pack tools verification
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **8,066 tests** with 513 standard opt-in skips,
+  formatting, lint, types, Docker-context checks, all four production builds and compiled
+  server startup. Web validation passes **392 suites / 4,183 tests**. Browser-spec types and
+  discovery pass; the fresh beta production build also passes.
+- Catalog checks cover all 355 listed UI entries across ten locales and the 24 exact
+  canonical export-finding reasons. Unknown control-label diagnostics and additional
+  provider detail remain untranslated English; finding reasons require both the canonical
+  code and exact message. Raw authored fields, snapshots, request bytes, review choices,
+  source approval, role/feature fences and export data are exercised in mounted regressions.
+- Root integration and practice-entry checks preserve exact Pack comparison signatures,
+  frozen references, published-version links and read-only gating across UI locale changes.
+- Screenshot review found a clipped final letter in the German published-Round placeholder.
+  The shorter published-Round wording fits the native select. After this small UI refinement,
+  25 focused library/catalog tests, web types, scoped lint and fresh normal/beta builds pass.
+- **50 distinct selected production-browser cases pass**: twenty desktop Chromium and
+  fifteen each on phone Chromium and phone WebKit. Fifteen new cases cover library editing,
+  frozen practice links, source approval, export losses and artifacts, explicit Round update
+  choices, Presentation picker/references and exact apply/undo receipt recovery. Existing
+  source-authoring, insertion, deleted-checkpoint/link repair, stale-review, history, portability
+  and practice regressions pass. Corrected fixture reruns count once.
+- Each browser/profile phase has a fresh API. Source generation uses the existing owned
+  loopback provider. New cases retain mandatory review, frozen-source/hash/version identity,
+  zero generation/approval on locale changes, private metadata boundaries, read-only and
+  disabled-feature behavior, exact request bodies, source/history integrity and exact
+  CSV/QTI/report artifact bytes. The initial oversized citation fixture was shortened within
+  its existing server limit while retaining a long unbroken overflow probe. Navigator, native
+  select, stable review-locator and locale-refresh fixtures were corrected without weakening
+  application assertions or changing service/controller/API behavior.
+- Axe and one-pixel overflow checks pass on the selected 320px flows. Screenshot review
+  confirms readable Korean/German review/export/picker controls, visible focus and preserved
+  raw source text, IDs, hashes and technical paths. Some full-page captures at a scrolled
+  position include sticky header/skip-link overlays; clean viewer/picker captures and actual
+  viewport/overflow checks distinguish those capture artifacts from content clipping. Native-
+  language/customer, manual accessibility/physical-device and exact-candidate hosted
+  acceptance remain pending. The release ledger remains valid at **0 complete / 15 pending**.
+
+The linked Pack practice setup, preview, private-link receipt and attribution surfaces remain
+a separate follow-up; this slice localizes their library entry points. Creation-locale
+templates/default content, exact-candidate hosted qualification, native-language/customer
+review, manual accessibility/physical-device checks and deferred public launch pages remain
+release work. The release ledger remains unchanged.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.

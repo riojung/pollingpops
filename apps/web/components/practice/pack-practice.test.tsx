@@ -9,6 +9,8 @@ import { PackPracticeAction } from "./pack-practice-action";
 import { PackPracticeAttribution } from "./pack-practice-attribution";
 import { PracticeLinkReceipt } from "./practice-link-receipt";
 import { PackPracticePreview } from "./pack-practice-preview";
+import { supportedLocales } from "@openround/contracts";
+import { packPracticeCopy } from "../../lib/i18n/pack-practice-copy";
 
 describe("Recovery Pack practice presentation", () => {
   const gates = {
@@ -17,6 +19,65 @@ describe("Recovery Pack practice presentation", () => {
     canEdit: true,
     followups: true,
   };
+
+  it.each(supportedLocales)(
+    "localizes entry guidance in %s while retaining exact frozen links and gates",
+    (locale) => {
+      const version = publishedPracticePack();
+      const before = structuredClone(version);
+      const copy = packPracticeCopy(locale);
+      for (const mode of ["delayed_probe", "full_sequence"] as const) {
+        const ready = renderToStaticMarkup(
+          <PackPracticeAction
+            packId={packPracticeIds.pack}
+            version={version}
+            mode={mode}
+            locale={locale}
+            {...gates}
+          />,
+        );
+        expect(ready).toContain(`lang="${locale}"`);
+        expect(ready).toContain(
+          copy(
+            mode === "full_sequence"
+              ? "Assign full-sequence practice"
+              : "Assign delayed-probe practice",
+          ),
+        );
+        expect(ready).toContain(
+          `/recovery-packs/${packPracticeIds.pack}/assign?version=${version.id}${mode === "full_sequence" ? "&amp;mode=full_sequence" : ""}`,
+        );
+        const paused = renderToStaticMarkup(
+          <PackPracticeAction
+            packId={packPracticeIds.pack}
+            version={version}
+            mode={mode}
+            locale={locale}
+            {...gates}
+            canEdit={false}
+          />,
+        );
+        expect(paused).toContain(copy("An owner or editor must create the practice assignment."));
+        expect(paused).toContain('disabled=""');
+        expect(paused).not.toContain("/assign?");
+      }
+      expect(version).toEqual(before);
+    },
+  );
+
+  it("keeps unknown service feedback in English even when it equals a control label", () => {
+    const markup = renderToStaticMarkup(
+      <PackPracticeAction
+        packId={packPracticeIds.pack}
+        version={publishedPracticePack()}
+        locale="ko-KR"
+        loadError="Full-sequence Pack practice"
+        {...gates}
+      />,
+    );
+    expect(markup).toContain('<p class="muted" lang="en-CA">Full-sequence Pack practice</p>');
+    expect(markup).not.toContain("/assign?");
+  });
 
   it("links only the exact published delayed probe and disables missing-probe practice", () => {
     const ready = renderToStaticMarkup(

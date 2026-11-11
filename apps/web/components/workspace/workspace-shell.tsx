@@ -421,7 +421,21 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
   const options = workspaceCreationOptions({ canEdit, productFeatures });
   if (!options.length) return null;
   return (
-    <details className={styles.createMenu}>
+    <details
+      className={styles.createMenu}
+      onKeyDown={(event) => {
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          !event.currentTarget.open
+        )
+          return;
+        event.preventDefault();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }}
+    >
       <summary
         aria-label={t("workspace.create.label")}
         className={styles.createButton}

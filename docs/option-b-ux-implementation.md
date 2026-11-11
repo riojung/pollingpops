@@ -810,6 +810,59 @@ implementation follow-ups. Native-language review, customer observation, manual
 accessibility/physical-device checks, exact-candidate hosted qualification and deferred
 public launch content remain release work. This slice does not complete release readiness.
 
+## Local acceptance preparation — November 11, 2026
+
+The `codex/option-b-acceptance` follow-up adds repeatable local qualification and
+native-language review preparation after the named software follow-ups were completed.
+The product owner has no staging environment selected; hosted qualification stays pending.
+
+The shared browser-test runner now supplies invocation-owned Firefox application-data
+paths on macOS while preserving existing overrides, the stock browser and its sandbox.
+It forwards cancellation to its owned process group and removes temporary data after
+child shutdown. Core/beta commands and the existing Presentation-scene entry point use
+this helper. This resolves the local pre-page Firefox profile failure recorded in the
+historical checkpoints below; selected Firefox application journeys can now run.
+
+New production-browser coverage walks sequential keyboard order through template
+selection/preview, private speaker notes, Undo/Redo, audience-preview privacy, inspector
+close/return and Create menus. It checks visible focus, dialog containment/return,
+reduced-motion preference, light/dark/forced-colors modes, Axe and narrow-screen reflow.
+The 640px/320px viewports model space available at 200%/400% zoom; these are not manual
+browser-zoom, screen-reader or physical-device results. Mobile WebKit uses its native
+macOS Option-Tab convention for all-controls keyboard navigation.
+
+That work corrects two existing UI defects: Create-menu entries could be clipped at
+640px, and Escape did not close the menu and return focus to its summary. Template
+preview now shares the existing modal keyboard handler for contained Tab traversal.
+Results card headers now wrap at every viewport: German status badges previously escaped
+narrow three-column cards in Firefox even when the full viewport was desktop-sized.
+
+`pnpm localization:review` exports source-bound bilingual review packets and checks
+separately recorded decisions. Each of the ten locales has 374 entries covering the
+21 Presentation templates and generated drafts, 36 Round starters, 17 Survey projections,
+creation/practice copy and action-created examples. The inert HTML is searchable,
+escaped and readable at desktop/320px widths; an actual hash/grid overflow discovered
+in Firefox and Chromium was corrected. Source and content hashes reject stale records,
+and exports preserve existing decisions. Every generated decision starts pending.
+See the [human review workflow](evidence/native-language-review.md).
+
+Validation on the final software source: `VITEST_MAX_WORKERS=1 pnpm check` passes
+**8,377 tests** with 513 standard opt-in skips, formatting, workspace/build lint, types,
+all four production builds and compiled-server startup. This includes 401 web suites /
+4,440 tests, 149 server suites / 1,488 tests and 45 support suites / 461 passing tests.
+Separate strict TypeScript checks cover the review CLI and new browser fixtures.
+The fresh beta production artifact passes all **28 distinct selected application-browser
+cases**: eight each on desktop Chromium/Firefox and six each on phone Chromium/WebKit.
+All eight standalone review-HTML cases pass separately. Final artifact/source/environment
+provenance validates. The [local qualification record](evidence/option-b-local-qualification.md)
+records commands, corrected reruns and limits; this is not the entire hosted matrix.
+
+These are supporting engineering checks. The 15 release gates remain pending, including
+native-language review, observed customer tasks, manual accessibility/assistive technology,
+physical devices, hosted performance and the deferred public launch content. Existing
+human evidence forms remain unfilled. Automated record validation cannot establish
+native quality or reviewer identity and does not remove language Preview labels.
+
 ## Remaining software follow-ups — November 11, 2026
 
 The `codex/option-b-remaining` source preserves the Pack practice work above and closes
@@ -919,7 +972,7 @@ is recorded in the dated sections above.
   all ten configured locales; actual-render regressions include Korean and French.
 - The release-readiness ledger remains at 15 pending gates. Local checks do not
   establish customer satisfaction, manual accessibility or hosted release acceptance.
-- Firefox remains unqualified locally because its runtime exits before opening a page
+- At this historical checkpoint, Firefox was unqualified locally because its runtime exited before opening a page
   with `Could not find profile folder`; no Firefox result is inferred from other engines.
 
 ## Initial merged verification
@@ -937,7 +990,7 @@ is recorded in the dated sections above.
   geometry are checked in the final cases.
 - The WebKit publication case exposed touch activation not restoring focus to Present;
   the application now explicitly retains that opener and the final case passes.
-- Firefox qualification remains open: the installed and a fresh official Playwright
+- At this historical checkpoint, Firefox qualification remained open: the installed and a fresh official Playwright
   Firefox runtime both exit before opening a page with `Could not find profile folder`.
   Alternate temporary-directory paths did not resolve that local execution problem.
 - The release-readiness ledger validates and retains all 15 pending gates. Final public

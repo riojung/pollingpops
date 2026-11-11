@@ -8,6 +8,31 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B local acceptance preparation November 11, 2026
+
+The `codex/option-b-acceptance` source adds a shared macOS browser runner that resolves
+the local Firefox profile-startup blocker, production keyboard/reflow journeys, and a
+source-bound language-review exporter/checker. Qualification corrects clipped Create
+menus, Escape focus return, template-preview keyboard containment and German Results
+card-header overflow. Ten locale packets
+contain 374 review entries each; all decisions remain pending. English remains reference
+material and language Preview labels remain in place. See the
+[implementation record](option-b-ux-implementation.md#local-acceptance-preparation--november-11-2026)
+and [native-language review workflow](evidence/native-language-review.md).
+
+The repository gate passes **8,377 tests** with 513 standard opt-in skips, all four
+production builds and compiled-server startup. All **28 distinct selected production-browser
+cases** pass across desktop Chromium/Firefox and phone Chromium/WebKit, including the
+corrected keyboard and Results reflow journeys. The review HTML passes eight standalone
+Chromium/Firefox cases across German/Korean and desktop/320px widths, with no active
+content, external requests or horizontal overflow.
+
+The named Option B software follow-ups are implemented. Customer observation, native
+review, manual assistive-technology/browser-zoom/physical-device checks, hosted
+qualification and deferred public launch content remain acceptance work. No staging
+environment is selected. The release ledger remains **0 complete / 15 pending**; no
+manual review or external approval is inferred from local automation.
+
 ### Option B remaining software follow-ups November 11, 2026
 
 The `codex/option-b-remaining` source preserves Pack practice work and implements the last

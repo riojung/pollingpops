@@ -398,6 +398,7 @@
 }
 
 .topActions {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -405,7 +406,7 @@
 }
 
 .createMenu {
-  position: relative;
+  position: static;
 }
 
 .createMenu > summary::-webkit-details-marker {
@@ -856,13 +857,8 @@
   }
 
   .topActions {
-    position: relative;
     grid-area: actions;
     gap: 0.2rem;
-  }
-
-  .createMenu {
-    position: static;
   }
 
   .createButton .chevron {

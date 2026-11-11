@@ -533,6 +533,81 @@ acceptance and exact-head hosted qualification remain release work.
   for `58eade92a4f170fc71413f270ad5cc7cbc95c9c9`, not qualification of this new source.
   No hosted retry, dependency change or release-gate completion is claimed by this UI slice.
 
+## Source workflow follow-up — November 10, 2026
+
+The `codex/option-b-source-workflows` slice extends all ten configured UI locales to local
+question starters, AI discussion suggestions, visual import review/recovery and the
+trusted-source dialog guidance. English remains the default. Source and proposal review,
+mandatory confirmations, retained-request actions, editor launch/resume controls and
+known diagnostics use 276 typed, display-only catalog keys and existing shared wording.
+
+The local starter templates and generated discussion wording remain English under their
+existing contracts. Source text, filenames, page titles/descriptions, accessible reading
+text, citations and provider/model values remain verbatim, with stored language retained
+and unknown authored language explicitly marked. Changing the interface language does not
+regenerate content or enter source fingerprints, controller effects, actor/storage identity,
+request bodies, insertion receipts, selected page order or ordinary Undo/Redo history.
+Known system warnings use explicit allowlists; unknown English diagnostics remain English.
+
+The trusted-source dialog now passes actual editor permission to its existing assistant,
+checks current permission before opening and again after the prerequisite save, and keeps
+its existing insertion target and opener restoration. If a permission change removes a
+focused form control, focus returns inside the dialog so keyboard commands remain available.
+Original input, proposal wording, source names and citation fields
+in the shared assistant carry explicit unknown-language annotations. Review surfaces use
+semantic focus/border/surface tokens and wrapping headings, actions and long source values.
+
+Creation-locale template/default content and Pack library/editor tools remain follow-ups.
+Customer observation, native-language review, manual accessibility/physical-device checks,
+exact-candidate hosted qualification and the deferred launch-facing pages remain release
+work. The release ledger is unchanged.
+
+### Source workflow verification
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **7,947 tests** with 513 standard opt-in skips,
+  formatting, lint, types, Docker-context checks, all four production builds and compiled
+  server startup. Web validation passes **386 suites / 4,064 tests**. The fresh beta
+  production build and the four new browser specs’ TypeScript/discovery checks pass.
+- Catalog checks cover all 2,760 exposed key/locale entries, placeholders, shared wording
+  and canonical English defaults. Mounted cases preserve source/proposal values, selection,
+  pending receipts, exact request identity, permission/authentication fences and authorized
+  media-preview retries. Trusted-source integration covers live permission changes before
+  opening, during prerequisite saving and while reviewing an open proposal.
+- The first browser phase exposed focus falling outside the trusted-source dialog when a
+  permission change removes its focused form. A separate current-permission focus guard
+  retains the original opener and restores an internal keyboard stop. After that fix,
+  43 focused builder/modal tests pass. The visual-import title now reuses the command catalog
+  so launcher and dialog terminology agree; 44 visual-import/catalog tests cover the final
+  wording, English fallback and existing review/retry behavior. Scoped lint, web types and
+  fresh normal/beta web builds qualify these small follow-ups.
+- Keyboard-close coverage found a second focus gap when resuming discussion review removes
+  its opener. Document body/root sentinels now fall back to the visible Resume control;
+  70 discussion component/catalog tests pass, including both sentinel regressions. Native
+  dialog checks allow browser-chrome sentinels while rejecting background controls and
+  require inside-dialog progress, Escape and keyboard Close with return focus. The final
+  full web suite and production builds requalify these UI follow-ups.
+- Final integrated web validation passes **386 suites / 4,066 tests**; combined with the
+  unchanged package checks, validated repository coverage is **7,949 passing tests**.
+  Final web types, scoped lint, formatting and fresh normal/beta web builds pass.
+- **44 distinct selected production-browser cases pass**: sixteen on desktop Chromium
+  and fourteen each on phone Chromium and phone WebKit. Twelve new cases cover Korean
+  question-starter/source review, trusted-source input/permission transitions, discussion
+  review and German receipt recovery, and PDF page review with exact insertion recovery.
+  Existing starter delivery/history, grouped editor controls, discussion review/stale-source/
+  lost-reply/privacy and visual conversion/delivery cases pass, along with the shared
+  source-authoring regression cases. Corrected reruns count once.
+- AI fixtures use the existing owned loopback provider; PDF conversion uses the existing
+  synthetic scanner/storage fixture. Each browser/profile phase has a fresh API. Request
+  bytes, private-source projection, page order/descriptions, mandatory review, fidelity,
+  source/currentness and normal Undo/Redo assertions remain in place. No client/controller,
+  contract, API or timeout changes were required.
+- New cases retain Axe, one-pixel document/dialog overflow, original-language boundaries
+  and no-insertion-before-review checks. Screenshot review covers 320px Korean/German
+  controls, long wrapping actions, French/English source and proposal wording, clear focus
+  and import review fields. Automated checks do not complete native-language/customer,
+  manual accessibility/physical-device or hosted acceptance. The release ledger remains
+  valid at **0 complete / 15 pending** gates; deferred public launch content stays open.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.

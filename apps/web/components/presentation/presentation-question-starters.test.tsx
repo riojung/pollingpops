@@ -2,7 +2,12 @@ import { isValidElement, type ComponentProps, type ReactElement, type ReactNode 
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ContentSlideDraft } from "@openround/contracts";
+import {
+  supportedLocales,
+  type ContentSlideDraft,
+  type SupportedLocale,
+} from "@openround/contracts";
+import { questionStartersCopy } from "../../lib/i18n/question-starters-copy";
 import {
   createNativeContentBlock,
   createNativeDialogNode,
@@ -126,7 +131,7 @@ function sourceBlock(): ContentSlideDraft {
   };
   return block;
 }
-function harness() {
+function harness(locale?: SupportedLocale) {
   const hooks: Hooks = {
     cursor: 0,
     slots: [],
@@ -140,6 +145,7 @@ function harness() {
     sourceKey: "actor:deck:slide",
     onInsert: vi.fn(),
     disabled: false,
+    locale,
   };
   const trigger = { disabled: false, isConnected: true, focus: vi.fn() };
   const nativeDialog = {
@@ -163,9 +169,7 @@ function harness() {
       fixture.hooks = null;
     }
     const nodes = elements(tree);
-    const button = nodes.find(
-      (node) => node.type === "button" && node.props.children === "Question starters",
-    )!;
+    const button = nodes.find((node) => node.type === "button" && node.props.ref)!;
     trigger.disabled = Boolean(button.props.disabled);
     (button.props.ref as { current: unknown }).current = trigger;
     const dialog = nodes.find((node) => node.type === "dialog");
@@ -201,7 +205,9 @@ function harness() {
       return elements(tree).find((node) => node.type === "dialog");
     },
     open() {
-      (button("Question starters").props.onClick as () => void)();
+      (
+        button(questionStartersCopy(props.locale)("Question starters")).props.onClick as () => void
+      )();
       flush();
     },
     choose(id: string) {
@@ -451,4 +457,208 @@ describe("reviewed local question starters", () => {
       createPresentationQuestionStarters(block).some((candidate) => candidate.id === "priority"),
     ).toBe(false);
   });
+
+  it.each(supportedLocales)(
+    "changes only mounted review chrome when locale becomes %s",
+    (locale) => {
+      const h = harness();
+      const before = structuredClone(h.props.block);
+      h.open();
+      h.choose("priority");
+      const reviewed = h.nodes.find((node) => node.type === QuestionStarterPreview)!.props.starter;
+      const originalInsert = h.button("Insert reviewed question").props.onClick as () => void;
+      h.props.locale = locale;
+      h.render();
+      h.flush();
+      const copy = questionStartersCopy(locale);
+      expect(h.nativeDialog.showModal).toHaveBeenCalledOnce();
+      expect(h.nativeDialog.close).not.toHaveBeenCalled();
+      expect(h.nodes.find((node) => node.type === "section")!.props.lang).toBe(locale);
+      expect(h.nodes.find((node) => node.type === "h2")!.props.children).toBe(
+        copy("Review question starters"),
+      );
+      expect(h.button(copy("Insert reviewed question")).props.disabled).toBe(false);
+      expect(h.nodes.find((node) => node.type === "input" && node.props.checked)!.props.value).toBe(
+        "priority",
+      );
+      const preview = h.nodes.find((node) => node.type === QuestionStarterPreview)!;
+      const source = h.nodes.find((node) => node.type === QuestionStarterSourceReview)!;
+      expect(preview.props.starter).toBe(reviewed);
+      expect(preview.props.locale).toBe(locale);
+      expect(source.props.locale).toBe(locale);
+      expect(
+        h.nodes.filter((node) => node.type === "strong").map((node) => node.props.children),
+      ).toEqual([copy("Discussion"), copy("Clarity rating"), copy("Priority poll")]);
+      originalInsert();
+      originalInsert();
+      h.flush();
+      expect(h.props.onInsert).toHaveBeenCalledOnce();
+      expect((h.props.onInsert as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
+        createPresentationQuestionStarters(before).find((starter) => starter.id === "priority"),
+      ]);
+      expect(h.props.block).toEqual(before);
+      expect(h.dialog).toBeUndefined();
+    },
+  );
+
+  it("retranslates retained raw feedback without replacing the review or selected English template", () => {
+    const h = harness();
+    (h.props.onInsert as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    h.open();
+    h.choose("clarity");
+    const starter = h.nodes.find((node) => node.type === QuestionStarterPreview)!.props.starter;
+    (h.button("Insert reviewed question").props.onClick as () => void)();
+    h.flush();
+    const raw =
+      "This question could not be inserted. Resolve outstanding draft changes or review the current slide, then try again.";
+    for (const locale of ["ko-KR", "fr-FR", "en-CA"] as const) {
+      h.props.locale = locale;
+      h.render();
+      h.flush();
+      const alert = h.nodes.find((node) => node.props.role === "alert")!;
+      expect(alert.props.children).toBe(questionStartersCopy(locale)(raw));
+      expect(alert.props.lang).toBe(locale);
+      expect(h.nodes.find((node) => node.type === QuestionStarterPreview)!.props.starter).toBe(
+        starter,
+      );
+      expect(
+        h.button(questionStartersCopy(locale)("Insert reviewed question")).props.disabled,
+      ).toBe(false);
+    }
+    expect(h.nativeDialog.showModal).toHaveBeenCalledOnce();
+    expect(h.nativeDialog.close).not.toHaveBeenCalled();
+  });
+
+  it.each(["Question preview", "PRIVATE_UNKNOWN_ERROR 原文"])(
+    "keeps thrown diagnostic %s raw and English-attributed through a locale change",
+    (raw) => {
+      const h = harness("ko-KR");
+      (h.props.onInsert as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error(raw);
+      });
+      h.open();
+      (
+        h.button(questionStartersCopy("ko-KR")("Insert reviewed question")).props
+          .onClick as () => void
+      )();
+      h.flush();
+      h.props.locale = "fr-FR";
+      h.render();
+      h.flush();
+      const alert = h.nodes.find((node) => node.props.role === "alert")!;
+      expect(alert.props.children).toBe(raw);
+      expect(alert.props.lang).toBe("en-CA");
+      expect(h.nativeDialog.open).toBe(true);
+    },
+  );
+
+  it("localizes exact thrown insertion errors while retaining unknown non-Error fallback", () => {
+    const h = harness("ko-KR");
+    const raw = "This question identity is already in use. Open question starters again.";
+    (h.props.onInsert as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => {
+        throw new Error(raw);
+      })
+      .mockImplementationOnce(() => {
+        throw null;
+      });
+    h.open();
+    const insert = () =>
+      (
+        h.button(questionStartersCopy("ko-KR")("Insert reviewed question")).props
+          .onClick as () => void
+      )();
+    insert();
+    h.flush();
+    expect(h.nodes.find((node) => node.props.role === "alert")!.props).toMatchObject({
+      children: questionStartersCopy("ko-KR")(raw),
+      lang: "ko-KR",
+    });
+    insert();
+    h.flush();
+    expect(h.nodes.find((node) => node.props.role === "alert")!.props).toMatchObject({
+      children: questionStartersCopy("ko-KR")(
+        "The question could not be inserted. Your presentation is retained.",
+      ),
+      lang: "ko-KR",
+    });
+  });
+
+  it("keeps stale-source fencing during a locale change and pending-selection render", () => {
+    const h = harness();
+    h.open();
+    const stale = h.button("Insert reviewed question").props.onClick as () => void;
+    h.deferState(() => h.choose("priority"));
+    h.props.locale = "ko-KR";
+    h.render();
+    stale();
+    expect(h.props.onInsert).not.toHaveBeenCalled();
+    h.commitDeferredState();
+    const current = h.button(questionStartersCopy("ko-KR")("Insert reviewed question")).props
+      .onClick as () => void;
+    h.props.sourceKey = "another-author:deck:slide";
+    h.props.locale = "fr-FR";
+    h.render();
+    current();
+    h.flush();
+    expect(h.props.onInsert).not.toHaveBeenCalled();
+    expect(h.dialog).toBeUndefined();
+  });
+
+  it.each(supportedLocales)("localizes unsupported availability in %s", (locale) => {
+    const h = harness(locale);
+    h.props.block = { ...h.props.block, hidden: true };
+    h.render();
+    expect(h.button(questionStartersCopy(locale)("Question starters")).props.disabled).toBe(true);
+    const reason = questionStartersCopy(locale)(
+      "Choose a visible native slide with a nonblank title and body text.",
+    );
+    expect(
+      h.nodes.some(
+        (node) => node.type === "p" && node.props.children === reason && node.props.lang === locale,
+      ),
+    ).toBe(true);
+  });
+
+  it.each(supportedLocales)(
+    "keeps source and generated text untouched under %s preview chrome",
+    (locale) => {
+      const block = sourceBlock();
+      const title = block.scene!.nodes[0]!;
+      const body = block.scene!.nodes[1]!;
+      if (title.type !== "text" || body.type !== "text") throw new Error("Expected source text");
+      // Authored text can exactly collide with catalog keys or feedback allowlist entries.
+      title.text = "Question preview";
+      title.lang = undefined;
+      body.text = "Close\nChoose a visible native slide with a nonblank title and body text.";
+      body.lang = undefined;
+      const starters = createPresentationQuestionStarters(block);
+      const snapshot = structuredClone(starters);
+      const poll = starters.find((starter) => starter.id === "priority")!;
+      const preview = QuestionStarterPreview({ starter: poll, locale });
+      const source = QuestionStarterSourceReview({ source: poll.source, locale });
+      const previewMarkup = renderToStaticMarkup(preview);
+      const sourceMarkup = renderToStaticMarkup(source);
+      expect(textContent(preview)).toContain(poll.prompt);
+      expect(previewMarkup).toContain('lang="en-CA"');
+      expect(previewMarkup).toContain('<span lang="">Question preview</span>');
+      expect(previewMarkup).toContain('<li lang="">Close</li>');
+      expect(previewMarkup).toContain(
+        '<li lang="">Choose a visible native slide with a nonblank title and body text.</li>',
+      );
+      expect(sourceMarkup).toContain('lang=""');
+      expect(textContent(source)).toContain(body.text);
+      expect(textContent(source)).toContain(title.text);
+      const rating = starters.find((starter) => starter.id === "clarity")!;
+      const ratingPreview = QuestionStarterPreview({ starter: rating, locale });
+      expect(
+        elements(ratingPreview)
+          .filter((node) => node.type === "dd")
+          .every((node) => node.props.lang === "en-CA"),
+      ).toBe(true);
+      expect(textContent(ratingPreview)).toContain("Not clear yet");
+      expect(textContent(ratingPreview)).toContain("Very clear");
+      expect(starters).toEqual(snapshot);
+    },
+  );
 });

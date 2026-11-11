@@ -212,6 +212,7 @@
   color: var(--ui-accent-ink);
   padding: 10px 18px;
   font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 .sourceBanner ul {
@@ -980,13 +981,33 @@
 
 .sourceImportDialog {
   width: min(920px, calc(100vw - 32px));
+  border: 1px solid var(--ui-border);
+  padding: clamp(16px, 4vw, 24px);
+  overflow-wrap: anywhere;
 }
 
 .sourceImportHeading {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   align-items: flex-start;
   justify-content: space-between;
+}
+
+.sourceImportHeading > div {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.sourceImportHeading > button {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.sourceImportDialog :is(button, input, textarea, select):focus-visible,
+.ideaCard > button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
 }
 
 .sourceImportHeading h2 {
@@ -1633,6 +1654,8 @@
   font-weight: 650;
   cursor: pointer;
   text-align: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .ideaCard > button:disabled {
   opacity: 0.5;

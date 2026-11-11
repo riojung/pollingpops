@@ -141,6 +141,10 @@ import {
   PresentationSlideThumbnail,
 } from "./presentation-editor-chrome";
 import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { questionStartersFeedback } from "../../lib/i18n/question-starters-copy";
+import { questionSuggestionsCopy, questionSuggestionsFeedback } from "./question-suggestions-copy";
+import { visualImportCopy, visualImportFeedback } from "./visual-import-copy";
+import { sourceWorkflowsCopy, sourceWorkflowsFeedback } from "./source-workflows-copy";
 import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
 import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
 import type { QuestionSuggestionsTarget } from "../../lib/presentation-question-suggestions-client";
@@ -514,6 +518,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const nativeControlUi = nativeControlsCopy(locale);
   const assistanceUi = assistanceCopy(locale);
   const textAssistanceUi = textAssistanceCopy(locale);
+  const questionSuggestionsUi = questionSuggestionsCopy(locale);
+  const visualImportUi = visualImportCopy(locale);
+  const sourceWorkflowsUi = sourceWorkflowsCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -1006,6 +1013,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     if (!sourceImportOpen) return;
     return focusModal(sourceImportDialogRef.current);
   }, [sourceImportOpen]);
+
+  useEffect(() => {
+    const dialog = sourceImportDialogRef.current;
+    // A permission change can remove the focused proposal control. Retain the
+    // initial opener above, while keeping keyboard commands inside the open dialog.
+    if (sourceImportOpen && dialog && !dialog.contains(document.activeElement)) {
+      (dialog.querySelector<HTMLButtonElement>("button") ?? dialog).focus({ preventScroll: true });
+    }
+  }, [sourceImportOpen, canEdit]);
 
   useEffect(() => {
     void apiFetch<{ mediaUploads: boolean }>("/v1/features")
@@ -2221,6 +2237,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   async function openSourceImport() {
     if (
+      !alive.current ||
+      !assistancePermission.current ||
       !draft ||
       importPreparation.current ||
       packOperation.current ||
@@ -2239,7 +2257,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setError("");
     try {
       await enqueueSave(draft);
-      if (!alive.current) return;
+      if (!alive.current || !assistancePermission.current) return;
       const serialized = JSON.stringify(draft);
       if (lastSavedJson.current !== serialized || latestDraftJson.current !== serialized) {
         throw new Error("Save this Presentation before inserting source proposals.");
@@ -2678,6 +2696,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     );
   }
 
+  // Keep stored errors canonical; only explicit system feedback is projected at render.
+  const sourceWorkflowError = [
+    sourceWorkflowsFeedback(locale, error),
+    questionStartersFeedback(locale, error),
+    questionSuggestionsFeedback(locale, error),
+    visualImportFeedback(locale, error),
+  ].find((feedback) => feedback.lang === locale) ?? { text: error, lang: "en-CA" };
+
   const questionBlocks = draft.blocks.flatMap((block) =>
     block.kind === "question" ? [block.question] : [],
   );
@@ -2991,18 +3017,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </div>
       ) : null}
       {questionSuggestionsRecovery && !questionSuggestionsOpen ? (
-        <div className={styles.errorBanner} role="status" lang="en-CA">
+        <div className={styles.errorBanner} role="status" lang={locale}>
           <p>
             {questionSuggestionsPending
-              ? "A discussion question insertion receipt is outstanding. Recover it before editing this deck."
-              : "A discussion question proposal is available for review."}
+              ? questionSuggestionsUi(
+                  "A discussion question insertion receipt is outstanding. Recover it before editing this deck.",
+                )
+              : questionSuggestionsUi("A discussion question proposal is available for review.")}
           </p>
           <button
             type="button"
             data-question-suggestions-resume
             onClick={() => void openQuestionSuggestions()}
           >
-            Resume discussion suggestions
+            {questionSuggestionsUi("Resume discussion suggestions")}
           </button>
         </div>
       ) : null}
@@ -3094,14 +3122,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </div>
       ) : null}
       {draft.sourceDisclosure ? (
-        <div className={styles.sourceBanner} lang="en-CA" role="note">
+        <div className={styles.sourceBanner} lang={locale} role="note">
           <span>
-            <strong>Grounded source:</strong>{" "}
-            <span lang="">{draft.sourceDisclosure.sourceName}</span> · generated by{" "}
+            <strong>{sourceWorkflowsUi("Grounded source:")}</strong>{" "}
+            <span lang="">{draft.sourceDisclosure.sourceName}</span> ·{" "}
+            {sourceWorkflowsUi("generated by")}{" "}
             <span lang="">
               {draft.sourceDisclosure.provider} / {draft.sourceDisclosure.model}
             </span>
-            . Verify citations before publishing.
+            . {sourceWorkflowsUi("Verify citations before publishing.")}
           </span>
           {draft.sourceDisclosure.conversionNotes?.length ? (
             <ul>
@@ -3120,7 +3149,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           inert={builderMutationBlocked || preparingImport}
           role="alert"
         >
-          <span lang="en-CA">{error}</span>
+          <span lang={sourceWorkflowError.lang}>{sourceWorkflowError.text}</span>
           {(saveState === "error" || ordinarySavePending) && saveState !== "saving" ? (
             <button onClick={() => void enqueueSave(draft)} type="button">
               {t("delivery.builder.retrySave")}
@@ -3633,16 +3662,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           ) : null}
           {selectedBlock?.kind === "content" &&
           selectedBlock.sourceDisclosure?.model === "visual-import-v1" ? (
-            <p className={styles.sourceBanner} role="note" lang="en-CA">
+            <p className={styles.sourceBanner} role="note" lang={locale}>
               <strong>
                 {selectedBlock.scene?.nodes.some((node) => node.type === "image")
-                  ? "Imported visual slide"
-                  : "Imported reading slide"}
+                  ? visualImportUi("Imported visual slide")
+                  : visualImportUi("Imported reading slide")}
               </strong>
               {" · "}
               {selectedBlock.scene?.nodes.some((node) => node.type === "image")
-                ? "Source objects, animation and media are flattened. Edit image placement or use its reading slide for editable text."
-                : "Author-reviewed accessible text is editable on this reading slide."}
+                ? visualImportUi(
+                    "Source objects, animation and media are flattened. Edit image placement or use its reading slide for editable text.",
+                  )
+                : visualImportUi(
+                    "Author-reviewed accessible text is editable on this reading slide.",
+                  )}
             </p>
           ) : null}
           {!selectedBlock ? (
@@ -3678,13 +3711,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 >
                   {assistanceUi("Outline to slides")}
                 </button>
-                <button lang="en-CA" onClick={openVisualImport} type="button">
-                  Import visual slides
+                <button lang={locale} onClick={openVisualImport} type="button">
+                  {visualImportUi("Import visual slides")}
                 </button>
               </div>
             </section>
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
-            <section className={styles.slideCanvas} lang="en-CA">
+            <section className={styles.slideCanvas} lang={locale}>
               <NativeSceneEditor
                 canEdit={canEdit}
                 key={selectedBlock.id}
@@ -3775,12 +3808,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 }}
               />
               <EditorDisclosure
-                label="Slide ideas & audience activities"
+                label={sourceWorkflowsUi("Slide ideas & audience activities")}
                 className={styles.slideIdeas}
                 icon="interaction"
                 inline
               >
                 <PresentationQuestionStarters
+                  locale={locale}
                   key={`question-starters:${selectedBlock.id}`}
                   block={selectedBlock}
                   sourceKey={selectedBlock.id}
@@ -3844,10 +3878,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     return true;
                   }}
                 />
-                <section className={styles.ideaCard} aria-label="AI discussion suggestions">
+                <section
+                  className={styles.ideaCard}
+                  lang={locale}
+                  aria-label={questionSuggestionsUi("AI discussion suggestions")}
+                >
                   <div className={styles.ideaCardHeading}>
                     <EditorIcon name="sparkle" />
-                    <span>AI assistance</span>
+                    <span>{questionSuggestionsUi("AI assistance")}</span>
                   </div>
                   <button
                     type="button"
@@ -3858,11 +3896,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     onClick={() => void openQuestionSuggestions()}
                   >
                     <EditorIcon name="sparkle" />
-                    <span>Suggest discussion questions</span>
+                    <span>{questionSuggestionsUi("Suggest discussion questions")}</span>
                   </button>
                   <p className={styles.helpText}>
-                    Review your source and shared AI allowance before generating two English
-                    discussion suggestions.
+                    {questionSuggestionsUi(
+                      "Review your source and shared AI allowance before generating two English discussion suggestions.",
+                    )}
                   </p>
                 </section>
                 {selectedBlock.textAssistance ? (
@@ -4818,27 +4857,29 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           role="dialog"
           aria-modal="true"
           aria-labelledby="source-import-title"
+          lang={locale}
           onKeyDown={(event) => handleModalKeyDown(event, () => setSourceImportOpen(false))}
           tabIndex={-1}
         >
-          <section className={`${styles.importDialog} ${styles.sourceImportDialog}`} lang="en-CA">
+          <section className={`${styles.importDialog} ${styles.sourceImportDialog}`}>
             <div className={styles.sourceImportHeading}>
               <div>
-                <p className={styles.eyebrow}>Review before insertion</p>
-                <h2 id="source-import-title">Insert from a trusted source</h2>
+                <p className={styles.eyebrow}>{sourceWorkflowsUi("Review before insertion")}</p>
+                <h2 id="source-import-title">{t("delivery.assistant.insertTrustedSource")}</h2>
                 <p className={styles.helpText}>
-                  Create a proposal, choose the cited content and Recovery questions you want, then
-                  confirm once. Nothing is inserted while the proposal is processing.
+                  {sourceWorkflowsUi(
+                    "Create a proposal, choose the cited content and Recovery questions you want, then confirm once. Nothing is inserted while the proposal is processing.",
+                  )}
                 </p>
               </div>
               <button onClick={() => setSourceImportOpen(false)} type="button">
-                Close
+                {sourceWorkflowsUi("Close")}
               </button>
             </div>
             <div lang={locale}>
               <AuthoringAssistant
                 artifactType="presentation"
-                canEdit
+                canEdit={canEdit}
                 insertionTarget={{
                   presentationId,
                   expectedRevision: revisionRef.current,
@@ -4906,6 +4947,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         />
       ) : null}
       <PresentationVisualImport
+        locale={locale}
         presentationId={presentationId}
         open={visualImportOpen}
         preparationBlocked={
@@ -5087,6 +5129,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onPendingChange={setAssistancePending}
       />
       <PresentationQuestionSuggestions
+        locale={locale}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}

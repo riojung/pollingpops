@@ -8,6 +8,29 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B source workflows November 10, 2026
+
+The `codex/option-b-source-workflows` source extends all ten configured UI locales to local
+question starters, AI discussion suggestion review/recovery, visual imports and trusted-source
+dialog guidance. Launch/resume controls, source attribution and explicit known system
+feedback follow the selected language. Original source/proposal text, file and review values,
+English question-generation contracts and exact recovery identities retain their meanings.
+
+The trusted-source dialog follows actual editor permission, including changes during its
+prerequisite save. Permission transitions retain focus inside that dialog; closing a resumed
+discussion proposal returns focus to its visible Resume control. Review controls wrap on
+narrow screens and retain shared focus/surface tokens.
+
+The repository gate passes 7,947 tests with 513 standard opt-in skips, all four production
+builds and server startup. After the focused follow-ups, all 386 web suites / 4,066 tests,
+web types and fresh normal/beta web builds pass, bringing validated repository coverage to
+7,949 passing tests. Forty-four distinct selected production-browser cases pass across
+desktop Chromium and phone Chromium/WebKit, including twelve new localized cases. The
+[Option B implementation record](option-b-ux-implementation.md) preserves corrected reruns,
+focus repairs and verification scope. Creation-locale template/default content and Pack
+library/editor tools remain follow-ups. Hosted, native-language/customer, manual
+accessibility/device and deferred public launch acceptance remain release work.
+
 ### Option B assistance review and recovery November 10, 2026
 
 The `codex/option-b-assistance-recovery` source extends all ten configured locales to

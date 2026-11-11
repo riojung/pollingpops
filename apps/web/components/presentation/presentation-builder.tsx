@@ -24,7 +24,6 @@ import {
   presentationTextAssistanceSourceDigest,
   presentationQuestionSuggestionSource,
   presentationQuestionSuggestionsSourceDigest,
-  presentationTextLanguageLabel,
   resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
   resolveContentSlideFrames,
@@ -121,6 +120,9 @@ import {
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { nativeEditorCopy } from "./native-editor-copy";
+import { nativeControlsCopy } from "./native-controls-copy";
+import { assistanceCopy } from "./assistance-copy";
+import { textAssistanceCopy, textAssistanceFeedback } from "./text-assistance-copy";
 import { PresentationActivitySlide } from "./presentation-activity-slide";
 import { SpeakerNotesEditor, PresenterNotesPanel } from "./presentation-speaker-notes";
 import {
@@ -144,7 +146,10 @@ import { PresentationQuestionSuggestions } from "./presentation-question-suggest
 import type { QuestionSuggestionsTarget } from "../../lib/presentation-question-suggestions-client";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationAssistance } from "./presentation-assistance";
-import { PresentationTextAssistance } from "./presentation-text-assistance";
+import {
+  PresentationTextAssistance,
+  textAssistanceLanguageDisplay,
+} from "./presentation-text-assistance";
 import {
   sameTextAssistanceBlockId,
   type TextAssistanceTarget,
@@ -506,6 +511,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const commands = presentationCommandCopy(locale);
   const sectionsSpatial = sectionsSpatialCopy(locale);
   const nativeEditorUi = nativeEditorCopy(locale);
+  const nativeControlUi = nativeControlsCopy(locale);
+  const assistanceUi = assistanceCopy(locale);
+  const textAssistanceUi = textAssistanceCopy(locale);
   const router = useRouter();
   const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
@@ -2949,26 +2957,36 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       ) : null}
 
       {textAssistanceRecovery && !textAssistanceOpen ? (
-        <div className={styles.errorBanner} role="status">
+        <div
+          className={textAssistancePending ? styles.errorBanner : styles.sourceBanner}
+          role="status"
+          lang={locale}
+        >
           <p>
             {textAssistancePending
-              ? "A text assistance receipt is outstanding. Recover it before editing this deck."
-              : "A text assistance proposal is available for review."}
+              ? textAssistanceUi(
+                  "A text assistance receipt is outstanding. Recover it before editing this deck.",
+                )
+              : textAssistanceUi("A text assistance proposal is available for review.")}
           </p>
           <button
             type="button"
             data-text-assistance-resume
             onClick={() => setTextAssistanceOpen(true)}
           >
-            Resume text assistance
+            {textAssistanceUi("Resume text assistance")}
           </button>
         </div>
       ) : null}
       {assistancePending && !assistanceOpen ? (
-        <div className={styles.errorBanner} role="status" lang="en-CA">
-          <p>Recover the outline insertion acknowledgement before continuing to edit.</p>
+        <div className={styles.errorBanner} role="status" lang={locale}>
+          <p>
+            {assistanceUi(
+              "Recover the outline insertion acknowledgement before continuing to edit.",
+            )}
+          </p>
           <button type="button" onClick={() => setAssistanceOpen(true)}>
-            Resume outline assistance
+            {assistanceUi("Resume outline assistance")}
           </button>
         </div>
       ) : null}
@@ -3654,11 +3672,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 </button>
                 <button
                   disabled={!canEdit || preparingImport}
-                  lang="en-CA"
+                  lang={locale}
                   onClick={() => void openAssistance()}
                   type="button"
                 >
-                  Outline to slides
+                  {assistanceUi("Outline to slides")}
                 </button>
                 <button lang="en-CA" onClick={openVisualImport} type="button">
                   Import visual slides
@@ -3848,22 +3866,57 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   </p>
                 </section>
                 {selectedBlock.textAssistance ? (
-                  <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
-                    <strong>Latest AI text edit — unverified wording</strong>
+                  <aside
+                    aria-label={textAssistanceUi("Latest AI text edit")}
+                    className={styles.sourceBanner}
+                    lang={locale}
+                  >
+                    <strong>{textAssistanceUi("Latest AI text edit — unverified wording")}</strong>
                     <p>
                       {selectedBlock.textAssistance.operation === "translate"
-                        ? `Translated to ${presentationTextLanguageLabel(selectedBlock.textAssistance.targetLanguage!)}`
+                        ? textAssistanceUi("Translated to {language}", {
+                            language: textAssistanceLanguageDisplay(
+                              selectedBlock.textAssistance.targetLanguage!,
+                              locale,
+                            ).text,
+                          })
                         : selectedBlock.textAssistance.operation === "shorten"
-                          ? "Shortened"
-                          : "Rewritten"}{" "}
-                      {selectedBlock.textAssistance.role} object{" "}
-                      {selectedBlock.textAssistance.nodeId} by{" "}
-                      {selectedBlock.textAssistance.provider} / {selectedBlock.textAssistance.model}{" "}
-                      at {selectedBlock.textAssistance.generatedAt}.
+                          ? textAssistanceUi("Shortened")
+                          : textAssistanceUi("Rewritten")}
+                      {" · "}
+                      {textAssistanceUi("Text object")}:{" "}
+                      {nativeControlUi(
+                        selectedBlock.textAssistance.role === "title" ? "Slide title" : "Body text",
+                      )}
+                      {" · "}
+                      <span lang="">{selectedBlock.textAssistance.nodeId}</span>
                     </p>
                     <p>
-                      {selectedBlock.textAssistance.reviewWarning} This records the latest edit on
-                      this slide, not a complete edit history or fact check.
+                      {textAssistanceUi("Generated by")}{" "}
+                      <span lang="">
+                        {selectedBlock.textAssistance.provider} /{" "}
+                        {selectedBlock.textAssistance.model}
+                      </span>
+                      {" · "}
+                      <time dateTime={selectedBlock.textAssistance.generatedAt}>
+                        {formatDateTime(locale, selectedBlock.textAssistance.generatedAt)}
+                      </time>
+                    </p>
+                    <p>
+                      <span
+                        lang={
+                          textAssistanceFeedback(locale, selectedBlock.textAssistance.reviewWarning)
+                            .lang
+                        }
+                      >
+                        {
+                          textAssistanceFeedback(locale, selectedBlock.textAssistance.reviewWarning)
+                            .text
+                        }
+                      </span>{" "}
+                      {textAssistanceUi(
+                        "This records the latest edit on this slide, not a complete edit history or fact check.",
+                      )}
                     </p>
                   </aside>
                 ) : null}
@@ -4884,6 +4937,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onPendingChange={setVisualImportReceiptPending}
       />
       <PresentationTextAssistance
+        locale={locale}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}
@@ -5000,6 +5054,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onRecoveryChange={setTextAssistanceRecovery}
       />
       <PresentationAssistance
+        locale={locale}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}

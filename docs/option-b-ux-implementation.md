@@ -452,6 +452,87 @@ qualification and deferred public launch content remain release work.
   manual accessibility/device and customer acceptance remain open; the release ledger stays
   valid with **0 complete / 15 pending** gates.
 
+## Assistance review and recovery follow-up — November 10, 2026
+
+The `codex/option-b-assistance-recovery` slice extends selected-language guidance to outline
+proposals, text rewrite/shorten/translation proposals and recovery, and local layout
+comparison. English remains the default. Three typed catalogs expose 218 keys across all
+ten configured locales, with 196 new translation rows and 22 references to shared wording.
+
+Proposal creation, allowance/availability, mandatory review confirmations, source/target
+language controls, invalid recovery guidance and exact retry actions translate at display
+time. Canonical language codes and the saved target language remain distinct from the UI
+locale. Original/proposed text, excerpts, source names, provider/model values, object IDs
+and stored metadata are never translated by equality; known text language stays attached
+and unknown authored language remains explicit. Known policy warnings and diagnostics use
+an allowlist; unknown English service feedback retains its original-language attribution.
+
+Changing a mounted locale retains staged outline fields, selected slides, reviewed state,
+pending/error feedback and recovery. Locale does not enter controller effects, actor or
+storage keys, request intent, revision/source identity or receipt bytes. Permissions,
+authentication invalidation, explicit review, reload-before-clear and exact retry guards
+remain intact. The underlying clients, recovery formats, providers, services and contracts
+are unchanged.
+
+The builder passes its locale to the modal components, translates resume guidance and
+renders the latest text-edit attribution in that language, retaining raw provenance and
+the canonical generated timestamp. Ready proposal/attribution notices use the existing
+source surface. Assistance dialogs use shared overlay, border, shadow and focus tokens,
+with wrapping headings/actions for long labels.
+
+Local layout comparison translates controls, known generated alternative descriptors,
+availability and recovery guidance, alongside the complete accessible reading copy. Its
+decorative fixed-plane previews remain inert, and stored text/language, rich links, data,
+reading order, source snapshots and selected alternatives retain their meanings. Layout
+generation, IDs/frames, fingerprints, size limits, apply guards and history are unchanged.
+Fit-feedback language can be supplied without changing measurement dependencies.
+
+Creation-locale template/default content, discussion/source-import assistance and Pack
+library/editor tools remain outside this bounded slice. Public launch content stays
+deferred. Native-language review, customer observation, manual accessibility/device
+acceptance and exact-head hosted qualification remain release work.
+
+### Assistance verification
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **7,790 tests** with 513 standard opt-in skips,
+  formatting, lint, types, Docker-context checks, all four production builds and compiled
+  server startup. The web portion passes **381 suites / 3,907 tests**. The fresh beta
+  production build and focused builder integration checks also pass.
+- The catalogs cover all 2,180 exposed key/locale entries, English defaults and placeholders.
+  Focused checks cover authored collisions and language boundaries, mounted review/recovery
+  retention, exact callback/request identity, permission/authentication fences and layout
+  currentness. Fixtures use the existing owned loopback provider.
+- **51 distinct selected production-browser cases pass**: seventeen each on desktop
+  Chromium, phone Chromium and phone WebKit. Nine new cases cover Korean outline/text
+  review, German receipt recovery with unchanged request identity, and local layout review.
+  Existing outline-first creation, uncertain creation/insertion/application, safe Undo,
+  stale-source rejection, conclusive refusals, invalid recovery, explicit translation intent,
+  grouped editor controls, rich text and readable table/layout comparison also pass.
+- Each browser/profile phase uses a fresh API; text receipt recovery and the remaining text
+  journeys retain their existing isolated admission budgets. Generation uses the owned
+  loopback provider, with source/other-object/citation privacy checks. No provider, timeout,
+  controller or API changes were required for qualification.
+- Layout checks preserve complete draft equality apart from the chosen preview frames,
+  with canonical empty sections seeded before baseline tracking, and verify normal
+  Undo/Redo. Native dialog checks reject background focus, exercise Escape and keyboard
+  Close with return focus, and respect browser chrome and
+  [WebKit keyboard navigation preferences](https://support.apple.com/guide/safari/keyboard-shortcuts-and-gestures-cpsh003/mac).
+  These automated checks do not replace physical-device or assistive-technology acceptance.
+- New cases retain Axe, one-pixel phone-overflow, mandatory review, read-only and no-save
+  before apply assertions. Local layout review also verifies no AI requests or quota use.
+  Screenshot review covers the 320px controls, wrapping
+  actions, raw Spanish/French wording, citations and the complete layout reading copy.
+  Corrected fixture reruns are counted once in the 51 distinct cases. Native-language,
+  observed customer, manual accessibility/device and exact-head hosted acceptance remain
+  open; the release ledger stays valid with **0 complete / 15 pending** gates.
+- The preceding [PR #230 CI run](https://github.com/riojung/pollingpops/actions/runs/42925072587)
+  passed all four core browsers and three beta browsers; Firefox beta was cancelled and the
+  aggregate browser gate therefore failed. Its
+  [dependency audit](https://github.com/riojung/pollingpops/actions/runs/42925073190/job/130209383109)
+  also reported a low-severity `fast-xml-parser` advisory. These are observed baseline checks
+  for `58eade92a4f170fc71413f270ad5cc7cbc95c9c9`, not qualification of this new source.
+  No hosted retry, dependency change or release-gate completion is claimed by this UI slice.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.

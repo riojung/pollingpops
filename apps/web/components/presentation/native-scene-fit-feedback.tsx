@@ -86,11 +86,14 @@ function Feedback({ locale, feedback }: { locale: SupportedLocale; feedback: Nat
 export function NativeSceneFitFeedback({
   root,
   scene,
+  locale: selectedLocale,
 }: {
   root: RefObject<HTMLDivElement | null>;
   scene: PresentationScene;
+  locale?: SupportedLocale;
 }) {
-  const { locale } = useLocale();
+  const { locale: contextLocale } = useLocale();
+  const locale = selectedLocale ?? contextLocale;
   const [feedback, setFeedback] = useState<NativeFitFeedback>(INITIAL_FEEDBACK);
   useEffect(() => {
     let active = true;

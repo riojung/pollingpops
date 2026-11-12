@@ -15,11 +15,21 @@ import {
   CANVAS_SCHEMA_VERSION,
   CanvasBoardCreateSchema,
   IdeaBoardCreateSchema,
+  ReportV4Schema,
+  type QuestionDraft,
 } from "@openround/contracts";
+import {
+  acceptAnswer,
+  addParticipant,
+  applyHostCommand,
+  createGameState,
+  type EngineAnswer,
+} from "@openround/game-engine";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
+import { generateReport } from "../src/reporting.js";
 
 let app: FastifyInstance | undefined;
 const BETA_WORKSPACE_ID = "10000000-0000-4000-8000-000000000004";
@@ -148,6 +158,182 @@ function createSummaryCanvas(
 }
 
 describe("Home workspace summary", () => {
+  it("keeps absent Round assessment evidence distinct from measured zero in result highlights", async () => {
+    const f = await artifactFixture();
+    const { creator, cookie } = f.owner;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 86_400_000);
+    const poll: QuestionDraft = {
+      id: randomUUID(),
+      type: "poll",
+      prompt: "Pick a priority",
+      choices: [
+        { id: randomUUID(), label: "Clarity", isCorrect: false },
+        { id: randomUUID(), label: "Speed", isCorrect: false },
+      ],
+      timeLimitSeconds: 30,
+      basePoints: 0,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const assessed: QuestionDraft = {
+      ...poll,
+      id: randomUUID(),
+      type: "single_select",
+      prompt: "Select the correct answer",
+      basePoints: 1_000,
+      choices: [
+        { id: randomUUID(), label: "Correct", isCorrect: true },
+        { id: randomUUID(), label: "Incorrect", isCorrect: false },
+      ],
+    };
+    const cases = [
+      { title: "Unanswered assessment", questions: [assessed], answers: false, replay: false },
+      {
+        title: "Unanswered replay assessment",
+        questions: [assessed],
+        answers: false,
+        replay: true,
+      },
+      { title: "Current poll", questions: [poll], answers: true, replay: false },
+      { title: "Historical poll", questions: [poll], answers: true, replay: true },
+      { title: "Mixed measured zero", questions: [poll, assessed], answers: true, replay: false },
+    ];
+    const expected: Array<{ id: string; title: string; accuracyPercent: number | null }> = [];
+    for (const [index, entry] of cases.entries()) {
+      const content = { title: entry.title, description: "", questions: entry.questions };
+      const quiz = await f.repository.createQuiz({
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        title: content.title,
+        description: "",
+        status: "draft",
+        draft: content,
+        currentVersionId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const version = await f.repository.publishQuiz({
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        quizId: quiz.id,
+        version: 1,
+        content,
+        contentHash: randomUUID(),
+        publishedAt: now,
+      });
+      const sessionId = randomUUID();
+      let state = createGameState({
+        sessionId,
+        code: String(7_000_001 + index),
+        quiz: content,
+        settings: {
+          audienceLimit: 10,
+          scoringMode: "accuracy",
+          resultVisibility: "private",
+          allowLateJoin: true,
+          nicknamePolicy: "custom",
+        },
+      });
+      const participantId = randomUUID();
+      state = addParticipant(state, {
+        id: participantId,
+        nickname: "Guest",
+        score: 0,
+        correctCount: 0,
+        acceptedResponseMs: 0,
+        connected: true,
+        kicked: false,
+      }).state;
+      let nowMs = now.getTime();
+      const command = (action: Parameters<typeof applyHostCommand>[1]["action"]) => {
+        state = applyHostCommand(state, {
+          action,
+          commandId: randomUUID(),
+          expectedVersion: state.version,
+          nowMs: (nowMs += 1_000),
+          newRoundId: randomUUID,
+        }).state;
+      };
+      const answers: EngineAnswer[] = [];
+      for (const [questionIndex, question] of entry.questions.entries()) {
+        command(questionIndex === 0 ? "start" : "next");
+        if (entry.answers) {
+          if (question.type !== "poll" && question.type !== "single_select")
+            throw new Error("Expected choice question fixture");
+          const accepted = acceptAnswer(state, {
+            answerId: randomUUID(),
+            participantId,
+            roundId: state.roundId!,
+            response: {
+              kind: question.type === "poll" ? "poll" : "choice",
+              choiceIds: [question.choices[1]!.id],
+            },
+            idempotencyKey: randomUUID(),
+            nowMs: (nowMs += 1_000),
+          });
+          state = accepted.state;
+          answers.push(accepted.answer);
+        }
+        command("lock");
+        command("reveal");
+      }
+      command("end");
+      let report = generateReport(state, expiresAt, {
+        generatedAt: now,
+        evidence: {
+          decisionReplayEnabled: entry.replay,
+          decisionEvents: [],
+          decisionEventsComplete: false,
+          answers,
+          rounds: Object.entries(state.rounds).map(([id, round]) => ({ id, ...round })),
+          interventions: [],
+          qna: { questions: 0, answered: 0, unresolved: 0 },
+        },
+      });
+      if (entry.title === "Historical poll") {
+        report = ReportV4Schema.parse({
+          ...report,
+          schemaVersion: 4,
+          metrics: { ...report.metrics, accuracyPercent: 0 },
+          initialAccuracy: { correct: 0, responses: 0, percent: 0 },
+          questions: report.questions.map((question) => ({
+            ...question,
+            correct: 0,
+            accuracyPercent: 0,
+          })),
+        });
+      }
+      await f.repository.createSession({
+        id: sessionId,
+        workspaceId: creator.workspaceId,
+        quizVersionId: version.id,
+        hostId: creator.userId,
+        hostTokenHash: randomUUID(),
+        state,
+        expiresAt,
+        retentionExpiresAt: expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await f.repository.saveReport(creator.workspaceId, report);
+      expected.push({
+        id: report.id,
+        title: entry.title,
+        accuracyPercent: entry.title === "Mixed measured zero" ? 0 : null,
+      });
+    }
+    const response = await f.app.inject({ url: "/v1/home/summary", headers: { cookie } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().resultHighlights).toHaveLength(cases.length);
+    for (const result of expected) {
+      expect(response.json().resultHighlights).toContainEqual(
+        expect.objectContaining({ ...result, participantCount: 1, recoveryPercent: null }),
+      );
+    }
+  });
+
   it("uses bounded canvas metadata and deduplicates a linked workshop outside the recent page", async () => {
     const f = await artifactFixture();
     const { creator, cookie } = f.owner;

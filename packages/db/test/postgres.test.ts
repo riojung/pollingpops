@@ -22,6 +22,7 @@ import {
 } from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectReportHistoryEvidenceConformance } from "./support/report-history-evidence-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
@@ -1958,6 +1959,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("results-history-owner"),
       await creator("results-history-outsider"),
+    );
+  });
+
+  it("distinguishes missing assessed evidence from measured zero in retained PostgreSQL report history", async () => {
+    await expectReportHistoryEvidenceConformance(
+      repository,
+      await creator("report-history-evidence-owner"),
     );
   });
 

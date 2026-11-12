@@ -810,6 +810,74 @@ implementation follow-ups. Native-language review, customer observation, manual
 accessibility/physical-device checks, exact-candidate hosted qualification and deferred
 public launch content remain release work. This slice does not complete release readiness.
 
+## Report evidence and recovery — November 12, 2026
+
+The `codex/option-b-report-clarity` follow-up closes concrete gaps found during
+local qualification of Option B’s report scope.
+
+- **Missing evidence:** Round history, Results and Home now return no initial accuracy
+  when the assessed-response denominator is zero. A measured zero with actual assessed
+  responses remains `0%`. Both repository implementations use the same pure projection.
+  Legacy V1 reports use their recorded answer count only to recognize no-answer evidence;
+  positive-count V1 grading meaning remains unchanged. The projection preserves stored
+  reports, schema versions and retention behavior; it adds no migration or background
+  regeneration. Recovery already used its eligible denominator and stays unchanged.
+- **Private report scope:** Presentation report reads, views and captured CSV callbacks
+  follow canonical session/user/workspace/role, account loading/error, feature and CSV
+  entitlement context. Auth and workspace events synchronously invalidate prior authority,
+  clear private view state and wait for canonical account resolution before re-reading.
+  Queued timers, held responses and old callbacks cannot revive prior evidence, including
+  when context values later return. Server authorization remains authoritative for reading
+  retained reports when creation features change.
+- **Read recovery:** transient failures use one bounded retry loop. After exhaustion,
+  unavailable status and a keyboard-operable Try again action replace an indefinite
+  loading announcement. A manual retry resets the budget once; pending reads disable
+  duplicate actions. Access-revoked/not-found/unauthenticated reads clear evidence, while
+  transient errors may retain safe evidence only within the same scope.
+- **Report labels:** 44 typed UI labels cover all ten locales, including CSV feedback,
+  navigation/interaction counts, assessment distinctions, nine question types and all
+  eleven known timeline events. The embedded Session insights panel adds 120 typed labels
+  for its actions, facts, evidence statuses, table headings and scope notes. Its shared projection
+  translates known UI literals at construction, preserving authored titles, sections and
+  answer labels even when they match a UI phrase. Authored cells and mixed headings retain
+  separate language boundaries. Dates, counts and response durations use locale formats.
+  Stored evidence notes and unknown service diagnostics keep their original language.
+  The dark report header uses the inverted brand treatment for readable product text.
+
+Main report evidence CSV bytes are unchanged by UI locale. Coverage CSV and readable HTML
+downloads retain their existing labels, locale formatting and data; the UI translator is
+not passed to download generation. A one-time comparison against the prior implementation
+matched all 40 format/fixture/locale combinations: both formats across all ten locales,
+using ordinary evidence and authored strings that collide with UI/template/formula text.
+
+The native-review CLI now includes both report phrase groups in its source-bound packet
+and invalidates a packet when either helper changes. All generated decisions remain
+pending; adding translated software does not establish native-language acceptance.
+
+Focused checks exercise retained schema versions, empty/pending/failed assessed reports,
+current and historical polls, mixed evidence, genuine zero, and stored-payload immutability.
+The Home API uses generated report fixtures, and the browser journey finishes real empty
+and incorrectly answered Rounds before inspecting Home. Presentation cases exhaust six
+failed reads, recover by keyboard, compare CSV bytes across English/German/Korean, and
+release an old held response after a revoked workspace transition. Focused independent
+read-only audits found no actionable issues in the loader/UI authority implementation or
+the insights projection, authored-language boundaries and captured-download guards.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with **8,459 tests passing** and
+**514 opt-in skips**, including lint, type checks, production builds and compiled-server
+startup smoke. The report/insights subset passes **113 focused tests**. All **16 distinct
+selected production-browser cases** pass across desktop Chromium/Firefox and phone
+Chromium/WebKit, including keyboard recovery, Axe, 320-pixel overflow, German/Korean
+controls and unchanged evidence CSV bytes. Both browser specs pass a separate strict
+TypeScript check. Ten current-source review packets each contain **538 pending items**,
+including the 164 new report phrases; all CLI checks return the expected pending status.
+Local captures and the qualification receipt are under `artifacts/option-b-report-clarity/`.
+
+Actual PostgreSQL conformance is wired into its existing restricted-runtime suite but
+requires the usual opt-in database credentials. Native-language, observed customer,
+manual assistive-technology, physical-device and hosted acceptance remain pending. The
+product owner still has no staging environment selected; no release gate is advanced.
+
 ## Local acceptance preparation — November 11, 2026
 
 The `codex/option-b-acceptance` follow-up adds repeatable local qualification and

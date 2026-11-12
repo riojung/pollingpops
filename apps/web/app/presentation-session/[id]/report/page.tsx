@@ -1,13 +1,9 @@
 "use client";
 
-import type {
-  PresentationReport,
-  PresentationReportWithSessionContextEnvelope,
-  PresentationTimeMode,
-} from "@openround/contracts";
+import type { PresentationReport } from "@openround/contracts";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CreatorBrand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
 import { SessionOnlyQuickCheckLabel } from "../../../../components/presentation-live/session-only-quick-check-label";
@@ -16,88 +12,67 @@ import {
   WorkspaceProvider,
 } from "../../../../components/workspace/workspace-provider";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
-import { apiFetch, humanError } from "../../../../lib/api";
+import { presentationReportCopy } from "../../../../lib/i18n/presentation-report-copy";
 import { SessionSummaryButton } from "../../../../components/session-summary/summary-dialog";
 import { PresentationSessionInsightsPanel } from "../../../../components/presentation-insights/session-insights";
 import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
 import {
   presentationReportCsv,
-  presentationReportUrl,
   presentationReportBlockNavigation,
   presentationReportBlockTitle,
 } from "../../../../lib/presentation-report-export";
 import { TextResultsView } from "../../../../components/text-results-view";
 import { isTextQuestion } from "../../../../lib/text-response";
+import { usePresentationReport } from "./use-presentation-report";
 
 function PresentationReportContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { locale, t } = useLocale();
-  const { productFeatures } = useWorkspace();
-  const [report, setReport] = useState<PresentationReport | null>(null);
-  const [timeMode, setTimeMode] = useState<PresentationTimeMode | null>(null);
-  const [reportFailed, setReportFailed] = useState(false);
-  const [error, setError] = useState("");
-  const [exportError, setExportError] = useState("");
-  const [summaryReady, setSummaryReady] = useState(false);
+  const copy = presentationReportCopy(locale);
+  const {
+    creator,
+    entitlements,
+    productFeatures,
+    loading: accountLoading,
+    error: accountError,
+    refreshAccount,
+  } = useWorkspace();
+  const contextKey = JSON.stringify([
+    id,
+    creator?.userId,
+    creator?.workspaceId,
+    creator?.role,
+    accountLoading,
+    accountError,
+    productFeatures?.presentations,
+    entitlements?.csvExport,
+  ]);
+  const read = usePresentationReport({
+    id,
+    contextKey,
+    contextReady: !accountLoading && !accountError && creator != null,
+    refreshAccount,
+    onUnauthenticated: () => router.replace("/signin"),
+  });
+  const { report, timeMode, summaryReady } = read;
+  const loading =
+    accountLoading ||
+    read.loading ||
+    read.resolvingContext ||
+    (read.contextReady && read.phase === "idle");
+  const error = accountError || read.error;
+  const reportFailed = read.phase === "failed";
+  const [exportFailure, setExportFailure] = useState<{
+    report: PresentationReport;
+    current: () => boolean;
+  } | null>(null);
+  const exportFailed = exportFailure?.report === report && exportFailure.current();
   const hasQuestionEvidence = report?.evidence.some((block) => block.kind === "question") ?? false;
 
-  useEffect(() => {
-    let cancelled = false;
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    let retryAttempts = 0;
-    setReport(null);
-    setTimeMode(null);
-    setReportFailed(false);
-    setError("");
-    setSummaryReady(false);
-    const load = async () => {
-      try {
-        const result = await apiFetch<PresentationReportWithSessionContextEnvelope>(
-          presentationReportUrl(id),
-        );
-        if (cancelled) return;
-        setError("");
-        setSummaryReady(result.reportStatus === "ready");
-        retryAttempts = 0;
-        // An older API binary ignores the opt-in query during a rolling web/API upgrade.
-        setTimeMode(result.sessionContext?.timeMode ?? "timed");
-        if (result.report) {
-          setReport(result.report);
-        }
-        if (result.reportStatus === "ready") {
-          return;
-        }
-        if (result.reportStatus === "failed") {
-          setReport(null);
-          setReportFailed(true);
-          return;
-        }
-        pollTimer = setTimeout(() => void load(), 1_000);
-      } catch (caught) {
-        if (cancelled) return;
-        if ((caught as { status?: number }).status === 401) {
-          router.replace("/signin");
-          return;
-        }
-        setError(humanError(caught));
-        if (retryAttempts < 5) {
-          const retryDelayMs = Math.min(10_000, 1_000 * 2 ** retryAttempts);
-          retryAttempts += 1;
-          pollTimer = setTimeout(() => void load(), retryDelayMs);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-      if (pollTimer) clearTimeout(pollTimer);
-    };
-  }, [id, router]);
-
   function exportEvidence() {
-    if (!report) return;
-    setExportError("");
+    if (!report || !read.canUseReport()) return;
+    setExportFailure(null);
     try {
       const url = URL.createObjectURL(
         new Blob(["\ufeff", presentationReportCsv(report)], { type: "text/csv;charset=utf-8" }),
@@ -110,18 +85,18 @@ function PresentationReportContent() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
     } catch {
-      setExportError("This report could not be exported. Refresh the report and try again.");
+      if (read.canUseReport()) setExportFailure({ report, current: read.canUseReport });
     }
   }
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <header className={styles.topbar}>
-        <CreatorBrand productFeatures={productFeatures} />
+        <CreatorBrand inverted productFeatures={productFeatures} />
         <div className="button-row">
           {report ? (
-            <button type="button" className="button-quiet" lang="en-CA" onClick={exportEvidence}>
-              Export evidence CSV
+            <button type="button" className="button-quiet" onClick={exportEvidence}>
+              {copy("exportEvidenceCsv")}
             </button>
           ) : null}
           {summaryReady && report ? (
@@ -134,33 +109,42 @@ function PresentationReportContent() {
         </div>
       </header>
       <div className={`${styles.stage} ${styles.report}`}>
-        {exportError ? (
-          <p className="error" lang="en-CA" role="alert">
-            {exportError}
+        {exportFailed ? (
+          <p className="error" role="alert">
+            {copy("exportFailed")}
           </p>
         ) : null}
         {error ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+          <p className="error" role="alert">
+            {copy("serviceMessage")}: <span lang="en-CA">{error}</span>
           </p>
         ) : null}
-        {reportFailed ? (
-          <p className="error" lang={locale} role="alert">
-            {t("live.presentationReport.failed")}
-          </p>
+        {read.phase !== "ready" ? (
+          <section className={styles.reportCard} aria-busy={loading}>
+            <p role={reportFailed ? "alert" : "status"}>
+              {loading
+                ? t("live.presentationReport.loading")
+                : reportFailed
+                  ? t("live.presentationReport.failed")
+                  : copy("reportUnavailable")}
+            </p>
+            <button
+              className="button-quiet"
+              disabled={loading}
+              onClick={() => {
+                if (read.contextReady) read.retry();
+                else void refreshAccount();
+              }}
+              type="button"
+            >
+              {copy(loading ? "retryingReport" : "retryReport")}
+            </button>
+          </section>
         ) : null}
-        {!report ? (
-          !reportFailed ? (
-            <section className={styles.reportCard} role="status" aria-live="polite">
-              {t("live.presentationReport.loading")}
-            </section>
-          ) : null
-        ) : (
+        {report ? (
           <>
             <section className={styles.reportCard}>
-              <span className={styles.statusPill} lang="en-CA">
-                {report.status} report
-              </span>
+              <span className={styles.statusPill}>{copy("finishedReport")}</span>
               <h1 lang="">{report.title}</h1>
               <p lang="en-CA">{report.evidenceNote}</p>
               {timeMode ? (
@@ -191,21 +175,25 @@ function PresentationReportContent() {
                 </div>
               </div>
               {report.schemaVersion === 6 || report.schemaVersion === 7 ? (
-                <p lang="en-CA">
-                  {report.navigation.jumpCount.toLocaleString(locale)} jumps ·{" "}
-                  {report.navigation.returnCount.toLocaleString(locale)} returns to path
+                <p>
+                  {copy("navigationCounts", {
+                    jumps: report.navigation.jumpCount.toLocaleString(locale),
+                    returns: report.navigation.returnCount.toLocaleString(locale),
+                  })}
                 </p>
               ) : null}
               {report.schemaVersion === 7 ? (
-                <p lang="en-CA">
-                  {report.interactionSummary.revealChangeCount.toLocaleString(locale)} broadcast
-                  reveal changes · {report.interactionSummary.branchCount.toLocaleString(locale)}{" "}
-                  answer branches followed
+                <p>
+                  {copy("interactionCounts", {
+                    reveals: report.interactionSummary.revealChangeCount.toLocaleString(locale),
+                    branches: report.interactionSummary.branchCount.toLocaleString(locale),
+                  })}
                 </p>
               ) : null}
             </section>
             {summaryReady ? (
               <PresentationSessionInsightsPanel
+                canUseEvidence={read.canUseReport}
                 source={{
                   sessionId: report.sessionId,
                   presentationId: report.presentationId,
@@ -236,25 +224,20 @@ function PresentationReportContent() {
                         : block.prompt}
                     </h2>
                     {navigation ? (
-                      <div lang="en-CA">
+                      <div>
                         {navigation.sectionTitle ? (
                           <p>
-                            Section: <span lang="">{navigation.sectionTitle}</span>
+                            {copy("sectionLabel")}: <span lang="">{navigation.sectionTitle}</span>
                           </p>
                         ) : null}
                         <p>
                           <strong>
-                            {navigation.status === "skipped"
-                              ? "Skipped · not presented"
-                              : "Presented"}
+                            {copy(
+                              navigation.status === "skipped" ? "skippedNotPresented" : "presented",
+                            )}
                           </strong>
                         </p>
-                        {navigation.status === "skipped" ? (
-                          <p>
-                            This block was never presented. No response or assessment evidence was
-                            collected.
-                          </p>
-                        ) : null}
+                        {navigation.status === "skipped" ? <p>{copy("skippedEvidence")}</p> : null}
                       </div>
                     ) : null}
                     {block.kind === "question" ? (
@@ -278,8 +261,8 @@ function PresentationReportContent() {
                           {("opinionSummary" in block && block.opinionSummary) ||
                           isTextQuestion(block.questionType) ? (
                             <>
-                              <strong lang="en-CA">Unscored opinion</strong>
-                              <span lang="en-CA">Assessment</span>
+                              <strong>{copy("unscoredOpinion")}</strong>
+                              <span>{copy("assessment")}</span>
                             </>
                           ) : (
                             <>
@@ -293,17 +276,20 @@ function PresentationReportContent() {
                           )}
                         </div>
                         <div className={styles.metric}>
-                          <strong lang="en-CA">{block.questionTypeLabel}</strong>
+                          <strong>{copy(`questionType.${block.questionType}`)}</strong>
                           <span>{t("live.presentationReport.questionType")}</span>
                         </div>
                         <div className={styles.metric}>
                           <strong>
                             {block.averageResponseMs === null
                               ? "—"
-                              : `${(block.averageResponseMs / 1_000).toLocaleString(locale, {
+                              : (block.averageResponseMs / 1_000).toLocaleString(locale, {
                                   maximumFractionDigits: 1,
                                   minimumFractionDigits: 1,
-                                })}s`}
+                                  style: "unit",
+                                  unit: "second",
+                                  unitDisplay: "narrow",
+                                })}
                           </strong>
                           <span>{t("live.presentationReport.averageResponse")}</span>
                         </div>
@@ -337,10 +323,7 @@ function PresentationReportContent() {
                           }
                         />
                       ) : (
-                        <p lang="en-CA">
-                          Text results require reveal and at least five approved responses. Pending
-                          and removed responses are excluded.
-                        </p>
+                        <p>{copy("textResultsSuppressed")}</p>
                       )
                     ) : null}
                   </article>
@@ -386,41 +369,62 @@ function PresentationReportContent() {
             ) : null}
             <section className={styles.reportCard}>
               <h2>{t("live.presentationReport.facilitationTimeline")}</h2>
-              <ol className={styles.timeline} aria-label="Facilitation timeline">
+              <ol
+                className={styles.timeline}
+                aria-label={t("live.presentationReport.facilitationTimeline")}
+              >
                 {report.timeline.map((event) => (
                   <li key={event.sequence}>
                     <strong>{event.sequence.toLocaleString(locale)}</strong>
-                    <span lang="en-CA">
-                      {event.type.replaceAll(".", " ")}
+                    <span>
+                      {copy(`event.${event.type}`)}
                       {"interaction" in event && event.interaction ? (
                         <small className={styles.timelineAttribution}>
-                          Broadcast reveal {event.interaction.revealed ? "shown" : "hidden"} ·{" "}
-                          {presentationReportBlockTitle(report, event.interaction.blockId)}
+                          {copy(
+                            event.interaction.revealed
+                              ? "broadcastRevealShown"
+                              : "broadcastRevealHidden",
+                          )}{" "}
+                          ·{" "}
+                          <span lang="">
+                            {presentationReportBlockTitle(report, event.interaction.blockId)}
+                          </span>
                         </small>
                       ) : null}
                       {"branch" in event && event.branch ? (
                         <small className={styles.timelineAttribution}>
-                          Answer branch followed ·{" "}
-                          {event.branch.matchedResponses.toLocaleString(locale)} of{" "}
-                          {event.branch.denominator.toLocaleString(locale)} responses matched
+                          {copy("answerBranchMatched", {
+                            matched: event.branch.matchedResponses.toLocaleString(locale),
+                            total: event.branch.denominator.toLocaleString(locale),
+                          })}
                         </small>
                       ) : null}
                       {"navigation" in event && event.navigation ? (
                         <small className={styles.timelineAttribution}>
-                          {event.navigation.restored ? "Restored saved state" : "Presented block"}
+                          {copy(
+                            event.navigation.restored ? "restoredSavedState" : "presentedBlock",
+                          )}
                           {" · "}
-                          {presentationReportBlockTitle(report, event.navigation.toBlockId)}
+                          <span lang="">
+                            {presentationReportBlockTitle(report, event.navigation.toBlockId)}
+                          </span>
                         </small>
                       ) : null}
                       {"recoveryPackIntervention" in event && event.recoveryPackIntervention ? (
                         <small className={styles.timelineAttribution}>
-                          {event.recoveryPackIntervention.type === "example"
-                            ? "Worked example"
-                            : "Explanation"}
-                          {" · Recovery Pack v"}
-                          {event.recoveryPackIntervention.reference.packVersion}
-                          {" · card "}
-                          {event.recoveryPackIntervention.reference.cardId}
+                          {copy(
+                            event.recoveryPackIntervention.type === "example"
+                              ? "workedExample"
+                              : "explanation",
+                          )}
+                          {" · "}
+                          {copy("recoveryPackReference", {
+                            version:
+                              event.recoveryPackIntervention.reference.packVersion.toLocaleString(
+                                locale,
+                              ),
+                            card: event.recoveryPackIntervention.reference.cardId,
+                          })}
                         </small>
                       ) : null}
                     </span>
@@ -432,7 +436,7 @@ function PresentationReportContent() {
               </ol>
             </section>
           </>
-        )}
+        ) : null}
       </div>
     </main>
   );

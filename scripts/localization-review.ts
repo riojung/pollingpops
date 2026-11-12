@@ -39,6 +39,14 @@ import {
   packPracticeDetailCopyKeys,
 } from "../apps/web/lib/i18n/pack-practice-detail-copy";
 import { packPracticeCopy, packPracticeCopyKeys } from "../apps/web/lib/i18n/pack-practice-copy";
+import {
+  presentationReportCopy,
+  presentationReportCopyKeys,
+} from "../apps/web/lib/i18n/presentation-report-copy";
+import {
+  presentationInsightsCopy,
+  presentationInsightsCopyKeys,
+} from "../apps/web/lib/i18n/presentation-insights-copy";
 import { instantiateStarter, starterSummariesForLocale } from "../apps/server/src/starters";
 import {
   STARTER_CONTENT_VERSION,
@@ -90,7 +98,7 @@ export interface ReviewDecisions {
 export const reviewExampleSource =
   "Synthetic authored source: 12345678-1234-4123-8123-123456789abc $& $` $' {title} <img src=x onerror=alert(1)>";
 const scope =
-  "Creation and practice copy; all 21 Presentation definitions and generated drafts; all 36 Round starters and 17 Survey projections; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
+  "Creation, practice, Presentation report and Session insights copy; all 21 Presentation definitions and generated drafts; all 36 Round starters and 17 Survey projections; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
 const shaPattern = /^[a-f0-9]{40}$/;
 const hashPattern = /^sha256:[a-f0-9]{64}$/;
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -424,6 +432,18 @@ export async function buildReviewBundle(
       packPracticeDetailCopy,
     ],
     ["pack-practice", "packPracticeCopy", packPracticeCopyKeys, packPracticeCopy],
+    [
+      "presentation-report",
+      "presentationReportCopy",
+      presentationReportCopyKeys,
+      presentationReportCopy,
+    ],
+    [
+      "presentation-insights",
+      "presentationInsightsCopy",
+      presentationInsightsCopyKeys,
+      presentationInsightsCopy,
+    ],
   ] as const) {
     const messages = (language: SupportedLocale) => {
       const copy = factory(language) as (

@@ -3,11 +3,18 @@ import {
   type PresentationInsightsPurpose,
   type PresentationSessionInsights,
 } from "@openround/contracts";
+import type {
+  PresentationInsightsCopyKey,
+  PresentationInsightsTranslator,
+} from "./i18n/presentation-insights-copy";
 
 export interface PresentationInsightsTable {
   title: string;
+  /** UI language boundaries; downloadable copies use the canonical title and rows. */
+  titleParts?: Array<{ text: string; authored: boolean }>;
   columns: string[];
   rows: string[][];
+  authoredCells?: boolean[][];
   note?: string;
 }
 export interface PresentationInsightsView {
@@ -18,7 +25,7 @@ export interface PresentationInsightsView {
   qnaNote: string;
   notes: string[];
 }
-const purposes: Record<PresentationInsightsPurpose, string> = {
+const purposes: Record<PresentationInsightsPurpose, PresentationInsightsCopyKey> = {
   content: "Content",
   assessment: "Assessed activities",
   opinion: "Opinion activities",
@@ -27,16 +34,20 @@ const purposes: Record<PresentationInsightsPurpose, string> = {
   unknown: "Other activities",
 };
 
-/** One aggregate projection for the creator view and both downloadable copies. */
+const originalCopy: PresentationInsightsTranslator = (key, values = {}) =>
+  key.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+
+/** Translate constructed UI labels only. Downloads retain the original default labels. */
 export function presentationInsightsView(
   input: PresentationSessionInsights,
   locale = "en-CA",
+  copy: PresentationInsightsTranslator = originalCopy,
 ): PresentationInsightsView {
   const value = PresentationSessionInsightsSchema.parse(input);
   const number = (count: number) => count.toLocaleString(locale);
   const percent = (count: number | null) =>
     count === null
-      ? "Not recorded"
+      ? copy("Not recorded")
       : `${count.toLocaleString(locale, { maximumFractionDigits: 1 })}%`;
   const date = (instant: string) => new Date(instant).toLocaleString(locale);
   const blocks = new Map(
@@ -45,95 +56,120 @@ export function presentationInsightsView(
   const blockTitle = (blockId: string) => {
     const block = blocks.get(blockId.toLowerCase());
     return block
-      ? `${number(block.blockIndex + 1)}. ${block.title || "Untitled block"}`
-      : "Not recorded";
+      ? `${number(block.blockIndex + 1)}. ${block.title || copy("Untitled block")}`
+      : copy("Not recorded");
   };
+  const hasAuthoredBlockTitle = (blockId: string) =>
+    Boolean(blocks.get(blockId.toLowerCase())?.title);
   const sectionTitles = new Map(
     value.delivery.sections.map((section) => [
       section.sectionId?.toLowerCase(),
-      section.title ?? "Unsectioned",
+      section.title ?? copy("Unsectioned"),
     ]),
+  );
+  const authoredSections = new Set(
+    value.delivery.sections
+      .filter((section) => section.title !== null)
+      .map((section) => section.sectionId?.toLowerCase()),
   );
   const totals = value.delivery.totals;
   const facts: Array<[string, string]> = [
     [
-      "Published version",
+      copy("Published version"),
       value.publishedVersion === null
-        ? "Not recorded"
-        : `Version ${number(value.publishedVersion)}`,
+        ? copy("Not recorded")
+        : copy("Version {version}", { version: number(value.publishedVersion) }),
     ],
-    ["Content", "Frozen session content; session additions are marked below."],
+    [copy("Content"), copy("Frozen session content; session additions are marked below.")],
     [
       value.freshness.finishedAtBasis === "legacy_updated_at"
-        ? "Finished (legacy transition timestamp)"
-        : "Session finished",
+        ? copy("Finished (legacy transition timestamp)")
+        : copy("Session finished"),
       date(value.freshness.finishedAt),
     ],
-    ["Report generated", date(value.freshness.reportGeneratedAt)],
-    ["Insights calculated", date(value.freshness.calculatedAt)],
-    ["Retention ends", date(value.freshness.retentionExpiresAt)],
+    [copy("Report generated"), date(value.freshness.reportGeneratedAt)],
+    [copy("Insights calculated"), date(value.freshness.calculatedAt)],
+    [copy("Retention ends"), date(value.freshness.retentionExpiresAt)],
     [
-      "Recorded start",
-      value.delivery.startedAt === null ? "Not recorded" : date(value.delivery.startedAt),
+      copy("Recorded start"),
+      value.delivery.startedAt === null ? copy("Not recorded") : date(value.delivery.startedAt),
     ],
     [
-      "Elapsed wall-clock time",
+      copy("Elapsed wall-clock time"),
       value.delivery.wallClockElapsedSeconds === null
-        ? "Not recorded"
-        : `${number(value.delivery.wallClockElapsedSeconds)} seconds`,
+        ? copy("Not recorded")
+        : copy("{seconds} seconds", { seconds: number(value.delivery.wallClockElapsedSeconds) }),
     ],
-    ["Participant identities joined", number(value.participation.joinedParticipantCount)],
-    ["Accepted response records", number(value.participation.acceptedResponseCount)],
-    ["Blocks presented", `${number(totals.presentedBlocks)} of ${number(totals.totalBlocks)}`],
-    ["Blocks skipped", number(totals.skippedBlocks)],
-    ["Blocks with delivery not recorded", number(totals.unknownBlocks)],
-    ["Delivery coverage", percent(totals.coveragePercent)],
+    [copy("Participant identities joined"), number(value.participation.joinedParticipantCount)],
+    [copy("Accepted response records"), number(value.participation.acceptedResponseCount)],
+    [
+      copy("Blocks presented"),
+      copy("{presented} of {total}", {
+        presented: number(totals.presentedBlocks),
+        total: number(totals.totalBlocks),
+      }),
+    ],
+    [copy("Blocks skipped"), number(totals.skippedBlocks)],
+    [copy("Blocks with delivery not recorded"), number(totals.unknownBlocks)],
+    [copy("Delivery coverage"), percent(totals.coveragePercent)],
   ];
   const tables: PresentationInsightsTable[] = [
     {
-      title: "Section delivery",
+      title: copy("Section delivery"),
       columns: [
-        "Section",
-        "Presented",
-        "Skipped",
-        "Not recorded",
-        "Total blocks",
-        "Delivery coverage",
+        copy("Section"),
+        copy("Presented"),
+        copy("Skipped"),
+        copy("Not recorded"),
+        copy("Total blocks"),
+        copy("Delivery coverage"),
       ],
       rows: value.delivery.sections.map((section) => [
-        section.title ?? "Unsectioned",
+        section.title ?? copy("Unsectioned"),
         number(section.presentedBlocks),
         number(section.skippedBlocks),
         number(section.unknownBlocks),
         number(section.totalBlocks),
         percent(section.coveragePercent),
       ]),
-      note: "Coverage records what the facilitator presented. It does not measure learner completion or understanding.",
+      authoredCells: value.delivery.sections.map((section) => [section.title !== null]),
+      note: copy(
+        "Coverage records what the facilitator presented. It does not measure learner completion or understanding.",
+      ),
     },
     {
-      title: "Block delivery",
-      columns: ["Block", "Type", "Section", "Delivery", "Source"],
+      title: copy("Block delivery"),
+      columns: [copy("Block"), copy("Type"), copy("Section"), copy("Delivery"), copy("Source")],
       rows: value.delivery.blocks.map((block) => [
         blockTitle(block.blockId),
-        purposes[block.purpose],
+        copy(purposes[block.purpose]),
         block.sectionId
-          ? (sectionTitles.get(block.sectionId.toLowerCase()) ?? "Not recorded")
-          : "Unsectioned",
+          ? (sectionTitles.get(block.sectionId.toLowerCase()) ?? copy("Not recorded"))
+          : copy("Unsectioned"),
         block.status === "unknown"
-          ? "Not recorded"
+          ? copy("Not recorded")
           : block.status === "presented"
-            ? "Presented"
-            : "Skipped",
+            ? copy("Presented")
+            : copy("Skipped"),
         block.isSessionAddition === null
-          ? "Source not recorded"
+          ? copy("Source not recorded")
           : block.isSessionAddition
-            ? "Added during this session"
-            : "Published content",
+            ? copy("Added during this session")
+            : copy("Published content"),
+      ]),
+      authoredCells: value.delivery.blocks.map((block) => [
+        hasAuthoredBlockTitle(block.blockId),
+        false,
+        Boolean(block.sectionId && authoredSections.has(block.sectionId.toLowerCase())),
       ]),
       note:
         value.delivery.basis === "navigation"
-          ? "Based on recorded session navigation. Revisits do not add another delivered block."
-          : "Based on recorded facilitation events. Missing historical delivery stays not recorded.",
+          ? copy(
+              "Based on recorded session navigation. Revisits do not add another delivered block.",
+            )
+          : copy(
+              "Based on recorded facilitation events. Missing historical delivery stays not recorded.",
+            ),
     },
   ];
   for (const purpose of [
@@ -153,39 +189,41 @@ export function presentationInsightsView(
       const unavailable = question.status === "unavailable";
       const skipped = question.status === "skipped";
       const empty = hidden
-        ? "Hidden"
+        ? copy("Hidden")
         : unavailable
-          ? "Not available"
+          ? copy("Not available")
           : skipped
-            ? "Not collected"
-            : "Not recorded";
+            ? copy("Not collected")
+            : copy("Not recorded");
       const count = (amount: number | null) => (amount === null ? empty : number(amount));
       const denominator =
         question.denominatorStatus === "recorded"
-          ? "Recorded"
+          ? copy("Recorded")
           : question.denominatorStatus === "legacy_unavailable"
-            ? "Not recorded for this older activity"
+            ? copy("Not recorded for this older activity")
             : question.denominatorStatus === "not_revealed"
-              ? "Responses were not revealed"
+              ? copy("Responses were not revealed")
               : question.denominatorStatus === "suppressed"
-                ? "Hidden"
-                : "Not available";
+                ? copy("Hidden")
+                : copy("Not available");
       const availability = hidden
-        ? `Hidden · fewer than ${number(value.minimumRespondents)} responses`
+        ? copy("Hidden · fewer than {minimum} responses", {
+            minimum: number(value.minimumRespondents),
+          })
         : unavailable
-          ? "Not available"
+          ? copy("Not available")
           : skipped
-            ? "Skipped · not presented"
-            : "Available";
+            ? copy("Skipped · not presented")
+            : copy("Available");
       const row = [
         blockTitle(question.blockId),
         availability,
-        skipped ? "Not collected" : count(question.acceptedRespondents),
+        skipped ? copy("Not collected") : count(question.acceptedRespondents),
         count(question.joinedByRevealCount),
         count(question.notRespondedByRevealCount),
         question.responseRatePercent === null
           ? question.denominatorStatus === "recorded" && question.joinedByRevealCount === 0
-            ? "Not applicable · zero joined by reveal"
+            ? copy("Not applicable · zero joined by reveal")
             : empty
           : percent(question.responseRatePercent),
         denominator,
@@ -193,106 +231,145 @@ export function presentationInsightsView(
       return row;
     });
     tables.push({
-      title: `Response coverage · ${purposes[purpose]}`,
+      title: copy("Response coverage · {purpose}", { purpose: copy(purposes[purpose]) }),
       columns: [
-        "Activity",
-        "Availability",
-        "Accepted responses",
-        "Participants joined by reveal",
-        "Not responded by reveal",
-        "Response rate",
-        "Denominator history",
+        copy("Activity"),
+        copy("Availability"),
+        copy("Accepted responses"),
+        copy("Participants joined by reveal"),
+        copy("Not responded by reveal"),
+        copy("Response rate"),
+        copy("Denominator history"),
       ],
       rows,
+      authoredCells: questions.map((question) => [hasAuthoredBlockTitle(question.blockId)]),
       note:
         purpose === "text"
-          ? "Text bodies are excluded from these insights. Existing approved text evidence remains in the detailed report."
+          ? copy(
+              "Text bodies are excluded from these insights. Existing approved text evidence remains in the detailed report.",
+            )
           : purpose === "assessment"
-            ? "Assessment accuracy remains in the detailed report with its original denominator. Skipped activities are not wrong answers."
+            ? copy(
+                "Assessment accuracy remains in the detailed report with its original denominator. Skipped activities are not wrong answers.",
+              )
             : purpose === "unknown" || purpose === "content"
-              ? "The activity purpose is not recorded. Assessment details remain in the original report."
-              : "These activities are unscored; their response coverage is separate from assessed evidence.",
+              ? copy(
+                  "The activity purpose is not recorded. Assessment details remain in the original report.",
+                )
+              : copy(
+                  "These activities are unscored; their response coverage is separate from assessed evidence.",
+                ),
     });
     if (purpose === "opinion" || purpose === "quick_check") {
       for (const question of questions) {
-        const title = `${purpose === "quick_check" ? "Quick Check distribution" : "Opinion distribution"} · ${blockTitle(question.blockId)}`;
+        const template =
+          purpose === "quick_check"
+            ? "Quick Check distribution · {block}"
+            : "Opinion distribution · {block}";
+        const block = blockTitle(question.blockId);
+        const title = copy(template, { block });
+        // Split a construction-time placeholder, never authored text or completed cells.
+        // This preserves translated word order while keeping the authored title's language.
+        const titleParts = copy(template, { block: "\u0000" })
+          .split("\u0000")
+          .flatMap((part, index) => [
+            ...(index ? [{ text: block, authored: hasAuthoredBlockTitle(question.blockId) }] : []),
+            { text: part, authored: false },
+          ]);
         if (question.distributionStatus !== "available") {
           tables.push({
             title,
-            columns: ["Distribution availability"],
+            titleParts,
+            columns: [copy("Distribution availability")],
             rows: [
               [
                 question.distributionStatus === "suppressed"
-                  ? "Hidden · fewer than five responses"
+                  ? copy("Hidden · fewer than five responses")
                   : question.distributionStatus === "not_applicable"
-                    ? "Not applicable"
-                    : "Unavailable",
+                    ? copy("Not applicable")
+                    : copy("Unavailable"),
               ],
             ],
             note:
               question.distributionStatus === "unavailable"
-                ? "Opinion distribution is unavailable for this activity."
+                ? copy("Opinion distribution is unavailable for this activity.")
                 : question.distributionStatus === "suppressed"
-                  ? "Opinion distribution is hidden because the response sample is below five."
-                  : "Opinion distribution does not apply to this activity.",
+                  ? copy(
+                      "Opinion distribution is hidden because the response sample is below five.",
+                    )
+                  : copy("Opinion distribution does not apply to this activity."),
           });
           continue;
         }
         tables.push({
           title,
+          titleParts,
           columns: [
-            "Option",
+            copy("Option"),
             question.measure === "weighted_points"
-              ? "Weighted rank points"
-              : "Respondents selecting option",
+              ? copy("Weighted rank points")
+              : copy("Respondents selecting option"),
           ],
           rows: question.results.map((result) => [result.label, number(result.value)]),
+          authoredCells: question.results.map(() => [true]),
           note:
             question.measure === "weighted_points"
-              ? "Distribution available. Ranking points are separate from response coverage and assessment accuracy."
+              ? copy(
+                  "Distribution available. Ranking points are separate from response coverage and assessment accuracy.",
+                )
               : (question.maxSelections ?? 1) > 1
-                ? "Distribution available. Participants may choose several options. Option counts do not represent distinct people across options."
+                ? copy(
+                    "Distribution available. Participants may choose several options. Option counts do not represent distinct people across options.",
+                  )
                 : purpose === "quick_check"
-                  ? "Distribution available. Option counts use accepted Quick Check responses."
-                  : "Distribution available. Option counts use accepted opinion responses.",
+                  ? copy(
+                      "Distribution available. Option counts use accepted Quick Check responses.",
+                    )
+                  : copy("Distribution available. Option counts use accepted opinion responses."),
         });
       }
     }
   }
   if (value.recovery.length)
     tables.push({
-      title: "Recovery evidence",
+      title: copy("Recovery evidence"),
       columns: [
-        "Initial activity",
-        "Recheck",
-        "Availability",
-        "Initially incorrect with accepted recheck",
-        "Recovered",
-        "Recovery rate",
+        copy("Initial activity"),
+        copy("Recheck"),
+        copy("Availability"),
+        copy("Initially incorrect with accepted recheck"),
+        copy("Recovered"),
+        copy("Recovery rate"),
       ],
       rows: value.recovery.map((item) => {
         const hidden = item.status === "suppressed";
-        const empty = hidden ? "Hidden" : "Not available";
+        const empty = hidden ? copy("Hidden") : copy("Not available");
         return [
           blockTitle(item.sourceBlockId),
-          item.recheckBlockId ? blockTitle(item.recheckBlockId) : "Not recorded",
+          item.recheckBlockId ? blockTitle(item.recheckBlockId) : copy("Not recorded"),
           item.status === "available"
-            ? "Available"
+            ? copy("Available")
             : hidden
-              ? "Hidden · fewer than five paired responses"
-              : "Not available",
+              ? copy("Hidden · fewer than five paired responses")
+              : copy("Not available"),
           item.initiallyIncorrectWithAcceptedRecheck === null
             ? empty
             : number(item.initiallyIncorrectWithAcceptedRecheck),
           item.recovered === null ? empty : number(item.recovered),
           item.recoveryPercent === null
             ? item.status === "available" && item.initiallyIncorrectWithAcceptedRecheck === 0
-              ? "Not applicable · zero paired responses"
+              ? copy("Not applicable · zero paired responses")
               : empty
             : percent(item.recoveryPercent),
         ];
       }),
-      note: "The denominator includes an incorrect initial answer and an accepted recheck. It is not everyone who initially answered incorrectly.",
+      authoredCells: value.recovery.map((item) => [
+        hasAuthoredBlockTitle(item.sourceBlockId),
+        Boolean(item.recheckBlockId && hasAuthoredBlockTitle(item.recheckBlockId)),
+      ]),
+      note: copy(
+        "The denominator includes an incorrect initial answer and an accepted recheck. It is not everyone who initially answered incorrectly.",
+      ),
     });
   const qna = value.qna;
   return {
@@ -302,28 +379,40 @@ export function presentationInsightsView(
     qna:
       qna.status === "available"
         ? [
-            ["Public questions", number(qna.publicQuestionCount!)],
-            ["Marked answered", number(qna.answeredQuestionCount!)],
-            ["Not marked answered", number(qna.unansweredQuestionCount!)],
-            ["Upvotes", number(qna.upvoteCount!)],
-            ["Q&A data as of", date(qna.asOf!)],
+            [copy("Public questions"), number(qna.publicQuestionCount!)],
+            [copy("Marked answered"), number(qna.answeredQuestionCount!)],
+            [copy("Not marked answered"), number(qna.unansweredQuestionCount!)],
+            [copy("Upvotes"), number(qna.upvoteCount!)],
+            [copy("Q&A data as of"), date(qna.asOf!)],
           ]
         : [],
     qnaNote:
       qna.status === "available"
-        ? "Current public moderation counts, separate from the frozen report. Question text and private moderation counts are excluded."
+        ? copy(
+            "Current public moderation counts, separate from the frozen report. Question text and private moderation counts are excluded.",
+          )
         : qna.status === "suppressed"
-          ? "Q&A totals are hidden because there are fewer than five public questions."
+          ? copy("Q&A totals are hidden because there are fewer than five public questions.")
           : qna.status === "not_enabled"
-            ? "Q&A is not enabled for this session."
-            : "Q&A outcomes are not available for this session.",
+            ? copy("Q&A is not enabled for this session.")
+            : copy("Q&A outcomes are not available for this session."),
     notes: [
-      "Participant identities are session entries, not verified unique people or devices. Accepted response records are not unique respondents.",
-      "Response rates use participants joined by reveal from the recorded roster. They do not measure attendance or eligibility; missing rosters are never replaced by the final joined count.",
-      "Positive activity samples below five responses are hidden. A recorded zero remains zero.",
-      "Elapsed time is wall-clock session time, not page dwell time or evidence of understanding. Report generation and insights calculation are separate from when this page was opened.",
-      "Private review-link views are not tracked. Self-paced assignments and learner completion are not included.",
-      "Downloaded copies cannot be revoked. Keep them within the intended audience.",
+      copy(
+        "Participant identities are session entries, not verified unique people or devices. Accepted response records are not unique respondents.",
+      ),
+      copy(
+        "Response rates use participants joined by reveal from the recorded roster. They do not measure attendance or eligibility; missing rosters are never replaced by the final joined count.",
+      ),
+      copy(
+        "Positive activity samples below five responses are hidden. A recorded zero remains zero.",
+      ),
+      copy(
+        "Elapsed time is wall-clock session time, not page dwell time or evidence of understanding. Report generation and insights calculation are separate from when this page was opened.",
+      ),
+      copy(
+        "Private review-link views are not tracked. Self-paced assignments and learner completion are not included.",
+      ),
+      copy("Downloaded copies cannot be revoked. Keep them within the intended audience."),
     ],
   };
 }

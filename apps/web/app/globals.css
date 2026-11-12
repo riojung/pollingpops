@@ -3383,6 +3383,12 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 @media (forced-colors: active) {
+  .button {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
   .avatar-option > input:checked + .avatar-option-surface,
   .avatar-option > input:focus-visible + .avatar-option-surface,
   .participant-avatar {

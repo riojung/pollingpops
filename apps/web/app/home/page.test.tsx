@@ -176,6 +176,158 @@ beforeEach(() => {
 });
 
 describe("workspace Home", () => {
+  it("shows workspace totals separately from recent result and assignment evidence", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.totals.artifacts = 120;
+    mocked.summary.totals.activeSessions = 3;
+    mocked.summary.assignments = [
+      {
+        id: "assignment",
+        quizId: "round",
+        title: "Recent practice",
+        status: "open",
+        checkpointCount: 1,
+        attemptCount: 4,
+        completedAttemptCount: 1,
+        opensAt: "2026-11-01T12:00:00Z",
+        closesAt: "2026-11-10T12:00:00Z",
+        href: "/practice/assignment",
+      },
+    ];
+    const result = {
+      id: "ready",
+      artifactType: "round" as const,
+      title: "Recent report",
+      status: "ready" as const,
+      participantCount: 3,
+      accuracyPercent: null,
+      recoveryPercent: null,
+      createdAt: mocked.summary.generatedAt,
+      href: "/report/ready",
+    };
+    mocked.summary.resultHighlights = [result, { ...result, id: "pending", status: "pending" }];
+    const markup = renderHome();
+    const widget = (name: string) => {
+      const tag = name === "work" ? "article" : "a";
+      return markup.match(new RegExp(`<${tag}[^>]*data-widget="${name}"[\\s\\S]*?</${tag}>`))?.[0];
+    };
+    expect(widget("work")).toContain(">120</strong>");
+    expect(widget("sessions")).toContain(">3</strong>");
+    expect(widget("assignments")).toContain("25%");
+    expect(widget("assignments")).toContain("1 of 4 attempts complete");
+    expect(widget("assignments")).toContain("From recent assignments");
+    expect(widget("reports")).toContain("1 of 2 recent results");
+    expect(markup).toContain('data-density="compact"');
+    expect(markup).toContain("data-work-row");
+  });
+
+  it("keeps no attempts distinct from an observed zero completion rate", () => {
+    mocked.summary = emptySummary();
+    let markup = renderHome();
+    const widget = () => markup.match(/<a[^>]*data-widget="assignments"[\s\S]*?<\/a>/)?.[0];
+    expect(widget()).toContain("No attempts yet");
+    expect(widget()).not.toContain("0%");
+    expect(widget()).not.toContain("<progress");
+    mocked.summary.assignments = [
+      {
+        id: "assignment",
+        quizId: "round",
+        title: "Recent practice",
+        status: "open",
+        checkpointCount: 1,
+        attemptCount: 5,
+        completedAttemptCount: 0,
+        opensAt: "2026-11-01T12:00:00Z",
+        closesAt: "2026-11-10T12:00:00Z",
+        href: "/practice/assignment",
+      },
+    ];
+    markup = renderHome();
+    expect(widget()).toContain("0%");
+    expect(widget()).toContain("0 of 5 attempts complete");
+    expect(widget()).toContain('value="0"');
+  });
+
+  it.each(["board-only", "mixed", "legacy"] as const)(
+    "offers Library and Boards destinations for %s accessible work",
+    (scope) => {
+      mocked.summary = scope === "mixed" ? mixedSummary() : emptySummary();
+      if (scope === "board-only") {
+        mocked.summary.totals.artifacts = 2;
+        mocked.summary.totals.boards = 2;
+        mocked.summary.recentBoards = mixedSummary().recentBoards;
+        mocked.canEdit = false;
+        mocked.creator.role = "viewer";
+      }
+      if (scope === "legacy") {
+        mocked.summary.totals.artifacts = 12;
+        delete mocked.summary.totals.boards;
+        delete mocked.summary.recentBoards;
+      }
+      const markup = renderHome();
+      const widget = markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0];
+      expect(widget).toContain(`>${mocked.summary.totals.artifacts}</strong>`);
+      expect(widget).toContain('href="/library"');
+      expect(widget).toContain('href="/boards"');
+      expect(widget).toContain("View Boards");
+      expect(markup).not.toMatch(/<a\b[^>]*data-widget="work"/);
+    },
+  );
+
+  it("shows Boards with a board rollout, while a known board-free disabled workspace keeps Library navigation", () => {
+    mocked.summary = emptySummary();
+    mocked.summary.totals.artifacts = 4;
+    let markup = renderHome();
+    expect(markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0]).not.toContain(
+      'href="/boards"',
+    );
+    mocked.productFeatures.canvasBoards = true;
+    markup = renderHome();
+    expect(markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0]).toContain(
+      'href="/boards"',
+    );
+  });
+
+  it("does not turn pending or omitted results into a completed-work claim", () => {
+    mocked.summary = emptySummary();
+    mocked.summary.resultHighlights = [
+      {
+        id: "pending",
+        artifactType: "round",
+        title: "A pending report",
+        status: "pending",
+        participantCount: 0,
+        accuracyPercent: null,
+        recoveryPercent: null,
+        createdAt: mocked.summary.generatedAt,
+        href: "/report/pending",
+      },
+    ];
+    const markup = renderHome();
+    const next = markup.match(
+      /<section[^>]*aria-labelledby="home-next-up-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(next).toContain("No suggested next steps");
+    expect(next).not.toContain("all caught up");
+    expect(next).toContain('href="/library"');
+  });
+
+  it("keeps next-step suggestions permission aware and routes a hidden active room to Sessions", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.totals.activeSessions = 250;
+    mocked.canEdit = false;
+    mocked.creator.role = "viewer";
+    const markup = renderHome();
+    const next = markup.match(
+      /<section[^>]*aria-labelledby="home-next-up-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(next).toContain("Return to a live session");
+    expect(next).toContain('href="/sessions"');
+    expect(next).not.toContain('data-insight="draft"');
+    expect(markup).toContain(">250+</strong>");
+    expect(markup).not.toContain('href="/host/setup/');
+  });
+
   it("keeps first-session guidance after a draft and completes it only on delivery evidence", () => {
     const summary = emptySummary();
     summary.totals.artifacts = 1;

@@ -598,25 +598,25 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
                 </span>
               </div>
             </div>
-            <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
-              <div className={styles.metric}>
-                <strong>{followup.attemptCount}</strong>
-                <span>{t("pages.common.attempts")}</span>
+            <div className={resultStyles.cardDetails}>
+              <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
+                <div className={styles.metric}>
+                  <strong>{followup.attemptCount}</strong>
+                  <span>{t("pages.common.attempts")}</span>
+                </div>
+                <div className={styles.metric}>
+                  <strong>{followup.completedAttemptCount}</strong>
+                  <span>{t("pages.common.completed")}</span>
+                </div>
+                <div className={styles.metric}>
+                  <strong>{formatDateTime(locale, followup.opensAt)}</strong>
+                  <span>{t("pages.results.opens")}</span>
+                </div>
+                <div className={styles.metric}>
+                  <strong>{formatDateTime(locale, followup.closesAt)}</strong>
+                  <span>{t("pages.results.closes")}</span>
+                </div>
               </div>
-              <div className={styles.metric}>
-                <strong>{followup.completedAttemptCount}</strong>
-                <span>{t("pages.common.completed")}</span>
-              </div>
-              <div className={styles.metric}>
-                <strong>{formatDateTime(locale, followup.opensAt)}</strong>
-                <span>{t("pages.results.opens")}</span>
-              </div>
-              <div className={styles.metric}>
-                <strong>{formatDateTime(locale, followup.closesAt)}</strong>
-                <span>{t("pages.results.closes")}</span>
-              </div>
-            </div>
-            <div className={resultStyles.cardEvidence}>
               <EvidenceMeter
                 label={t("resultsOverview.completion")}
                 value={evidencePercent(followup.completedAttemptCount, followup.attemptCount)}
@@ -626,19 +626,19 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
                 })}
                 empty={t("resultsOverview.noAttempts")}
               />
+              {followup.conceptKeys.length ? (
+                <div
+                  className={`${styles.conceptList} ${resultStyles.concepts}`}
+                  aria-label={t("pages.results.conceptsPractised")}
+                >
+                  {followup.conceptKeys.map((concept) => (
+                    <span className={styles.subtlePill} key={concept}>
+                      {concept}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            {followup.conceptKeys.length ? (
-              <div
-                className={`${styles.conceptList} ${resultStyles.concepts}`}
-                aria-label={t("pages.results.conceptsPractised")}
-              >
-                {followup.conceptKeys.map((concept) => (
-                  <span className={styles.subtlePill} key={concept}>
-                    {concept}
-                  </span>
-                ))}
-              </div>
-            ) : null}
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
               <Link className="button small-button" href={`/practice/${followup.id}`}>
                 {t("pages.results.managePractice")}
@@ -805,9 +805,13 @@ function PresentationResultList(listControls: ListControls) {
           <article className={`${styles.listCard} ${resultStyles.card}`} key={session.id}>
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
-                <ResultKindIcon kind="presentation" />
-                <p className="eyebrow">{t("pages.common.presentation")}</p>
-                <h2 lang="">{session.title}</h2>
+                <div className={resultStyles.titleRow}>
+                  <ResultKindIcon kind="presentation" />
+                  <div>
+                    <p className="eyebrow">{t("pages.common.presentation")}</p>
+                    <h2 lang="">{session.title}</h2>
+                  </div>
+                </div>
                 <p className={styles.summaryLine}>
                   {t("pages.results.presentationStarted", {
                     date: formatDateTime(locale, session.createdAt),
@@ -1033,8 +1037,10 @@ function SurveyResultList(listControls: ListControls) {
           >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
-                <ResultKindIcon kind="survey" />
-                <h2 lang="">{room.title}</h2>
+                <div className={resultStyles.titleRow}>
+                  <ResultKindIcon kind="survey" />
+                  <h2 lang="">{room.title}</h2>
+                </div>
                 <p className={styles.summaryLine}>
                   {t("pages.results.surveyRunCode", { code: room.code })}
                 </p>

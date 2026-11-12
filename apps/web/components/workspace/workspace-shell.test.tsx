@@ -518,8 +518,9 @@ describe("professional workspace shell", () => {
     expect(markup).toContain(">Arbeitsbereich</span></a>");
     expect(markup).toContain('aria-label="Darstellung: System"');
     expect(markup).toMatch(/<aside[^>]*lang="de-DE">/);
-    expect(markup).toMatch(/<main class="[^"]+" id="main" lang="en-CA">/);
-    expect(markup).toMatch(/<header class="[^"]+" lang="de-DE">/);
+    expect(markup.match(/<main\b[^>]*>/)?.[0]).toContain('lang="en-CA"');
+    const main = markup.slice(markup.indexOf("<main"));
+    expect(main.match(/<header\b[^>]*>/)?.[0]).toContain('lang="de-DE"');
   });
 
   it("does not expose creation controls to a read-only member", () => {

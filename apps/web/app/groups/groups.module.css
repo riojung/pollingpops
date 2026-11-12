@@ -21,14 +21,14 @@
 .createPanel {
   display: grid;
   grid-template-columns: minmax(220px, 0.75fr) minmax(220px, 1fr) minmax(260px, 1.25fr) auto;
-  gap: 16px;
+  gap: 12px;
   align-items: end;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   border: 1px solid var(--ui-border);
   border-radius: 16px;
   background: var(--ui-surface-soft);
   box-shadow: var(--ui-shadow-sm);
-  padding: 18px;
+  padding: var(--workspace-card-padding, 14px);
 }
 
 .createPanel h2,
@@ -48,9 +48,8 @@
 
 .workspaceGrid {
   display: grid;
-  min-height: 680px;
   grid-template-columns: minmax(240px, 290px) minmax(0, 1fr);
-  gap: 18px;
+  gap: 12px;
 }
 
 .groupRail,
@@ -66,7 +65,6 @@
 .groupRail {
   position: sticky;
   top: 88px;
-  min-height: 380px;
   align-self: start;
   padding: 11px;
 }
@@ -209,14 +207,14 @@
 }
 
 .detailLoading {
-  min-height: 620px;
+  min-height: 320px;
 }
 
 .detailColumn {
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
 }
 
 .groupHero {
@@ -224,32 +222,34 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 14px;
+  flex-wrap: wrap;
   overflow: hidden;
   background:
     radial-gradient(circle at 93% 0%, rgb(71 202 190 / 22%), transparent 220px),
     radial-gradient(circle at 70% 100%, rgb(105 73 230 / 14%), transparent 260px), var(--ui-surface);
-  padding: 25px;
+  padding: 16px;
 }
 
 .heroHeading {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 17px;
+  gap: 12px;
 }
 
 .heroMonogram {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   flex: 0 0 auto;
   border-radius: 18px;
   font-size: 25px;
 }
 
 .groupHero h2 {
-  margin-top: 7px;
-  font-size: clamp(24px, 3vw, 34px);
+  margin-top: 4px;
+  font-size: clamp(20px, 2.2vw, 26px);
+  overflow-wrap: anywhere;
   letter-spacing: -0.045em;
 }
 
@@ -304,11 +304,11 @@
 }
 
 .stats div {
-  min-width: 78px;
+  min-width: 64px;
   border: 1px solid var(--ui-border);
   border-radius: 12px;
   background: var(--ui-surface-translucent);
-  padding: 10px 12px;
+  padding: 8px 10px;
   text-align: center;
 }
 
@@ -328,19 +328,19 @@
 
 .panel {
   min-width: 0;
-  padding: 20px;
+  padding: var(--workspace-card-padding, 14px);
 }
 
 .sectionHeading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 15px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .sectionHeading h2 {
-  font-size: 21px;
+  font-size: 18px;
 }
 
 .compactForm,
@@ -623,7 +623,7 @@
 
 .emptyState {
   display: grid;
-  min-height: 560px;
+  min-height: 260px;
   place-items: center;
   align-content: center;
   padding: 30px;
@@ -663,11 +663,15 @@
 
 @media (max-width: 1180px) {
   .createPanel {
-    grid-template-columns: minmax(220px, 0.8fr) minmax(220px, 1fr) minmax(260px, 1.2fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .createPanel > div:first-child {
+    grid-column: 1 / -1;
   }
 
   .createPanel > button {
-    grid-column: 3;
+    grid-column: 2;
     justify-self: end;
   }
 

@@ -522,7 +522,7 @@ export function WorkspaceShell({
   title,
   titleLanguage,
   description,
-  headerDensity = "comfortable",
+  headerDensity = "compact",
   actions,
   children,
   requireBeta = true,

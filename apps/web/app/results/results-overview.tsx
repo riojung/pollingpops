@@ -199,7 +199,7 @@ export function ResultsOverview(props: Props) {
         <p>{t("resultsOverview.scope", { count: number(props.items.length) })}</p>
       </div>
       <div className={styles.widgets}>
-        <div className={styles.widget}>
+        <div className={`${styles.widget} ${styles.countWidget}`}>
           <dl>
             <dt>{shownLabel}</dt>
             <dd>{number(props.items.length)}</dd>

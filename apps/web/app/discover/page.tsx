@@ -95,9 +95,9 @@ export default function DiscoverPage() {
       </section>
 
       <section className={`${hub.section} ${content.panel}`}>
-        <div className={content.sectionHeader}>
+        <div className={hub.sectionHeading}>
           <div>
-            <p className="eyebrow">{t("pages.discover.library.eyebrow")}</p>
+            <p className={hub.sectionEyebrow}>{t("pages.discover.library.eyebrow")}</p>
             <h2>{t("pages.discover.library.title")}</h2>
             <p>{t("pages.discover.library.description")}</p>
           </div>

@@ -712,14 +712,18 @@ describe("Sessions workspace", () => {
         return Promise.resolve(response(path));
       });
       const harness = sessionsHarness();
-      await harness.settle();
+      const initialMarkup = await harness.settle();
+      const deleteLabel = type === "presentations" ? "Delete session" : "Delete Survey run";
+      expect(initialMarkup).toContain(`aria-label="${deleteLabel}"`);
+      expect(initialMarkup).toContain(`title="${deleteLabel}"`);
+      expect(initialMarkup).toContain(`class="sr-only">${deleteLabel}</span>`);
       const historyReads = () =>
         fixtures.apiFetch.mock.calls.filter(
           ([path]) =>
             path === "/v1/presentation-sessions" || String(path).startsWith("/v1/survey-rooms?"),
         ).length;
       expect(historyReads()).toBe(1);
-      clickButton(type === "presentations" ? "Delete session" : "Delete Survey run");
+      clickButton(deleteLabel);
       fixtures.query = `type=${type}&q=Deletable&status=finished`;
       await harness.settle();
       expect(historyReads()).toBe(1);
@@ -798,7 +802,9 @@ describe("Sessions workspace", () => {
     expect(markup).not.toContain("Delete Survey run");
     fixtures.role = "owner";
     markup = harness.render();
-    expect(markup.match(/>Delete Survey run<\/button>/g)).toHaveLength(2);
+    expect(markup.match(/aria-label="Delete Survey run"/g)).toHaveLength(2);
+    expect(markup.match(/title="Delete Survey run"/g)).toHaveLength(2);
+    expect(markup.match(/class="sr-only">Delete Survey run<\/span>/g)).toHaveLength(2);
   });
 
   it("keeps a pending resume scoped to the original query", async () => {
@@ -823,7 +829,10 @@ describe("Sessions workspace", () => {
 
   it("deletes owner history through the typed endpoint and clears Round credentials", async () => {
     const harness = sessionsHarness();
-    await harness.settle();
+    const initialMarkup = await harness.settle();
+    expect(initialMarkup).toContain('aria-label="Delete session"');
+    expect(initialMarkup).toContain('title="Delete session"');
+    expect(initialMarkup).toContain('class="sr-only">Delete session</span>');
     clickButton("Delete session");
     const markup = await harness.settle();
     expect(
@@ -871,7 +880,9 @@ describe("Sessions workspace", () => {
     await harness.settle();
     clickButton("Delete session");
     fixtures.query = "type=rounds&status=finished";
-    await harness.settle();
+    const pendingMarkup = await harness.settle();
+    expect(pendingMarkup).toContain('aria-label="Deleting…"');
+    expect(pendingMarkup).toContain('aria-live="polite" class="sr-only">Deleting…</span>');
     clickButton("Deleting…");
     expect(
       fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "DELETE"),

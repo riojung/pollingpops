@@ -7,7 +7,7 @@
 }
 
 .workspace :global(.small-button) {
-  min-height: 44px;
+  min-height: var(--workspace-control-height, 44px);
 }
 
 .workspace input::placeholder,
@@ -602,6 +602,11 @@
 }
 
 .main {
+  --workspace-card-padding: 0.875rem;
+  --workspace-card-gap: 0.625rem;
+  --workspace-grid-min: 16.5rem;
+  --workspace-control-height: 2.25rem;
+  --workspace-row-gap: 0.5rem;
   width: min(var(--workspace-content-width), calc(100% - 48px));
   margin: 0 auto;
   padding: 2.7rem 0 5rem;
@@ -627,6 +632,10 @@
   margin-bottom: 2rem;
 }
 
+.pageHeader > div:first-child {
+  min-width: 0;
+}
+
 .pageHeader h1 {
   max-width: 760px;
   margin: 0;
@@ -634,6 +643,7 @@
   letter-spacing: -0.05em;
   line-height: 1;
   color: var(--ui-text-strong);
+  overflow-wrap: anywhere;
 }
 
 .pageHeader[data-density="compact"] {
@@ -684,6 +694,12 @@
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+@media (pointer: coarse) {
+  .main {
+    --workspace-control-height: 2.75rem;
+  }
 }
 
 .mobileManagement {

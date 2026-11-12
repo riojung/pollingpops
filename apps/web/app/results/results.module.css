@@ -1,53 +1,94 @@
 .clearFilters {
-  min-height: 38px;
-  padding: 7px 10px;
+  min-height: var(--workspace-control-height, 2.25rem);
+  padding: 6px 9px;
   font-size: 12px;
 }
 
 .collection {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--workspace-grid-min, 16.5rem)), 1fr)
+  );
+  gap: var(--workspace-card-gap, 0.625rem);
+  align-items: start;
 }
 
 .card {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 20px;
-  padding: 22px;
+  gap: var(--workspace-card-gap, 0.625rem);
+  padding: var(--workspace-card-padding, 0.875rem);
+  border-radius: 12px;
   background: var(--ui-surface-raised);
 }
 
-.topline {
-  align-items: start;
-  flex-wrap: wrap;
-}
-
-.topline > div {
-  min-width: 0;
+.card .topline {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) fit-content(45%);
+  align-items: start;
+  gap: 4px 8px;
 }
 
-.topline h2 {
-  font-size: 20px;
+.topline > div:first-child {
+  display: contents;
+}
+
+.topline > div:first-child > * {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.card .topline h2 {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-size: 16px;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-.topline p {
-  font-size: 14px;
-  line-height: 1.5;
+.card .topline p {
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .topline > span {
-  flex-shrink: 0;
+  grid-column: 2;
+  grid-row: 1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.topline > .concepts {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.topline > div:first-child > .titleRow {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.titleRow > div {
+  min-width: 0;
+}
+
+.card .titleRow :global(.eyebrow) {
+  margin: 0 0 2px;
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .metrics {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px 10px;
 }
 
 .metrics > div {
@@ -55,23 +96,55 @@
   align-content: start;
 }
 
-.metrics strong {
-  font-size: 16px;
+.metrics > div > strong {
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.metrics > div > span {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cardDetails {
+  display: grid;
+  min-width: 0;
+  gap: var(--workspace-card-gap, 0.625rem);
+}
+
+.concepts {
+  min-width: 0;
+}
+
+.concepts > span {
+  max-width: 100%;
   overflow-wrap: anywhere;
 }
 
 .actions {
-  margin-top: auto;
+  gap: 6px;
+}
+
+.actions > a {
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .loadError {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 16px;
-  margin-bottom: 20px;
+  padding: 14px;
+  margin-bottom: 14px;
   border: 1px solid var(--ui-danger-border);
   border-radius: 12px;
   background: var(--ui-surface);
@@ -84,40 +157,54 @@
 
 .loadError p + p {
   color: var(--ui-text-subtle);
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .collection[data-view="list"] {
   grid-template-columns: 1fr;
+  gap: var(--workspace-row-gap, 0.5rem);
 }
 
 .collection[data-view="list"] .card {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(230px, 1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.8fr);
   align-items: center;
+  gap: 14px;
 }
 
-.collection[data-view="list"] .actions,
-.collection[data-view="list"] .cardEvidence,
-.collection[data-view="list"] .concepts {
-  grid-column: 1 / -1;
-  margin-top: 0;
+.collection[data-view="list"] .actions {
+  justify-content: end;
 }
 
 .collection[data-view="list"] .surveyCard {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr);
 }
 
-.collection[data-view="list"] .surveyCard .actions {
-  grid-column: auto;
-}
-
-@media (max-width: 620px) {
-  .card {
-    padding: 18px;
-  }
+@media (max-width: 760px) {
   .collection[data-view="list"] .card {
     display: flex;
     align-items: stretch;
+    gap: var(--workspace-card-gap, 0.625rem);
+  }
+  .collection[data-view="list"] .actions {
+    justify-content: start;
+  }
+}
+
+@media (max-width: 380px) {
+  .card .topline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .topline > span {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+}
+
+@media (pointer: coarse) {
+  .clearFilters,
+  .actions > a {
+    min-height: 44px;
   }
 }

@@ -8,6 +8,32 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Compact workspace collections November 12, 2026
+
+The `codex/workspace-compact-layout` source applies Home's compact header sizing and
+shared spacing to workspace collections. Library, Sessions and Results use smaller grid
+cards and horizontal desktop list rows, with inline metadata and actions. Discover and
+template galleries use smaller previews and grouped actions; Assignments, Idea board
+cards, Groups and folders share the reduced spacing. Long content wraps, Library
+descriptions remain bounded snippets, and touch controls keep their larger targets.
+Existing filtering, selection, favorites, permissions, evidence and preview behavior is
+preserved. Local browser qualification and validation results are recorded with this slice;
+this does not advance hosted, native-language, customer or physical-device acceptance.
+
+At a 1440px desktop viewport, the synthetic collection fixtures show four grid columns,
+Library cards around 283px and list rows around 117px, Round session cards around 248px
+and list rows around 98px, and assignment rows around 105px. Richer evidence and long
+titles grow naturally. The browser journeys cover both themes, all collection types,
+German/Korean Library labels, keyboard selection and menus, 44px touch targets, and
+Groups form reflow at 320, 768, 900 and 1024px. Captures and measurements are under
+`artifacts/workspace-density/`.
+
+Validation: `pnpm check` passes with 8,459 tests and 514 opt-in skips, including lint,
+type checks, production builds and server startup smoke. Four-profile density journeys
+and the existing collection workflows pass 14 distinct selected production-browser
+cases. The new browser fixtures also pass a separate strict TypeScript check. Supporting
+browser Axe/keyboard/reflow checks do not establish manual accessibility acceptance.
+
 ### Option B report evidence and recovery November 12, 2026
 
 The `codex/option-b-report-clarity` source corrects Round history/Home summaries that

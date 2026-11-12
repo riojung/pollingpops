@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Children } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
@@ -61,16 +62,24 @@ describe("workspace state signals", () => {
   it.each(["下書き", "Brouillon", "مسودة", "Draft"])(
     "preserves the visible translated label %s as its only accessible text",
     (label) => {
-      const markup = renderToStaticMarkup(
-        <WorkspaceStatus className="existing-compact-badge" status="draft">
-          {label}
-        </WorkspaceStatus>,
-      );
+      const status = WorkspaceStatus({
+        className: "existing-compact-badge",
+        status: "draft",
+        children: label,
+      });
+      expect(status.type).toBe("span");
+      expect(Children.toArray(status.props.children)).toEqual([
+        expect.objectContaining({
+          type: "svg",
+          props: expect.objectContaining({ "aria-hidden": "true", focusable: "false" }),
+        }),
+        label,
+      ]);
+      const markup = renderToStaticMarkup(status);
       expect(markup).toContain("existing-compact-badge");
       expect(markup).toMatch(/<svg aria-hidden="true"[^>]*focusable="false"/);
       expect(markup).not.toMatch(/aria-label=|<title\b|role="status"/);
-      const visible = markup.replace(/<svg\b[\s\S]*?<\/svg>/g, "").replace(/<[^>]+>/g, "");
-      expect(visible).toBe(label);
+      expect(markup).toContain(`</svg>${label}</span>`);
     },
   );
 
@@ -87,21 +96,25 @@ describe("workspace state signals", () => {
     expect(markup).toContain(`data-icon="${icon}"`);
   });
 
-  it("keeps kind and action icons decorative without adding action words", () => {
-    const markup = renderToStaticMarkup(
-      <>
-        {(["round", "presentation", "survey", "practice"] as const).map((kind) => (
-          <WorkspaceKindIcon key={kind} kind={kind} />
-        ))}
-        {(["host", "resume", "edit", "result", "assign"] as const).map((action) => (
-          <WorkspaceActionIcon action={action} key={action} />
-        ))}
-      </>,
-    );
+  it("keeps kind and action icons decorative without adding accessible names", () => {
+    const icons = [
+      ...(["round", "presentation", "survey", "practice"] as const).map((kind) =>
+        WorkspaceKindIcon({ kind }),
+      ),
+      ...(["host", "resume", "edit", "result", "assign"] as const).map((action) =>
+        WorkspaceActionIcon({ action }),
+      ),
+    ];
+    for (const icon of icons) {
+      expect(icon.type).toBe("svg");
+      expect(icon.props).toMatchObject({ "aria-hidden": "true", focusable: "false" });
+      expect(icon.props).not.toHaveProperty("aria-label");
+      expect(icon.props).not.toHaveProperty("aria-labelledby");
+    }
+    const markup = icons.map((icon) => renderToStaticMarkup(icon)).join("");
     expect(markup.match(/<svg aria-hidden="true"/g)).toHaveLength(9);
     expect(markup.match(/focusable="false"/g)).toHaveLength(9);
-    expect(markup.replace(/<[^>]+>/g, "")).toBe("");
-    expect(markup).not.toMatch(/aria-label=|<title\b/);
+    expect(markup).not.toMatch(/aria-label=|aria-labelledby=|<title\b/);
   });
 });
 

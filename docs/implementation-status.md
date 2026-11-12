@@ -8,6 +8,38 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Home overview and compact recent work November 12, 2026
+
+The `codex/home-insights-workspace` source adds four linked Home widgets for accessible
+work, active sessions, completion across recent assignments and ready recent reports.
+A compact Next up panel prioritizes live work, an open assignment closing soon, an
+editable draft and a ready report. It uses the existing authorized Home summary, with
+no new endpoint or per-item detail fetches. Counts do not imply personal ownership or
+unique participants; missing attempt evidence remains distinct from zero completion.
+Recent result/assignment samples are labelled, and capped session counts use a lower
+bound. Empty suggestions do not claim all work is complete.
+
+Recent work uses icon-led rows with wrapping titles, status, counts, timestamps and
+canonical actions, removing the old 215px card minimum. Home opts into a compact header;
+phone layouts retain the global Create menu and avoid a duplicate page-level control.
+New copy covers all ten configured locales. Keyboard focus, loading/retry, long labels,
+light/dark themes and forced-color controls have dedicated browser coverage. The
+[implementation record](home-workspace-overview.md) records data boundaries and validation.
+
+The repository gate passes 8,403 tests with 513 standard opt-in skips, including all
+403 web suites / 4,466 tests, all four production build tasks and compiled-server startup.
+Focused tests, strict browser-fixture types and the dedicated beta build also pass.
+Twelve selected production-browser cases pass across
+desktop Chromium/Firefox and phone Chromium/WebKit. Synthetic desktop rows measure
+64–77px against the removed 215px minimum; responsive rows preserve complete titles and
+canonical actions. Manual acceptance and existing release gates remain unchanged.
+
+The review follow-up keeps Accessible work as an aggregate summary with separate Library
+and Boards links, covering board-only viewers and legacy summaries with missing board
+totals. All 87 focused tests, 12 selected browser cases, types/lint and normal/beta
+production builds pass for the review fix. The focused reviewer confirms that navigation
+mismatch is resolved.
+
 ### Option B local acceptance preparation November 11, 2026
 
 The `codex/option-b-acceptance` source adds a shared macOS browser runner that resolves

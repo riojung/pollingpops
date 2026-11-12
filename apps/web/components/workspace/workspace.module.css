@@ -607,6 +607,18 @@
   padding: 2.7rem 0 5rem;
 }
 
+.main[data-header-density="compact"] {
+  padding-block-start: 1.5rem;
+}
+
+@media (forced-colors: active) {
+  .createButton {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+}
+
 .pageHeader {
   display: flex;
   align-items: flex-end;
@@ -622,6 +634,32 @@
   letter-spacing: -0.05em;
   line-height: 1;
   color: var(--ui-text-strong);
+}
+
+.pageHeader[data-density="compact"] {
+  align-items: center;
+  margin-bottom: 1.4rem;
+}
+
+.pageHeader[data-density="compact"] h1 {
+  font-size: clamp(1.9rem, 3vw, 2.5rem);
+  line-height: 1.1;
+}
+
+.pageHeader[data-density="compact"] .eyebrow {
+  margin-bottom: 0.4rem;
+}
+
+.pageHeader[data-density="compact"] .description {
+  margin-top: 0.45rem;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 620px) {
+  .pageHeader[data-density="compact"] {
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
 }
 
 .eyebrow {

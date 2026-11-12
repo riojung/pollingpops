@@ -21,6 +21,8 @@ import { deriveHomeInsights } from "../../lib/home-insights";
 import { homeOverviewCopy, formatHomeOverviewText } from "../../lib/i18n/home-overview-copy";
 import { HomeOverview, HomeNextUp } from "./home-overview";
 import { HomeIcon } from "./home-icon";
+import { WorkspaceStatus } from "../../components/workspace/workspace-signals";
+import signals from "../../components/workspace/workspace-signals.module.css";
 import styles from "./home.module.css";
 
 type Translator = ReturnType<typeof useLocale>["t"];
@@ -138,7 +140,13 @@ function HomeWorkspace() {
           : action.label === "continueEditing"
             ? t("pages.home.authoring.continueEditing")
             : copy[action.label];
-    return { ...action, label };
+    const tone =
+      action.label === "hostRound" || action.label === "hostPresentation"
+        ? "host"
+        : action.label === "continueEditing"
+          ? "edit"
+          : "view";
+    return { ...action, label, tone };
   }
   function compactWork(items: HomeWork[]) {
     return (
@@ -151,9 +159,7 @@ function HomeWorkspace() {
           >
             <div className={styles.activityTopline}>
               <span>{workType(artifact)}</span>
-              <span className={styles.statusPill} data-status={artifact.status}>
-                {workStatus(artifact)}
-              </span>
+              <WorkspaceStatus status={artifact.status}>{workStatus(artifact)}</WorkspaceStatus>
             </div>
             <strong lang="">{artifact.title}</strong>
             {workCount(artifact) || artifact.updatedAt ? (
@@ -202,7 +208,11 @@ function HomeWorkspace() {
                   {localizedProgress(session.progressLabel, t)}
                 </p>
               </div>
-              <Link className="button" href={session.href}>
+              <Link
+                className={`button ${signals.action}`}
+                data-action={session.artifactType === "round" ? "view" : "resume"}
+                href={session.href}
+              >
                 {t(
                   session.artifactType === "round"
                     ? "pages.common.openSessions"
@@ -302,9 +312,9 @@ function HomeWorkspace() {
                             <h3 lang="">
                               <Link href={artifact.editHref}>{artifact.title}</Link>
                             </h3>
-                            <span className={styles.statusPill} data-status={artifact.status}>
+                            <WorkspaceStatus status={artifact.status}>
                               {workStatus(artifact)}
-                            </span>
+                            </WorkspaceStatus>
                           </div>
                           <div className={styles.metadata}>
                             <span
@@ -325,7 +335,8 @@ function HomeWorkspace() {
                           </div>
                         </div>
                         <Link
-                          className={styles.cardAction}
+                          className={`${styles.cardAction} ${signals.action}`}
+                          data-action={action.tone}
                           href={action.href}
                           aria-label={`${action.label}: ${artifact.title}`}
                         >
@@ -529,9 +540,9 @@ function HomeWorkspace() {
                       key={assignment.id}
                     >
                       <div className={styles.activityTopline}>
-                        <span className={styles.statusPill} data-status={assignment.status}>
+                        <WorkspaceStatus status={assignment.status}>
                           {t(`pages.common.status.${assignment.status}`)}
-                        </span>
+                        </WorkspaceStatus>
                         <time dateTime={assignment.closesAt} lang={locale}>
                           {t("pages.common.closes", { date: formatDate(assignment.closesAt) })}
                         </time>

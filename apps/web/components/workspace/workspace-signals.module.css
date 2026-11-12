@@ -1,0 +1,226 @@
+.surface {
+  --workspace-kind-bg: var(--ui-surface-soft);
+  --workspace-kind-ink: var(--ui-text-subtle);
+  --workspace-state-ink: var(--ui-border-strong);
+  position: relative;
+}
+
+.surface::before {
+  position: absolute;
+  inset-block: 10px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--workspace-state-ink);
+  content: "";
+  pointer-events: none;
+}
+
+.surface[data-state-tone="warning"] {
+  --workspace-state-ink: var(--ui-warning-text);
+}
+
+.surface[data-state-tone="positive"] {
+  --workspace-state-ink: var(--ui-success-text);
+}
+
+.surface[data-state-tone="active"] {
+  --workspace-state-ink: var(--ui-info-text);
+}
+
+.surface[data-state-tone="danger"] {
+  --workspace-state-ink: var(--ui-danger-text);
+}
+
+.surface[data-kind="round"],
+.kindTab[data-kind="round"],
+.kindIcon[data-kind="round"] {
+  --workspace-kind-bg: var(--ui-kind-round-bg);
+  --workspace-kind-ink: var(--ui-kind-round-text);
+}
+
+.surface[data-kind="presentation"],
+.kindTab[data-kind="presentation"],
+.kindIcon[data-kind="presentation"] {
+  --workspace-kind-bg: var(--ui-kind-presentation-bg);
+  --workspace-kind-ink: var(--ui-kind-presentation-text);
+}
+
+.surface[data-kind="survey"],
+.kindTab[data-kind="survey"],
+.kindIcon[data-kind="survey"] {
+  --workspace-kind-bg: var(--ui-kind-survey-bg);
+  --workspace-kind-ink: var(--ui-kind-survey-text);
+}
+
+.surface[data-kind="practice"],
+.kindTab[data-kind="practice"],
+.kindIcon[data-kind="practice"] {
+  --workspace-kind-bg: var(--ui-kind-practice-bg);
+  --workspace-kind-ink: var(--ui-kind-practice-text);
+}
+
+.status.status[data-state-tone] {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--workspace-status-bg, var(--ui-surface-soft));
+  color: var(--workspace-status-ink, var(--ui-text-subtle));
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.4;
+  padding: 3px 7px;
+}
+
+.status[data-state-tone="warning"] {
+  --workspace-status-bg: var(--ui-warning-bg);
+  --workspace-status-ink: var(--ui-warning-text);
+}
+
+.status[data-state-tone="positive"] {
+  --workspace-status-bg: var(--ui-success-bg);
+  --workspace-status-ink: var(--ui-success-text);
+}
+
+.status[data-state-tone="active"] {
+  --workspace-status-bg: var(--ui-info-bg);
+  --workspace-status-ink: var(--ui-info-text);
+}
+
+.status[data-state-tone="danger"] {
+  --workspace-status-bg: var(--ui-danger-bg);
+  --workspace-status-ink: var(--ui-danger-text);
+}
+
+.statusIcon,
+.actionIcon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
+
+.kindIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--workspace-kind-ink, var(--ui-text-subtle));
+  vertical-align: -3px;
+}
+
+.action.action[data-action] {
+  background: var(--workspace-action-bg, var(--ui-surface-soft));
+  color: var(--workspace-action-ink, var(--ui-text-strong));
+}
+
+.action[data-action="host"] {
+  --workspace-action-bg: var(--ui-success-text);
+  --workspace-action-ink: var(--ui-surface);
+}
+
+.action[data-action="resume"] {
+  --workspace-action-bg: var(--ui-info-text);
+  --workspace-action-ink: var(--ui-surface);
+}
+
+.action[data-action="edit"] {
+  --workspace-action-bg: var(--ui-warning-bg);
+  --workspace-action-ink: var(--ui-warning-text);
+}
+
+.action[data-action="result"],
+.action[data-action="assign"] {
+  --workspace-action-bg: var(--ui-violet-bg);
+  --workspace-action-ink: var(--ui-violet-text);
+}
+
+.action[data-action="delete"] {
+  --workspace-action-bg: var(--ui-danger-bg);
+  --workspace-action-ink: var(--ui-danger-text);
+}
+
+/* Repeating the class keeps legacy button hover rules from replacing the action color. */
+.action.action[data-action]:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: color-mix(
+    in srgb,
+    var(--workspace-action-bg, var(--ui-surface-soft)) 88%,
+    var(--workspace-action-ink, var(--ui-text-strong))
+  );
+  color: var(--workspace-action-ink, var(--ui-text-strong));
+}
+
+.action.action[data-action]:focus-visible,
+.kindTab.kindTab:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.action.action[data-action]:disabled,
+.action.action[data-action][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) {
+  background: var(--workspace-kind-bg);
+  color: var(--workspace-kind-ink);
+  border-color: var(--workspace-kind-ink);
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) > span {
+  background: var(--ui-surface);
+  color: var(--workspace-kind-ink);
+}
+
+@media (forced-colors: active) {
+  .surface::before {
+    background: CanvasText;
+  }
+
+  .status.status[data-state-tone] {
+    background: Canvas;
+    color: CanvasText;
+    outline: 1px solid CanvasText;
+  }
+
+  .kindIcon {
+    color: inherit;
+  }
+
+  .action.action[data-action],
+  .action.action[data-action]:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  .action.action[data-action] {
+    outline: 1px solid ButtonText;
+  }
+
+  .action.action[data-action]:focus-visible,
+  .kindTab.kindTab:focus-visible {
+    outline: 3px solid CanvasText;
+  }
+
+  .action.action[data-action]:disabled,
+  .action.action[data-action][aria-disabled="true"] {
+    color: GrayText;
+    outline-color: GrayText;
+    opacity: 1;
+  }
+
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]),
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) > span {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) {
+    border-block-end: 2px solid CanvasText;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

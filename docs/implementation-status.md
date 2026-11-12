@@ -8,6 +8,34 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace type and lifecycle colors November 12, 2026
+
+The `codex/workspace-semantic-colors` source adds shared type, lifecycle and action
+signals across Library, Sessions, Results, Home and Assignments. Round content uses
+blue, Presentations violet, Surveys teal and Practice amber. Status badges retain their
+translated labels and add decorative icons: drafts/processing/scheduled work use amber,
+published/ready work green, active/open work blue, expired/failed work red, and completed
+or archived work neutral. Thin card rails make the same states visible in grid and list
+views. Host, Resume, Edit, result and assignment actions have distinct treatments while
+keeping their existing destinations and eligibility.
+
+Both themes use contrast-checked colors, keyboard focus and forced-color fallbacks.
+Report lifecycle colors remain independent of scores; genuine zero accuracy and absent
+evidence retain their existing meaning. Compact dimensions, full wrapping titles,
+permissions and destructive-action confirmations are preserved. Local screenshots and
+resolved color/density measurements are under `artifacts/workspace-colors/`; this slice
+does not advance hosted, native-language, customer or physical-device acceptance.
+
+Validation: `pnpm check` passes with 8,537 tests and 514 opt-in skips, including
+406 web suites / 4,597 tests, lint/types, all four production build tasks and compiled
+server startup smoke. The browser fixture also passes a separate strict TypeScript check.
+The existing Library/Sessions/Results workflows pass 12 browser cases. After the final
+forced-color refinement, four mixed-state journeys pass against a fresh production beta
+build across desktop Chromium/Firefox and phone Chromium/WebKit. They cover both themes,
+grid/list density, German labels, keyboard focus including hover in forced colors,
+translated status text/icons, actual action eligibility and resolved text contrast.
+The final web production build and 51 focused palette/signal tests also pass.
+
 ### Compact workspace collections November 12, 2026
 
 The `codex/workspace-compact-layout` source applies Home's compact header sizing and

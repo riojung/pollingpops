@@ -265,12 +265,63 @@ describe("Sessions workspace", () => {
   it("defaults to Rounds with unknown counts instead of a false zero", () => {
     const markup = renderToStaticMarkup(withEnglishLocale(<SessionsPage />));
     expect(markup).toContain('aria-label="Session type"');
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Rounds/);
+    expect(markup).toMatch(
+      /aria-selected="true"[^>]*role="tab"[^>]*><svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Rounds/,
+    );
     expect(markup).toContain('aria-label="Loading session count"');
     expect(markup).toContain('placeholder="Search Round sessions"');
     expect(markup).toContain('href="/library?type=rounds"');
     expect(markup).not.toContain("Artifact type");
     expect(markup).not.toContain("Browse Surveys");
+  });
+
+  it.each([
+    { status: "active", tone: "active", label: "Active", resume: true },
+    { status: "finished", tone: "neutral", label: "Finished", resume: false },
+    { status: "expired", tone: "danger", label: "Access Expired", resume: false },
+  ])(
+    "preserves the $status Round lifecycle in its visible badge and actions",
+    async ({ status, tone, label, resume }) => {
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path.startsWith("/v1/sessions?")
+          ? { items: [{ ...round(), status }], nextCursor: null }
+          : response(path),
+      );
+      const harness = sessionsHarness();
+      const markup = await harness.settle();
+      expect(markup).toContain(`data-kind="round" data-state-tone="${tone}"`);
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toMatch(/aria-hidden="true"[^>]*data-icon="[^"]+"[^>]*focusable="false"/);
+      expect(markup).toContain(`</svg>${label}</span>`);
+      expect(markup.includes('data-action="resume"')).toBe(resume);
+      expect(markup).toContain('data-action="result" href="/report/report-one"');
+      clickButton("List view");
+      const listMarkup = harness.render();
+      expect(listMarkup).toContain('data-view="list"');
+      expect(listMarkup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(listMarkup.includes('data-action="resume"')).toBe(resume);
+    },
+  );
+
+  it("keeps Survey Open, Closed, and Expired labels beside their lifecycle signals", async () => {
+    fixtures.query = "type=surveys";
+    const markup = await sessionsHarness().settle();
+    for (const [status, tone, label] of [
+      ["active", "active", "Open"],
+      ["finished", "neutral", "Closed"],
+      ["expired", "danger", "Access Expired"],
+    ]) {
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toContain(`</svg>${label}</span>`);
+    }
+    expect(markup).not.toContain('data-action="resume"');
+    expect(markup).not.toContain('href="/results/surveys/survey-expired"');
   });
 
   it.each(["rounds", "presentations", "surveys"])(

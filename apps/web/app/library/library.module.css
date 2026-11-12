@@ -60,7 +60,8 @@
   place-items: center;
   overflow: hidden;
   border-radius: 11px 11px 0 0;
-  background: var(--ui-surface-soft);
+  color: var(--workspace-kind-ink, var(--ui-text-strong));
+  background: var(--workspace-kind-bg, var(--ui-surface-soft));
 }
 .presentationPreview > strong {
   min-width: 0;
@@ -80,9 +81,9 @@
   height: 84px;
   padding: 12px 52px;
   overflow: hidden;
-  background: var(--ui-accent-soft);
+  background: var(--workspace-kind-bg, var(--ui-accent-soft));
   border-radius: 11px 11px 0 0;
-  color: var(--ui-text-strong);
+  color: var(--workspace-kind-ink, var(--ui-text-strong));
 }
 .questionPreview > strong {
   display: -webkit-box;
@@ -125,12 +126,16 @@
 
 .tab,
 .tabActive {
+  display: inline-flex;
   min-width: 0;
   max-width: 100%;
   min-height: var(--workspace-control-height, 2.25rem);
   padding: 7px 10px;
   border: 0;
   border-radius: 9px;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
   color: var(--ui-text-muted);
   font: inherit;
   font-size: 13px;
@@ -145,22 +150,11 @@
   display: inline-grid;
   min-width: 22px;
   height: 22px;
-  margin-left: 5px;
   padding: 0 5px;
   place-items: center;
   border-radius: 999px;
   font-size: 11px;
   background: var(--ui-surface-hover);
-}
-
-.tabActive {
-  color: var(--ui-accent-ink);
-  background: var(--ui-accent-soft);
-}
-
-.tabActive span {
-  color: var(--ui-on-accent);
-  background: var(--ui-accent);
 }
 
 .tab:focus-visible,
@@ -530,11 +524,11 @@
 }
 
 .roundArtwork {
-  background: linear-gradient(135deg, #083b9e, #0968d9 58%, #14a5c6);
+  background: var(--workspace-kind-bg, var(--ui-accent-soft));
 }
 
 .presentationArtwork {
-  background: linear-gradient(135deg, #29106b, #6634d8 56%, #0a7ac7);
+  background: var(--workspace-kind-bg, var(--ui-accent-soft));
 }
 
 .artwork span {
@@ -544,13 +538,13 @@
   width: 40px;
   height: 40px;
   place-items: center;
-  border: 1px solid rgb(255 255 255 / 32%);
+  border: 1px solid color-mix(in srgb, var(--workspace-kind-ink, var(--ui-accent)) 24%, transparent);
   border-radius: 12px;
-  color: #ffffff;
+  color: var(--workspace-kind-ink, var(--ui-accent-ink));
   font-size: 21px;
   font-weight: 950;
   /* Repeated backdrop layers can exhaust WebKit's compositor in populated libraries. */
-  background: rgb(255 255 255 / 16%);
+  background: var(--ui-surface-translucent);
 }
 
 .artwork div {
@@ -558,7 +552,7 @@
   width: 160px;
   height: 160px;
   border-radius: 45px;
-  background: rgb(255 255 255 / 9%);
+  background: color-mix(in srgb, var(--workspace-kind-ink, var(--ui-accent)) 8%, transparent);
   transform: rotate(24deg);
 }
 
@@ -599,30 +593,6 @@
 .cardMeta > span {
   min-width: 0;
   max-width: 100%;
-}
-
-.status,
-.changed {
-  padding: 2px 7px;
-  border-radius: 999px;
-  color: var(--ui-accent-ink);
-  text-transform: capitalize;
-  background: var(--ui-accent-soft);
-}
-
-.status[data-status="published"] {
-  color: var(--ui-success-text);
-  background: var(--ui-success-bg);
-}
-
-.status[data-status="archived"] {
-  color: var(--ui-text-subtle);
-  background: var(--ui-surface-hover);
-}
-
-.changed {
-  color: var(--ui-warning-text);
-  background: var(--ui-warning-bg);
 }
 
 .cardMain {
@@ -993,12 +963,6 @@
   }
 }
 .surveyArtwork {
-  background: linear-gradient(135deg, var(--ui-accent-soft), var(--ui-surface-raised));
-  color: var(--ui-accent-ink);
-}
-
-.surveyArtwork span {
-  border-color: var(--ui-border-strong);
-  color: var(--ui-accent-ink);
-  background: var(--ui-surface-translucent);
+  background: var(--workspace-kind-bg, var(--ui-accent-soft));
+  color: var(--workspace-kind-ink, var(--ui-accent-ink));
 }

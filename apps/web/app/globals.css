@@ -32,6 +32,8 @@
   --ui-shadow-lg: 0 20px 56px rgba(24, 29, 36, 0.12);
   --ui-success-bg: #dcfce7;
   --ui-success-text: #166534;
+  --ui-info-bg: #e6f0ff;
+  --ui-info-text: #2058a5;
   --ui-warning-bg: #fff3c4;
   --ui-warning-text: #8a4b08;
   --ui-danger-bg: #fff1f0;
@@ -39,6 +41,14 @@
   --ui-danger-border: #fecaca;
   --ui-violet-bg: #efe9ff;
   --ui-violet-text: #6941c6;
+  --ui-kind-round-bg: var(--ui-info-bg);
+  --ui-kind-round-text: var(--ui-info-text);
+  --ui-kind-presentation-bg: var(--ui-violet-bg);
+  --ui-kind-presentation-text: var(--ui-violet-text);
+  --ui-kind-survey-bg: var(--ui-accent-soft);
+  --ui-kind-survey-text: var(--ui-accent-ink);
+  --ui-kind-practice-bg: var(--ui-warning-bg);
+  --ui-kind-practice-text: var(--ui-warning-text);
   --ui-skeleton-base: #e8eef2;
   --ui-skeleton-highlight: #f6f9fb;
   --ui-hero-start: #242931;
@@ -116,6 +126,8 @@ html[data-color-mode="dark"] {
   --ui-shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.36);
   --ui-success-bg: #133b31;
   --ui-success-text: #8ae1bf;
+  --ui-info-bg: #203655;
+  --ui-info-text: #a5c8ff;
   --ui-warning-bg: #412f16;
   --ui-warning-text: #f4c66d;
   --ui-danger-bg: #45201f;

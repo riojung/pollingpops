@@ -1,7 +1,17 @@
 .overview {
+  --result-kind-ink: var(--ui-kind-round-text);
   display: grid;
   gap: 8px;
   margin-bottom: 14px;
+}
+.overview[data-kind="presentation"] {
+  --result-kind-ink: var(--ui-kind-presentation-text);
+}
+.overview[data-kind="survey"] {
+  --result-kind-ink: var(--ui-kind-survey-text);
+}
+.overview[data-kind="practice"] {
+  --result-kind-ink: var(--ui-kind-practice-text);
 }
 .header {
   display: flex;
@@ -41,15 +51,9 @@
   left: 14px;
   right: 14px;
   height: 3px;
-  background: #eeb3c6;
+  background: var(--result-kind-ink);
   content: "";
   border-radius: 0 0 4px 4px;
-}
-.widget:nth-child(2)::before {
-  background: #efcf76;
-}
-.widget:nth-child(3)::before {
-  background: #91cbb3;
 }
 .countWidget {
   display: grid;
@@ -139,7 +143,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--ui-accent-ink);
+  background: var(--ui-info-text);
 }
 .emptyTrack {
   border: 1px dashed var(--ui-border-strong);
@@ -178,20 +182,20 @@
   height: 7px;
   border-radius: 2px;
 }
-.distribution [data-tone="green"] {
-  background: #3d9a78;
+.distribution [data-tone="positive"] {
+  background: var(--ui-success-text);
 }
-.distribution [data-tone="yellow"] {
-  background: #d6a63d;
+.distribution [data-tone="warning"] {
+  background: var(--ui-warning-text);
 }
-.distribution [data-tone="pink"] {
-  background: #c85b83;
+.distribution [data-tone="danger"] {
+  background: var(--ui-danger-text);
 }
-.distribution [data-tone="purple"] {
-  background: #9383bc;
+.distribution [data-tone="active"] {
+  background: var(--ui-info-text);
 }
-.distribution [data-tone="muted"] {
-  background: #87929e;
+.distribution [data-tone="neutral"] {
+  background: var(--ui-text-muted);
 }
 .kindIcon {
   display: grid;
@@ -200,12 +204,10 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  color: var(--ui-accent-ink);
-  background: var(--ui-accent-soft);
+  background: var(--ui-kind-survey-bg);
 }
 .kindIcon[data-kind="presentation"] {
-  color: var(--ui-text-strong);
-  background: var(--ui-surface-soft);
+  background: var(--ui-kind-presentation-bg);
 }
 .kindIcon svg {
   width: 21px;

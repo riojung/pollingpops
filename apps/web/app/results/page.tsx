@@ -11,6 +11,11 @@ import { formatDateTime, formatNumber, pluralCategory } from "../../lib/i18n/for
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { SessionPhaseLabel } from "../../components/workspace/session-phase-label";
+import {
+  WorkspaceKindIcon,
+  WorkspaceStatus,
+  workspaceStateTone,
+} from "../../components/workspace/workspace-signals";
 import type {
   CursorPage,
   FollowupSummary,
@@ -19,6 +24,7 @@ import type {
 } from "../../components/workspace/workspace-types";
 import styles from "../../components/workspace/workspace-content.module.css";
 import controls from "../../components/workspace/workspace-history-controls.module.css";
+import signals from "../../components/workspace/workspace-signals.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
@@ -402,7 +408,12 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         aria-label={t("pages.common.results")}
       >
         {reports.map((report) => (
-          <article className={`${styles.listCard} ${resultStyles.card}`} key={report.id}>
+          <article
+            className={`${styles.listCard} ${resultStyles.card} ${signals.surface}`}
+            data-kind="round"
+            data-state-tone={workspaceStateTone(report.status)}
+            key={report.id}
+          >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <h2 lang="">{report.title}</h2>
@@ -417,11 +428,11 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
                   · {followupLifecycleLabel(report, t)}
                 </p>
               </div>
-              <span className={styles.status} data-tone={report.status}>
+              <WorkspaceStatus status={report.status}>
                 {t(
                   `pages.common.status.${report.status === "pending" ? "processing" : report.status === "failed" ? "needsAttention" : "ready"}`,
                 )}
-              </span>
+              </WorkspaceStatus>
             </div>
             <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
               <EvidenceMeter
@@ -455,13 +466,21 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
               </div>
             </div>
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
-              <Link className="button small-button" href={`/report/${report.id}`}>
+              <Link
+                className={`button small-button ${signals.action}`}
+                data-action={report.status === "ready" ? "result" : "view"}
+                href={`/report/${report.id}`}
+              >
                 {report.status === "ready"
                   ? t("pages.results.openRecoveryStory")
                   : t("pages.results.viewStatus")}
               </Link>
               {report.followupId ? (
-                <Link className="button-quiet small-button" href="/results?view=practice">
+                <Link
+                  className={`button-quiet small-button ${signals.action}`}
+                  data-action="view"
+                  href="/results?view=practice"
+                >
                   {t("pages.results.viewFollowup")}
                 </Link>
               ) : null}
@@ -564,7 +583,12 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         aria-label={t("pages.results.practiceListLabel")}
       >
         {followups.map((followup) => (
-          <article className={`${styles.listCard} ${resultStyles.card}`} key={followup.id}>
+          <article
+            className={`${styles.listCard} ${resultStyles.card} ${signals.surface}`}
+            data-kind="practice"
+            data-state-tone={workspaceStateTone(followup.status)}
+            key={followup.id}
+          >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <h2 lang="">{followup.title}</h2>
@@ -593,9 +617,9 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
                     ? t("pages.results.assignment")
                     : t("pages.results.recoveryFollowup")}
                 </span>
-                <span className={styles.status} data-tone={followup.status}>
+                <WorkspaceStatus status={followup.status}>
                   {t(`pages.common.status.${followup.status}`)}
-                </span>
+                </WorkspaceStatus>
               </div>
             </div>
             <div className={resultStyles.cardDetails}>
@@ -640,12 +664,17 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
               ) : null}
             </div>
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
-              <Link className="button small-button" href={`/practice/${followup.id}`}>
+              <Link
+                className={`button small-button ${signals.action}`}
+                data-action="view"
+                href={`/practice/${followup.id}`}
+              >
                 {t("pages.results.managePractice")}
               </Link>
               {followup.sourceReportId ? (
                 <Link
-                  className="button-quiet small-button"
+                  className={`button-quiet small-button ${signals.action}`}
+                  data-action="result"
                   href={`/report/${followup.sourceReportId}`}
                 >
                   {t("pages.results.viewSourceResult")}
@@ -802,7 +831,12 @@ function PresentationResultList(listControls: ListControls) {
         aria-label={t("pages.results.presentationResults")}
       >
         {visible.map((session) => (
-          <article className={`${styles.listCard} ${resultStyles.card}`} key={session.id}>
+          <article
+            className={`${styles.listCard} ${resultStyles.card} ${signals.surface}`}
+            data-kind="presentation"
+            data-state-tone={workspaceStateTone(session.status)}
+            key={session.id}
+          >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
                 <div className={resultStyles.titleRow}>
@@ -819,9 +853,9 @@ function PresentationResultList(listControls: ListControls) {
                   })}
                 </p>
               </div>
-              <span className={styles.status} data-tone={session.status}>
+              <WorkspaceStatus status={session.status}>
                 {t(`pages.common.status.${session.status}`)}
-              </span>
+              </WorkspaceStatus>
             </div>
             <div className={`${styles.metricGrid} ${resultStyles.metrics}`}>
               <div className={styles.metric}>
@@ -841,13 +875,15 @@ function PresentationResultList(listControls: ListControls) {
             </div>
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
               <Link
-                className="button small-button"
+                className={`button small-button ${signals.action}`}
+                data-action="result"
                 href={`/presentation-session/${session.id}/report`}
               >
                 {t("pages.results.openReport")}
               </Link>
               <Link
-                className="button-quiet small-button"
+                className={`button-quiet small-button ${signals.action}`}
+                data-action="view"
                 href={`/presentation/${session.presentationId}`}
               >
                 {t("pages.sessions.viewPresentation")}
@@ -1032,7 +1068,9 @@ function SurveyResultList(listControls: ListControls) {
       >
         {visible.map((room) => (
           <article
-            className={`${styles.listCard} ${resultStyles.card} ${resultStyles.surveyCard}`}
+            className={`${styles.listCard} ${resultStyles.card} ${resultStyles.surveyCard} ${signals.surface}`}
+            data-kind="survey"
+            data-state-tone={workspaceStateTone("closed")}
             key={room.id}
           >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
@@ -1055,12 +1093,14 @@ function SurveyResultList(listControls: ListControls) {
                   })}
                 </p>
               </div>
-              <span className={styles.status} data-tone="closed">
-                {t("pages.common.status.closed")}
-              </span>
+              <WorkspaceStatus status="closed">{t("pages.common.status.closed")}</WorkspaceStatus>
             </div>
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
-              <Link className="button small-button" href={`/results/surveys/${room.id}`}>
+              <Link
+                className={`button small-button ${signals.action}`}
+                data-action="result"
+                href={`/results/surveys/${room.id}`}
+              >
                 {t("pages.common.viewResults")}
               </Link>
             </div>
@@ -1178,32 +1218,40 @@ function ResultsContent() {
         <nav className={controls.tabs} aria-label={t("pages.results.evidenceViews")}>
           <Link
             aria-current={view === "results" ? "page" : undefined}
-            className={view === "results" ? controls.tabActive : controls.tab}
+            className={`${view === "results" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+            data-kind="round"
             href="/results"
           >
+            <WorkspaceKindIcon kind="round" />
             {t("pages.common.rounds")}
           </Link>
           {presentationsEnabled ? (
             <Link
               aria-current={view === "presentations" ? "page" : undefined}
-              className={view === "presentations" ? controls.tabActive : controls.tab}
+              className={`${view === "presentations" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+              data-kind="presentation"
               href="/results?view=presentations"
             >
+              <WorkspaceKindIcon kind="presentation" />
               {t("pages.common.presentations")}
             </Link>
           ) : null}
           <Link
             aria-current={view === "surveys" ? "page" : undefined}
-            className={view === "surveys" ? controls.tabActive : controls.tab}
+            className={`${view === "surveys" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+            data-kind="survey"
             href="/results?view=surveys"
           >
+            <WorkspaceKindIcon kind="survey" />
             {t("pages.common.surveys")}
           </Link>
           <Link
             aria-current={view === "practice" ? "page" : undefined}
-            className={view === "practice" ? controls.tabActive : controls.tab}
+            className={`${view === "practice" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+            data-kind="practice"
             href="/results?view=practice"
           >
+            <WorkspaceKindIcon kind="practice" />
             {t("pages.results.practice")}
           </Link>
         </nav>

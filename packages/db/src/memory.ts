@@ -2,6 +2,7 @@ import type { FolderArtifactType } from "@openround/contracts";
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
 import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
+import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
@@ -4400,10 +4401,7 @@ export class MemoryRepository implements Repository {
             title: session.state.quiz.title,
             status: report.status,
             participantCount: report.metrics.participantCount,
-            initialAccuracyPercent:
-              "initialAccuracy" in report
-                ? report.initialAccuracy.percent
-                : report.metrics.accuracyPercent,
+            initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
             recovery: {
               recovered,
               eligible,

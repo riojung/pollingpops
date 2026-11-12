@@ -8,6 +8,19 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Option B report evidence and recovery November 12, 2026
+
+The `codex/option-b-report-clarity` source corrects Round history/Home summaries that
+presented unanswered assessments as `0%`, preserving genuine measured zeros and immutable
+stored reports. Presentation report reads and captured exports now fence auth/workspace
+changes, late responses and canonical context changes. Exhausted transient reads have an
+honest unavailable state and explicit retry. The report controls and embedded Session
+insights panel cover all ten locales while original authored/report text and existing
+CSV/readable-summary downloads remain unchanged. See the
+[implementation record](option-b-ux-implementation.md#report-evidence-and-recovery--november-12-2026).
+Manual/native-language/customer/device/hosted acceptance and the 15 pending release gates
+remain separate work; no staging environment is selected.
+
 ### Home overview and compact recent work November 12, 2026
 
 The `codex/home-insights-workspace` source adds four linked Home widgets for accessible

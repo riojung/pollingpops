@@ -5,6 +5,14 @@ import { dirname, resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { supportedLocales } from "../../packages/contracts/src/index";
 import {
+  presentationReportCopy,
+  presentationReportCopyKeys,
+} from "../../apps/web/lib/i18n/presentation-report-copy";
+import {
+  presentationInsightsCopy,
+  presentationInsightsCopyKeys,
+} from "../../apps/web/lib/i18n/presentation-insights-copy";
+import {
   assertInvariantParity,
   buildReviewBundle,
   canonicalJson,
@@ -62,6 +70,8 @@ describe("native-language review preparation", () => {
         "pack-practice-setup",
         "pack-practice-detail",
         "pack-practice",
+        "presentation-report",
+        "presentation-insights",
         "creation-goal",
         "creation",
         "template",
@@ -97,6 +107,70 @@ describe("native-language review preparation", () => {
       });
     }
   }, 60_000);
+
+  it("includes all 164 exact report and insights phrases with bound sources and pending decisions", () => {
+    const groups = [
+      {
+        group: "presentation-report",
+        helper: "presentationReportCopy",
+        count: 44,
+        phrases: presentationReportCopyKeys.map((key) => ({
+          key,
+          english: presentationReportCopy()(key),
+          target: presentationReportCopy("ko-KR")(key),
+        })),
+      },
+      {
+        group: "presentation-insights",
+        helper: "presentationInsightsCopy",
+        count: 120,
+        phrases: presentationInsightsCopyKeys.map((key) => ({
+          key,
+          english: presentationInsightsCopy()(key),
+          target: presentationInsightsCopy("ko-KR")(key),
+        })),
+      },
+    ];
+    const decisions = createReviewDecisions(bundle);
+    let phraseCount = 0;
+    for (const { group, helper, count, phrases } of groups) {
+      const items = bundle.items.filter((item) => item.id.startsWith(`ui/${group}/`));
+      expect(items).toHaveLength(count);
+      expect(items.map((item) => item.id).sort()).toEqual(
+        phrases.map(({ key }) => `ui/${group}/${encodeURIComponent(key)}`).sort(),
+      );
+      expect(bundle.sourceBinding.files).toContainEqual({
+        path: `apps/web/lib/i18n/${group}-copy.ts`,
+        sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      });
+      for (const { key, english, target } of phrases) {
+        const id = `ui/${group}/${encodeURIComponent(key)}`;
+        expect(items.find((item) => item.id === id)).toMatchObject({
+          source: {
+            file: `apps/web/lib/i18n/${group}-copy.ts`,
+            helper,
+            contentVersion: "repository-source",
+          },
+          english: { template: english },
+          target: { template: target },
+        });
+        expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+          decision: "pending",
+          reviewerReference: null,
+          reviewedAt: null,
+          issue: null,
+          evidenceReference: null,
+        });
+      }
+      phraseCount += items.length;
+    }
+    expect(phraseCount).toBe(164);
+    expect(checkReviewDecisions(bundle, decisions)).toMatchObject({
+      complete: false,
+      nativeAcceptance: false,
+      pending: bundle.items.length,
+    });
+  });
 
   it("is byte deterministic despite fresh generated identities and changing invocation time", async () => {
     const again = await buildReviewBundle("ko-KR", sourceRef);
@@ -427,9 +501,19 @@ describe("native-language review preparation", () => {
         await mkdir(dirname(destination), { recursive: true });
         await writeFile(destination, await readFile(resolve(file.path)));
       }
-      const changed = resolve(root, "apps/web/lib/presentation-template-locales/ko-KR.json");
-      await writeFile(changed, (await readFile(changed, "utf8")) + "\n");
-      await expect(validateCurrentReview(bundle, completedReview(), root)).rejects.toThrow(/stale/);
+      for (const path of [
+        "apps/web/lib/presentation-template-locales/ko-KR.json",
+        "apps/web/lib/i18n/presentation-report-copy.ts",
+        "apps/web/lib/i18n/presentation-insights-copy.ts",
+      ]) {
+        const changed = resolve(root, path);
+        const original = await readFile(changed, "utf8");
+        await writeFile(changed, original + "\n");
+        await expect(validateCurrentReview(bundle, completedReview(), root)).rejects.toThrow(
+          /stale/,
+        );
+        await writeFile(changed, original);
+      }
       expect(bundle.sourceBinding.sourceRef).toBe(sourceRef);
     } finally {
       await rm(root, { recursive: true, force: true });

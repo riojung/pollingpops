@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type {
   PresentationSessionInsights,
   PresentationSessionInsightsEnvelope,
+  SupportedLocale,
 } from "@openround/contracts";
 import { ApiClientError, humanError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
@@ -16,7 +17,9 @@ import {
   presentationInsightsCsv,
   presentationInsightsHtml,
   presentationInsightsView,
+  type PresentationInsightsTable,
 } from "../../lib/presentation-session-insights-export";
+import { presentationInsightsCopy } from "../../lib/i18n/presentation-insights-copy";
 import styles from "./insights.module.css";
 
 function Facts({ rows }: { rows: Array<[string, string]> }) {
@@ -31,24 +34,42 @@ function Facts({ rows }: { rows: Array<[string, string]> }) {
     </dl>
   );
 }
+function TableTitle({ table }: { table: PresentationInsightsTable }) {
+  return table.titleParts ? (
+    <>
+      {table.titleParts.map((part, index) => (
+        <span key={index} lang={part.authored ? "" : undefined}>
+          {part.text}
+        </span>
+      ))}
+    </>
+  ) : (
+    table.title
+  );
+}
 export function PresentationInsightsDetails({
   insights,
   locale = "en-CA",
 }: {
   insights: PresentationSessionInsights;
-  locale?: string;
+  locale?: SupportedLocale;
 }) {
-  const view = presentationInsightsView(insights, locale);
+  const copy = presentationInsightsCopy(locale);
+  const view = presentationInsightsView(insights, locale, copy);
   return (
-    <>
-      <h3>Delivery coverage</h3>
+    <div lang={locale}>
+      <h3>{copy("Delivery coverage")}</h3>
       <Facts rows={view.facts} />
       {view.tables.map((table) => (
         <section key={table.title}>
-          <h3>{table.title}</h3>
+          <h3>
+            <TableTitle table={table} />
+          </h3>
           <div className={styles.table} tabIndex={0} role="region" aria-label={table.title}>
             <table>
-              <caption className="sr-only">{table.title}</caption>
+              <caption className="sr-only">
+                <TableTitle table={table} />
+              </caption>
               <thead>
                 <tr>
                   {table.columns.map((column) => (
@@ -63,11 +84,20 @@ export function PresentationInsightsDetails({
                   <tr key={index}>
                     {row.map((cell, column) =>
                       column === 0 ? (
-                        <th scope="row" key={column} lang="">
+                        <th
+                          scope="row"
+                          key={column}
+                          lang={table.authoredCells?.[index]?.[column] ? "" : undefined}
+                        >
                           {cell}
                         </th>
                       ) : (
-                        <td key={column}>{cell}</td>
+                        <td
+                          key={column}
+                          lang={table.authoredCells?.[index]?.[column] ? "" : undefined}
+                        >
+                          {cell}
+                        </td>
                       ),
                     )}
                   </tr>
@@ -79,45 +109,48 @@ export function PresentationInsightsDetails({
         </section>
       ))}
       <section>
-        <h3>Q&A outcomes</h3>
+        <h3>{copy("Q&A outcomes")}</h3>
         <Facts rows={view.qna} />
         <p>{view.qnaNote}</p>
       </section>
       <details className={styles.notes}>
-        <summary>Reading these insights</summary>
+        <summary>{copy("Reading these insights")}</summary>
         <ul>
           {view.notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
       </details>
-    </>
+    </div>
   );
 }
 
 export function PresentationSessionInsightsPanel({
   source,
+  canUseEvidence = () => true,
 }: {
   source: PresentationInsightsSource;
+  canUseEvidence?: () => boolean;
 }) {
   const headingId = useId();
   const { locale } = useLocale();
+  const copy = presentationInsightsCopy(locale);
   const [data, setData] = useState<PresentationSessionInsightsEnvelope | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [downloadError, setDownloadError] = useState("");
-  const [downloadStatus, setDownloadStatus] = useState("");
+  const [downloadStarted, setDownloadStarted] = useState(false);
   const releaseDownload = useRef<(() => void) | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
     setLoading(true);
-    setError("");
+    setLoadFailed(false);
     setUnavailable(false);
     setDownloadError("");
-    setDownloadStatus("");
+    setDownloadStarted(false);
     void fetchPresentationSessionInsights(source, controller.signal)
       .then((value) => {
         if (!controller.signal.aborted) setData(value);
@@ -126,10 +159,7 @@ export function PresentationSessionInsightsPanel({
         if (controller.signal.aborted) return;
         if (caught instanceof ApiClientError && [404, 405, 501].includes(caught.status))
           setUnavailable(true);
-        else
-          setError(
-            "Could not load session insights. The detailed report is still available below.",
-          );
+        else setLoadFailed(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -146,9 +176,9 @@ export function PresentationSessionInsightsPanel({
       ? insights
       : null;
   function download(format: "csv" | "html") {
-    if (!current) return;
+    if (!current || !canUseEvidence()) return;
     setDownloadError("");
-    setDownloadStatus("");
+    setDownloadStarted(false);
     try {
       const contents =
         format === "csv"
@@ -156,57 +186,80 @@ export function PresentationSessionInsightsPanel({
           : presentationInsightsHtml(current, locale);
       releaseDownload.current?.();
       releaseDownload.current = downloadPresentationInsightsFile(contents, format);
-      setDownloadStatus("Download started. Downloaded copies cannot be revoked.");
+      setDownloadStarted(true);
     } catch (caught) {
       setDownloadError(humanError(caught));
     }
   }
   return (
-    <section className={styles.panel} aria-labelledby={headingId} lang="en-CA">
-      <h2 id={headingId}>Session insights</h2>
-      {loading ? <p role="status">Loading session insights…</p> : null}
+    <section className={styles.panel} aria-labelledby={headingId} lang={locale}>
+      <h2 id={headingId}>{copy("Session insights")}</h2>
+      {loading ? <p role="status">{copy("Loading session insights…")}</p> : null}
       {unavailable ? (
         <p role="status">
-          Additional insights are unavailable for this report. The detailed report and summary
-          controls remain available.
+          {copy(
+            "Additional insights are unavailable for this report. The detailed report and summary controls remain available.",
+          )}
         </p>
       ) : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {loadFailed ? (
+        <p role="alert">
+          {copy("Could not load session insights. The detailed report is still available below.")}
+        </p>
+      ) : null}
       {data?.status === "pending" ? (
         <p role="status">
-          Session insights are still being reconciled. The detailed report is available below.
+          {copy(
+            "Session insights are still being reconciled. The detailed report is available below.",
+          )}
         </p>
       ) : null}
       {data?.status === "failed" ? (
         <p role="alert">
-          Session insights could not be reconciled. The detailed report is still available below.
+          {copy(
+            "Session insights could not be reconciled. The detailed report is still available below.",
+          )}
         </p>
       ) : null}
       {!loading && !current ? (
         <button type="button" onClick={() => setAttempt((value) => value + 1)}>
-          Retry insights
+          {copy("Retry insights")}
         </button>
       ) : null}
       {current ? (
         <>
           <div className={styles.actions}>
             <button type="button" onClick={() => download("csv")}>
-              Export coverage CSV
+              {copy("Export coverage CSV")}
             </button>
             <button type="button" onClick={() => download("html")}>
-              Download readable summary
+              {copy("Download readable summary")}
             </button>
             <button type="button" onClick={() => setAttempt((value) => value + 1)}>
-              Refresh insights
+              {copy("Refresh insights")}
             </button>
           </div>
-          <p>Downloaded copies cannot be revoked. Keep them within the intended audience.</p>
+          <p>
+            {copy("Downloaded copies cannot be revoked. Keep them within the intended audience.")}
+          </p>
           <PresentationInsightsDetails insights={current} locale={locale} />
         </>
       ) : null}
-      {downloadError ? <p role="alert">{downloadError}</p> : null}
-      <p className={downloadStatus ? undefined : "sr-only"} role="status" aria-live="polite">
-        {downloadStatus}
+      {downloadError ? (
+        <p role="alert">
+          {downloadError ===
+          "This summary exceeds the 1 MiB download limit. No file was downloaded." ? (
+            copy("This summary exceeds the 1 MiB download limit. No file was downloaded.")
+          ) : (
+            <>
+              {copy("Service message (original language)")}:{" "}
+              <span lang="en-CA">{downloadError}</span>
+            </>
+          )}
+        </p>
+      ) : null}
+      <p className={downloadStarted ? undefined : "sr-only"} role="status" aria-live="polite">
+        {downloadStarted ? copy("Download started. Downloaded copies cannot be revoked.") : ""}
       </p>
     </section>
   );

@@ -15,6 +15,7 @@ import { PlatformService } from "./platform-service.js";
 import { PlatformError } from "./platform-types.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
+import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import {
   MAX_SESSION_DECISION_EVENTS,
   QUESTION_HEALTH_POST_USE_MAX_REPORTS,
@@ -710,8 +711,7 @@ function mapReportHistory(row: QueryResultRow): ReportHistoryRecord {
     title: String(row.quiz_title),
     status: report.status,
     participantCount: report.metrics.participantCount,
-    initialAccuracyPercent:
-      "initialAccuracy" in report ? report.initialAccuracy.percent : report.metrics.accuracyPercent,
+    initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
     recovery: {
       recovered,
       eligible,

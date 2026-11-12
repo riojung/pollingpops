@@ -176,6 +176,38 @@ beforeEach(() => {
 });
 
 describe("workspace Home", () => {
+  it("shows missing report evidence separately from a measured zero", () => {
+    mocked.summary = emptySummary();
+    const result = {
+      id: "empty-assessment",
+      artifactType: "round" as const,
+      title: "Assessment without responses",
+      status: "ready" as const,
+      participantCount: 3,
+      accuracyPercent: null,
+      recoveryPercent: null,
+      createdAt: mocked.summary.generatedAt,
+      href: "/report/empty-assessment",
+    };
+    mocked.summary.resultHighlights = [
+      result,
+      {
+        ...result,
+        id: "measured-zero",
+        title: "Assessment with incorrect responses",
+        accuracyPercent: 0,
+        href: "/report/measured-zero",
+      },
+    ];
+    const markup = renderHome();
+    const empty = markup.match(/<a\b[^>]*href="\/report\/empty-assessment"[\s\S]*?<\/a>/)?.[0];
+    const measured = markup.match(/<a\b[^>]*href="\/report\/measured-zero"[\s\S]*?<\/a>/)?.[0];
+    expect(empty).toContain("Assessment without responses");
+    expect(empty).toContain("—");
+    expect(empty).not.toContain("0%");
+    expect(measured).toContain("0%");
+  });
+
   it("shows workspace totals separately from recent result and assignment evidence", () => {
     mocked.summary = mixedSummary();
     mocked.summary.totals.artifacts = 120;

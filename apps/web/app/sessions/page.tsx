@@ -49,6 +49,23 @@ const EMPTY_DATA: SessionData = {
   nextCursor: null,
 };
 
+function DeleteIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      focusable="false"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" />
+    </svg>
+  );
+}
+
 function SessionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -828,14 +845,27 @@ function SessionsContent() {
                   </Link>
                   {sessionActions("rounds", session.status, role).canDelete ? (
                     <button
-                      className="button-quiet small-button"
+                      aria-label={
+                        deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")
+                      }
+                      className={`button-quiet small-button ${styles.deleteButton}`}
                       disabled={mutationBusy}
                       onClick={() => void deleteSession(session, session.status)}
+                      title={
+                        deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")
+                      }
                       type="button"
                     >
-                      {deletingId === session.id
-                        ? t("pages.sessions.deleting")
-                        : t("pages.sessions.delete")}
+                      <DeleteIcon />
+                      <span aria-live="polite" className="sr-only">
+                        {deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")}
+                      </span>
                     </button>
                   ) : null}
                 </div>
@@ -907,14 +937,27 @@ function SessionsContent() {
                     </Link>
                     {actions.canDelete ? (
                       <button
-                        className="button-quiet small-button"
+                        aria-label={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")
+                        }
+                        className={`button-quiet small-button ${styles.deleteButton}`}
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
+                        title={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")
+                        }
                         type="button"
                       >
-                        {deletingId === session.id
-                          ? t("pages.sessions.deleting")
-                          : t("pages.sessions.delete")}
+                        <DeleteIcon />
+                        <span aria-live="polite" className="sr-only">
+                          {deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")}
+                        </span>
                       </button>
                     ) : null}
                   </div>
@@ -964,14 +1007,27 @@ function SessionsContent() {
                     ) : null}
                     {actions.canDelete ? (
                       <button
-                        className="button-quiet small-button"
+                        aria-label={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")
+                        }
+                        className={`button-quiet small-button ${styles.deleteButton}`}
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
+                        title={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")
+                        }
                         type="button"
                       >
-                        {deletingId === session.id
-                          ? t("pages.sessions.deleting")
-                          : t("pages.sessions.deleteSurvey")}
+                        <DeleteIcon />
+                        <span aria-live="polite" className="sr-only">
+                          {deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")}
+                        </span>
                       </button>
                     ) : null}
                   </div>

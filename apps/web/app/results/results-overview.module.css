@@ -1,46 +1,45 @@
 .overview {
   display: grid;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 .header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
 }
 .header > strong {
   color: var(--ui-text-strong);
-  font-size: 16px;
+  font-size: 14px;
 }
 .header p,
 .more {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--ui-text-muted);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 .widgets {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--workspace-card-gap, 0.625rem);
 }
 .widget {
   position: relative;
   min-width: 0;
   margin: 0;
-  padding: 21px;
+  padding: var(--workspace-card-padding, 0.875rem);
   border: 1px solid var(--ui-border);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--ui-surface-raised);
-  overflow: hidden;
 }
 .widget::before {
   position: absolute;
   top: 0;
-  left: 22px;
-  right: 22px;
+  left: 14px;
+  right: 14px;
   height: 3px;
   background: #eeb3c6;
   content: "";
@@ -52,74 +51,86 @@
 .widget:nth-child(3)::before {
   background: #91cbb3;
 }
+.countWidget {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, 0.35fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
 .widget dl {
+  min-width: 0;
   margin: 0;
 }
 .widget dt {
   color: var(--ui-text-subtle);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 650;
-  line-height: 1.5;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .widget dd {
-  margin: 8px 0 12px;
+  margin: 4px 0 0;
   color: var(--ui-text-strong);
-  font-size: 34px;
+  font-size: 26px;
   font-weight: 750;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .widget .textValue {
-  font-size: 22px;
+  font-size: 16px;
 }
 .widget p,
 .evidence small {
   color: var(--ui-text-muted);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .widget .qualifier {
-  margin-bottom: 12px;
-  font-size: 13px;
+  margin-bottom: 6px;
+  font-size: 12px;
 }
 .widget dd p {
-  margin-top: 12px;
+  margin-top: 6px;
   font-weight: 400;
 }
 .evidence {
   min-width: 0;
   display: grid;
-  gap: 9px;
-}
-.evidenceHeading {
-  display: grid;
   gap: 5px;
 }
+.evidenceHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px 8px;
+}
 .evidenceHeading > span {
-  font-size: 14px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--ui-text-subtle);
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 .evidenceHeading > strong {
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   color: var(--ui-text-strong);
-  white-space: nowrap;
-  overflow-wrap: normal;
-  width: max-content;
   max-width: 100%;
-}
-.widget .evidenceHeading {
-  flex-direction: column;
+  overflow-wrap: anywhere;
 }
 .widget .evidenceHeading > strong {
-  font-size: 34px;
+  font-size: 26px;
 }
 .track,
 .emptyTrack,
 .statusTrack {
-  height: 9px;
+  height: 6px;
   border-radius: 20px;
   background: var(--ui-surface-soft);
   overflow: hidden;
@@ -135,8 +146,9 @@
   background: transparent;
 }
 .distribution {
+  min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 .statusTrack {
   display: flex;
@@ -148,16 +160,20 @@
   margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px 12px;
+  gap: 5px 10px;
 }
 .distribution li {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--ui-text-subtle);
+  overflow-wrap: anywhere;
 }
 .distribution li > span {
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   border-radius: 2px;
@@ -179,11 +195,11 @@
 }
 .kindIcon {
   display: grid;
+  flex-shrink: 0;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  margin-bottom: 6px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   color: var(--ui-accent-ink);
   background: var(--ui-accent-soft);
 }
@@ -192,8 +208,8 @@
   background: var(--ui-surface-soft);
 }
 .kindIcon svg {
-  width: 27px;
-  height: 27px;
+  width: 21px;
+  height: 21px;
 }
 @media (max-width: 900px) {
   .widgets {
@@ -206,9 +222,6 @@
 @media (max-width: 560px) {
   .widgets {
     grid-template-columns: 1fr;
-  }
-  .widget {
-    padding: 18px;
   }
   .widgets > :last-child {
     grid-column: auto;

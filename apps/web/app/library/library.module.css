@@ -1,33 +1,36 @@
 .toolbar {
   display: grid;
-  grid-template-columns: auto minmax(200px, 1fr);
-  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--workspace-card-gap, 0.625rem);
   align-items: center;
   margin-bottom: 12px;
   padding: 10px;
   border: 1px solid var(--ui-border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--ui-surface-raised);
 }
 
 .advancedFilters {
+  min-width: 0;
+  max-width: 100%;
   align-self: end;
 }
 .advancedFilters > summary {
-  min-height: 40px;
-  padding: 9px 14px;
+  min-height: var(--workspace-control-height, 2.25rem);
+  padding: 7px 12px;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
   background: var(--ui-surface);
   cursor: pointer;
+  font-size: 13px;
   font-weight: 700;
 }
 .advancedFilterPanel {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--workspace-card-gap, 0.625rem);
   align-items: end;
-  padding: 14px;
+  padding: var(--workspace-card-padding, 0.875rem);
   margin-top: 8px;
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-small);
@@ -40,37 +43,45 @@
   margin-bottom: 12px;
 }
 .appliedFilters button {
-  min-height: 40px;
+  min-height: var(--workspace-control-height, 2.25rem);
+  min-width: 0;
+  max-width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   color: var(--ui-accent-ink);
   background: var(--ui-accent-soft);
+  overflow-wrap: anywhere;
 }
 .presentationPreview {
+  display: grid;
+  height: 84px;
+  padding: 6px 52px;
+  place-items: center;
   overflow: hidden;
-  border-radius: 15px 15px 0 0;
-  min-height: 145px;
+  border-radius: 11px 11px 0 0;
   background: var(--ui-surface-soft);
-  padding-top: 44px;
 }
 .presentationPreview > strong {
-  display: block;
-  padding: 50px 42px 25px;
+  min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 .presentationPreview > div {
   position: relative;
   inset: auto;
-  width: 100%;
+  width: min(100%, 128px);
   border: 0;
-  border-radius: 15px 15px 0 0;
+  border-radius: 5px;
 }
 .questionPreview {
-  min-height: 145px;
-  padding: 48px 42px 18px;
+  height: 84px;
+  padding: 12px 52px;
+  overflow: hidden;
   background: var(--ui-accent-soft);
-  border-radius: 15px 15px 0 0;
+  border-radius: 11px 11px 0 0;
   color: var(--ui-text-strong);
 }
 .questionPreview > strong {
@@ -78,21 +89,24 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .questionPreview > div {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 .questionPreview span {
+  min-width: 0;
   max-width: 100%;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
   background: var(--ui-surface);
-  font-size: 12px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -104,20 +118,26 @@
 
 .tabs {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   gap: 5px;
 }
 
 .tab,
 .tabActive {
-  min-height: 42px;
-  padding: 8px 14px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--workspace-control-height, 2.25rem);
+  padding: 7px 10px;
   border: 0;
   border-radius: 9px;
   color: var(--ui-text-muted);
   font: inherit;
+  font-size: 13px;
   font-weight: 850;
   background: transparent;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .tab span,
@@ -155,14 +175,20 @@
   outline-offset: 2px;
 }
 
+.searchField {
+  min-width: 0;
+}
+
 .searchField input {
+  min-width: 0;
   width: 100%;
-  min-height: 42px;
-  padding: 9px 14px;
+  min-height: var(--workspace-control-height, 2.25rem);
+  padding: 7px 12px;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
   color: var(--ui-text-strong);
   font: inherit;
+  font-size: 13px;
   background: var(--ui-surface-soft);
 }
 
@@ -174,26 +200,32 @@
 }
 
 .manageLink {
-  padding: 0 8px;
+  display: inline-flex;
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
+  padding: 6px 8px;
+  align-items: center;
   color: var(--ui-accent-ink);
   font-size: 13px;
   font-weight: 750;
   text-decoration: none;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .filterBar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--workspace-card-gap, 0.625rem);
   align-items: end;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .filterField {
   display: grid;
   gap: 5px;
-  min-width: 165px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 165px;
 }
 
 .filterField > span {
@@ -202,10 +234,13 @@
   font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .filterField select {
-  min-height: 38px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--workspace-control-height, 2.25rem);
   padding: 7px 34px 7px 10px;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
@@ -218,7 +253,9 @@
 
 .favoriteFilter {
   display: inline-flex;
-  min-height: 38px;
+  min-width: 0;
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
   padding: 7px 12px;
   gap: 7px;
   align-items: center;
@@ -230,6 +267,7 @@
   font-weight: 800;
   background: var(--ui-surface);
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .favoriteFilter span {
@@ -254,16 +292,19 @@
 
 .viewToggle {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
   align-self: end;
-  padding: 3px;
+  padding: 2px;
   border: 1px solid var(--ui-border);
   border-radius: 10px;
   background: var(--ui-surface-soft);
 }
 
 .viewToggle button {
-  min-height: 32px;
-  padding: 5px 12px;
+  min-width: 0;
+  min-height: var(--workspace-control-height, 2.25rem);
+  padding: 5px 10px;
   border: 0;
   border-radius: 7px;
   color: var(--ui-text-muted);
@@ -272,6 +313,7 @@
   font-weight: 800;
   background: transparent;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .viewToggle button[aria-pressed="true"] {
@@ -282,10 +324,11 @@
 
 .selectionBar {
   display: flex;
-  min-height: 48px;
-  margin-bottom: 14px;
-  padding: 9px 12px;
-  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  gap: var(--workspace-row-gap, 0.5rem) 12px;
   align-items: center;
   border: 1px solid var(--ui-border);
   border-radius: 12px;
@@ -302,10 +345,13 @@
 
 .selectAll {
   display: inline-flex;
+  min-width: 0;
+  min-height: var(--workspace-control-height, 2.25rem);
   gap: 8px;
   align-items: center;
   font-weight: 750;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .selectAll input,
@@ -318,17 +364,22 @@
 
 .selectionHint {
   color: var(--ui-text-muted);
+  overflow-wrap: anywhere;
 }
 
 .bulkActions {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
 }
 
 .bulkActions button {
-  min-height: 30px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--workspace-control-height, 2.25rem);
   padding: 5px 10px;
   border: 1px solid var(--ui-border-strong);
   border-radius: 8px;
@@ -338,11 +389,18 @@
   font-weight: 800;
   background: var(--ui-surface);
   cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.bulkFolder {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bulkFolder select {
-  min-height: 30px;
-  max-width: 180px;
+  min-width: 0;
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: min(100%, 180px);
   padding: 4px 28px 4px 8px;
   border: 1px solid var(--ui-border-strong);
   border-radius: 8px;
@@ -368,17 +426,22 @@
   font-size: 13px;
   font-weight: 750;
   background: var(--ui-success-bg);
+  overflow-wrap: anywhere;
 }
 
 .collection {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 18px;
+  min-width: 0;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--workspace-grid-min, 16.5rem)), 1fr)
+  );
+  gap: var(--workspace-card-gap, 0.625rem);
 }
 
 .collection[data-view="list"] {
-  grid-template-columns: 1fr;
-  gap: 11px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--workspace-row-gap, 0.5rem);
 }
 
 .card {
@@ -388,21 +451,25 @@
   min-width: 0;
   overflow: visible;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: var(--ui-shadow-sm);
   background: var(--ui-surface-raised);
   transition:
-    transform 150ms ease,
     box-shadow 150ms ease,
     border-color 150ms ease;
 }
 
 .card:hover {
-  box-shadow: var(--ui-shadow-lg);
-  transform: translateY(-2px);
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-shadow-md);
 }
 
-.cardSelected {
+.card:has(.moreMenu[open]) {
+  z-index: 5;
+}
+
+.cardSelected,
+.cardSelected:hover {
   border-color: var(--ui-accent);
   box-shadow: 0 0 0 2px var(--ui-focus);
 }
@@ -410,11 +477,11 @@
 .cardSelector {
   position: absolute;
   z-index: 4;
-  top: 13px;
-  left: 13px;
+  top: 10px;
+  left: 10px;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: var(--workspace-control-height, 2.25rem);
+  height: var(--workspace-control-height, 2.25rem);
   place-items: center;
   border: 1px solid var(--ui-border-subtle);
   border-radius: 9px;
@@ -426,11 +493,11 @@
 .favoriteButton {
   position: absolute;
   z-index: 4;
-  top: 13px;
-  right: 13px;
+  top: 10px;
+  right: 10px;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: var(--workspace-control-height, 2.25rem);
+  height: var(--workspace-control-height, 2.25rem);
   padding: 0;
   place-items: center;
   border: 1px solid var(--ui-border-subtle);
@@ -455,11 +522,11 @@
 .artwork {
   position: relative;
   display: grid;
-  min-height: 145px;
-  padding: 22px;
+  height: 84px;
+  padding: 12px 52px;
   place-items: center;
   overflow: hidden;
-  border-radius: 15px 15px 0 0;
+  border-radius: 11px 11px 0 0;
 }
 
 .roundArtwork {
@@ -474,13 +541,13 @@
   position: relative;
   z-index: 2;
   display: grid;
-  width: 58px;
-  height: 58px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border: 1px solid rgb(255 255 255 / 32%);
-  border-radius: 18px;
+  border-radius: 12px;
   color: #ffffff;
-  font-size: 28px;
+  font-size: 21px;
   font-weight: 950;
   /* Repeated backdrop layers can exhaust WebKit's compositor in populated libraries. */
   background: rgb(255 255 255 / 16%);
@@ -510,25 +577,33 @@
   min-width: 0;
   height: auto;
   flex: 1;
-  padding: 18px;
+  padding: var(--workspace-card-padding, 0.875rem);
+  gap: var(--workspace-card-gap, 0.625rem);
   flex-direction: column;
 }
 
 .cardMeta {
   display: flex;
   min-width: 0;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   align-items: center;
   justify-content: space-between;
   color: var(--ui-text-muted);
   font-size: 11px;
   font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.cardMeta > span {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .status,
 .changed {
-  flex: 0 0 auto;
-  padding: 4px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   color: var(--ui-accent-ink);
   text-transform: capitalize;
@@ -546,10 +621,7 @@
 }
 
 .changed {
-  overflow: hidden;
   color: var(--ui-warning-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   background: var(--ui-warning-bg);
 }
 
@@ -560,67 +632,92 @@
 }
 
 .card h2 {
-  margin: 14px 0 6px;
-  overflow: hidden;
+  margin: 0 0 6px;
   color: var(--ui-text-strong);
-  font-size: 20px;
+  font-size: 16px;
   overflow-wrap: anywhere;
   line-height: 1.3;
 }
 
 .description {
   display: -webkit-box;
-  min-height: 2.8em;
-  margin: 0 0 10px;
-  overflow: hidden;
-  color: var(--ui-text-muted);
-  line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0 0 6px;
+  color: var(--ui-text-muted);
+  line-height: 1.4;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .facts {
   margin: 0;
   color: var(--ui-text-subtle);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .folderLabel {
   display: inline-flex;
-  margin: 9px 0 0;
-  padding: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 6px 0 0;
+  padding: 2px 6px;
   border-radius: 7px;
   color: var(--ui-text-subtle);
   font-size: 11px;
   font-weight: 750;
   background: var(--ui-surface-soft);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.folderLabel > span {
+  min-width: 0;
 }
 
 .cardActions {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  margin-top: 18px;
+}
+
+.cardActions > a {
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .moreMenu {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
 }
 
 .moreMenu summary {
-  min-height: 32px;
+  display: flex;
+  min-height: var(--workspace-control-height, 2.25rem);
   padding: 6px 10px;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   color: var(--ui-text-subtle);
   font-size: 12px;
   font-weight: 800;
+  align-items: center;
   list-style: none;
   background: var(--ui-surface);
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .moreMenu summary::-webkit-details-marker {
@@ -633,7 +730,9 @@
   right: 0;
   bottom: calc(100% + 7px);
   display: grid;
-  width: 150px;
+  width: max-content;
+  min-width: 150px;
+  max-width: min(240px, calc(100vw - 32px));
   padding: 6px;
   border: 1px solid var(--ui-border);
   border-radius: 10px;
@@ -642,6 +741,8 @@
 }
 
 .moreMenuPanel button {
+  min-width: 0;
+  min-height: var(--workspace-control-height, 2.25rem);
   padding: 8px 9px;
   border: 0;
   border-radius: 7px;
@@ -652,6 +753,7 @@
   text-align: left;
   background: transparent;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .moreMenuPanel button:hover {
@@ -664,99 +766,106 @@
 }
 
 .collection[data-view="list"] .card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 160px;
-  overflow: visible;
+  min-height: 90px;
 }
 
 .collection[data-view="list"] .artwork {
   display: none;
-  min-height: 160px;
-  border-radius: 15px 0 0 15px;
-}
-
-.collection[data-view="list"] .artwork span {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  font-size: 22px;
 }
 
 .collection[data-view="list"] .cardBody {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr;
-  height: auto;
-  min-height: 160px;
-  gap: 0 20px;
-  padding-inline-start: 60px;
+  grid-template-areas: "main actions" "meta actions";
+  align-content: center;
+  gap: 4px 16px;
+  padding: 12px 60px;
 }
 
 .collection[data-view="list"] .cardSelector {
-  top: calc(50% - 15px);
+  top: calc(50% - var(--workspace-control-height, 2.25rem) / 2);
 }
 
 .collection[data-view="list"] .cardMeta {
-  grid-column: 1 / -1;
-  padding-right: 40px;
+  grid-area: meta;
+  justify-content: flex-start;
 }
 
 .collection[data-view="list"] .cardMain {
+  grid-area: main;
   align-self: center;
 }
 
+.collection[data-view="list"] .card h2 {
+  margin-bottom: 4px;
+}
+
 .collection[data-view="list"] .description {
-  min-height: auto;
-  margin-bottom: 7px;
   -webkit-line-clamp: 1;
+  margin-bottom: 4px;
+}
+
+.collection[data-view="list"] .facts {
+  display: inline;
+}
+
+.collection[data-view="list"] .folderLabel {
+  margin: 0 0 0 8px;
+  vertical-align: middle;
 }
 
 .collection[data-view="list"] .cardActions {
-  align-self: end;
+  grid-area: actions;
+  max-width: 300px;
+  align-self: center;
   justify-content: flex-end;
-  margin-top: 12px;
+}
+
+.collection[data-view="list"] .moreMenu {
+  margin-left: 0;
 }
 
 .empty {
   display: grid;
-  min-height: 390px;
-  padding: 48px;
+  min-height: 260px;
+  padding: 28px var(--workspace-card-padding, 0.875rem);
   place-items: center;
   align-content: center;
   border: 1px dashed var(--ui-border-strong);
-  border-radius: 18px;
+  border-radius: 12px;
   text-align: center;
   background: var(--ui-surface-soft);
 }
 
 .empty > span {
   display: grid;
-  width: 66px;
-  height: 66px;
+  width: 48px;
+  height: 48px;
   place-items: center;
-  border-radius: 20px;
+  border-radius: 14px;
   color: #ffffff;
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 950;
   background: linear-gradient(135deg, #1266d7, #7142e9);
 }
 
 .empty h2 {
-  margin: 18px 0 6px;
+  margin: 14px 0 6px;
   color: var(--ui-text-strong);
-  font-size: 28px;
+  font-size: 20px;
+  overflow-wrap: anywhere;
 }
 
 .empty p {
   max-width: 520px;
   margin: 0 0 22px;
   color: var(--ui-text-muted);
+  overflow-wrap: anywhere;
 }
 
 .loadingGrid {
-  min-height: 430px;
-  border-radius: 18px;
+  min-height: 280px;
+  border-radius: 12px;
   background:
     linear-gradient(100deg, transparent 35%, var(--ui-surface-translucent) 50%, transparent 65%) 0
       0 / 220% 100%,
@@ -774,28 +883,12 @@
   .toolbar {
     grid-template-columns: 1fr;
   }
-
-  .manageLink {
-    padding: 0 4px 5px;
-  }
-
-  .collection[data-view="list"] .cardBody {
-    display: flex;
-  }
-
-  .collection[data-view="list"] .cardActions {
-    justify-content: flex-start;
-  }
 }
 
-@media (max-width: 620px) {
-  .tabs {
-    overflow-x: auto;
-  }
-
+@media (max-width: 720px) {
   .filterField,
   .viewToggle {
-    flex: 1 1 44%;
+    flex: 1 1 140px;
   }
 
   .filterField select {
@@ -816,32 +909,79 @@
     margin-left: 0;
   }
 
-  .collection[data-view="list"] .card {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .collection[data-view="list"] .artwork {
-    padding: 12px;
-  }
-
   .collection[data-view="list"] .cardBody {
-    padding: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "meta" "actions";
+    gap: 8px;
+    padding: var(--workspace-card-padding, 0.875rem);
     padding-inline-start: 54px;
   }
 
-  .collection[data-view="list"] .cardMeta {
-    align-items: flex-start;
-    flex-direction: column;
+  .collection[data-view="list"] .cardMain {
+    padding-right: 40px;
   }
 
-  .collection[data-view="list"] .cardMeta > span {
-    min-width: 0;
-    max-width: 100%;
-    overflow-wrap: anywhere;
+  .collection[data-view="list"] .cardSelector {
+    top: 10px;
   }
 
   .collection[data-view="list"] .cardActions {
-    gap: 6px;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  .collection[data-view="list"] .moreMenu {
+    margin-left: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  .tab,
+  .tabActive,
+  .searchField input,
+  .filterField select,
+  .advancedFilters > summary,
+  .appliedFilters button,
+  .favoriteFilter,
+  .viewToggle button,
+  .selectAll,
+  .bulkActions button,
+  .bulkFolder select,
+  .manageLink,
+  .cardActions > a,
+  .moreMenu summary,
+  .moreMenuPanel button {
+    min-height: 44px;
+  }
+
+  .cardSelector,
+  .favoriteButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .presentationPreview,
+  .questionPreview,
+  .artwork {
+    padding-inline: 60px;
+  }
+
+  .collection[data-view="list"] .cardSelector {
+    top: calc(50% - 22px);
+  }
+}
+
+@media (max-width: 720px) and (pointer: coarse) {
+  .collection[data-view="list"] .cardBody {
+    padding-inline-start: 62px;
+  }
+
+  .collection[data-view="list"] .cardSelector {
+    top: 10px;
+  }
+
+  .collection[data-view="list"] .cardMain {
+    padding-right: 48px;
   }
 }
 

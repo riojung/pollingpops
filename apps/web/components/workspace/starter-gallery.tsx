@@ -159,7 +159,7 @@ export function StarterGallery({
         </strong>
         <span>{t("templateLibrary.englishContent")}</span>
       </div>
-      <div className={styles.templateFilters}>
+      <div className={galleryStyles.filters}>
         <label className="field">
           <span>{t("starter.search")}</span>
           <input
@@ -221,19 +221,19 @@ export function StarterGallery({
           {actionError}
         </p>
       ) : null}
-      <div className={compact ? styles.starterGridCompact : styles.starterGrid}>
+      <div className={galleryStyles.starterGrid} data-compact={compact || undefined}>
         {orderedStarters.map((starter) => {
           const recommended = starter.segment === "all" || starter.segment === creator?.segment;
           return (
             <article
-              className={`${styles.starterCard} ${galleryStyles.templateCard}`}
+              className={galleryStyles.templateCard}
               data-category={starter.category}
               key={starter.id}
             >
-              <div className={styles.cardTopline}>
-                <span className={styles.category}>{t(categoryKeys[starter.category])}</span>
+              <div className={galleryStyles.cardTopline}>
+                <span className={galleryStyles.category}>{t(categoryKeys[starter.category])}</span>
                 {recommended ? (
-                  <span className={styles.recommended}>{t("starter.recommended")}</span>
+                  <span className={galleryStyles.recommended}>{t("starter.recommended")}</span>
                 ) : null}
               </div>
               <h3 lang={contentLocale}>{starter.title}</h3>
@@ -244,7 +244,7 @@ export function StarterGallery({
                   <p lang={contentLocale}>{starter.previewPrompt}</p>
                 </div>
               ) : null}
-              <div className={styles.metaLine}>
+              <div className={galleryStyles.metaLine}>
                 <span>{t(`create.kind.${survey ? "survey" : starter.roundType}`)}</span>
                 <span>
                   {t(
@@ -258,38 +258,52 @@ export function StarterGallery({
                   {starter.responseTypes.map((type) => t(questionTypeLabelKeys[type])).join(" · ")}
                 </span>
               </div>
-              <button
-                className="button-quiet small-button"
-                type="button"
-                disabled={preview?.id !== starter.id && !catalogCurrent}
-                aria-expanded={preview?.id === starter.id}
-                aria-controls={
-                  preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
-                }
-                onClick={async () => {
-                  const request = ++previewRequest.current;
-                  if (preview?.id === starter.id) {
-                    setPreview(null);
-                    return;
+              <div className={galleryStyles.cardActions}>
+                <button
+                  className="button-quiet small-button"
+                  type="button"
+                  disabled={preview?.id !== starter.id && !catalogCurrent}
+                  aria-expanded={preview?.id === starter.id}
+                  aria-controls={
+                    preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
                   }
-                  if (!catalogCurrent || latestLocale.current !== locale) return;
-                  setActionError("");
-                  try {
-                    const result = await apiFetch<{ draft: QuizDraft }>(
-                      `/v1/starters/${starter.id}?locale=${locale}`,
-                    );
-                    if (request !== previewRequest.current || latestLocale.current !== locale)
+                  onClick={async () => {
+                    const request = ++previewRequest.current;
+                    if (preview?.id === starter.id) {
+                      setPreview(null);
                       return;
-                    setPreview({ id: starter.id, draft: result.draft, contentLocale: locale });
-                  } catch (caught) {
-                    if (request !== previewRequest.current || latestLocale.current !== locale)
-                      return;
-                    setActionError(humanError(caught));
-                  }
-                }}
-              >
-                {preview?.id === starter.id ? t("starter.closePreview") : t("starter.preview")}
-              </button>
+                    }
+                    if (!catalogCurrent || latestLocale.current !== locale) return;
+                    setActionError("");
+                    try {
+                      const result = await apiFetch<{ draft: QuizDraft }>(
+                        `/v1/starters/${starter.id}?locale=${locale}`,
+                      );
+                      if (request !== previewRequest.current || latestLocale.current !== locale)
+                        return;
+                      setPreview({ id: starter.id, draft: result.draft, contentLocale: locale });
+                    } catch (caught) {
+                      if (request !== previewRequest.current || latestLocale.current !== locale)
+                        return;
+                      setActionError(humanError(caught));
+                    }
+                  }}
+                >
+                  {preview?.id === starter.id ? t("starter.closePreview") : t("starter.preview")}
+                </button>
+                {canEdit && (!survey || productFeatures?.surveys) ? (
+                  <button
+                    className="button small-button"
+                    disabled={Boolean(busyId) || !catalogCurrent}
+                    onClick={() => void useStarter(starter)}
+                    type="button"
+                  >
+                    {busyId === starter.id ? t("starter.creating") : t("starter.use")}
+                  </button>
+                ) : !canEdit ? (
+                  <p className={galleryStyles.readOnlyNote}>{t("starter.readOnly")}</p>
+                ) : null}
+              </div>
               {preview?.id === starter.id ? (
                 <ol
                   className={galleryStyles.preview}
@@ -314,18 +328,6 @@ export function StarterGallery({
                     </li>
                   ))}
                 </ol>
-              ) : null}
-              {canEdit && (!survey || productFeatures?.surveys) ? (
-                <button
-                  className="button small-button"
-                  disabled={Boolean(busyId) || !catalogCurrent}
-                  onClick={() => void useStarter(starter)}
-                  type="button"
-                >
-                  {busyId === starter.id ? t("starter.creating") : t("starter.use")}
-                </button>
-              ) : !canEdit ? (
-                <p className={styles.readOnlyNote}>{t("starter.readOnly")}</p>
               ) : null}
             </article>
           );

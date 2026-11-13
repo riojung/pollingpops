@@ -31,14 +31,14 @@ export const INITIAL_NATIVE_DESIGN: PresentationSceneDesign = {
   spacing: "relaxed",
 };
 
-/** An explicit action opts into version 3; existing scenes are never normalized on read. */
+/** Explicit design writes opt into their feature version; reads preserve historical scenes. */
 export function applyNativeSceneDesign(
   scene: PresentationScene,
   design: PresentationSceneDesign,
 ): PresentationScene {
   return PresentationSceneDraftSchema.parse({
     ...scene,
-    schemaVersion: scene.schemaVersion >= 3 ? scene.schemaVersion : 3,
+    schemaVersion: Math.max(scene.schemaVersion, design.motionBackground ? 8 : 3),
     design,
   });
 }

@@ -15,6 +15,7 @@ import {
   PRESENTATION_NATIVE_SCENE_SCHEMA_VERSION,
   PRESENTATION_RICH_TEXT_SCHEMA_VERSION,
   PRESENTATION_VISIBILITY_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION,
   upcastPresentationContent,
   upcastPresentationDraft,
   upcastPresentationSessionContent,
@@ -139,6 +140,18 @@ function designPresentation(): PresentationDraft {
   return PresentationDraftSchema.parse(draft);
 }
 
+function motionPresentation(): PresentationDraft {
+  const draft = designPresentation();
+  draft.schemaVersion = 17;
+  for (const block of draft.blocks) {
+    if (block.kind !== "content" || !block.scene?.design)
+      throw new Error("Expected designed scene");
+    block.scene.schemaVersion = 8;
+    block.scene.design.motionBackground = "aurora";
+  }
+  return PresentationDraftSchema.parse(draft);
+}
+
 describe("durable native Presentation artifact version", () => {
   it("opts into v4 and retains ordinary v2 defaults", () => {
     expect(PRESENTATION_DRAFT_SCHEMA_VERSION).toBe(2);
@@ -175,20 +188,22 @@ describe("durable native Presentation artifact version", () => {
     expect(() => upcastPresentationContent(draft, 4)).toThrow("Describe the image");
   });
 
-  it.each([4, 5, 6, 7, 8] as const)(
+  it.each([4, 5, 6, 7, 8, 17] as const)(
     "reads v%s draft, history and immutable version without rewriting hash or native IDs",
     async (schemaVersion) => {
       const repository = new MemoryPresentationRepository();
       const draft =
-        schemaVersion === 8
-          ? compositionPresentation()
-          : schemaVersion === 7
-            ? designPresentation()
-            : schemaVersion === 6
-              ? visibilityPresentation()
-              : schemaVersion === 5
-                ? richTextPresentation()
-                : presentation();
+        schemaVersion === 17
+          ? motionPresentation()
+          : schemaVersion === 8
+            ? compositionPresentation()
+            : schemaVersion === 7
+              ? designPresentation()
+              : schemaVersion === 6
+                ? visibilityPresentation()
+                : schemaVersion === 5
+                  ? richTextPresentation()
+                  : presentation();
       const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
       const workspaceId = randomUUID();
       const presentationId = randomUUID();
@@ -246,6 +261,54 @@ describe("durable native Presentation artifact version", () => {
       expect(repository.versions.get(versionId)).toEqual(published);
     },
   );
+});
+
+describe("durable motion background Presentation artifact version", () => {
+  it("retains exact version17 draft, publication and session bytes without rewriting historical versions", () => {
+    expect(PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION).toBe(17);
+    const draft = motionPresentation();
+    expect(upcastPresentationDraft(JSON.parse(JSON.stringify(draft)), 17)).toEqual(draft);
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    const serialized = JSON.stringify(content);
+    for (const parse of [upcastPresentationContent, upcastPresentationSessionContent]) {
+      expect(JSON.stringify(parse(JSON.parse(serialized), 17))).toBe(serialized);
+      expect(parse(content, 17).blocks[0]).toMatchObject({
+        scene: { schemaVersion: 8, design: { motionBackground: "aurora" } },
+      });
+      expect(() => parse(draft, 17)).toThrow("hidden");
+    }
+    for (const version of [7, 8, 16]) {
+      const historical = {
+        ...preparePresentationPublication(designPresentation()),
+        schemaVersion: version,
+      };
+      const canonical = PresentationContentSchema.parse(historical);
+      expect(JSON.stringify(upcastPresentationContent(canonical, version))).toBe(
+        JSON.stringify(canonical),
+      );
+      expect(JSON.stringify(canonical)).not.toContain("motionBackground");
+    }
+  });
+
+  it("rejects motion records in mismatched stored versions and invalid tokens without dropping design", () => {
+    const content = PresentationContentSchema.parse(
+      preparePresentationPublication(motionPresentation()),
+    );
+    for (const parse of [
+      upcastPresentationDraft,
+      upcastPresentationContent,
+      upcastPresentationSessionContent,
+    ]) {
+      for (let version = 2; version < 17; version++)
+        expect(() => parse(content, version)).toThrow();
+      const invalid = structuredClone(content);
+      const block = invalid.blocks[0]!;
+      if (block.kind !== "content" || !block.scene?.design)
+        throw new Error("Expected designed scene");
+      Object.assign(block.scene.design, { motionBackground: "none" });
+      expect(() => parse(invalid, 17)).toThrow();
+    }
+  });
 });
 
 describe("durable visibility Presentation artifact version", () => {

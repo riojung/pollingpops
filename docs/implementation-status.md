@@ -36,6 +36,56 @@ grid/list density, German labels, keyboard focus including hover in forced color
 translated status text/icons, actual action eligibility and resolved text contrast.
 The final web production build and 51 focused palette/signal tests also pass.
 
+### Built-in Presentation motion backgrounds November 12, 2026
+
+The `codex/presentation-motion-backgrounds` source adds six optional original backgrounds:
+Aurora, Soft waves, Floating orbs, Gradient mesh, Flowing ribbons and Star drift. Creators
+choose a preset in Slide tools → Layout → Design, preview the selected option and apply
+it with the existing design controls. Static remains the default. No motion builder,
+remote media, new dependency, generation allowance or paid asset is required.
+
+The shared decorative renderer supports native slides, ordinary slides with inherited
+design and audience activities. Motion respects reduced-motion preferences and pauses
+in hidden tabs/offscreen surfaces. Local pause/play persists across slide changes without
+editing the document or submitting an activity response. Thumbnails and layout comparisons
+remain still. PNG, PDF, readable HTML, offline HTML and print preserve static-export
+semantics with a deterministic still composition. All new system copy covers ten locales.
+
+Optional `design.motionBackground` opts into scene8/document17; omission leaves historical
+content and appearance unchanged. Copy, recovery, assistance, publication, sharing and
+assignments preserve the token/version. Append-only migration107 extends PostgreSQL
+validators and delivery/response fences without rewriting existing JSON or hashes. See the
+[compatibility notes](presentation-implementation-plan-2026-11.md#built-in-motion-backgrounds--november-12-2026).
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes 8,590 tests with 518 standard
+opt-in skips, formatting, lint, types, all four production build tasks and compiled-server
+startup. Eight production-browser cases pass across desktop Chromium/Firefox and phone
+Chromium/WebKit. These check real animation timelines for all six presets, save/Undo/Redo,
+bulk design, static thumbnails, None, private-reader/presenter playback, pause persistence,
+readable-but-unwritable storage, and Korean 320px reduced-motion/keyboard/touch/Axe behavior.
+Twenty-three PostgreSQL checks pass against an isolated PostgreSQL17 instance, including
+version17 draft/history/publication/share/assignment writes, live navigation/reveal/response
+fences and invalid-token/version rejection. The temporary instance was removed afterward.
+Renderer tests cover all 24 preset/palette combinations and deterministic PNG/PDF/HTML
+snapshots. Captures and the source-bound receipt are under `artifacts/presentation-motion/`.
+These local checks do not establish physical-device, manual accessibility or hosted release
+acceptance, and no existing release gate is advanced.
+
+The November 13 review follow-up preserves scene8 in generic node updates when text has
+language metadata, so manual edits and pronunciation changes remain valid on motion slides
+and after motion is disabled. Migration107 also extends the existing question-suggestion
+source projector to scene8 while retaining its text-only projection, limits and digests.
+PostgreSQL coverage exercises job admission, claim, completion, apply and exact retries
+with active and cleared motion; historical migration104 is unchanged. The focused reviewer
+confirmed both reported compatibility defects are resolved.
+
+Follow-up validation passes `VITEST_MAX_WORKERS=1 pnpm check`: 8,594 tests, 521 standard
+opt-in skips, all production builds and compiled-server startup. Twelve selected production
+browser cases pass across the same four profiles, including actual manual editing and
+pronunciation add/clear/reload on motion slides and scene8 retention after None. The focused
+PostgreSQL suggestion/motion suites pass 15 tests; the isolated instance was removed.
+The current source-bound receipt is `artifacts/presentation-motion/review-fixes-2026-11-13.json`.
+
 ### Customer template collection November 12, 2026
 
 The `codex/customer-template-collection` source strengthens existing original templates

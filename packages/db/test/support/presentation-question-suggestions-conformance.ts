@@ -7,6 +7,7 @@ import {
   presentationQuestionSuggestionSource,
   presentationQuestionSuggestionsSourceDigest,
   presentationQuestionSuggestionsProposalHash,
+  presentationQuestionSuggestionsSourceFingerprint,
 } from "@openround/contracts";
 import {
   buildPresentationQuestionSuggestionsDraft,
@@ -161,6 +162,76 @@ export async function expectQuestionSuggestionsConformance(repository: Repositor
   expect(await f.presentations.updatePresentationDraft(application)).toEqual(changed);
   expect(await repository.countAuthoringJobsSince(f.actor.workspaceId, f.since)).toBe(1);
   return f;
+}
+export async function expectQuestionSuggestionsMotionConformance(
+  repository: Repository,
+  cleared: boolean,
+) {
+  const f = await questionSuggestionsFixture(repository);
+  const draft = structuredClone(f.presentation.draft);
+  draft.schemaVersion = 17;
+  const block = draft.blocks[0]!;
+  if (block.kind !== "content" || !block.scene) throw new Error("Expected native source");
+  block.scene.schemaVersion = 8;
+  block.scene.design = {
+    theme: "ocean",
+    font: "serif",
+    spacing: "compact",
+    motionBackground: "aurora",
+  };
+  const save = (expectedRevision: number) =>
+    f.presentations.updatePresentationDraft({
+      workspaceId: f.actor.workspaceId,
+      presentationId: f.presentation.id,
+      editorId: f.actor.userId,
+      expectedRevision,
+      mutationId: randomUUID(),
+      draftHash: createHash("sha256").update(JSON.stringify(draft)).digest("hex"),
+      draft: PresentationDraftSchema.parse(draft),
+    });
+  let presentation = (await save(f.presentation.draftRevision))!;
+  if (cleared) {
+    delete block.scene.design.motionBackground;
+    presentation = (await save(presentation.draftRevision))!;
+  }
+  const savedBlock = presentation.draft.blocks[0]!;
+  const result = presentationQuestionSuggestionSource(savedBlock);
+  if (!result.supported) throw new Error("Expected scene8 source");
+  expect(result.source).toEqual(f.source);
+  expect(presentationQuestionSuggestionsSourceDigest(result.source)).toBe(
+    presentationQuestionSuggestionsSourceDigest(f.source),
+  );
+  expect(presentationQuestionSuggestionsSourceFingerprint(result.source)).not.toMatch(
+    /motionBackground|aurora|speakerNotes|sourceDisclosure|citations/,
+  );
+  const input = f.create();
+  input.request.expectedRevision = presentation.draftRevision;
+  const created = await f.jobs.create(input);
+  expect(created.status).toBe("created");
+  const claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 60_000)))!;
+  expect(claim.id).toBe(created.job.id);
+  expect(claim.source).toEqual(f.source);
+  const proposal = questionProposal(claim);
+  expect(await f.jobs.complete({ ...questionFence(claim, f.now), proposal })).toBe(true);
+  expect(await f.jobs.get({ ...f.context, jobId: claim.id })).toMatchObject({
+    status: "ready",
+    proposal,
+  });
+  const application = questionInsertion(
+    { ...f, presentation },
+    { jobId: created.job.id, claim, proposal },
+  );
+  const applied = await f.presentations.updatePresentationDraft(application);
+  expect(applied?.draft.schemaVersion).toBe(17);
+  expect(applied?.draft.blocks).toHaveLength(2);
+  expect(applied?.draft.blocks[0]).toEqual(savedBlock);
+  expect(applied?.draft.blocks[1]).toMatchObject({
+    kind: "question",
+    question: { type: "open_text", purpose: "opinion", confidence: "off", basePoints: 0 },
+  });
+  expect(await f.presentations.updatePresentationDraft(application)).toEqual(applied);
+  await repository.deleteAccount(f.actor.userId);
+  return { block: savedBlock, source: f.source };
 }
 export async function expectQuestionSuggestionsCapacity(repository: Repository) {
   const f = await questionSuggestionsFixture(repository);

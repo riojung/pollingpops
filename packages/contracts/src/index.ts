@@ -32,7 +32,12 @@ export * from "./presentation-scene-prototype";
 export * from "./presentation-scene";
 export * from "./presentation-rich-text";
 export * from "./presentation-scene-adapter";
-import { PresentationSceneDesignSchema, type PresentationSceneNode } from "./presentation-scene";
+import {
+  PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION,
+  PresentationSceneDesignSchema,
+  type PresentationSceneNode,
+} from "./presentation-scene";
 import {
   ContentSlideLayoutSchema,
   ContentSlideDraftSchema,
@@ -4789,7 +4794,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4828,10 +4833,10 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
     blocks: Array<{
       kind: string;
-      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 };
+      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 };
       hidden?: true;
     }>;
   },
@@ -4862,6 +4867,16 @@ function applyPresentationSceneRules(
         message: "Native scenes require Presentation schema version 4 or later",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION &&
+      presentation.schemaVersion < PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Motion background scenes require Presentation schema version 17",
+      });
     if (
       block.kind === "content" &&
       block.scene?.schemaVersion === 7 &&
@@ -5175,6 +5190,7 @@ export const PresentationDraftSchema = z
         z.literal(14),
         z.literal(15),
         z.literal(16),
+        z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5250,6 +5266,7 @@ export const PresentationContentSchema = z
       z.literal(14),
       z.literal(15),
       z.literal(16),
+      z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),

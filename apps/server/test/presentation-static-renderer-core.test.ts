@@ -1,6 +1,7 @@
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
 import type * as CanvasModule from "@napi-rs/canvas";
 import {
+  PRESENTATION_MOTION_BACKGROUND_PRESETS,
   type PresentationReview,
   type PresentationReviewBlock,
   type PresentationScene,
@@ -31,6 +32,7 @@ function native(
   nodes: PresentationSceneNode[],
   options: {
     theme?: NonNullable<PresentationScene["design"]>["theme"];
+    motionBackground?: NonNullable<PresentationScene["design"]>["motionBackground"];
     readingOrder?: string[];
   } = {},
 ): Content {
@@ -43,12 +45,19 @@ function native(
     mediaId: null,
     mediaAlt: null,
     scene: {
-      schemaVersion: 6,
+      schemaVersion: options.motionBackground ? 8 : 6,
       aspectRatio: "16:9",
       nodes: ordered,
       readingOrder: options.readingOrder ?? ordered.map((node) => node.id),
-      ...(options.theme
-        ? { design: { theme: options.theme, font: "sans", spacing: "relaxed" } }
+      ...(options.theme || options.motionBackground
+        ? {
+            design: {
+              theme: options.theme ?? "paper",
+              font: "sans",
+              spacing: "relaxed",
+              ...(options.motionBackground ? { motionBackground: options.motionBackground } : {}),
+            },
+          }
         : {}),
     },
   };
@@ -725,6 +734,174 @@ describe("Presentation static HTML readable companion", () => {
         code: "EXPORT_INVALID",
         message: expect.stringContaining("supported characters"),
       });
+    },
+  );
+});
+
+describe("Presentation static motion posters", () => {
+  const themes = [
+    { theme: "paper", background: "#fffdf7", text: "#172b4d" },
+    { theme: "midnight", background: "#111b2e", text: "#f6f8ff" },
+    { theme: "ocean", background: "#eaf8fa", text: "#113945" },
+    { theme: "sunset", background: "#fff0e5", text: "#522a20" },
+  ] as const;
+  const renderPng = (block: Content) =>
+    renderPresentationStaticCore({
+      review: review([block]),
+      images: new Map(),
+      format: "png",
+      blockId: block.id,
+    });
+  function luminance(channels: number[]) {
+    const linear = channels.slice(0, 3).map((channel) => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+  }
+
+  it.each(
+    themes.flatMap((theme) =>
+      PRESENTATION_MOTION_BACKGROUND_PRESETS.map((motionBackground) => ({
+        ...theme,
+        motionBackground,
+      })),
+    ),
+  )(
+    "paints a deterministic, opaque, readable $motionBackground still in the $theme theme",
+    async ({ theme, background, text, motionBackground }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("Network forbidden"))),
+      );
+      const block = native([], { theme, motionBackground });
+      const first = await renderPng(block),
+        second = await renderPng(block);
+      expect(first.bytes.equals(second.bytes)).toBe(true);
+      expect(decoded.loadImage).not.toHaveBeenCalled();
+      const ctx = await png(block);
+      expect(countColor(ctx, background, [0, 140, 1280, 580])).toBeLessThan(1280 * 580 - 100);
+      const textLuminance = luminance(rgb(text));
+      for (let y = 144; y < 720; y += 24)
+        for (let x = 0; x < 1280; x += 24) {
+          const color = pixel(ctx, x, y),
+            backgroundLuminance = luminance(color);
+          expect(color[3]).toBe(255);
+          expect(
+            (Math.max(textLuminance, backgroundLuminance) + 0.05) /
+              (Math.min(textLuminance, backgroundLuminance) + 0.05),
+          ).toBeGreaterThanOrEqual(7);
+        }
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(themes)(
+    "preserves every legacy $theme pixel when the motion token is omitted",
+    async ({ theme, background }) => {
+      const legacy = native([], { theme }),
+        current = structuredClone(legacy);
+      current.scene!.schemaVersion = 8;
+      const before = await renderPng(legacy),
+        after = await renderPng(current);
+      expect(after.bytes.equals(before.bytes)).toBe(true);
+      const ctx = await png(current);
+      expect(countColor(ctx, background, [0, 140, 1280, 580])).toBe(1280 * 580);
+    },
+  );
+
+  it.each(["html", "offline_html"] as const)(
+    "embeds the exact PNG still for all six presets in self-contained %s with readable content",
+    async (format) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("Network forbidden"))),
+      );
+      const blocks = PRESENTATION_MOTION_BACKGROUND_PRESETS.map((motionBackground, index) => ({
+        ...native([], { theme: "midnight", motionBackground }),
+        id: id(index + 1),
+      }));
+      const result = await renderPresentationStaticCore({
+        review: review(blocks),
+        images: new Map(),
+        format,
+      });
+      const html = result.bytes.toString("utf8"),
+        snapshots = [...html.matchAll(/class="snapshot" src="data:image\/png;base64,([^"]+)"/g)];
+      expect(snapshots).toHaveLength(6);
+      expect(new Set(snapshots.map((snapshot) => snapshot[1])).size).toBe(6);
+      for (const [index, block] of blocks.entries()) {
+        const expected = await renderPng(block);
+        expect(Buffer.from(snapshots[index]![1]!, "base64").equals(expected.bytes)).toBe(true);
+      }
+      expect(html.match(/<h3>Published visual<\/h3>/g)).toHaveLength(6);
+      expect(html).not.toMatch(
+        /<(?:script|iframe|object|embed|video|audio|link)\b|\son(?:load|error)=|\bsrc=["']https?:|url\s*\(|@import|animation|requestAnimationFrame/i,
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("round-trips all six poster compositions through flattened PDF pages", async () => {
+    const blocks = PRESENTATION_MOTION_BACKGROUND_PRESETS.map((motionBackground, index) => ({
+      ...native([], { theme: "ocean", motionBackground }),
+      id: id(index + 1),
+    }));
+    const result = await renderPresentationStaticCore({
+      review: review(blocks),
+      images: new Map(),
+      format: "pdf",
+    });
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs"),
+      task = pdfjs.getDocument({
+        data: new Uint8Array(result.bytes),
+        useSystemFonts: false,
+        verbosity: 0,
+      });
+    const document = await task.promise;
+    try {
+      expect(document.numPages).toBe(6);
+      expect(await document.getJSActions()).toBeNull();
+      for (const [index, block] of blocks.entries()) {
+        const expected = await png(block),
+          page = await document.getPage(index + 1),
+          canvas = createCanvas(1280, 720),
+          ctx = canvas.getContext("2d");
+        await page.render({
+          canvas: null,
+          canvasContext: ctx as unknown as CanvasRenderingContext2D,
+          viewport: page.getViewport({ scale: 1 }),
+        }).promise;
+        expect(await page.getAnnotations()).toEqual([]);
+        for (const [x, y] of [
+          [64, 180],
+          [1050, 490],
+          [640, 650],
+        ])
+          expect(pixel(ctx, x!, y!)).toEqual(pixel(expected, x!, y!));
+      }
+    } finally {
+      await task.destroy();
+    }
+  }, 20_000);
+
+  it.each([
+    "https://example.test/motion.svg",
+    "url(https://example.test/motion)",
+    "unknown",
+    { preset: "aurora" },
+  ])(
+    "rejects an unrecognized motion token before any image or network work: %j",
+    async (motionBackground) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("Network forbidden"))),
+      );
+      const block = native([], { motionBackground: "aurora" });
+      Object.assign(block.scene!.design!, { motionBackground });
+      await expect(renderPng(block)).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      expect(decoded.loadImage).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
     },
   );
 });

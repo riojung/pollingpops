@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import {
+  PRESENTATION_MOTION_BACKGROUND_PRESETS,
   PRESENTATION_SCENE_MAX_BYTES,
   PresentationSceneDraftSchema,
   type PresentationScene,
@@ -20,6 +21,7 @@ import {
   NativeSceneImageDesignControls,
   NativeSceneLayoutControls,
 } from "./native-scene-design-controls";
+import { PresentationMotionBackground } from "./presentation-motion-background";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -142,6 +144,136 @@ describe("native design controls", () => {
     });
     for (const label of ["Slide theme", "Slide font", "Slide spacing"])
       expect(input(tree, label).type).toBe("select");
+  });
+
+  it("offers seven labeled motion choices as native buttons with one selected static default", () => {
+    const scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 3,
+      design,
+    };
+    const onChange = vi.fn();
+    const tree = render(() => NativeSceneDesignControls({ scene, onChange }));
+    const group = elements(tree).find(
+      (element) =>
+        element.props.role === "group" && element.props["aria-label"] === "Motion background",
+    )!;
+    const choices = elements(group).filter((element) => element.type === "button");
+    expect(choices.map((element) => element.props["aria-label"])).toEqual([
+      "None · static",
+      "Aurora",
+      "Soft waves",
+      "Floating orbs",
+      "Gradient mesh",
+      "Flowing ribbons",
+      "Star drift",
+    ]);
+    expect(choices.filter((element) => element.props["aria-pressed"] === true)).toHaveLength(1);
+    for (const choice of choices) expect(choice.props.type).toBe("button");
+    expect(button(tree, "None · static").props["aria-pressed"]).toBe(true);
+    click(button(tree, "None · static"));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(button(tree, "Play preview")).toBeUndefined();
+    const previews = elements(tree).filter(
+      (element) => element.type === PresentationMotionBackground,
+    );
+    expect(previews).toHaveLength(PRESENTATION_MOTION_BACKGROUND_PRESETS.length);
+    for (const preview of previews) expect(preview.props.static).toBe(true);
+  });
+
+  it.each([
+    ["aurora", "Aurora"],
+    ["waves", "Soft waves"],
+    ["orbs", "Floating orbs"],
+    ["mesh", "Gradient mesh"],
+    ["ribbons", "Flowing ribbons"],
+    ["stars", "Star drift"],
+  ] as const)(
+    "stores %s as one validated scene-8 edit without changing authored content",
+    (preset, label) => {
+      const scene: PresentationScene = {
+        ...createNativeContentBlock().scene!,
+        schemaVersion: 3,
+        design,
+      };
+      const title = scene.nodes.find((node) => node.type === "text")!;
+      title.text = "日本語のタイトル {title}";
+      const original = structuredClone(scene);
+      const onChange = vi.fn();
+      const tree = render(() => NativeSceneDesignControls({ scene, onChange }));
+      click(button(tree, label));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const next = onChange.mock.calls[0]![0];
+      expect(next).toMatchObject({
+        schemaVersion: 8,
+        design: { ...design, motionBackground: preset },
+        nodes: scene.nodes,
+        readingOrder: scene.readingOrder,
+      });
+      expect(PresentationSceneDraftSchema.safeParse(next).success).toBe(true);
+      expect(scene).toEqual(original);
+    },
+  );
+
+  it("preserves scene 8 when removing motion and when editing other design settings", () => {
+    const motionDesign: PresentationSceneDesign = { ...design, motionBackground: "waves" };
+    const scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 8,
+      design: motionDesign,
+    };
+    const original = structuredClone(scene);
+    const onChange = vi.fn();
+    const onApplyDesignToDeck = vi.fn();
+    const tree = render(() => NativeSceneDesignControls({ scene, onChange, onApplyDesignToDeck }));
+    click(button(tree, "Soft waves"));
+    expect(onChange).not.toHaveBeenCalled();
+    change(input(tree, "Slide theme"), { value: "ocean" });
+    change(input(tree, "Slide font"), { value: "sans" });
+    change(input(tree, "Slide spacing"), { value: "relaxed" });
+    for (const [next] of onChange.mock.calls) {
+      expect(next.schemaVersion).toBe(8);
+      expect(next.design.motionBackground).toBe("waves");
+      expect(PresentationSceneDraftSchema.safeParse(next).success).toBe(true);
+    }
+    click(button(tree, "None · static"));
+    const cleared = onChange.mock.calls.at(-1)![0];
+    expect(cleared.schemaVersion).toBe(8);
+    expect(cleared.design).toEqual(design);
+    expect(cleared.design).not.toHaveProperty("motionBackground");
+    click(button(tree, "Apply design to all native slides"));
+    expect(onApplyDesignToDeck).toHaveBeenCalledExactlyOnceWith(motionDesign);
+    expect(scene).toEqual(original);
+  });
+
+  it("only animates the selected preview after explicit play and pauses without a scene edit", () => {
+    let scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 8,
+      design: { ...design, motionBackground: "aurora" },
+    };
+    const onChange = vi.fn();
+    const component = () => NativeSceneDesignControls({ scene, onChange });
+    const previews = (tree: ReactNode) =>
+      elements(tree).filter((element) => element.type === PresentationMotionBackground);
+    let tree = render(component);
+    expect(previews(tree).every((element) => element.props.static === true)).toBe(true);
+    click(button(tree, "Play preview"));
+    tree = render(component);
+    const active = previews(tree).filter((element) => element.props.static === false);
+    expect(active.map((element) => element.props.preset)).toEqual(["aurora"]);
+    expect(active[0]!.props.paused).toBe(false);
+    expect(button(tree, "Pause preview")).toBeDefined();
+    click(button(tree, "Pause preview"));
+    expect(previews(render(component)).every((element) => element.props.static === true)).toBe(
+      true,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    click(button(render(component), "Play preview"));
+    scene = { ...scene, design: { ...scene.design!, motionBackground: "stars" } };
+    tree = render(component);
+    expect(previews(tree).every((element) => element.props.static === true)).toBe(true);
+    expect(button(tree, "Play preview")).toBeDefined();
   });
 
   it("disables inapplicable layouts and explains the required objects", () => {
@@ -355,6 +487,27 @@ describe("native design scene budget recovery", () => {
     click(button(render(component), "Use Ocean theme"));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0]![0].design.theme).toBe("ocean");
+    expect(alert(render(component))).toBeUndefined();
+  });
+
+  it("rejects motion beyond the scene budget and succeeds after shortening authored text", () => {
+    let scene = budgetFixture({ design });
+    const original = structuredClone(scene);
+    const onChange = vi.fn();
+    const component = () => NativeSceneDesignControls({ scene, onChange });
+    click(button(render(component), "Aurora"));
+    expect(text(alert(render(component)))).toContain(
+      "This design change exceeds the slide’s limits.",
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(scene).toEqual(original);
+    scene = shorten(scene);
+    click(button(render(component), "Aurora"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0]).toMatchObject({
+      schemaVersion: 8,
+      design: { ...design, motionBackground: "aurora" },
+    });
     expect(alert(render(component))).toBeUndefined();
   });
 

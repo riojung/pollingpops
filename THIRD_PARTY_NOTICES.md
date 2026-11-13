@@ -233,7 +233,7 @@ This file is not legal advice.
 | fast-json-stringify                   | 7.0.1               | [Project page](https://github.com/fastify/fast-json-stringify#readme)                               |
 | fast-querystring                      | 1.1.2               | [Project page](https://github.com/anonrig/fast-querystring#readme)                                  |
 | fast-xml-builder                      | 1.3.1               | [Project page](https://github.com/NaturalIntelligence/fast-xml-builder#readme)                      |
-| fast-xml-parser                       | 5.11.2              | [Project page](https://github.com/NaturalIntelligence/fast-xml-parser#readme)                       |
+| fast-xml-parser                       | 5.12.0              | [Project page](https://github.com/NaturalIntelligence/fast-xml-parser#readme)                       |
 | fastify                               | 5.12.7              | [Project page](https://fastify.dev/)                                                                |
 | fastify-plugin                        | 6.0.1               | [Project page](https://github.com/fastify/fastify-plugin#readme)                                    |
 | fastify-raw-body                      | 6.0.3               | [Project page](https://github.com/Eomm/fastify-raw-body#readme)                                     |
@@ -250,7 +250,7 @@ This file is not legal advice.
 | ipaddr.js                             | 2.5.0               | [Project page](https://github.com/whitequark/ipaddr.js#readme)                                      |
 | is-fullwidth-code-point               | 3.0.0               | [Project page](https://github.com/sindresorhus/is-fullwidth-code-point#readme)                      |
 | is-plain-object                       | 5.1.0               | [Project page](https://github.com/jonschlinkert/is-plain-object)                                    |
-| is-unsafe                             | 2.0.2               | [Project page](https://github.com/NaturalIntelligence/is-unsafe#readme)                             |
+| is-unsafe                             | 2.0.3               | [Project page](https://github.com/NaturalIntelligence/is-unsafe#readme)                             |
 | jose                                  | 6.2.12              | [Project page](https://github.com/panva/jose)                                                       |
 | json-schema-ref-resolver              | 3.0.0               | [Project page](https://github.com/fastify/json-schema-ref-resolver#readme)                          |
 | json-schema-traverse                  | 1.0.0               | [Project page](https://github.com/epoberezkin/json-schema-traverse#readme)                          |
@@ -320,7 +320,7 @@ This file is not legal advice.
 | string-width                          | 4.2.3               | [Project page](https://github.com/sindresorhus/string-width#readme)                                 |
 | strip-ansi                            | 6.0.1               | [Project page](https://github.com/chalk/strip-ansi#readme)                                          |
 | stripe                                | 22.6.2              | [Project page](https://github.com/stripe/stripe-node)                                               |
-| strnum                                | 2.4.2               | [Project page](https://github.com/NaturalIntelligence/strnum#readme)                                |
+| strnum                                | 2.5.1               | [Project page](https://github.com/NaturalIntelligence/strnum#readme)                                |
 | styled-jsx                            | 5.1.6               | [Project page](https://github.com/vercel/styled-jsx#readme)                                         |
 | tdigest                               | 0.1.3               | [Project page](https://github.com/welch/tdigest)                                                    |
 | thread-stream                         | 4.2.0               | [Project page](https://github.com/mcollina/thread-stream#readme)                                    |

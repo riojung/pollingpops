@@ -1,6 +1,6 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { expect } from "vitest";
-import { PresentationContentSchema } from "@openround/contracts";
+import { PresentationContentSchema, type PresentationContent } from "@openround/contracts";
 import { interactionDocument } from "./presentation-interaction-fixture.js";
 import type {
   PresentationSessionRepository,
@@ -12,7 +12,8 @@ export async function expectPresentationTextConformance(input: {
   presentationId: string;
   presentationVersionId: string;
   createdBy: string;
-  schemaVersion?: 10 | 11;
+  schemaVersion?: 10 | 11 | 17;
+  additionalBlocks?: PresentationContent["blocks"];
 }) {
   const { repository, workspaceId } = input;
   for (const type of ["open_text", "word_cloud"] as const) {
@@ -42,6 +43,7 @@ export async function expectPresentationTextConformance(input: {
           },
         },
         ...(input.schemaVersion === 11 ? interactionDocument().blocks : []),
+        ...(input.additionalBlocks ?? []),
       ],
     });
     const session = await repository.createSession({

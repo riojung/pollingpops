@@ -1,63 +1,7 @@
 .surface {
   --workspace-kind-bg: var(--ui-surface-soft);
-  --workspace-kind-ink: var(--ui-text-subtle);
-  --workspace-state-ink: var(--ui-border-strong);
+  --workspace-kind-ink: var(--ui-text-strong);
   position: relative;
-}
-
-.surface::before {
-  position: absolute;
-  inset-block: 10px;
-  inset-inline-start: 0;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--workspace-state-ink);
-  content: "";
-  pointer-events: none;
-}
-
-.surface[data-state-tone="warning"] {
-  --workspace-state-ink: var(--ui-warning-text);
-}
-
-.surface[data-state-tone="positive"] {
-  --workspace-state-ink: var(--ui-success-text);
-}
-
-.surface[data-state-tone="active"] {
-  --workspace-state-ink: var(--ui-info-text);
-}
-
-.surface[data-state-tone="danger"] {
-  --workspace-state-ink: var(--ui-danger-text);
-}
-
-.surface[data-kind="round"],
-.kindTab[data-kind="round"],
-.kindIcon[data-kind="round"] {
-  --workspace-kind-bg: var(--ui-kind-round-bg);
-  --workspace-kind-ink: var(--ui-kind-round-text);
-}
-
-.surface[data-kind="presentation"],
-.kindTab[data-kind="presentation"],
-.kindIcon[data-kind="presentation"] {
-  --workspace-kind-bg: var(--ui-kind-presentation-bg);
-  --workspace-kind-ink: var(--ui-kind-presentation-text);
-}
-
-.surface[data-kind="survey"],
-.kindTab[data-kind="survey"],
-.kindIcon[data-kind="survey"] {
-  --workspace-kind-bg: var(--ui-kind-survey-bg);
-  --workspace-kind-ink: var(--ui-kind-survey-text);
-}
-
-.surface[data-kind="practice"],
-.kindTab[data-kind="practice"],
-.kindIcon[data-kind="practice"] {
-  --workspace-kind-bg: var(--ui-kind-practice-bg);
-  --workspace-kind-ink: var(--ui-kind-practice-text);
 }
 
 .status.status[data-state-tone] {
@@ -69,24 +13,19 @@
   background: var(--workspace-status-bg, var(--ui-surface-soft));
   color: var(--workspace-status-ink, var(--ui-text-subtle));
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.4;
   padding: 3px 7px;
 }
 
-.status[data-state-tone="warning"] {
-  --workspace-status-bg: var(--ui-warning-bg);
-  --workspace-status-ink: var(--ui-warning-text);
-}
-
 .status[data-state-tone="positive"] {
-  --workspace-status-bg: var(--ui-success-bg);
-  --workspace-status-ink: var(--ui-success-text);
+  --workspace-status-bg: var(--ui-accent-soft);
+  --workspace-status-ink: var(--ui-accent-ink);
 }
 
 .status[data-state-tone="active"] {
-  --workspace-status-bg: var(--ui-info-bg);
-  --workspace-status-ink: var(--ui-info-text);
+  --workspace-status-bg: var(--ui-accent-soft);
+  --workspace-status-ink: var(--ui-accent-ink);
 }
 
 .status[data-state-tone="danger"] {
@@ -106,38 +45,41 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: var(--workspace-kind-ink, var(--ui-text-subtle));
+  color: var(--ui-text-subtle);
   vertical-align: -3px;
 }
 
 .action.action[data-action] {
-  background: var(--workspace-action-bg, var(--ui-surface-soft));
+  background: var(--workspace-action-bg, var(--ui-surface));
   color: var(--workspace-action-ink, var(--ui-text-strong));
+  border-color: var(--workspace-action-border, var(--ui-border));
 }
 
 .action[data-action="host"] {
-  --workspace-action-bg: var(--ui-success-text);
-  --workspace-action-ink: var(--ui-surface);
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
 }
 
 .action[data-action="resume"] {
-  --workspace-action-bg: var(--ui-info-text);
-  --workspace-action-ink: var(--ui-surface);
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
 }
 
 .action[data-action="edit"] {
-  --workspace-action-bg: var(--ui-warning-bg);
-  --workspace-action-ink: var(--ui-warning-text);
+  --workspace-action-bg: var(--ui-surface);
+  --workspace-action-ink: var(--ui-text-strong);
 }
 
-.action[data-action="result"],
-.action[data-action="assign"] {
-  --workspace-action-bg: var(--ui-violet-bg);
-  --workspace-action-ink: var(--ui-violet-text);
+.action[data-action="result"] {
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
 }
 
 .action[data-action="delete"] {
-  --workspace-action-bg: var(--ui-danger-bg);
+  --workspace-action-bg: var(--ui-surface);
   --workspace-action-ink: var(--ui-danger-text);
 }
 
@@ -145,7 +87,7 @@
 .action.action[data-action]:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(
     in srgb,
-    var(--workspace-action-bg, var(--ui-surface-soft)) 88%,
+    var(--workspace-action-bg, var(--ui-surface)) 88%,
     var(--workspace-action-ink, var(--ui-text-strong))
   );
   color: var(--workspace-action-ink, var(--ui-text-strong));
@@ -164,21 +106,21 @@
 }
 
 .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) {
-  background: var(--workspace-kind-bg);
-  color: var(--workspace-kind-ink);
-  border-color: var(--workspace-kind-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  border-color: var(--ui-accent-ink);
 }
 
 .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) > span {
   background: var(--ui-surface);
-  color: var(--workspace-kind-ink);
+  color: var(--ui-accent-ink);
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) .kindIcon {
+  color: inherit;
 }
 
 @media (forced-colors: active) {
-  .surface::before {
-    background: CanvasText;
-  }
-
   .status.status[data-state-tone] {
     background: Canvas;
     color: CanvasText;

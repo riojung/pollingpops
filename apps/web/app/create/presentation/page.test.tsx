@@ -42,6 +42,9 @@ vi.mock("../../../components/workspace/workspace-shell", () => ({
 vi.mock("../../../components/authoring-assistant", () => ({
   AuthoringAssistant: () => <div>Source authoring workflow</div>,
 }));
+vi.mock("../../../components/workspace/presentation-design-gallery", () => ({
+  PresentationDesignGallery: () => <div>Presentation design gallery</div>,
+}));
 vi.mock("../../../components/workspace/presentation-template-gallery", () => ({
   PresentationTemplateGallery: () => <div>Presentation template gallery</div>,
 }));
@@ -80,6 +83,11 @@ describe("Presentation creation launcher", () => {
     expect(markup).toContain('href="/create/presentation?start=template"');
     expect(markup).toContain("Start a blank presentation");
     expect(markup).toContain("Presentation template gallery");
+    expect(markup).not.toContain("Presentation design gallery");
+    expect(markup).toContain('href="/create/presentation?start=design"');
+    expect(markup.indexOf("presentation-designs-title")).toBeLessThan(
+      markup.indexOf("Presentation template gallery"),
+    );
     expect(markup.indexOf("Start a blank presentation")).toBeLessThan(
       markup.indexOf("Presentation template gallery"),
     );
@@ -95,6 +103,7 @@ describe("Presentation creation launcher", () => {
     ["outline", "Outline draft creation workflow"],
     ["source", "Source authoring workflow"],
     ["template", "Presentation template gallery"],
+    ["design", "Presentation design gallery"],
   ])("renders only the chosen %s workflow", (start, expected) => {
     mocked.query = `start=${start}`;
     const markup = renderToStaticMarkup(<CreatePresentationPage />);
@@ -103,6 +112,7 @@ describe("Presentation creation launcher", () => {
       "Outline draft creation workflow",
       "Source authoring workflow",
       "Presentation template gallery",
+      "Presentation design gallery",
     ].filter((value) => value !== expected))
       expect(markup).not.toContain(other);
     expect(markup).not.toContain('aria-label="From outline"');

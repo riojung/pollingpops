@@ -685,14 +685,14 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
   const canvas = createCanvas(W, H),
     ctx = canvas.getContext("2d");
   ctx.textBaseline = "top";
-  const motionDesign = block.design?.motionBackground ? block.design : undefined,
-    inheritedPalette = motionDesign ? palettes[motionDesign.theme] : undefined;
+  const effectiveDesign = block.design,
+    inheritedPalette = effectiveDesign ? palettes[effectiveDesign.theme] : undefined;
   if (block.kind === "content" && block.scene) {
     // Inheritance is a rendering view; do not upgrade or rewrite the published scene.
     const scene =
-        block.scene.design || !motionDesign
+        block.scene.design || !effectiveDesign
           ? block.scene
-          : { ...block.scene, design: motionDesign },
+          : { ...block.scene, design: effectiveDesign },
       palette = scene.design
         ? palettes[scene.design.theme]
         : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
@@ -711,13 +711,14 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
       ctx.fillStyle = gradient;
     }
     ctx.fillRect(0, 0, W, H);
-    if (motionDesign) paintPresentationMotionPoster(ctx, motionDesign, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     const frames = resolveContentSlideFrames(block);
     for (const element of block.textElements) {
       const r = frame(frames[element.id]!);
       text(ctx, element.text, r.x + 8, r.y + 6, r.width - 16, r.height - 12, {
         size: element.role === "title" ? 46 : 23,
-        family: family(motionDesign?.font),
+        family: family(effectiveDesign?.font),
         color: inheritedPalette?.text ?? (element.role === "title" ? "#102a43" : "#334e68"),
         leading: element.role === "title" ? 1.04 : 1.4,
         bold: element.role === "title",
@@ -728,16 +729,17 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
   } else {
     ctx.fillStyle = inheritedPalette?.background ?? "#f8fbff";
     ctx.fillRect(0, 0, W, H);
-    if (motionDesign) paintPresentationMotionPoster(ctx, motionDesign, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     text(ctx, "Activity preview - no submissions or results", 64, 34, 1152, 40, {
       size: 20,
-      family: family(motionDesign?.font),
+      family: family(effectiveDesign?.font),
       color: inheritedPalette?.link ?? "#52616f",
       leading: 1.3,
     });
     const end = text(ctx, block.question.prompt, 64, 96, 1152, 220, {
       size: 42,
-      family: family(motionDesign?.font),
+      family: family(effectiveDesign?.font),
       color: inheritedPalette?.text ?? "#102a43",
       leading: 1.2,
       bold: true,
@@ -753,7 +755,7 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         340,
         {
           size: 26,
-          family: family(motionDesign?.font),
+          family: family(effectiveDesign?.font),
           color: inheritedPalette?.text ?? "#102a43",
           leading: 1.5,
         },
@@ -768,7 +770,7 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         120,
         {
           size: 26,
-          family: family(motionDesign?.font),
+          family: family(effectiveDesign?.font),
           color: inheritedPalette?.text ?? "#102a43",
           leading: 1.4,
         },
@@ -785,7 +787,7 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         120,
         {
           size: 26,
-          family: family(motionDesign?.font),
+          family: family(effectiveDesign?.font),
           color: inheritedPalette?.text ?? "#52616f",
           leading: 1.4,
         },

@@ -1,0 +1,420 @@
+.gallery {
+  min-inline-size: 0;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.search {
+  flex: 1 1 18rem;
+  max-inline-size: 28rem;
+  margin: 0;
+  gap: 0.4rem;
+}
+.search > span,
+.scope > span {
+  color: var(--ui-text-subtle);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+.search input {
+  background: var(--ui-surface);
+}
+.styleFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.filter {
+  min-block-size: 36px;
+  max-inline-size: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  background: var(--ui-surface);
+  color: var(--ui-text-subtle);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.filter[aria-pressed="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent-ink);
+  color: var(--ui-accent-ink);
+}
+.filter:hover {
+  border-color: var(--ui-border-strong);
+}
+.resultSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-block: 0.9rem;
+  color: var(--ui-text-subtle);
+  font-size: 0.75rem;
+}
+.resultSummary p {
+  margin: 0;
+}
+.clear {
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-accent-ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1.1rem;
+}
+.card {
+  min-inline-size: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.8rem;
+  overflow: hidden;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+.previewButton {
+  display: block;
+  inline-size: 100%;
+  padding: 0.7rem 0.7rem 0;
+  border: 0;
+  background: var(--ui-surface-soft);
+  text-align: start;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.artwork {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  inline-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 0.3rem;
+  background: var(--ui-surface-soft);
+  pointer-events: none;
+}
+.scene {
+  position: absolute;
+  inset: 0 auto auto 0;
+  inline-size: 960px;
+  transform-origin: top left;
+}
+.scene > article {
+  min-block-size: 540px;
+}
+.miniatures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-block-start: 0.4rem;
+}
+.cardHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding-block: 0.85rem 0.7rem;
+}
+.cardHeading strong {
+  color: var(--ui-text-strong);
+  font-size: 1.12rem;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+}
+.cardHeading > span {
+  color: var(--ui-text-subtle);
+  font-size: 0.7rem;
+}
+.cardBody {
+  padding: 0.8rem;
+}
+.cardBody > p {
+  min-block-size: 2.6em;
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.cardActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.8rem;
+}
+.cardActions > span {
+  color: var(--ui-text-subtle);
+  font-size: 0.72rem;
+}
+.cardActions button {
+  white-space: normal;
+  max-inline-size: 100%;
+}
+.empty {
+  padding: 2rem 1rem;
+  border: 1px dashed var(--ui-border-strong);
+  border-radius: 0.6rem;
+  color: var(--ui-text-subtle);
+  text-align: center;
+}
+.recovery {
+  display: grid;
+  gap: 0.5rem;
+}
+.recoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.notice {
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.dialog {
+  inline-size: min(1180px, calc(100% - 32px));
+  max-inline-size: calc(100% - 32px);
+  max-block-size: calc(100dvh - 32px);
+  box-sizing: border-box;
+  padding: 1.25rem;
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+}
+.dialog::backdrop {
+  background: rgb(20 30 26 / 65%);
+}
+.dialogHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 1rem;
+}
+.dialogHeader > div {
+  min-inline-size: 0;
+}
+.dialogHeader h2 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 1.6rem;
+  letter-spacing: -0.035em;
+  color: var(--ui-text-strong);
+}
+.dialogHeader p {
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.dialogHeader .eyebrow {
+  font-size: 0.7rem;
+  color: var(--ui-accent-ink);
+  font-weight: 700;
+}
+.dialog button {
+  max-inline-size: 100%;
+  min-block-size: 40px;
+  white-space: normal;
+}
+.editorControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.25rem 1rem;
+}
+.scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0;
+  gap: 0.6rem;
+}
+.scope select {
+  max-inline-size: 100%;
+  inline-size: auto;
+  min-block-size: 40px;
+}
+.layoutList {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding-block: 0.4rem 1rem;
+}
+.layoutChoice {
+  min-inline-size: 0;
+  padding: 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--ui-text-subtle);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+.layoutChoice[aria-pressed="true"] {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+.layoutChoice > span {
+  display: block;
+  margin-block-start: 0.4rem;
+  font-size: 0.65rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.stageHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-block: 0.4rem 0.7rem;
+}
+.stageHeading h3,
+.stageHeading p {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ui-text-subtle);
+}
+.stage {
+  max-inline-size: 960px;
+  margin-inline: auto;
+}
+.stage > .artwork {
+  border-radius: 0.5rem;
+  box-shadow: var(--ui-shadow-sm);
+}
+.textPreview {
+  margin-block-start: 0.7rem;
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+}
+.textPreview summary {
+  min-block-size: 36px;
+  align-content: center;
+  cursor: pointer;
+}
+.textPreview p {
+  margin: 0.5rem 0;
+  white-space: pre-line;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.dialogFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-start: 1rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--ui-border);
+}
+.dialogFooter > p {
+  flex: 1 1 25rem;
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.filter:focus-visible,
+.clear:focus-visible,
+.previewButton:focus-visible,
+.layoutChoice:focus-visible,
+.textPreview summary:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: -3px;
+}
+@media (max-width: 800px) {
+  .layoutList {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .dialog {
+    inline-size: calc(100% - 16px);
+    max-inline-size: calc(100% - 16px);
+    max-block-size: calc(100dvh - 16px);
+    padding: 0.75rem;
+  }
+  .dialogHeader {
+    flex-wrap: wrap;
+  }
+  .dialogHeader > button {
+    margin-inline-start: auto;
+  }
+  .scope,
+  .scope select,
+  .dialogActions {
+    inline-size: 100%;
+  }
+  .dialogActions button {
+    flex: 1 1 auto;
+  }
+  .cardActions button {
+    flex: 1 1 100%;
+  }
+}
+@media (pointer: coarse) {
+  .filter,
+  .clear,
+  .previewButton,
+  .dialog button,
+  .cardActions button,
+  .textPreview summary {
+    min-block-size: 44px;
+  }
+}
+.readingTable {
+  max-inline-size: 100%;
+  overflow: auto;
+  margin-block: 0.75rem;
+}
+.readingTable table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+.readingTable caption {
+  padding-block: 0.4rem;
+  text-align: start;
+}
+.readingTable th,
+.readingTable td {
+  min-inline-size: 6rem;
+  padding: 0.5rem;
+  border: 1px solid var(--ui-border);
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.readingTable:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}

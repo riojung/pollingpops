@@ -87,6 +87,14 @@ import { PresentationShareButton } from "../presentation-sharing/share-dialog";
 import { PresentationAssignmentButton } from "../presentation-assignments/assignment-dialog";
 import { PresentationPracticeButton } from "../presentation-practice/practice-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
+import { PresentationDesignGallery } from "../workspace/presentation-design-gallery";
+import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
+import {
+  applyPresentationDesign,
+  createDesignSlide,
+  type DesignLayoutId,
+  type PresentationDesignId,
+} from "../../lib/presentation-designs";
 import {
   applyNativeDesignToDeck,
   applyNativeSceneToDeck,
@@ -515,6 +523,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const { locale, t } = useLocale();
   const authoring = authoringWorkflowCopy(locale);
   const commands = presentationCommandCopy(locale);
+  const designLibraryCopy = presentationDesignCopy(locale);
   const sectionsSpatial = sectionsSpatialCopy(locale);
   const nativeEditorUi = nativeEditorCopy(locale);
   const nativeControlUi = nativeControlsCopy(locale);
@@ -581,6 +590,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
   const [mapOpen, setMapOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [designLibraryOpen, setDesignLibraryOpen] = useState(false);
+  const designLibraryTrigger = useRef<HTMLButtonElement>(null);
+  const designLibraryPanel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!designLibraryOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const panel = designLibraryPanel.current;
+      panel?.scrollIntoView({ block: "start" });
+      panel
+        ?.querySelector<HTMLInputElement>('input[type="search"]')
+        ?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [designLibraryOpen]);
   const [compactEditor, setCompactEditor] = useState(false);
   const [nativeInspectorTarget, setNativeInspectorTarget] = useState<HTMLDivElement | null>(null);
   const mapTrigger = useRef<HTMLButtonElement>(null);
@@ -1512,6 +1535,55 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     });
     setSelectedBlockId(block.id);
     setInspectorTab(block.kind === "content" ? "content" : "build");
+  }
+
+  function applyDesignFromLibrary(id: PresentationDesignId, scope: "deck" | "slide") {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const options = { scope, ...(selectedBlockId ? { blockId: selectedBlockId } : {}) };
+    // Preflight the latest local document before closing a preview. The functional commit
+    // repeats validation against its authoritative snapshot rather than replacing later edits.
+    applyPresentationDesign(JSON.parse(latestDraftJson.current) as PresentationDraft, id, options);
+    commit((current) => {
+      try {
+        return applyPresentationDesign(current, id, options).draft;
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    return true;
+  }
+
+  function insertDesignLayout(id: PresentationDesignId, layout: DesignLayoutId) {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const block = createDesignSlide(id, layout, designLibraryCopy.sampleDraft.slides[layout]);
+    const insert = (current: PresentationDraft): PresentationDraft => {
+      const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
+      const blocks = [...current.blocks];
+      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
+      const next = reconcilePresentationSpatialBlocks(current, {
+        ...current,
+        blocks,
+        schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene!),
+      });
+      PresentationDraftSchema.parse(next);
+      return next;
+    };
+    insert(JSON.parse(latestDraftJson.current) as PresentationDraft);
+    // Unlike a generic blank slide, a chosen layout keeps the design the user previewed.
+    commit((current) => {
+      try {
+        return insert(current);
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    setSelectedBlockId(block.id);
+    setInspectorTab("content");
+    return true;
   }
 
   function undo() {
@@ -2856,6 +2928,17 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </div>
         </div>
         <div className={styles.commandActions}>
+          <button
+            ref={designLibraryTrigger}
+            aria-expanded={designLibraryOpen}
+            aria-controls="presentation-design-library"
+            onClick={() => setDesignLibraryOpen((open) => !open)}
+            type="button"
+            data-presentation-designs
+            lang={locale}
+          >
+            <EditorIcon name="palette" /> {designLibraryCopy.title}
+          </button>
           <div className={styles.historyActions} data-editor-history>
             <button
               className={styles.iconButton}
@@ -3211,6 +3294,44 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               onUndo={undoPackUpdate}
             />
           ))}
+        </section>
+      ) : null}
+
+      {designLibraryOpen ? (
+        <section
+          ref={designLibraryPanel}
+          id="presentation-design-library"
+          className={styles.designLibrary}
+          aria-labelledby="presentation-design-library-title"
+          inert={builderMutationBlocked || preparingImport}
+          lang={locale}
+        >
+          <div className={styles.designLibraryHeading}>
+            <div>
+              <h2 id="presentation-design-library-title">{designLibraryCopy.title}</h2>
+              <p>{designLibraryCopy.description}</p>
+            </div>
+            <button
+              type="button"
+              aria-label={commands.closePanel}
+              onClick={() => {
+                setDesignLibraryOpen(false);
+                designLibraryTrigger.current?.focus();
+              }}
+            >
+              <EditorIcon name="close" />
+            </button>
+          </div>
+          <PresentationDesignGallery
+            draft={draft}
+            selectedBlockId={selectedBlockId ?? undefined}
+            onApply={applyDesignFromLibrary}
+            onInsert={insertDesignLayout}
+            renderSceneImage={(mediaId, altText) => (
+              <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+            )}
+            disabled={!canEdit || builderMutationBlocked || preparingImport}
+          />
         </section>
       ) : null}
 

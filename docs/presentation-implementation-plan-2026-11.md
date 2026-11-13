@@ -13,6 +13,28 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Presentation design collection — November 13, 2026
+
+The `codex/presentation-design-library` follow-up separates visual designs from the content
+and scenario collection below. Eight original families supply 64 editable native layout recipes
+with ten-locale example copy. Templates → Designs supports visual browsing, filtering, preview
+and new-draft creation. The editor supports applying style to existing content and inserting
+one selected layout through the existing undo/autosave transaction.
+
+Style application retains native geometry and content; ordinary slides use the existing native
+adapter. Activity appearance follows nearby visible content, and imported raster colors remain
+part of the original artwork. Appearance changes and layout insertion are separate actions.
+Existing motion is retained, published source content stays immutable, and complete-document
+budgets are validated before application or spatial insertion. Creation retries preserve their
+original request identity, owner context and initial draft revision.
+
+Public catalog/help evidence, clean-room provenance, implementation boundaries and export
+consistency are recorded in [the design-library evidence](evidence/presentation-design-library-2026-11.md).
+The source uses existing versioned scene primitives and requires no new migration or paid asset
+service. Validation results are recorded in [implementation status](implementation-status.md).
+This closes a specific design-discovery/application gap without treating an original starter
+collection as numerical parity with competitor catalogs or advancing release-acceptance gates.
+
 ## Customer template collection — November 12, 2026
 
 The pre-launch template work prioritizes complete, useful examples and faithful previews.

@@ -3,6 +3,8 @@ import Link from "next/link";
 import type { SurveyDraft } from "@openround/contracts/surveys";
 import { useLocale } from "../locale-provider";
 import type { RoundLibraryView } from "../../lib/round-library-view";
+import { WorkspaceStatus, workspaceStateTone } from "./workspace-signals";
+import signals from "./workspace-signals.module.css";
 import styles from "../../app/library/library.module.css";
 
 export function SurveyLibraryCards({
@@ -45,7 +47,9 @@ export function SurveyLibraryCards({
         const folder = folders.find((row) => row.id === survey.folderId)?.name;
         return (
           <article
-            className={`${styles.card} ${selectedIds.has(survey.id) ? styles.cardSelected : ""}`}
+            className={`${styles.card} ${signals.surface} ${selectedIds.has(survey.id) ? styles.cardSelected : ""}`}
+            data-kind="survey"
+            data-state-tone={workspaceStateTone(survey.status)}
             key={survey.id}
           >
             {canEdit ? (
@@ -78,9 +82,9 @@ export function SurveyLibraryCards({
             </div>
             <div className={styles.cardBody}>
               <div className={styles.cardMeta}>
-                <span className={styles.status} data-status={survey.status}>
+                <WorkspaceStatus status={survey.status}>
                   {t(`pages.common.status.${survey.status}`)}
-                </span>
+                </WorkspaceStatus>
                 {survey.updatedAt ? (
                   <span>
                     {t("pages.common.updated", {
@@ -106,11 +110,19 @@ export function SurveyLibraryCards({
                 </p>
               </div>
               <div className={styles.cardActions}>
-                <Link className="button-quiet small-button" href={`/surveys/${survey.id}`}>
+                <Link
+                  className={`button-quiet small-button ${signals.action}`}
+                  data-action={canEdit && !archived ? "edit" : "view"}
+                  href={`/surveys/${survey.id}`}
+                >
                   {t(canEdit && !archived ? "pages.library.edit" : "pages.library.view")}
                 </Link>
                 {survey.status === "published" && canEdit && canCreate ? (
-                  <Link className="button small-button" href={`/surveys/${survey.id}`}>
+                  <Link
+                    className={`button small-button ${signals.action}`}
+                    data-action="edit"
+                    href={`/surveys/${survey.id}`}
+                  >
                     {t("pages.library.shareSurvey")}
                   </Link>
                 ) : null}

@@ -253,6 +253,87 @@ afterEach(() => {
 
 describe("Results workspace", () => {
   it.each([
+    { status: "ready", tone: "positive", label: "Ready", action: "result" },
+    { status: "pending", tone: "warning", label: "Processing", action: "view" },
+    { status: "failed", tone: "danger", label: "Needs attention", action: "view" },
+  ])(
+    "uses the actual $status report state while preserving zero and missing evidence",
+    async ({ status, tone, label, action }) => {
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path.startsWith("/v1/reports?")
+          ? {
+              items: [
+                {
+                  ...report(),
+                  status,
+                  initialAccuracyPercent: 0,
+                  recovery: { recovered: 0, eligible: 10, percent: 0 },
+                },
+              ],
+              nextCursor: null,
+            }
+          : response(path),
+      );
+      await resultsHarness().settle();
+      const card = elements(fixtures.tree).find((node) => node.type === "article")!;
+      const markup = renderToStaticMarkup(card);
+      expect(card.props["data-kind"]).toBe("round");
+      expect(card.props["data-state-tone"]).toBe(tone);
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toContain(`</svg>${label}</span>`);
+      expect(markup).toMatch(/aria-hidden="true"[^>]*data-icon="[^"]+"[^>]*focusable="false"/);
+      expect(markup).toContain(`data-action="${action}" href="/report/report-first"`);
+      expect(markup).not.toContain('data-action="resume"');
+      if (status === "ready") {
+        expect(markup).toContain('aria-valuenow="0"');
+        expect(markup).toContain("0%");
+      } else {
+        expect(markup).not.toContain('role="meter"');
+        expect(markup).not.toContain("0%");
+        expect(markup).toContain("No evidence recorded");
+      }
+    },
+  );
+
+  it.each([
+    { view: "practice", kind: "practice", status: "open", tone: "active", label: "Open" },
+    {
+      view: "presentations",
+      kind: "presentation",
+      status: "finished",
+      tone: "neutral",
+      label: "Finished",
+    },
+    { view: "surveys", kind: "survey", status: "closed", tone: "neutral", label: "Closed" },
+  ])(
+    "preserves $view lifecycle signals in grid and list Results",
+    async ({ view, kind, status, tone, label }) => {
+      fixtures.query = `view=${view}`;
+      const harness = resultsHarness();
+      for (const layout of ["grid", "list"]) {
+        if (layout === "list") clickButton("List view");
+        const markup = await harness.settle();
+        expect(markup).toContain(`data-view="${layout}"`);
+        const card = elements(fixtures.tree).find((node) => node.type === "article")!;
+        const cardMarkup = renderToStaticMarkup(card);
+        expect(card.props["data-kind"]).toBe(kind);
+        expect(card.props["data-state-tone"]).toBe(tone);
+        expect(cardMarkup).toContain(
+          `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+        );
+        expect(cardMarkup).toContain(`</svg>${label}</span>`);
+        expect(cardMarkup).not.toContain('data-action="resume"');
+        if (view === "practice") {
+          expect(cardMarkup).toContain('data-action="view" href="/practice/practice-first"');
+          expect(cardMarkup).not.toContain('data-action="edit"');
+        }
+      }
+    },
+  );
+
+  it.each([
     { view: "results", path: "/v1/reports", title: "First Round result" },
     { view: "practice", path: "/v1/followups", title: "First practice" },
     {

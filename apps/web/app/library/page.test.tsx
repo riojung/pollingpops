@@ -187,7 +187,7 @@ describe("Library workspace", () => {
 
     expect(markup).toContain("Library");
     expect(markup).toContain('role="tablist"');
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Rounds/);
+    expect(markup).toMatch(/aria-selected="true"[^>]*id="rounds-tab"[^>]*role="tab"/);
     expect(markup).toContain('placeholder="Search rounds"');
     expect(markup).toContain('href="/create"');
     expect(markup).toContain("Create Round");
@@ -208,7 +208,7 @@ describe("Library workspace", () => {
     fixtures.query = "type=presentations&q=recovery";
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
 
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Presentations/);
+    expect(markup).toMatch(/aria-selected="true"[^>]*id="presentations-tab"[^>]*role="tab"/);
     expect(markup).toContain('placeholder="Search presentations"');
     expect(markup).toContain('value="recovery"');
     expect(markup).toContain('href="/create/presentation"');
@@ -219,7 +219,7 @@ describe("Library workspace", () => {
   it("includes Surveys as a first-class Library tab with the same filters and layouts", () => {
     fixtures.query = "type=surveys&q=training&status=published&favorites=true";
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Surveys/);
+    expect(markup).toMatch(/aria-selected="true"[^>]*id="surveys-tab"[^>]*role="tab"/);
     expect(markup).toContain('placeholder="Search surveys"');
     expect(markup).toContain('value="training"');
     expect(markup).toContain('href="/surveys/new"');
@@ -250,6 +250,142 @@ describe("Library workspace", () => {
     expect(markup).not.toContain("Create Round");
     expect(markup).not.toContain('href="/create"');
     expect(markup).toContain('href="/library/folders?type=rounds"');
+  });
+
+  it("keeps named type tabs and decorates each with its content kind", () => {
+    const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+
+    for (const [type, kind, name] of [
+      ["rounds", "round", "Rounds"],
+      ["presentations", "presentation", "Presentations"],
+      ["surveys", "survey", "Surveys"],
+    ]) {
+      const tab = elements(fixtures.tree).find((candidate) => candidate.props.id === `${type}-tab`);
+      expect(tab?.props["data-kind"]).toBe(kind);
+      expect(tab?.props["aria-controls"]).toBe(`${type}-panel`);
+      expect(elementText(tab?.props.children as ReactNode)).toBe(`${name} 0`);
+    }
+    expect(markup.match(/<svg[^>]*aria-hidden="true"/g)).toHaveLength(3);
+  });
+
+  it.each([
+    ["rounds", "round"],
+    ["presentations", "presentation"],
+    ["surveys", "survey"],
+  ])("marks %s drafts without adding delivery actions", async (type, kind) => {
+    fixtures.query = `type=${type}`;
+    const markup = await libraryHarness().settle();
+
+    expect(markup).toContain(`data-kind="${kind}" data-state-tone="warning"`);
+    expect(markup).toContain('data-status="draft"');
+    expect(markup).toContain('data-tone="draft"');
+    expect(markup).toContain('data-action="edit"');
+    expect(markup).toContain(`aria-label="Select ${type} filed"`);
+    expect(markup).not.toContain('data-action="host"');
+    expect(markup).not.toContain('data-action="assign"');
+    expect(markup).not.toContain('data-action="resume"');
+    expect(markup).not.toContain(">Share</a>");
+  });
+
+  it.each([
+    ["rounds", "round"],
+    ["presentations", "presentation"],
+    ["surveys", "survey"],
+  ])("preserves published %s labels and available actions", async (type, kind) => {
+    fixtures.query = `type=${type}`;
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      libraryResponseWithStatus(path, "published"),
+    );
+    const markup = await libraryHarness().settle();
+
+    expect(markup).toContain(`data-kind="${kind}" data-state-tone="positive"`);
+    expect(markup).toContain('data-status="published"');
+    expect(markup).toContain('data-tone="published"');
+    expect(markup).toContain("Published");
+    expect(markup).toContain('data-action="edit"');
+    if (type === "rounds") {
+      expect(markup).toMatch(/data-action="host"[^>]*href="\/host\/setup\/rounds-filed"/);
+      expect(markup).toMatch(/data-action="assign"[^>]*href="\/quiz\/rounds-filed\/assign"/);
+    } else if (type === "presentations") {
+      expect(markup).toMatch(
+        /data-action="host"[^>]*href="\/presentation\/presentations-filed\/host"/,
+      );
+      expect(markup).toContain('data-status="changed"');
+      expect(markup).toContain('data-tone="changed"');
+      expect(markup).toContain(
+        'data-status="changed" data-tone="changed" data-state-tone="warning"',
+      );
+      expect(markup).toContain("Unpublished changes");
+    } else {
+      expect(markup).toContain(">Share</a>");
+      expect(markup).toContain('href="/surveys/surveys-filed"');
+      expect(markup).not.toContain('data-action="host"');
+    }
+    expect(markup).not.toContain('data-action="resume"');
+  });
+
+  it.each([
+    ["rounds", "round"],
+    ["presentations", "presentation"],
+    ["surveys", "survey"],
+  ])("preserves archived %s status and the existing View action", async (type, kind) => {
+    fixtures.query = `type=${type}&status=archived`;
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      libraryResponseWithStatus(path, "archived"),
+    );
+    const markup = await libraryHarness().settle();
+
+    expect(markup).toContain(`data-kind="${kind}" data-state-tone="neutral"`);
+    expect(markup).toContain('data-status="archived"');
+    expect(markup).toContain('data-tone="archived"');
+    expect(markup).toContain('data-action="view"');
+    expect(markup).toContain(">View</a>");
+    expect(markup).not.toContain('data-action="edit"');
+    expect(markup).not.toContain('data-action="host"');
+    expect(markup).not.toContain('data-action="assign"');
+    expect(markup).not.toContain("Unpublished changes");
+  });
+
+  it.each(["rounds", "presentations", "surveys"])(
+    "keeps published %s delivery actions hidden for viewers",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      fixtures.canEdit = false;
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        libraryResponseWithStatus(path, "published"),
+      );
+      const markup = await libraryHarness().settle();
+
+      expect(markup).toContain('data-action="view"');
+      expect(markup).not.toContain('data-action="edit"');
+      expect(markup).not.toContain('data-action="host"');
+      expect(markup).not.toContain('data-action="assign"');
+      expect(markup).not.toContain(">Share</a>");
+    },
+  );
+
+  it.each([
+    ["rounds", "round"],
+    ["presentations", "presentation"],
+    ["surveys", "survey"],
+  ])("retains %s state and actions when switching to list view", async (type, kind) => {
+    fixtures.query = `type=${type}`;
+    const harness = libraryHarness();
+    await harness.settle();
+    const listButton = elements(fixtures.tree).find(
+      (candidate) => candidate.type === "button" && candidate.props["aria-label"] === "List view",
+    );
+    expect(listButton).toBeDefined();
+    (listButton!.props as ComponentProps<"button">).onClick?.(
+      {} as Parameters<NonNullable<ComponentProps<"button">["onClick"]>>[0],
+    );
+    const markup = await harness.settle();
+
+    expect(markup).toContain('data-view="list"');
+    expect(markup).toContain('aria-label="List view" aria-pressed="true"');
+    expect(markup).toContain(`data-kind="${kind}" data-state-tone="warning"`);
+    expect(markup).toContain('data-status="draft"');
+    expect(markup).toContain('data-action="edit"');
   });
 
   it.each(["rounds", "presentations", "surveys"])(
@@ -563,6 +699,34 @@ function libraryResponse(path: string) {
     };
   if (path === "/v1/library/favorites") return { favorites: [] };
   return {};
+}
+
+function libraryResponseWithStatus(path: string, status: "published" | "archived") {
+  const response = libraryResponse(path);
+  if ("quizzes" in response && response.quizzes) {
+    return {
+      ...response,
+      quizzes: response.quizzes.map((row) => ({ ...row, status, currentVersionId: "version" })),
+    };
+  }
+  if ("presentations" in response && response.presentations) {
+    return {
+      ...response,
+      presentations: response.presentations.map((row) => ({
+        ...row,
+        status,
+        currentVersionId: "version",
+        hasUnpublishedChanges: true,
+      })),
+    };
+  }
+  if ("surveys" in response && response.surveys) {
+    return {
+      ...response,
+      surveys: response.surveys.map((row) => ({ ...row, status, versionId: "version" })),
+    };
+  }
+  return response;
 }
 
 // Exercise the page's callbacks and effect ordering without adding a browser test dependency.

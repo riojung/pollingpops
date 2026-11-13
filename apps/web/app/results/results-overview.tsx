@@ -1,6 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useLocale } from "../../components/locale-provider";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
+import {
+  WorkspaceKindIcon,
+  workspaceStateTone,
+} from "../../components/workspace/workspace-signals";
 import { formatNumber } from "../../lib/i18n/format";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 import {
@@ -64,19 +68,7 @@ export function EvidenceMeter({
 export function ResultKindIcon({ kind }: { kind: "presentation" | "survey" }) {
   return (
     <span className={styles.kindIcon} data-kind={kind} aria-hidden="true">
-      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8">
-        {kind === "presentation" ? (
-          <>
-            <path d="M5 6h22v15H5zM16 21v6M10 27h12" />
-            <path d="m10 16 4-4 4 3 5-5" />
-          </>
-        ) : (
-          <>
-            <path d="M10 5H7v23h18V5h-3M12 3h8v5h-8zM16 14h6M16 21h6" />
-            <path d="m9 14 1.5 1.5L13 12m-4 9 1.5 1.5L13 19" />
-          </>
-        )}
-      </svg>
+      <WorkspaceKindIcon kind={kind} />
     </span>
   );
 }
@@ -93,15 +85,15 @@ export function ResultsOverview(props: Props) {
   const number = (value: number) => formatNumber(locale, value);
   let primary: ReactNode;
   let secondary: ReactNode;
-  let distribution: Array<{ label: string; count: number; tone: string }> = [];
+  let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
     distribution = [
-      { label: t("pages.common.status.ready"), count: summary.ready, tone: "green" },
-      { label: t("pages.common.status.processing"), count: summary.pending, tone: "yellow" },
-      { label: t("pages.common.status.needsAttention"), count: summary.failed, tone: "pink" },
+      { label: t("pages.common.status.ready"), count: summary.ready, status: "ready" },
+      { label: t("pages.common.status.processing"), count: summary.pending, status: "pending" },
+      { label: t("pages.common.status.needsAttention"), count: summary.failed, status: "failed" },
     ];
     primary = (
       <>
@@ -128,10 +120,10 @@ export function ResultsOverview(props: Props) {
     );
   } else if (props.kind === "practice") {
     const summary = practiceOverview(props.items);
-    distribution = (["open", "scheduled", "closed", "expired"] as const).map((status, index) => ({
+    distribution = (["open", "scheduled", "closed", "expired"] as const).map((status) => ({
       label: t(`pages.common.status.${status}`),
       count: summary[status],
-      tone: ["green", "yellow", "purple", "muted"][index]!,
+      status,
     }));
     primary = (
       <EvidenceMeter
@@ -153,8 +145,8 @@ export function ResultsOverview(props: Props) {
   } else if (props.kind === "presentations") {
     const summary = presentationOverview(props.items);
     distribution = [
-      { label: t("pages.common.status.finished"), count: summary.finished, tone: "green" },
-      { label: t("pages.common.status.active"), count: summary.active, tone: "yellow" },
+      { label: t("pages.common.status.finished"), count: summary.finished, status: "finished" },
+      { label: t("pages.common.status.active"), count: summary.active, status: "active" },
     ];
     primary = (
       <EvidenceMeter
@@ -193,7 +185,19 @@ export function ResultsOverview(props: Props) {
   }
 
   return (
-    <section className={styles.overview} aria-label={t("resultsOverview.title")}>
+    <section
+      className={styles.overview}
+      data-kind={
+        props.kind === "rounds"
+          ? "round"
+          : props.kind === "presentations"
+            ? "presentation"
+            : props.kind === "surveys"
+              ? "survey"
+              : "practice"
+      }
+      aria-label={t("resultsOverview.title")}
+    >
       <div className={styles.header}>
         <strong>{t("resultsOverview.title")}</strong>
         <p>{t("resultsOverview.scope", { count: number(props.items.length) })}</p>
@@ -214,7 +218,8 @@ export function ResultsOverview(props: Props) {
                 {distribution.map((part) => (
                   <span
                     key={part.label}
-                    data-tone={part.tone}
+                    data-status={part.status}
+                    data-tone={workspaceStateTone(part.status)}
                     style={{ flex: part.count } as CSSProperties}
                   />
                 ))}
@@ -222,7 +227,11 @@ export function ResultsOverview(props: Props) {
               <ul>
                 {distribution.map((part) => (
                   <li key={part.label}>
-                    <span data-tone={part.tone} />
+                    <span
+                      aria-hidden="true"
+                      data-status={part.status}
+                      data-tone={workspaceStateTone(part.status)}
+                    />
                     {part.label}
                     <strong>{number(part.count)}</strong>
                   </li>

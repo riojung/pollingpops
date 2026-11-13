@@ -296,14 +296,13 @@
   text-decoration: none;
 }
 
-.typePill,
-.statusPill {
+.typePill {
   display: inline-flex;
   width: fit-content;
   align-items: center;
   border-radius: 999px;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent-ink);
+  background: var(--ui-kind-round-bg);
+  color: var(--ui-kind-round-text);
   font-size: 0.64rem;
   font-weight: 850;
   letter-spacing: 0.055em;
@@ -312,39 +311,18 @@
 }
 
 .typePill[data-type="presentation"] {
-  background: var(--ui-violet-bg);
-  color: var(--ui-violet-text);
+  background: var(--ui-kind-presentation-bg);
+  color: var(--ui-kind-presentation-text);
 }
 
 .typePill[data-type="survey"] {
-  background: var(--ui-warning-bg);
-  color: var(--ui-warning-text);
+  background: var(--ui-kind-survey-bg);
+  color: var(--ui-kind-survey-text);
 }
 
 .typePill[data-type="canvas"] {
   background: var(--ui-surface-soft);
   color: var(--ui-text-strong);
-}
-
-.statusPill {
-  background: var(--ui-surface-soft);
-  color: var(--ui-text-subtle);
-}
-
-.statusPill[data-status="published"],
-.statusPill[data-status="open"],
-.statusPill[data-status="collecting"],
-.statusPill[data-status="active"] {
-  background: var(--ui-success-bg);
-  color: var(--ui-success-text);
-}
-
-.statusPill[data-status="scheduled"],
-.statusPill[data-status="organizing"],
-.statusPill[data-status="voting"],
-.statusPill[data-status="frozen"] {
-  background: var(--ui-warning-bg);
-  color: var(--ui-warning-text);
 }
 
 .resultList,
@@ -909,16 +887,16 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent-ink);
+  background: var(--ui-kind-round-bg);
+  color: var(--ui-kind-round-text);
 }
 .workIcon[data-type="presentation"] {
-  background: var(--ui-violet-bg);
-  color: var(--ui-violet-text);
+  background: var(--ui-kind-presentation-bg);
+  color: var(--ui-kind-presentation-text);
 }
 .workIcon[data-type="survey"] {
-  background: var(--ui-warning-bg);
-  color: var(--ui-warning-text);
+  background: var(--ui-kind-survey-bg);
+  color: var(--ui-kind-survey-text);
 }
 .workIcon[data-type="canvas"],
 .workIcon[data-type="idea_board"] {
@@ -939,11 +917,6 @@
   font-size: 0.94rem;
   line-height: 1.35;
 }
-.workTitleline .statusPill {
-  font-size: 0.58rem;
-  padding: 0.2rem 0.45rem;
-  letter-spacing: 0.035em;
-}
 .artifactGrid[data-layout="compact"] .metadata {
   display: flex;
   flex-wrap: wrap;
@@ -962,7 +935,8 @@
   align-items: center;
   min-height: 44px;
   margin: 0;
-  padding: 0 0.2rem;
+  padding: 0 0.55rem;
+  border-radius: 8px;
   font-size: 0.75rem;
   white-space: nowrap;
 }

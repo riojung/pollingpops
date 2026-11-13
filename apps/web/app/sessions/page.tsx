@@ -9,6 +9,11 @@ import { formatDateTime } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { SessionPhaseLabel } from "../../components/workspace/session-phase-label";
+import {
+  WorkspaceKindIcon,
+  WorkspaceStatus,
+  workspaceStateTone,
+} from "../../components/workspace/workspace-signals";
 import type { CursorPage, SessionSummary } from "../../components/workspace/workspace-types";
 import {
   filterSessionRows,
@@ -31,6 +36,7 @@ import {
 import contentStyles from "../../components/workspace/workspace-content.module.css";
 import styles from "./sessions.module.css";
 import controls from "../../components/workspace/workspace-history-controls.module.css";
+import signals from "../../components/workspace/workspace-signals.module.css";
 
 type SessionCounts = Record<SessionType, number>;
 type SourceOption = { id: string; title: string };
@@ -592,7 +598,10 @@ function SessionsContent() {
             <button
               aria-controls={`${value}-panel`}
               aria-selected={type === value}
-              className={type === value ? controls.tabActive : controls.tab}
+              className={`${type === value ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+              data-kind={
+                value === "rounds" ? "round" : value === "presentations" ? "presentation" : "survey"
+              }
               id={`${value}-tab`}
               key={value}
               onClick={() => updateFilters(sessionFiltersForType(filters, value), true)}
@@ -601,6 +610,15 @@ function SessionsContent() {
               tabIndex={type === value ? 0 : -1}
               type="button"
             >
+              <WorkspaceKindIcon
+                kind={
+                  value === "rounds"
+                    ? "round"
+                    : value === "presentations"
+                      ? "presentation"
+                      : "survey"
+                }
+              />
               {t(
                 value === "rounds"
                   ? "pages.common.rounds"
@@ -769,7 +787,12 @@ function SessionsContent() {
             )}
           >
             {current.rounds.map((session) => (
-              <article className={styles.card} key={session.id}>
+              <article
+                className={`${styles.card} ${signals.surface}`}
+                data-kind="round"
+                data-state-tone={workspaceStateTone(session.status)}
+                key={session.id}
+              >
                 <div className={styles.cardTopline}>
                   <div>
                     <h2 lang="">{session.title}</h2>
@@ -788,9 +811,9 @@ function SessionsContent() {
                       )}
                     </p>
                   </div>
-                  <span className={contentStyles.status} data-tone={session.status}>
+                  <WorkspaceStatus status={session.status}>
                     {statusLabel(session.status)}
-                  </span>
+                  </WorkspaceStatus>
                 </div>
                 <div className={styles.metrics}>
                   <div>
@@ -819,7 +842,8 @@ function SessionsContent() {
                 <div className={styles.actions}>
                   {sessionActions("rounds", session.status, role).canResume ? (
                     <button
-                      className="button small-button"
+                      className={`button small-button ${signals.action}`}
+                      data-action="resume"
                       disabled={mutationBusy}
                       onClick={() => void resumeSession(session)}
                       type="button"
@@ -831,14 +855,16 @@ function SessionsContent() {
                   ) : null}
                   {session.reportId ? (
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="result"
                       href={`/report/${session.reportId}`}
                     >
                       {t("pages.sessions.viewResult")}
                     </Link>
                   ) : null}
                   <Link
-                    className="button-quiet small-button"
+                    className={`button-quiet small-button ${signals.action}`}
+                    data-action="view"
                     href={`/quiz/${session.quizId}/preview`}
                   >
                     {t("pages.sessions.viewRound")}
@@ -850,7 +876,8 @@ function SessionsContent() {
                           ? t("pages.sessions.deleting")
                           : t("pages.sessions.delete")
                       }
-                      className={`button-quiet small-button ${styles.deleteButton}`}
+                      className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                      data-action="delete"
                       disabled={mutationBusy}
                       onClick={() => void deleteSession(session, session.status)}
                       title={
@@ -875,7 +902,12 @@ function SessionsContent() {
               const value = presentationSessionStatus(session, now);
               const actions = sessionActions("presentations", value, role);
               return (
-                <article className={styles.card} key={session.id}>
+                <article
+                  className={`${styles.card} ${signals.surface}`}
+                  data-kind="presentation"
+                  data-state-tone={workspaceStateTone(value)}
+                  key={session.id}
+                >
                   <div className={styles.cardTopline}>
                     <div>
                       <h2 lang="">{session.title}</h2>
@@ -886,9 +918,7 @@ function SessionsContent() {
                         })}
                       </p>
                     </div>
-                    <span className={contentStyles.status} data-tone={value}>
-                      {statusLabel(value)}
-                    </span>
+                    <WorkspaceStatus status={value}>{statusLabel(value)}</WorkspaceStatus>
                   </div>
                   <div className={styles.metrics}>
                     <div>
@@ -917,20 +947,23 @@ function SessionsContent() {
                   <div className={styles.actions}>
                     {actions.canResume ? (
                       <Link
-                        className="button small-button"
+                        className={`button small-button ${signals.action}`}
+                        data-action="resume"
                         href={`/presentation-session/${session.id}/host`}
                       >
                         {t("pages.sessions.resumePresentation")}
                       </Link>
                     ) : null}
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="result"
                       href={`/presentation-session/${session.id}/report`}
                     >
                       {t("pages.sessions.viewReport")}
                     </Link>
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="view"
                       href={`/presentation/${session.presentationId}`}
                     >
                       {t("pages.sessions.viewPresentation")}
@@ -942,7 +975,8 @@ function SessionsContent() {
                             ? t("pages.sessions.deleting")
                             : t("pages.sessions.delete")
                         }
-                        className={`button-quiet small-button ${styles.deleteButton}`}
+                        className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                        data-action="delete"
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
                         title={
@@ -968,7 +1002,12 @@ function SessionsContent() {
               const value = surveySessionStatus(session, now);
               const actions = sessionActions("surveys", value, role);
               return (
-                <article className={styles.card} key={session.id}>
+                <article
+                  className={`${styles.card} ${signals.surface}`}
+                  data-kind="survey"
+                  data-state-tone={workspaceStateTone(value)}
+                  key={session.id}
+                >
                   <div className={styles.cardTopline}>
                     <div>
                       <h2 lang="">{session.title}</h2>
@@ -987,19 +1026,22 @@ function SessionsContent() {
                         )}
                       </p>
                     </div>
-                    <span className={contentStyles.status} data-tone={value}>
-                      {statusLabel(value)}
-                    </span>
+                    <WorkspaceStatus status={value}>{statusLabel(value)}</WorkspaceStatus>
                   </div>
                   <div className={styles.actions}>
                     {actions.canManageSharing ? (
-                      <Link className="button small-button" href={`/surveys/rooms/${session.id}`}>
+                      <Link
+                        className={`button small-button ${signals.action}`}
+                        data-action="view"
+                        href={`/surveys/rooms/${session.id}`}
+                      >
                         {t("pages.sessions.surveySharing")}
                       </Link>
                     ) : null}
                     {actions.canViewSurveyResults ? (
                       <Link
-                        className="button-quiet small-button"
+                        className={`button-quiet small-button ${signals.action}`}
+                        data-action="result"
                         href={`/results/surveys/${session.id}`}
                       >
                         {t("pages.common.viewResults")}
@@ -1012,7 +1054,8 @@ function SessionsContent() {
                             ? t("pages.sessions.deleting")
                             : t("pages.sessions.deleteSurvey")
                         }
-                        className={`button-quiet small-button ${styles.deleteButton}`}
+                        className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                        data-action="delete"
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
                         title={

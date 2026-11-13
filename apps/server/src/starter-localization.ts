@@ -1,7 +1,8 @@
 import type { QuizDraft, StarterId, SupportedLocale } from "@openround/contracts";
+import { launchStarter } from "./starter-launch-collection.js";
 
 /** Versioned original copy, applied only while explicitly instantiating a new starter. */
-export const STARTER_CONTENT_VERSION = "localized-starters-v1";
+export const STARTER_CONTENT_VERSION = "launch-collection-v2";
 export const starterTranslationLocales = [
   "fr-FR",
   "de-DE",
@@ -1190,6 +1191,8 @@ export function localizedStarter(
   id: StarterId,
   locale: SupportedLocale,
 ): QuizDraft {
+  const launch = launchStarter(id, locale);
+  if (launch) return launch;
   const result = structuredClone(source);
   if (locale === "en-CA") return result;
   const column = indexFor(locale);
@@ -1228,8 +1231,11 @@ export function localizedStarterDescription(
   source: string,
   draft: QuizDraft,
   locale: SupportedLocale,
+  id?: StarterId,
 ) {
   if (locale === "en-CA") return source;
+  // Enhanced descriptions are field-keyed and have already been localized with the draft.
+  if (id && launchStarter(id, locale)) return draft.description;
   const column = indexFor(locale);
   if (descriptions[source]) return descriptions[source][column];
   if (source.endsWith(" Follow with a labeled reflection scale."))

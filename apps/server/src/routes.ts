@@ -137,7 +137,11 @@ import { AuthoringError, type AuthoringService } from "./authoring-service.js";
 import { OidcError, type OidcService } from "./oidc-service.js";
 import { LtiError, type LtiService } from "./lti-service.js";
 import { InteractionError, type InteractionService } from "./interaction-service.js";
-import { instantiateStarter, starterSummariesForLocale } from "./starters.js";
+import {
+  instantiateStarter,
+  starterGuideForLocale,
+  starterSummariesForLocale,
+} from "./starters.js";
 import { STARTER_CONTENT_VERSION } from "./starter-localization.js";
 import { StarterLocaleRequestSchema } from "./starter-locale-request.js";
 import type { ProductEventDispatcher } from "./product-events.js";
@@ -1916,6 +1920,7 @@ export async function registerRoutes(
     const { locale } = StarterLocaleRequestSchema.parse(request.query);
     return {
       draft: instantiateStarter(id, locale),
+      guide: starterGuideForLocale(id, locale),
       contentLocale: locale,
       contentVersion: STARTER_CONTENT_VERSION,
     };

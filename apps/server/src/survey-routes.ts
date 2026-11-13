@@ -27,7 +27,11 @@ import {
 import { hashToken } from "./security.js";
 import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 import { roomCreationPolicy } from "./room-entitlements.js";
-import { instantiateStarter, starterSummariesForLocale } from "./starters.js";
+import {
+  instantiateSurveyStarter,
+  starterGuideForLocale,
+  surveyStarterSummariesForLocale,
+} from "./starters.js";
 import { STARTER_CONTENT_VERSION, surveyCreationCopy } from "./starter-localization.js";
 import { StarterLocaleRequestSchema } from "./starter-locale-request.js";
 
@@ -189,20 +193,13 @@ export async function registerSurveyRoutes(
         items: [],
       });
       if (input.templateId) {
-        const template = instantiateStarter(input.templateId, input.locale);
-        if (!template.questions.every((q) => q.type === "poll" || q.type === "rating"))
+        const template = instantiateSurveyStarter(input.templateId, input.locale);
+        if (!template)
           throw new SurveyError(
             "VALIDATION_ERROR",
             "Choose a poll or feedback template for a Survey",
           );
-        draft = SurveyDraftSchema.parse({
-          schemaVersion: 2,
-          title: template.title,
-          description: copy.description,
-          category: template.category,
-          experiencePreset: template.experiencePreset,
-          items: template.questions.map((question) => ({ required: true, question })),
-        });
+        draft = template;
       }
       if (input.sourceId) {
         const source = await deps.surveys.get(actor.workspaceId, input.sourceId);
@@ -246,9 +243,24 @@ export async function registerSurveyRoutes(
       return {
         contentLocale: locale,
         contentVersion: STARTER_CONTENT_VERSION,
-        templates: starterSummariesForLocale(locale).filter((starter) =>
-          starter.responseTypes.every((type) => type === "poll" || type === "rating"),
-        ),
+        templates: surveyStarterSummariesForLocale(locale),
+      };
+    });
+    scoped.get("/v1/surveys/templates/:id", async (request, reply) => {
+      if (!(await creator(request, reply))) return;
+      const { id } = z.object({ id: StarterIdSchema }).strict().parse(request.params);
+      const { locale } = StarterLocaleRequestSchema.parse(request.query);
+      const draft = instantiateSurveyStarter(id, locale);
+      if (!draft)
+        throw new SurveyError(
+          "VALIDATION_ERROR",
+          "Choose a poll or feedback template for a Survey",
+        );
+      return {
+        draft,
+        guide: starterGuideForLocale(id, locale, true),
+        contentLocale: locale,
+        contentVersion: STARTER_CONTENT_VERSION,
       };
     });
     scoped.get("/v1/surveys/:id", async (request, reply) => {

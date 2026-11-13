@@ -47,7 +47,14 @@ import {
   presentationInsightsCopy,
   presentationInsightsCopyKeys,
 } from "../apps/web/lib/i18n/presentation-insights-copy";
-import { instantiateStarter, starterSummariesForLocale } from "../apps/server/src/starters";
+import { templateGuideCopy, templateGuideCopyKeys } from "../apps/web/lib/i18n/template-guide-copy";
+import {
+  instantiateStarter,
+  instantiateSurveyStarter,
+  starterGuideForLocale,
+  starterSummariesForLocale,
+  surveyStarterSummariesForLocale,
+} from "../apps/server/src/starters";
 import {
   STARTER_CONTENT_VERSION,
   surveyCreationCopy,
@@ -98,7 +105,7 @@ export interface ReviewDecisions {
 export const reviewExampleSource =
   "Synthetic authored source: 12345678-1234-4123-8123-123456789abc $& $` $' {title} <img src=x onerror=alert(1)>";
 const scope =
-  "Creation, practice, Presentation report and Session insights copy; all 21 Presentation definitions and generated drafts; all 36 Round starters and 17 Survey projections; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
+  "Creation, practice, Presentation report, Session insights and template-guide copy; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
 const shaPattern = /^[a-f0-9]{40}$/;
 const hashPattern = /^sha256:[a-f0-9]{64}$/;
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -130,7 +137,7 @@ export function normalizeGeneratedIds(value: unknown): Json {
   const copy = structuredClone(value) as Json;
   const identities = new Map<string, string>();
   const generatedPath =
-    /^(?:\/id|\/question\/id)$|\/(?:blocks|questions|choices|textElements|nodes)\/\d+(?:\/question)?\/id$/;
+    /^(?:\/id|\/question\/id)$|\/(?:blocks|questions|choices|textElements|nodes|groups)\/\d+(?:\/question)?\/id$/;
   const visit = (input: Json, path: string, replace: boolean): Json => {
     if (Array.isArray(input))
       return input.map((child, index) => visit(child, `${path}/${index}`, replace));
@@ -154,12 +161,26 @@ export function normalizeGeneratedIds(value: unknown): Json {
             if (!identities.has(child)) fail(`unresolved generated reference at ${childPath}`);
             return [key, identities.get(child)!];
           }
-          if (replace && key === "readingOrder" && Array.isArray(child))
+          if (
+            replace &&
+            key === "nodeId" &&
+            /\/nodes\/\d+\/(?:from|to)\/nodeId$/.test(childPath) &&
+            typeof child === "string"
+          ) {
+            if (!identities.has(child)) fail(`unresolved connector endpoint at ${childPath}`);
+            return [key, identities.get(child)!];
+          }
+          if (
+            replace &&
+            (key === "readingOrder" ||
+              (key === "nodeIds" && /\/groups\/\d+\/nodeIds$/.test(childPath))) &&
+            Array.isArray(child)
+          )
             return [
               key,
               child.map((id) => {
                 if (typeof id !== "string" || !identities.has(id))
-                  fail(`unresolved reading order at ${childPath}`);
+                  fail(`unresolved scene reference at ${childPath}`);
                 return identities.get(id)!;
               }),
             ];
@@ -197,6 +218,12 @@ const copyFields = new Set([
   "columns",
   "labels",
   "rows",
+  "previewPrompt",
+  "audience",
+  "preparation",
+  "facilitation",
+  "interpretation",
+  "followUp",
 ]);
 
 /** Retains IDs/topology, enums, scoring, schema, geometry, figures and all array shapes. */
@@ -444,6 +471,7 @@ export async function buildReviewBundle(
       presentationInsightsCopyKeys,
       presentationInsightsCopy,
     ],
+    ["template-guide", "templateGuideCopy", templateGuideCopyKeys, templateGuideCopy],
   ] as const) {
     const messages = (language: SupportedLocale) => {
       const copy = factory(language) as (
@@ -504,6 +532,15 @@ export async function buildReviewBundle(
   const summaries = starterSummariesForLocale("en-CA");
   const targetSummaries = starterSummariesForLocale(locale);
   if (summaries.length !== 36 || targetSummaries.length !== 36) fail("expected 36 Round starters");
+  const surveyCatalog = surveyStarterSummariesForLocale("en-CA");
+  const targetSurveyCatalog = surveyStarterSummariesForLocale(locale);
+  if (surveyCatalog.length !== 6 || targetSurveyCatalog.length !== 6)
+    fail("expected six curated Survey catalog entries");
+  if (
+    canonicalJson(surveyCatalog.map(({ id }) => id)) !==
+    canonicalJson(targetSurveyCatalog.map(({ id }) => id))
+  )
+    fail("Survey catalog identity/order changed");
   let surveyContexts = 0;
   for (const [index, summary] of summaries.entries()) {
     const targetSummary = targetSummaries[index]!;
@@ -513,9 +550,10 @@ export async function buildReviewBundle(
     QuizContentSchema.parse(english);
     QuizContentSchema.parse(target);
     assertInvariantParity(english, target, summary.id);
+    assertInvariantParity(summary, targetSummary, `round/${summary.id}/metadata`);
     add(
       `round/${summary.id}/metadata`,
-      "Gallery metadata and preview prompt.",
+      "Gallery metadata, preview prompt and owner-only preparation, facilitation, interpretation and follow-up guide.",
       "apps/server/src/starters.ts",
       "starterSummariesForLocale",
       summary,
@@ -531,38 +569,68 @@ export async function buildReviewBundle(
       normalizeGeneratedIds(target),
       STARTER_CONTENT_VERSION,
     );
-    if (summary.responseTypes.every((type) => type === "poll" || type === "rating")) {
-      const survey = (draft: typeof english, language: SupportedLocale) => ({
-        schemaVersion: 2,
-        title: draft.title,
-        description: surveyCreationCopy(language).description,
-        category: draft.category,
-        experiencePreset: draft.experiencePreset,
-        items: draft.questions.map((question) => ({ required: true, question })),
-      });
-      SurveyContentSchema.parse(survey(english, "en-CA"));
-      SurveyContentSchema.parse(survey(target, locale));
-      const context = (language: SupportedLocale) => ({
-        schemaVersion: 2,
-        questionContentReference: `round/${summary.id}/draft`,
-        description: surveyCreationCopy(language).description,
-        required: true,
-        unscored: true,
-        questionCount: english.questions.length,
-      });
+    const englishSurvey = instantiateSurveyStarter(summary.id, "en-CA");
+    const targetSurvey = instantiateSurveyStarter(summary.id, locale);
+    if (Boolean(englishSurvey) !== Boolean(targetSurvey))
+      fail(`Survey compatibility changed: ${summary.id}`);
+    if (englishSurvey && targetSurvey) {
+      SurveyContentSchema.parse(englishSurvey);
+      SurveyContentSchema.parse(targetSurvey);
+      for (const [survey, round] of [
+        [englishSurvey, english],
+        [targetSurvey, target],
+      ] as const) {
+        // Canonical Survey choices may reuse IDs across questions; each question has its own scope.
+        const questions = (content: typeof round.questions) =>
+          content.map((question) => normalizeGeneratedIds({ question }));
+        if (
+          canonicalJson(questions(survey.items.map(({ question }) => question))) !==
+          canonicalJson(questions(round.questions))
+        )
+          fail(`Survey questions differ from the referenced Round: ${summary.id}`);
+      }
+      const context = (survey: typeof englishSurvey, language: SupportedLocale) => {
+        const { items, ...metadata } = survey;
+        return {
+          ...metadata,
+          questionContentReference: `round/${summary.id}/draft`,
+          items: items.map(({ question: _question, ...item }, index) => ({
+            ...item,
+            questionContentReference: `round/${summary.id}/draft#/questions/${index}`,
+          })),
+          unscored: true,
+          questionCount: items.length,
+          catalogMetadata:
+            (language === "en-CA" ? surveyCatalog : targetSurveyCatalog).find(
+              ({ id }) => id === summary.id,
+            ) ?? null,
+          guide: starterGuideForLocale(summary.id, language, true) ?? null,
+        };
+      };
+      const englishContext = context(englishSurvey, "en-CA");
+      const targetContext = context(targetSurvey, locale);
+      assertInvariantParity(englishContext, targetContext, `survey/${summary.id}/context`);
       add(
         `survey/${summary.id}/context`,
-        "Survey projection reuses this Round's exact localized questions; review the referenced draft and this Survey-only description/required/unscored context.",
-        "apps/server/src/starter-localization.ts",
-        "surveyCreationCopy / SurveyContentSchema",
-        context("en-CA"),
-        context(locale),
+        "Actual preview/creation Survey factory metadata and per-item requirements; questions are verified against the referenced Round draft. Participant introduction is separate from the owner guide. catalogMetadata identifies the six curated entries; other compatible legacy projections remain reviewable.",
+        "apps/server/src/starters.ts",
+        "instantiateSurveyStarter / surveyStarterSummariesForLocale / starterGuideForLocale",
+        englishContext,
+        targetContext,
         STARTER_CONTENT_VERSION,
       );
       surveyContexts++;
     }
   }
   if (surveyContexts !== 17) fail("expected 17 Survey contexts");
+  if (
+    items.filter(
+      (item) =>
+        item.id.startsWith("survey/") &&
+        (item.english as { catalogMetadata?: Json }).catalogMetadata !== null,
+    ).length !== surveyCatalog.length
+  )
+    fail("curated Survey catalog has an incompatible projection");
 
   const defaults = (language: SupportedLocale) => {
     const copy = creationContent(language);

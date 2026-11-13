@@ -88,7 +88,10 @@ import { PresentationAssignmentButton } from "../presentation-assignments/assign
 import { PresentationPracticeButton } from "../presentation-practice/practice-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
 import { PresentationDesignGallery } from "../workspace/presentation-design-gallery";
-import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../lib/i18n/presentation-design-copy";
 import {
   applyPresentationDesign,
   createDesignSlide,
@@ -1558,7 +1561,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   function insertDesignLayout(id: PresentationDesignId, layout: DesignLayoutId) {
     if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
       return false;
-    const block = createDesignSlide(id, layout, designLibraryCopy.sampleDraft.slides[layout]);
+    const block = createDesignSlide(
+      id,
+      layout,
+      presentationDesignDraftCopy(id, locale).slides[layout],
+    );
     const insert = (current: PresentationDraft): PresentationDraft => {
       const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
       const blocks = [...current.blocks];

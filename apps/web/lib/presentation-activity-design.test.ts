@@ -23,6 +23,17 @@ function native(design?: PresentationSceneDesign, hidden = false) {
 }
 
 describe("Presentation activity design inheritance", () => {
+  it("retains a named collection palette through content, activity and insertion inheritance", () => {
+    const design = { ...sunset, palette: "clay" as const };
+    const donor = native(design);
+    const activity = createQuestionBlock();
+    const ordinary = createContentBlock();
+    const blocks = [donor, activity, ordinary];
+    expect(copyPresentationSceneDesign(design)).toEqual(design);
+    expect(resolvePresentationActivityDesign(blocks, activity.id)).toEqual(design);
+    expect(resolvePresentationContentDesign(blocks, ordinary.id)).toEqual(design);
+    expect(inheritPresentationSceneDesign(blocks, ordinary.id)).toEqual(design);
+  });
   it("keeps legacy layout styling when no visible authored design exists, matching delivery", () => {
     const legacy = createContentBlock("section");
     const blocks = [legacy, native(), native(sunset, true)];

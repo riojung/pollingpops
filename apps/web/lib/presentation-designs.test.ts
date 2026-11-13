@@ -91,6 +91,13 @@ describe("original presentation design catalog", () => {
         ),
       ).size,
     ).toBe(8);
+    for (const scene of covers) {
+      const headline = scene.nodes.find((node) => node.type === "text" && node.role === "title");
+      expect(headline?.type === "text" && headline.typography?.size).toBeGreaterThanOrEqual(72);
+      expect(
+        scene.nodes.filter((node) => node.type === "shape" && node.decorative).length,
+      ).toBeGreaterThanOrEqual(2);
+    }
     expect(isPresentationDesignId("blueprint")).toBe(true);
     expect(isPresentationDesignId("native-startup-pitch")).toBe(false);
     expect(isPresentationDesignId("__proto__")).toBe(false);
@@ -103,7 +110,7 @@ describe("original presentation design catalog", () => {
       const original = structuredClone(copy);
       const first = createDesignDraft(design.id, copy, createIds());
       const second = createDesignDraft(design.id, copy, createIds(1_000));
-      expect(first.schemaVersion).toBe(8);
+      expect(first.schemaVersion).toBe(18);
       expect(first.blocks).toHaveLength(8);
       expect(
         PresentationContentSchema.safeParse(preparePresentationPublication(first)).success,
@@ -116,7 +123,11 @@ describe("original presentation design catalog", () => {
           scene.nodes.filter((node) => node.type === "text" && node.role === "title"),
         ).toHaveLength(1);
         expect(scene.nodes.some((node) => node.type === "image")).toBe(false);
-        expect(scene.nodes.length).toBeLessThanOrEqual(5);
+        expect(scene.schemaVersion).toBe(9);
+        expect(scene.nodes.length).toBeGreaterThanOrEqual(5);
+        expect(scene.nodes.length).toBeLessThanOrEqual(50);
+        expect(new TextEncoder().encode(JSON.stringify(scene)).byteLength).toBeLessThan(128 * 1024);
+        expect(scene.nodes.some((node) => node.type === "shape" && node.decorative)).toBe(true);
       }
       const ids = first.blocks.flatMap((block) => [
         block.id,
@@ -198,7 +209,7 @@ describe("content-preserving design application", () => {
       changedSlides: 1,
       eligibleSlides: 1,
     });
-    expect(result.draft.schemaVersion).toBe(7);
+    expect(result.draft.schemaVersion).toBe(18);
     const block = result.draft.blocks[0]!;
     const scene = native(block);
     expect(block).toMatchObject({ ...ordinary, textElements: [], mediaId: null, mediaAlt: null });
@@ -257,12 +268,12 @@ describe("content-preserving design application", () => {
     const result = applyPresentationDesign(source, "terracotta", { scope: "deck" });
     const changed = native(result.draft.blocks[0]!);
     expect(result.summary.importedSlides).toBe(1);
-    expect(result.draft.schemaVersion).toBe(16);
+    expect(result.draft.schemaVersion).toBe(18);
     expect(result.draft.sections).toBe(source.sections);
     expect(changed.nodes).toBe(scene.nodes);
     expect(changed.readingOrder).toBe(scene.readingOrder);
     expect(changed.groups).toBe(scene.groups);
-    expect(changed.schemaVersion).toBe(7);
+    expect(changed.schemaVersion).toBe(9);
     expect(result.draft.blocks[0]).toMatchObject({
       hidden: true,
       sourceDisclosure: block.sourceDisclosure,
@@ -274,20 +285,20 @@ describe("content-preserving design application", () => {
     const moving = createDesignSlide("studio", "body", slideCopy);
     moving.scene = {
       ...moving.scene!,
-      schemaVersion: 8,
+      schemaVersion: 9,
       design: { ...moving.scene!.design!, motionBackground: "waves" },
     };
     const ordinary = createContentBlock();
     const other = createDesignSlide("studio", "cover", slideCopy);
     other.scene = {
       ...other.scene!,
-      schemaVersion: 8,
+      schemaVersion: 9,
       design: { ...other.scene!.design!, motionBackground: "stars" },
     };
-    const source = draft([moving, ordinary, other], 17);
+    const source = draft([moving, ordinary, other], 18);
     source.sections = [];
     const result = applyPresentationDesign(source, "midnight", { scope: "deck" });
-    expect(result.draft.schemaVersion).toBe(17);
+    expect(result.draft.schemaVersion).toBe(18);
     expect(result.draft.blocks.map((block) => native(block).design?.motionBackground)).toEqual([
       "waves",
       "waves",
@@ -304,13 +315,13 @@ describe("content-preserving design application", () => {
     const moving = createDesignSlide("studio", "cover", slideCopy);
     moving.scene = {
       ...moving.scene!,
-      schemaVersion: 8,
+      schemaVersion: 9,
       design: { ...moving.scene!.design!, motionBackground: "waves" },
     };
     const after = createNativeContentBlock();
     const barrier = createDesignSlide("studio", "body", slideCopy);
     const behindBarrier = createNativeContentBlock();
-    const source = draft([before, moving, after, barrier, behindBarrier], 17);
+    const source = draft([before, moving, after, barrier, behindBarrier], 18);
     source.sections = [];
     const snapshot = structuredClone(source);
 
@@ -321,7 +332,7 @@ describe("content-preserving design application", () => {
       });
       const styled = result.draft.blocks.find((block) => block.id === target.id)!;
       expect(native(styled).design?.motionBackground).toBe("waves");
-      expect(native(styled).schemaVersion).toBe(8);
+      expect(native(styled).schemaVersion).toBe(9);
       expect(native(styled).nodes).toBe(target.scene!.nodes);
       expect(PresentationDraftSchema.safeParse(result.draft).success).toBe(true);
     }
@@ -388,6 +399,41 @@ describe("content-preserving design application", () => {
       draft: onlyActivity,
       summary: { eligibleSlides: 0, changedSlides: 0 },
     });
+  });
+
+  it("changes collection fonts without losing authored text, frames or other typography", () => {
+    const content = createDesignSlide("studio", "cover", slideCopy);
+    const source = draft([content], 18);
+    const before = structuredClone(content.scene!);
+    const result = applyPresentationDesign(source, "editorial", { scope: "deck" });
+    const after = native(result.draft.blocks[0]!);
+    expect(after.design?.font).toBe("serif");
+    expect(after.nodes).toEqual(
+      before.nodes.map((node) => {
+        if (node.type !== "text" || !node.typography?.font) return node;
+        const typography = { ...node.typography };
+        delete typography.font;
+        return { ...node, typography };
+      }),
+    );
+    expect(content.scene).toEqual(before);
+  });
+
+  it("treats palette as part of style identity and retains authored node appearance", () => {
+    const content = createDesignSlide("studio", "cover", slideCopy);
+    const original = content.scene!;
+    const legacyDesign = { ...original.design! };
+    delete legacyDesign.palette;
+    content.scene = { ...original, design: legacyDesign };
+    const source = draft([content], 18);
+    const result = applyPresentationDesign(source, "studio", { scope: "deck" });
+    expect(result.summary.changedSlides).toBe(1);
+    expect(native(result.draft.blocks[0]!).design?.palette).toBe("cobalt");
+    expect(native(result.draft.blocks[0]!).nodes).toBe(original.nodes);
+    expect(native(result.draft.blocks[0]!).readingOrder).toBe(original.readingOrder);
+    expect(applyPresentationDesign(result.draft, "studio", { scope: "deck" }).draft).toBe(
+      result.draft,
+    );
   });
 
   it("validates an entire bulk edit atomically against the document byte budget", () => {

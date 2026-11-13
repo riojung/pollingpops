@@ -3,11 +3,18 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CreatePresentationSchema, PresentationDraftMutationSchema } from "@openround/contracts";
+import {
+  CreatePresentationSchema,
+  PresentationDraftMutationSchema,
+  PRESENTATION_DESIGN_PALETTES,
+} from "@openround/contracts";
 import type { ContentSlideDraft, PresentationDraft, SupportedLocale } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
 import { formatNumber } from "../../lib/i18n/format";
-import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../lib/i18n/presentation-design-copy";
 import {
   DESIGN_LAYOUTS,
   PRESENTATION_DESIGNS,
@@ -191,7 +198,7 @@ export function PresentationDesignReadingView({
     <div lang={locale}>
       {scene.readingOrder.map((id) => {
         const node = nodes.get(id);
-        if (!node) return null;
+        if (!node || (node.type === "shape" && node.decorative)) return null;
         if (node.type === "text")
           return (
             <p key={id} lang={node.lang ?? locale}>
@@ -346,7 +353,7 @@ export function PresentationDesignGallery({
           design.id,
           createDesignDraft(
             design.id,
-            presentationDesignCopy(locale).sampleDraft,
+            presentationDesignDraftCopy(design.id, locale),
             previewIdFactory(design.id),
           ),
         ]),
@@ -356,7 +363,7 @@ export function PresentationDesignGallery({
   const visible = PRESENTATION_DESIGNS.filter(
     (design) =>
       (style === "all" || design.style === style) &&
-      `${design.name} ${copy.descriptions[design.id]} ${copy[design.style]}`
+      `${design.name} ${copy.purposes[design.id]} ${copy.descriptions[design.id]} ${copy[design.style]}`
         .toLocaleLowerCase(locale)
         .includes(search.trim().toLocaleLowerCase(locale)),
   );
@@ -408,7 +415,7 @@ export function PresentationDesignGallery({
             : restoreDesign(recoveryKey, creator.userId, creator.workspaceId, id, contentLocale);
       }
       if (!attempt) {
-        const nextDraft = createDesignDraft(id, presentationDesignCopy(contentLocale).sampleDraft);
+        const nextDraft = createDesignDraft(id, presentationDesignDraftCopy(id, contentLocale));
         attempt = {
           schemaVersion: 1,
           designId: id,
@@ -563,6 +570,7 @@ export function PresentationDesignGallery({
       <div className={styles.grid} id={resultId}>
         {visible.map((design) => {
           const sample = samples.get(design.id)!;
+          const palette = PRESENTATION_DESIGN_PALETTES[design.design.palette];
           return (
             <article className={styles.card} key={design.id} data-design-card={design.id}>
               <button
@@ -576,21 +584,22 @@ export function PresentationDesignGallery({
                   block={sample.blocks[0] as ContentSlideDraft}
                   locale={locale}
                 />
-                <div className={styles.miniatures} aria-hidden="true">
-                  {[2, 3, 6].map((index) => (
-                    <PresentationDesignArtwork
-                      key={index}
-                      block={sample.blocks[index] as ContentSlideDraft}
-                      locale={locale}
-                    />
-                  ))}
-                </div>
-                <span className={styles.cardHeading}>
-                  <strong>{design.name}</strong>
-                  <span>{copy[design.style]}</span>
+                <span className={styles.previewBadge} aria-hidden="true">
+                  {copy.preview}
                 </span>
               </button>
               <div className={styles.cardBody}>
+                <span className={styles.cardHeading}>
+                  <strong>{design.name}</strong>
+                  <span className={styles.palette} aria-hidden="true">
+                    {[palette.background, palette.text, palette.accent].map((color, index) => (
+                      <i key={index} style={{ backgroundColor: color }} />
+                    ))}
+                  </span>
+                </span>
+                <span className={styles.purpose}>
+                  {copy.purposes[design.id]} · {copy[design.style]}
+                </span>
                 <p>{copy.descriptions[design.id]}</p>
                 <div className={styles.cardActions}>
                   <span>{copy.layouts}</span>
@@ -807,26 +816,6 @@ export function PresentationDesignPreview({
           </label>
         </div>
       ) : null}
-      {mode === "samples" ? (
-        <div className={styles.layoutList} role="group" aria-label={copy.layoutSamples}>
-          {DESIGN_LAYOUTS.map((id, index) => (
-            <button
-              className={styles.layoutChoice}
-              type="button"
-              key={id}
-              aria-pressed={layoutIndex === index}
-              data-design-layout={id}
-              onClick={() => setLayoutIndex(index)}
-            >
-              <PresentationDesignArtwork
-                block={preview.draft.blocks[index] as ContentSlideDraft}
-                locale={preview.locale}
-              />
-              <span>{copy.layoutLabels[id]}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
       <div className={styles.stageHeading}>
         <h3>{activeLabel}</h3>
         {mode === "samples" ? (
@@ -859,6 +848,26 @@ export function PresentationDesignPreview({
       ) : (
         <p className={styles.empty}>{copy.emptyEligible}</p>
       )}
+      {mode === "samples" ? (
+        <div className={styles.layoutList} role="group" aria-label={copy.layoutSamples}>
+          {DESIGN_LAYOUTS.map((id, index) => (
+            <button
+              className={styles.layoutChoice}
+              type="button"
+              key={id}
+              aria-pressed={layoutIndex === index}
+              data-design-layout={id}
+              onClick={() => setLayoutIndex(index)}
+            >
+              <PresentationDesignArtwork
+                block={preview.draft.blocks[index] as ContentSlideDraft}
+                locale={preview.locale}
+              />
+              <span>{copy.layoutLabels[id]}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {summary ? (
         <p className={styles.notice}>
           {copy.summary

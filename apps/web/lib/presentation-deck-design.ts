@@ -6,27 +6,31 @@ import {
   type PresentationSceneDesign,
 } from "@openround/contracts";
 
+import { nativeSceneNodesForDesign } from "./presentation-native-design";
+
 /** Promote only when needed; adding plain slides or formatting never downgrades a deck. */
 export function nativeSceneDocumentVersion(
   current: PresentationDraft["schemaVersion"],
   scene: Pick<PresentationScene, "schemaVersion">,
 ): PresentationDraft["schemaVersion"] {
   const minimum =
-    scene.schemaVersion >= 8
-      ? 17
-      : scene.schemaVersion >= 7
-        ? 16
-        : scene.schemaVersion >= 6
-          ? 13
-          : scene.schemaVersion === 5
-            ? 11
-            : scene.schemaVersion === 4
-              ? 8
-              : scene.schemaVersion === 3
-                ? 7
-                : scene.schemaVersion === 2
-                  ? 5
-                  : 4;
+    scene.schemaVersion >= 9
+      ? 18
+      : scene.schemaVersion >= 8
+        ? 17
+        : scene.schemaVersion >= 7
+          ? 16
+          : scene.schemaVersion >= 6
+            ? 13
+            : scene.schemaVersion === 5
+              ? 11
+              : scene.schemaVersion === 4
+                ? 8
+                : scene.schemaVersion === 3
+                  ? 7
+                  : scene.schemaVersion === 2
+                    ? 5
+                    : 4;
   return current >= minimum ? current : minimum;
 }
 
@@ -62,7 +66,8 @@ export function applyNativeDesignToDeck(
       block.scene.design?.theme === design.theme &&
       block.scene.design.font === design.font &&
       block.scene.design.spacing === design.spacing &&
-      block.scene.design.motionBackground === design.motionBackground
+      block.scene.design.motionBackground === design.motionBackground &&
+      block.scene.design.palette === design.palette
     )
       return block;
     changed = true;
@@ -72,14 +77,15 @@ export function applyNativeDesignToDeck(
         ...block.scene,
         schemaVersion: Math.max(
           block.scene.schemaVersion,
-          design.motionBackground ? 8 : 3,
+          design.palette ? 9 : design.motionBackground ? 8 : 3,
         ) as PresentationScene["schemaVersion"],
         design: { ...design },
+        nodes: nativeSceneNodesForDesign(block.scene, design),
       },
     };
   });
   if (!changed) return draft;
-  const minimumVersion = design.motionBackground ? 17 : 7;
+  const minimumVersion = design.palette ? 18 : design.motionBackground ? 17 : 7;
   const next = {
     ...draft,
     schemaVersion: Math.max(

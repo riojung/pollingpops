@@ -143,6 +143,58 @@ const samples = [
 ] as const;
 
 describe("static export inherited presentation design", () => {
+  it("keeps named palettes, authored type and decorative shapes through public review and each page export", async () => {
+    const source = native(20, { ...still, palette: "coral" });
+    const draft = PresentationDraftSchema.parse({
+      schemaVersion: 18,
+      title: "An original designed collection",
+      sections: [],
+      blocks: [
+        {
+          ...source,
+          scene: {
+            ...source.scene,
+            schemaVersion: 9,
+            nodes: [
+              { ...source.scene.nodes[0], typography: { size: 96, weight: 800, leading: 1.05 } },
+              {
+                id: "ornament",
+                type: "shape",
+                shape: "ellipse",
+                color: "sky",
+                label: "",
+                decorative: true,
+                frame: { x: 70, y: 70, width: 20, height: 20 },
+                appearance: { fill: "accent", stroke: "none", strokeWidth: 0 },
+              },
+            ],
+            readingOrder: ["title", "ornament"],
+          },
+        },
+        ordinary(21),
+        question(22),
+      ],
+    });
+    const version = {
+      ...fixture().version,
+      contentSchemaVersion: 18,
+      content: PresentationContentSchema.parse(preparePresentationPublication(draft)),
+    };
+    const frozen = JSON.stringify(version);
+    const review = project(version);
+    const authored = review.blocks[0]!;
+    expect(authored.kind === "content" && authored.scene?.nodes).toEqual(
+      draft.blocks[0]!.kind === "content" && draft.blocks[0]!.scene!.nodes,
+    );
+    for (const block of review.blocks) {
+      expect(block.design?.palette).toBe("coral");
+      const ctx = await decode((await render({ ...review, blocks: [block] }, "png")).bytes);
+      expect(Array.from(ctx.getImageData(1, 719, 1, 1).data)).toEqual([255, 99, 78, 255]);
+    }
+    expect(JSON.stringify(review)).not.toContain("PRIVATE_SPEAKER_NOTES");
+    expect(JSON.stringify(review)).not.toContain("PRIVATE_ANSWER_EXPLANATION");
+    expect(JSON.stringify(version)).toBe(frozen);
+  });
   it("uses the complete visible donor context, keeps static barriers and preserves source bytes/privacy", () => {
     const { draft, version } = fixture(),
       frozen = JSON.stringify(version);

@@ -117,9 +117,9 @@ describe("versioned built-in Presentation motion backgrounds", () => {
         expect(schema.safeParse({ ...deck(input), schemaVersion }).success).toBe(false);
       // Version8 also requires document17 when its optional decoration is removed.
       expect(schema.safeParse({ ...deck(), schemaVersion: 16 }).success).toBe(false);
-      expect(schema.safeParse({ ...deck(input), schemaVersion: 18 }).success).toBe(false);
+      expect(schema.safeParse({ ...deck(input), schemaVersion: 19 }).success).toBe(false);
     }
-    expect(PresentationSceneSchema.safeParse({ ...input, schemaVersion: 9 }).success).toBe(false);
+    expect(PresentationSceneSchema.safeParse({ ...input, schemaVersion: 10 }).success).toBe(false);
     for (const motionBackground of [
       "none",
       "Aurora",

@@ -134,7 +134,7 @@ describe("Presentation document10 text contracts", () => {
       expect(schema.parse({ ...value, schemaVersion: 16 }).blocks).toEqual(
         schema.parse(value).blocks,
       );
-      for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8, 9, 18])
+      for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8, 9, 19])
         expect(schema.safeParse({ ...value, schemaVersion }).success).toBe(false);
       for (const bad of [
         { basePoints: 1 },

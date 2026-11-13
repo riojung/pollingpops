@@ -13,6 +13,28 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Authored visual collections — November 13, 2026
+
+The `codex/presentation-designed-collections` follow-up deepens the eight design families into
+complete visual sets. The original names and layout APIs remain stable; each family now has
+its own typography, recurring components, cover composition and eight coordinated interiors.
+Family-specific purposes and illustrative headlines are supplied in all ten creation languages.
+Gallery discovery, full-size previews, new-deck creation and individual-layout insertion use
+the same factories. Existing presentation styling keeps content and native geometry intact.
+
+The [individual-template benchmark](evidence/presentation-designed-collections-2026-11.md)
+records nine inspected public Canva sets and the clean-room design decisions. Implementations
+use editable native vectors and system fonts, with explicit image placeholders. Additional
+families can extend the typed catalog, localized narrative and composition factory.
+
+Named palettes, bounded per-object typography and decorative shape appearance use scene 9 /
+document 18 with additive migration 108. Deploy the migration before enabling new-version
+writes; existing frozen publications are not rewritten. Legacy visuals remain unchanged when
+the optional fields are absent. Browser, live, shared, reading and static-export surfaces must
+honor the same public fields and retain private-data fences. Acceptance results belong in
+[implementation status](implementation-status.md); local automated checks do not qualify hosted,
+physical-device or native-language acceptance gates.
+
 ## Presentation design collection — November 13, 2026
 
 The `codex/presentation-design-library` follow-up separates visual designs from the content

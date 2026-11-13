@@ -231,7 +231,7 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation text assistance Postgre
     for (const [document, version] of [
       [{ ...v15, schemaVersion: 14 }, 14],
       [v15, 14],
-      [{ ...v15, schemaVersion: 18 }, 18],
+      [{ ...v15, schemaVersion: 19 }, 19],
       [
         {
           ...v15,

@@ -17,6 +17,7 @@ import {
   NATIVE_DESIGN_FONTS,
   NATIVE_DESIGN_THEMES,
   NATIVE_LAYOUT_PRESETS,
+  nativeSceneNodesForDesign,
   alignNativeSceneNodes,
   applyNativeLayout,
   canApplyNativeLayout,
@@ -152,8 +153,12 @@ export function NativeSceneDesignControls({
   function update(next: PresentationSceneDesign) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...scene,
-      schemaVersion: Math.max(scene.schemaVersion, next.motionBackground ? 8 : 3),
+      schemaVersion: Math.max(
+        scene.schemaVersion,
+        next.palette ? 9 : next.motionBackground ? 8 : 3,
+      ),
       design: next,
+      nodes: nativeSceneNodesForDesign(scene, next),
     });
     if (!result.success) {
       setFailure({
@@ -165,6 +170,12 @@ export function NativeSceneDesignControls({
     }
     setFailure(null);
     onChange(result.data);
+  }
+  function updateTheme(theme: PresentationSceneDesign["theme"]) {
+    if (!design) return;
+    const next = { ...design, theme };
+    delete next.palette;
+    update(next);
   }
   return (
     <fieldset lang={locale} className={styles.section}>
@@ -183,10 +194,7 @@ export function NativeSceneDesignControls({
                 <select
                   value={design.theme}
                   onChange={(event) =>
-                    update({
-                      ...design,
-                      theme: event.target.value as PresentationSceneDesign["theme"],
-                    })
+                    updateTheme(event.target.value as PresentationSceneDesign["theme"])
                   }
                 >
                   {(Object.keys(NATIVE_DESIGN_THEMES) as PresentationSceneDesign["theme"][]).map(
@@ -210,9 +218,9 @@ export function NativeSceneDesignControls({
                     type="button"
                     className={styles.themeOption}
                     aria-label={copy("Use {theme} theme", { theme: copy(THEME_NAMES[theme]) })}
-                    aria-pressed={design.theme === theme}
+                    aria-pressed={design.theme === theme && !design.palette}
                     onClick={() => {
-                      if (design.theme !== theme) update({ ...design, theme });
+                      if (design.theme !== theme || design.palette) updateTheme(theme);
                     }}
                   >
                     <span
@@ -237,7 +245,7 @@ export function NativeSceneDesignControls({
                     <span className={styles.themeOptionName}>
                       {copy(THEME_NAMES[theme])}
                       <span className={styles.themeSelected} aria-hidden="true">
-                        {design.theme === theme ? "✓" : ""}
+                        {design.theme === theme && !design.palette ? "✓" : ""}
                       </span>
                     </span>
                   </button>

@@ -3,7 +3,10 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../lib/i18n/presentation-design-copy";
 import { createDesignDraft, PRESENTATION_DESIGNS } from "../../lib/presentation-designs";
 import {
   PresentationDesignArtwork,
@@ -153,8 +156,10 @@ describe("Presentation design library", () => {
     const second = renderToStaticMarkup(<PresentationDesignGallery />);
     for (const family of PRESENTATION_DESIGNS)
       expect(first).toContain(`data-design-card="${family.id}"`);
-    expect(first.match(/data-static-thumbnail="true"/g)).toHaveLength(32);
-    expect(first).toContain("Make room for your next idea");
+    expect(first.match(/data-static-thumbnail="true"/g)).toHaveLength(8);
+    expect(first).toContain(presentationDesignDraftCopy("studio", "en-CA").slides.cover.title);
+    for (const family of PRESENTATION_DESIGNS)
+      expect(first).toContain(presentationDesignCopy().purposes[family.id]);
     expect(first).toBe(second);
     expect(mocked.request).not.toHaveBeenCalled();
   });
@@ -208,7 +213,7 @@ describe("Presentation design library", () => {
       /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i,
     );
     expect(payload.draft.blocks).toHaveLength(8);
-    expect(payload.draft.title).toBe(presentationDesignCopy("en-CA").sampleDraft.title);
+    expect(payload.draft.title).toBe(presentationDesignDraftCopy("studio", "en-CA").title);
     expect(mocked.push).toHaveBeenCalledWith(`/presentation/${presentationId}`);
   });
 

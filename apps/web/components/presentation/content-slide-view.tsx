@@ -18,6 +18,7 @@ import {
   fitContentSlideFrameAroundMedia,
   regionForContentSlideFrame,
   resolveContentSlideFrames,
+  presentationDesignPalette,
   type ContentSlideFrame,
   type ContentSlideLayout,
   type ContentSlideRegion,
@@ -28,7 +29,7 @@ import {
 } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import styles from "./content-slide-view.module.css";
-import { NATIVE_DESIGN_THEMES, NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import type { NativeSceneInteractionRuntime } from "./native-scene-interaction-view";
 import {
@@ -604,8 +605,8 @@ function LegacyContentSlideView({
         style={
           designOverride
             ? ({
-                "--content-slide-background": NATIVE_DESIGN_THEMES[designOverride.theme].background,
-                "--content-slide-text": NATIVE_DESIGN_THEMES[designOverride.theme].text,
+                "--content-slide-background": presentationDesignPalette(designOverride).background,
+                "--content-slide-text": presentationDesignPalette(designOverride).text,
                 fontFamily: NATIVE_DESIGN_FONTS[designOverride.font],
               } as CSSProperties)
             : undefined

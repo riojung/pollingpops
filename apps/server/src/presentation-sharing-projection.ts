@@ -7,9 +7,9 @@ import {
 import type { PresentationShareRecord, PresentationVersionRecord } from "@openround/db";
 import { presentationBlockDesign } from "./presentation-block-design.js";
 const nodeFields: Record<PresentationSceneNode["type"], readonly string[]> = {
-  text: ["role", "text", "richText", "lang"],
+  text: ["role", "text", "richText", "lang", "typography"],
   image: ["mediaId", "altText", "fit", "focalPoint"],
-  shape: ["shape", "color", "label"],
+  shape: ["shape", "color", "label", "appearance", "decorative"],
   connector: ["from", "to", "label", "color"],
   table: ["caption", "headers", "rows"],
   chart: ["chartType", "title", "summary", "categories", "series"],

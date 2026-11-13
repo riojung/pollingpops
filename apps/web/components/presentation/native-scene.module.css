@@ -53,17 +53,26 @@
 .node h1 {
   /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
      type and padding scale together, so a smaller editor does not change text fit. */
-  font-size: 3.75cqw;
-  line-height: var(--native-title-leading, 1.08);
+  font-size: var(--native-node-size, 3.75cqw);
+  line-height: var(--native-node-leading, var(--native-title-leading, 1.08));
+  font-weight: var(--native-node-weight, 700);
+}
+.node[data-native-typography] h1,
+.node p,
+.richBody {
+  color: var(--native-node-color, inherit);
+  font-family: var(--native-node-font, inherit);
+  text-align: var(--native-node-align, inherit);
 }
 .stage[data-native-theme] .node h1 {
-  color: inherit;
+  color: var(--native-node-color, inherit);
   max-width: none;
-  font-family: inherit;
+  font-family: var(--native-node-font, inherit);
 }
 .node p {
-  font-size: 2.03125cqw;
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody {
   box-sizing: border-box;
@@ -73,8 +82,9 @@
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: 2.03125cqw;
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody p {
   width: auto;
@@ -360,6 +370,10 @@
     height: auto !important;
     transform: none !important;
   }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-decorative="true"] {
+    display: none;
+  }
   .groupOutline,
   .snapGuides {
     display: none;
@@ -387,6 +401,19 @@
   }
   .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > :is(h1, p, .richBody) {
+    /* Nested rich paragraphs resolve this token rather than inheriting wrapper color. */
+    --native-node-color: var(--native-text, #102a43);
+    color: var(--native-text, #102a43);
+    line-height: 1.45;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > h1 {
+    line-height: 1.2;
   }
   .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
@@ -617,6 +644,7 @@
   box-sizing: border-box;
   overflow: visible;
 }
+.outline .node[data-decorative="true"],
 .outline .connections {
   display: none;
 }
@@ -645,6 +673,14 @@
 .outline .node p,
 .outline .richBody {
   font-size: 16px;
+}
+.outline .node[data-native-typography] > :is(h1, p, .richBody) {
+  --native-node-color: var(--native-text, #102a43);
+  color: var(--native-text, #102a43);
+  line-height: 1.45;
+}
+.outline .node[data-native-typography] > h1 {
+  line-height: 1.2;
 }
 .outline .shape,
 .outline .image {

@@ -68,9 +68,9 @@ export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
 /** Match E04 frozen UUID spelling without changing literal legacy acknowledgement semantics. */
 export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
   CASE WHEN (
-    session.content_snapshot ->> 'schemaVersion' IN ('12','13','14','15','16','17')
+    session.content_snapshot ->> 'schemaVersion' IN ('12','13','14','15','16','17','18')
     OR session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
-    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11','12','13','14','15','16','17') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
+    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11','12','13','14','15','16','17','18') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
     OR (
       session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
       AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')

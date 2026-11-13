@@ -5939,7 +5939,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid({ ...document, schemaVersion: 15 }, 15)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(true);
-    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 19 }, 19)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {

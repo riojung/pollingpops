@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -413,5 +414,101 @@ describe("shared native design rendering", () => {
     expect(markup).not.toContain("data-native-theme");
     expect(markup).not.toContain("--native-background");
     expect(scene).toEqual(original);
+  });
+});
+
+describe("bounded designed scene paint", () => {
+  it("uses authored palette, type and shape tokens for plain and rich text, retaining editor selection", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 9;
+    scene.design = { theme: "paper", palette: "cobalt", font: "sans", spacing: "compact" };
+    scene.nodes = scene.nodes.map((node) =>
+      node.type === "text"
+        ? {
+            ...node,
+            typography: {
+              size: 96,
+              weight: 800,
+              align: "center",
+              font: "serif",
+              color: "accent",
+              leading: 0.95,
+            },
+            ...(node.role === "body"
+              ? { richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: node.text }] }] } }
+              : {}),
+          }
+        : node.type === "shape"
+          ? {
+              ...node,
+              decorative: true,
+              appearance: { fill: "accent", stroke: "none", strokeWidth: 0 },
+            }
+          : node,
+    );
+    const before = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} />);
+    expect(markup).toContain("--native-background:#1847c5");
+    expect(markup).toContain("--native-node-size:7.5cqw");
+    expect(markup).toContain("--native-node-weight:800");
+    expect(markup).toContain("--native-node-align:center");
+    expect(markup).toContain("--native-node-leading:0.95");
+    expect(markup).toContain("--native-node-color:#f5ef83");
+    expect(markup).toContain('fill="#f5ef83" stroke="none" stroke-width="0"');
+    expect(markup).toContain('data-decorative="true"');
+    expect(markup).toMatch(/aria-hidden="true" role="img" aria-label="Decision"/);
+    const editing = renderToStaticMarkup(
+      <NativeSceneView scene={scene} onSelect={() => undefined} />,
+    );
+    expect(editing).not.toContain('data-decorative="true"');
+    expect(editing).toContain('data-node-id="shape"');
+    expect(scene).toEqual(before);
+  });
+});
+
+describe("styled rich text reading contrast", () => {
+  it("resets the color token consumed by nested paragraphs in phone and outline reading layouts", () => {
+    // Check the stylesheet contract here; browser coverage verifies computed colors after formatting.
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8").replace(
+      /\s+/g,
+      " ",
+    );
+    const readingRoots = [
+      '.stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node[data-native-typography] > :is(h1, p, .richBody)',
+      ".outline .node[data-native-typography] > :is(h1, p, .richBody)",
+    ];
+    for (const selector of readingRoots) {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const declarations = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1];
+      expect(declarations).toMatch(/--native-node-color:\s*var\(--native-text, #102a43\)/);
+      expect(declarations).not.toMatch(/--native-link:/);
+    }
+    // The authored outer-node token and palette link token remain available to fixed layouts.
+    expect(css.match(/--native-node-color:\s*var\(--native-text, #102a43\)/g)).toHaveLength(2);
+    expect(css).toMatch(/\.richBody a, \.richTitle a \{ color: var\(--native-link, #145da0\)/);
+  });
+});
+
+describe("shape labels after legacy color edits", () => {
+  it.each([
+    [{ strokeWidth: 1 }, "#ffffff"],
+    [{ stroke: "none" as const }, "#ffffff"],
+    [{ fill: "none" as const, strokeWidth: 1 }, "#171717"],
+  ])("uses fill authority for label contrast with appearance %j", (appearance, labelColor) => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 9;
+    scene.design = { theme: "paper", palette: "default", font: "sans", spacing: "compact" };
+    scene.nodes = scene.nodes.map((node) =>
+      node.type === "shape" ? { ...node, color: "black" as const, appearance } : node,
+    );
+    const before = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} />);
+    expect(markup).toContain(
+      `<span aria-hidden="true" style="color:${labelColor}">Decision</span>`,
+    );
+    expect(markup).toContain(
+      `fill="${"fill" in appearance && appearance.fill === "none" ? "none" : "#3b4351"}"`,
+    );
+    expect(scene).toEqual(before);
   });
 });

@@ -8,6 +8,47 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Authored presentation collections November 13, 2026
+
+The `codex/presentation-designed-collections` iteration replaces the initial design recipes
+with eight original, coordinated visual collections and 64 native layouts. Nine individually
+inspected Canva sets informed the design benchmark; covers and one interior from each were
+reviewed, without copying their assets or claiming a verified popularity ranking.
+
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas now have
+family-specific compositions, typography, decorative geometry, palettes and localized example
+headlines. Business proposals, brand stories, startup pitches, project plans, wellbeing workshops,
+creative briefs, portfolios and team workshops have distinct visual identities. The compact
+gallery emphasizes covers and purposes; full-size preview and a scrollable layout strip expose
+each coordinated set. Existing style application preserves authored content and geometry.
+
+Bounded named palettes, text typography and decorative-shape appearance opt into scene 9 and
+document 18. Migration 108 adds database validation for the new fields and version floors;
+older migrations and stored presentation bytes remain unchanged. Native, ordinary and activity
+views, public sharing and static exports retain the palette. Text and geometry stay editable;
+image areas are clearly labeled placeholders rather than unlicensed stock imagery.
+Switching the collection font clears only conflicting text-font overrides; other typography,
+content and object geometry remain intact.
+Explicit object colors replace collection palette paints while retaining outline and border
+treatments. Formatted text uses readable palette colors in mobile reading and accessible
+outline views; recolored dark placeholders retain contrasting labels in web and static exports.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,774 tests and 526 opt-in
+skips, including formatting, lint, types, all four production build tasks and compiled startup.
+All 80 localized example decks (640 layout recipes) pass publication validation. Twenty
+production browser journeys pass across desktop Chromium/Firefox and phone Chromium/WebKit,
+including all 64 English layouts' text fit, large cover type, layout diversity, German/Korean
+creation, editable save/reload, existing-content preservation, insertion and retry recovery.
+Regressions cover explicit shape colors, contrasting placeholder labels and formatted-text
+contrast in mobile and accessible-outline views, including private sharing.
+Five styled PostgreSQL tests plus 33 PostgreSQL regressions pass on an isolated local cluster;
+strict version/null, field, budget, semantic and privacy fences are retained. The temporary
+cluster was stopped. Independent read-only review has no unresolved actionable findings.
+Captures and a source receipt are under `artifacts/presentation-designed-collections/`.
+
+See the [individual-template benchmark and original design briefs](evidence/presentation-designed-collections-2026-11.md).
+Local automated results do not advance hosted, native-language or physical-device acceptance.
+
 ### Presentation design library November 13, 2026
 
 The `codex/presentation-design-library` source adds a separate Presentation design collection

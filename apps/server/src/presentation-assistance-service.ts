@@ -203,7 +203,7 @@ export class PresentationAssistanceService {
             conversionNotes: [proposal.reviewWarning],
           },
           scene: {
-            schemaVersion: design?.motionBackground === undefined ? 6 : 8,
+            schemaVersion: design?.palette ? 9 : design?.motionBackground === undefined ? 6 : 8,
             aspectRatio: "16:9",
             ...(design ? { design } : {}),
             nodes: [

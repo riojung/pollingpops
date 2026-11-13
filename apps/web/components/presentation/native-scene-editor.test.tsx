@@ -463,6 +463,63 @@ describe("native upload capacity guard", () => {
   });
 });
 
+describe("shape label accessibility", () => {
+  it.each([
+    { decorative: true, label: "Meaningful label", expected: false, schemaVersion: 9 },
+    { decorative: true, label: "  Meaningful label  ", expected: false, schemaVersion: 9 },
+    { decorative: true, label: "", expected: true, schemaVersion: 9 },
+    { decorative: true, label: "  \t  ", expected: true, schemaVersion: 9 },
+    { decorative: false, label: "", expected: false, schemaVersion: 9 },
+    { decorative: undefined, label: "", expected: undefined, schemaVersion: 1 },
+    { decorative: undefined, label: "Meaningful label", expected: undefined, schemaVersion: 1 },
+  ] as const)(
+    "retains shape semantics when decorative=$decorative is labeled '$label'",
+    ({ decorative, label, expected, schemaVersion }) => {
+      const editor = editorHarness();
+      editor.scene.schemaVersion = schemaVersion;
+      const shape = {
+        id: "collection-art",
+        type: "shape" as const,
+        shape: "rectangle" as const,
+        color: "blue" as const,
+        label: decorative ? "" : "Previous label",
+        ...(decorative === undefined ? {} : { decorative }),
+        ...(schemaVersion === 9
+          ? { appearance: { fill: "accent" as const, stroke: "none" as const, strokeWidth: 1 } }
+          : {}),
+        frame: { x: 70, y: 10, width: 20, height: 30 },
+      };
+      editor.scene.nodes.push(shape);
+      editor.scene.readingOrder.push(shape.id);
+      const before = structuredClone(editor.scene);
+      editor.render("idle");
+      const canvas = editor.find((node) => node.type === NativeSceneCanvas);
+      (canvas.props.onSelect as (id: string) => void)(shape.id);
+      editor.render("idle");
+      const field = editor.find(
+        (node) => node.type === "label" && controlText(node) === "Shape label",
+      );
+      const input = elements(field).find((node) => node.type === "input")!;
+      (input.props.onChange as (event: unknown) => void)({ target: { value: label } });
+      expect(editor.onChange).toHaveBeenCalledOnce();
+      const [updated, historyField] = editor.onChange.mock.calls[0]! as [PresentationScene, string];
+      const updatedShape = updated.nodes.find((node) => node.id === shape.id);
+      expect(updatedShape).toEqual({
+        ...shape,
+        label,
+        ...(expected === undefined ? {} : { decorative: expected }),
+      });
+      if (expected === undefined) expect(updatedShape).not.toHaveProperty("decorative");
+      expect(updated).toEqual({
+        ...before,
+        nodes: before.nodes.map((node) => (node.id === shape.id ? updatedShape : node)),
+      });
+      expect(historyField).toBe(`native:${shape.id}:label`);
+      expect(editor.scene).toEqual(before);
+    },
+  );
+});
+
 describe("native multi-object selection", () => {
   it.each([
     {

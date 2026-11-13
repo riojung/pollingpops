@@ -537,7 +537,15 @@ export function NativeSceneEditor({
                     onChange={(event) =>
                       update(
                         (node) =>
-                          node.type === "shape" ? { ...node, label: event.target.value } : node,
+                          node.type === "shape"
+                            ? {
+                                ...node,
+                                label: event.target.value,
+                                ...(node.decorative && event.target.value.trim()
+                                  ? { decorative: false }
+                                  : {}),
+                              }
+                            : node,
                         "label",
                       )
                     }

@@ -744,6 +744,8 @@ for (const suffix of ["", " @mobile"]) {
     );
     if (!body || body.type !== "text" || !marker || marker.type !== "shape")
       throw new Error("Expected real Signal collection objects");
+    expect(marker.decorative).toBe(true);
+    const markerLabel = "Audience-visible collection note";
     const bodyTitle = headline(bodyBlock);
     const imageBlock = record.draft.blocks[4]!;
     const imageTitle = headline(imageBlock);
@@ -781,13 +783,19 @@ for (const suffix of ["", " @mobile"]) {
     await inspector
       .getByRole("combobox", { name: "Object color", exact: true })
       .selectOption("orange");
+    await inspector.getByRole("textbox", { name: "Shape label", exact: true }).fill(markerLabel);
     await expect
       .poll(async () =>
         scene((await readE01Record(page, id)).draft.blocks[0]!).nodes.find(
           (node) => node.id === marker.id,
         ),
       )
-      .toMatchObject({ color: "orange", appearance: { stroke: "none", strokeWidth: 0 } });
+      .toMatchObject({
+        color: "orange",
+        appearance: { stroke: "none", strokeWidth: 0 },
+        label: markerLabel,
+        decorative: false,
+      });
     const paint = page.locator(`[data-native-scene-canvas] [data-node-id="${marker.id}"] svg path`);
     await expect(paint).toHaveAttribute("fill", "#ffdbb5");
     await selectE01Block(page, imageTitle, narrow);
@@ -882,6 +890,8 @@ for (const suffix of ["", " @mobile"]) {
         "fill",
         "#ffdbb5",
       );
+      // A label authored on collection artwork must also reach mobile and assistive readers.
+      await expect(current.getByRole("img", { name: markerLabel, exact: true })).toBeVisible();
       await reader
         .getByRole("navigation", { name: "Presentation pages", exact: true })
         .getByRole("button")

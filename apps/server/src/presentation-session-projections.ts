@@ -7,7 +7,6 @@ import {
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
-  type PresentationSceneDesign,
   type PresentationStageSnapshot,
   type QuestionDraft,
   presentationQuestionSupported,
@@ -48,46 +47,9 @@ import {
   presentationResponseMatchesBlock,
   presentationResponsesForContent,
 } from "./presentation-response-identifiers.js";
+import { presentationBlockDesign } from "./presentation-block-design.js";
 
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
-
-/** Only frozen, visible scene tokens cross the public delivery boundary. */
-function presentationBlockDesign(
-  block: PresentationBlock,
-  session?: PresentationSessionRecord,
-): PresentationSceneDesign | undefined {
-  if (!session) return undefined;
-  const blocks = session.content.blocks;
-  const index = blocks.findIndex((candidate) => candidate.id === block.id);
-  if (index < 0) return undefined;
-  const explicitDesign = (candidate: PresentationBlock | undefined) => {
-    if (
-      candidate?.kind !== "content" ||
-      ("hidden" in candidate && candidate.hidden === true) ||
-      !candidate.scene?.design
-    )
-      return undefined;
-    const { theme, font, spacing, motionBackground } = candidate.scene.design;
-    return {
-      theme,
-      font,
-      spacing,
-      ...(motionBackground === undefined ? {} : { motionBackground }),
-    };
-  };
-  const ownDesign = explicitDesign(blocks[index]);
-  if (ownDesign) return ownDesign;
-  for (let preceding = index - 1; preceding >= 0; preceding--) {
-    const design = explicitDesign(blocks[preceding]);
-    if (design) return design;
-  }
-  for (let following = index + 1; following < blocks.length; following++) {
-    const design = explicitDesign(blocks[following]);
-    if (design) return design;
-  }
-  // Omission keeps legacy wire records compatible; the renderer defaults to Paper/Sans/Relaxed.
-  return undefined;
-}
 
 export interface PresentationProjectionData {
   participants: PresentationSessionParticipantRecord[];
@@ -160,7 +122,7 @@ export function presentationParticipantBlock(
   session?: PresentationSessionRecord,
 ) {
   if (!block) return null;
-  const design = presentationBlockDesign(block, session);
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -309,7 +271,7 @@ function presentationRealtimeBlock(
   staffScene = facilitator,
 ) {
   if (!block) return null;
-  const design = presentationBlockDesign(block, session);
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,

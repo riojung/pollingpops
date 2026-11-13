@@ -685,8 +685,14 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
   const canvas = createCanvas(W, H),
     ctx = canvas.getContext("2d");
   ctx.textBaseline = "top";
+  const motionDesign = block.design?.motionBackground ? block.design : undefined,
+    inheritedPalette = motionDesign ? palettes[motionDesign.theme] : undefined;
   if (block.kind === "content" && block.scene) {
-    const scene = block.scene,
+    // Inheritance is a rendering view; do not upgrade or rewrite the published scene.
+    const scene =
+        block.scene.design || !motionDesign
+          ? block.scene
+          : { ...block.scene, design: motionDesign },
       palette = scene.design
         ? palettes[scene.design.theme]
         : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
@@ -697,18 +703,22 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
     for (const node of scene.nodes)
       if (node.type !== "connector") await drawNode(ctx, node, scene, images, palette);
   } else if (block.kind === "content") {
-    const gradient = ctx.createLinearGradient(0, 0, W, H);
-    gradient.addColorStop(0, "#f8fbff");
-    gradient.addColorStop(1, "#fff");
-    ctx.fillStyle = gradient;
+    if (inheritedPalette) ctx.fillStyle = inheritedPalette.background;
+    else {
+      const gradient = ctx.createLinearGradient(0, 0, W, H);
+      gradient.addColorStop(0, "#f8fbff");
+      gradient.addColorStop(1, "#fff");
+      ctx.fillStyle = gradient;
+    }
     ctx.fillRect(0, 0, W, H);
+    if (motionDesign) paintPresentationMotionPoster(ctx, motionDesign, W, H);
     const frames = resolveContentSlideFrames(block);
     for (const element of block.textElements) {
       const r = frame(frames[element.id]!);
       text(ctx, element.text, r.x + 8, r.y + 6, r.width - 16, r.height - 12, {
         size: element.role === "title" ? 46 : 23,
-        family: "sans-serif",
-        color: element.role === "title" ? "#102a43" : "#334e68",
+        family: family(motionDesign?.font),
+        color: inheritedPalette?.text ?? (element.role === "title" ? "#102a43" : "#334e68"),
         leading: element.role === "title" ? 1.04 : 1.4,
         bold: element.role === "title",
       });
@@ -716,18 +726,19 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
     if (block.mediaId)
       drawImage(ctx, await imageAt(images, block.mediaId), frame(contentSlideMediaFrame));
   } else {
-    ctx.fillStyle = "#f8fbff";
+    ctx.fillStyle = inheritedPalette?.background ?? "#f8fbff";
     ctx.fillRect(0, 0, W, H);
+    if (motionDesign) paintPresentationMotionPoster(ctx, motionDesign, W, H);
     text(ctx, "Activity preview - no submissions or results", 64, 34, 1152, 40, {
       size: 20,
-      family: "sans-serif",
-      color: "#52616f",
+      family: family(motionDesign?.font),
+      color: inheritedPalette?.link ?? "#52616f",
       leading: 1.3,
     });
     const end = text(ctx, block.question.prompt, 64, 96, 1152, 220, {
       size: 42,
-      family: "sans-serif",
-      color: "#102a43",
+      family: family(motionDesign?.font),
+      color: inheritedPalette?.text ?? "#102a43",
       leading: 1.2,
       bold: true,
     });
@@ -740,7 +751,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         block.question.mediaId ? 700 : 1152,
         340,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.5 },
+        {
+          size: 26,
+          family: family(motionDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.5,
+        },
       );
     else if (block.question.rating)
       text(
@@ -750,7 +766,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.4 },
+        {
+          size: 26,
+          family: family(motionDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.4,
+        },
       );
     else
       text(
@@ -762,7 +783,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#52616f", leading: 1.4 },
+        {
+          size: 26,
+          family: family(motionDesign?.font),
+          color: inheritedPalette?.text ?? "#52616f",
+          leading: 1.4,
+        },
       );
     if (block.question.mediaId)
       drawImage(ctx, await imageAt(images, block.question.mediaId), {

@@ -145,6 +145,62 @@ function slide(title: string, mediaId: string | null = null) {
   };
 }
 describe("published Presentation static export API", () => {
+  it("resolves full-deck inherited motion before selecting a native, ordinary or activity PNG page", async () => {
+    const f = await fixture({ media: false }),
+      design = {
+        theme: "ocean" as const,
+        font: "serif" as const,
+        spacing: "compact" as const,
+        motionBackground: "waves" as const,
+      },
+      scene = {
+        schemaVersion: 8 as const,
+        aspectRatio: "16:9" as const,
+        design,
+        nodes: [
+          {
+            id: "title",
+            type: "text" as const,
+            role: "title" as const,
+            text: "Public design donor",
+            frame: { x: 5, y: 5, width: 90, height: 20 },
+          },
+        ],
+        readingOrder: ["title"],
+      },
+      ordinary = slide("Public inherited ordinary"),
+      native = {
+        ...slide("Public inherited native"),
+        textElements: [],
+        scene: {
+          schemaVersion: 1 as const,
+          aspectRatio: scene.aspectRatio,
+          nodes: scene.nodes,
+          readingOrder: scene.readingOrder,
+        },
+      },
+      question = f.content.blocks[1]!,
+      published = await publish(f, {
+        ...f.content,
+        schemaVersion: 17,
+        blocks: [{ ...slide("Public donor"), textElements: [], scene }, ordinary, native, question],
+      });
+    for (const block of [ordinary, native, question]) {
+      const response = await f.request({
+        versionId: published.id,
+        format: "png",
+        blockId: block.id,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const input = f.render.mock.calls.at(-1)![0];
+      expect(input.review.blocks).toHaveLength(1);
+      expect(input.review.blocks[0]).toMatchObject({ id: block.id, design });
+      expect(JSON.stringify(input.review)).not.toMatch(
+        /PRIVATE_|isCorrect|speakerNotes|explanation/,
+      );
+    }
+  });
+
   it("downloads real offline HTML containing only projected public content and local disclosures", async () => {
     const f = await fixture({ media: false });
     const block = {

@@ -40,7 +40,7 @@ test("creator can return to signed-in Home and sign out on a narrow screen", asy
   await expect(page).toHaveURL(/\/home/);
   await expect(
     page
-      .getByRole("article")
+      .getByRole("listitem")
       .filter({ has: page.getByRole("heading", { name: "Navigation quiz", exact: true }) }),
   ).toHaveCount(1);
 

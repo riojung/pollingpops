@@ -166,9 +166,12 @@ export function promotePresentationOpinionFormats(
     draft.blocks.some(
       (block) =>
         block.kind === "content" &&
-        (block.scene?.schemaVersion === 7 || block.textAssistance?.operation === "translate"),
+        ((block.scene?.schemaVersion ?? 0) >= 7 || block.textAssistance?.operation === "translate"),
     )
       ? 16
+      : 2,
+    draft.blocks.some((block) => block.kind === "content" && (block.scene?.schemaVersion ?? 0) >= 8)
+      ? 17
       : 2,
   ) as PresentationDraft["schemaVersion"];
   if (draft.schemaVersion === schemaVersion) return draft;

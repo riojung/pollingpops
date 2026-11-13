@@ -91,6 +91,42 @@ creator adapting and running each workflow, review translations with native spea
 and use that evidence to prioritize additional industry scenarios and visual families.
 Free-response Surveys remain a separate capability; these templates do not advertise it.
 
+## Built-in motion backgrounds — November 12, 2026
+
+The `codex/presentation-motion-backgrounds` slice adds optional Aurora, Soft waves,
+Floating orbs, Gradient mesh, Flowing ribbons and Star drift presets. A static background
+remains the default. The Layout inspector provides visual choices, None, an explicit
+selected-tile preview and the existing apply-design action. This is a fixed original
+library: no custom motion builder, stock video, remote asset service or paid generation
+is required.
+
+Motion uses three bounded decorative CSS layers with slow transform animation, with
+colors harmonized to the slide's existing palette. Content, choices, links and geometry
+controls remain above the background. Native slides, inherited ordinary slides and
+audience activities share the renderer. Filmstrip/layout thumbnails stay still; reduced
+motion preferences, hidden tabs and offscreen backgrounds pause animation. A local
+pause/play control sits outside the slide artwork and persists across slide changes.
+Playback preferences are not document edits, responses or broadcast actions.
+
+Published, shared and assignment content preserves the selected preset. PNG, PDF,
+readable HTML and offline HTML retain their existing static-export semantics and render
+a deterministic still composition. Print uses a still background too. New UI labels
+cover all ten supported locales; authored content is unchanged.
+
+### Stored-content compatibility
+
+The optional closed `design.motionBackground` token explicitly opts into scene schema8
+and Presentation document17. Existing documents and omitted tokens keep their original
+versions and appearance. Removing motion retains the document's already-supported
+version; Undo, duplicate, recovery, bulk design and assistance preserve higher versions.
+Publication remains immutable. Named tokens accept no URLs, scripts or arbitrary CSS.
+
+Append-only migration107 extends the PostgreSQL validators and delivery/response fences
+for these versions. It runs through the existing migration process before the updated
+writer is used; it does not rewrite stored JSON or hashes. Motion-enabled documents
+require the updated parser/renderer. No automatic downgrade to an older application
+version is provided for documents written with the new capability.
+
 ## Product definition
 
 The first credible broad release must let an ordinary creator make a pitch, project update,

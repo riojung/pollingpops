@@ -367,7 +367,7 @@ describe("reviewed deterministic native layout alternatives", () => {
     const invalid = [
       null,
       {},
-      { ...source, schemaVersion: 8 },
+      { ...source, schemaVersion: 9 },
       { ...source, readingOrder: [titleId, titleId] },
       {
         ...source,
@@ -392,6 +392,23 @@ describe("reviewed deterministic native layout alternatives", () => {
       });
     }
   });
+  it("retains motion and language metadata in every reviewed layout alternative", () => {
+    const source = fixture(8);
+    source.design = { ...source.design!, motionBackground: "aurora" };
+    const snapshot = structuredClone(source);
+    const candidates = suggestNativeLayouts(source);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate.scene.schemaVersion).toBe(8);
+      expect(candidate.scene.design).toEqual(source.design);
+      expect(
+        candidate.scene.nodes.map((node) => (node.type === "text" ? node.lang : undefined)),
+      ).toEqual(source.nodes.map((node) => (node.type === "text" ? node.lang : undefined)));
+      expect(PresentationSceneDraftSchema.safeParse(candidate.scene).success).toBe(true);
+    }
+    expect(source).toEqual(snapshot);
+  });
+
   it("refuses valid near-budget sources when frame changes would exceed the unchanged scene limit", () => {
     const runs = Array.from({ length: 65 }, () => ({ text: "x", href: "https://example.test/" }));
     const scene: PresentationScene = {

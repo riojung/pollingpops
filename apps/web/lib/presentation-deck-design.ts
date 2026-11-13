@@ -12,19 +12,21 @@ export function nativeSceneDocumentVersion(
   scene: Pick<PresentationScene, "schemaVersion">,
 ): PresentationDraft["schemaVersion"] {
   const minimum =
-    scene.schemaVersion >= 7
-      ? 16
-      : scene.schemaVersion >= 6
-        ? 13
-        : scene.schemaVersion === 5
-          ? 11
-          : scene.schemaVersion === 4
-            ? 8
-            : scene.schemaVersion === 3
-              ? 7
-              : scene.schemaVersion === 2
-                ? 5
-                : 4;
+    scene.schemaVersion >= 8
+      ? 17
+      : scene.schemaVersion >= 7
+        ? 16
+        : scene.schemaVersion >= 6
+          ? 13
+          : scene.schemaVersion === 5
+            ? 11
+            : scene.schemaVersion === 4
+              ? 8
+              : scene.schemaVersion === 3
+                ? 7
+                : scene.schemaVersion === 2
+                  ? 5
+                  : 4;
   return current >= minimum ? current : minimum;
 }
 
@@ -59,7 +61,8 @@ export function applyNativeDesignToDeck(
       block.scene.schemaVersion >= 3 &&
       block.scene.design?.theme === design.theme &&
       block.scene.design.font === design.font &&
-      block.scene.design.spacing === design.spacing
+      block.scene.design.spacing === design.spacing &&
+      block.scene.design.motionBackground === design.motionBackground
     )
       return block;
     changed = true;
@@ -67,15 +70,23 @@ export function applyNativeDesignToDeck(
       ...block,
       scene: {
         ...block.scene,
-        schemaVersion: block.scene.schemaVersion >= 4 ? block.scene.schemaVersion : (3 as const),
+        schemaVersion: Math.max(
+          block.scene.schemaVersion,
+          design.motionBackground ? 8 : 3,
+        ) as PresentationScene["schemaVersion"],
         design: { ...design },
       },
     };
   });
   if (!changed) return draft;
+  const minimumVersion = design.motionBackground ? 17 : 7;
   const next = {
     ...draft,
-    schemaVersion: draft.schemaVersion >= 7 ? draft.schemaVersion : (7 as const),
+    schemaVersion: Math.max(
+      draft.schemaVersion,
+      minimumVersion,
+    ) as PresentationDraft["schemaVersion"],
+    ...(minimumVersion >= 12 && draft.sections === undefined ? { sections: [] } : {}),
     blocks,
   };
   // Check the complete document budget before applying an all-slide operation. Keep existing

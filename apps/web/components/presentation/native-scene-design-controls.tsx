@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useLocale } from "../locale-provider";
 import { nativeControlsCopy, type NativeControlsCopyKey } from "./native-controls-copy";
+import { motionBackgroundCopy, type MotionBackgroundCopyKey } from "./motion-background-copy";
+import { PresentationMotionBackground } from "./presentation-motion-background";
 import {
   PresentationSceneDraftSchema,
+  type PresentationMotionBackground as MotionBackgroundPreset,
   type PresentationScene,
   type PresentationSceneDesign,
   type PresentationSceneNode,
@@ -42,6 +45,18 @@ const FONT_NAMES = {
   serif: "Classic serif",
   mono: "Monospace",
 } as const;
+const MOTION_BACKGROUNDS = [
+  { preset: undefined, label: "None · static" },
+  { preset: "aurora", label: "Aurora" },
+  { preset: "waves", label: "Soft waves" },
+  { preset: "orbs", label: "Floating orbs" },
+  { preset: "mesh", label: "Gradient mesh" },
+  { preset: "ribbons", label: "Flowing ribbons" },
+  { preset: "stars", label: "Star drift" },
+] as const satisfies readonly {
+  preset: MotionBackgroundPreset | undefined;
+  label: MotionBackgroundCopyKey;
+}[];
 
 /** Original schematics describe object positions, without loading any slide media. */
 function LayoutPreview({ preset }: { preset: NativeLayoutPreset }) {
@@ -122,15 +137,22 @@ export function NativeSceneDesignControls({
 }) {
   const { locale } = useLocale();
   const copy = nativeControlsCopy(locale);
+  const motionCopy = motionBackgroundCopy(locale);
+  const [motionPreview, setMotionPreview] = useState<{
+    scene: PresentationScene;
+    preset: MotionBackgroundPreset;
+  } | null>(null);
   const [failure, setFailure] = useState<{
     scene: PresentationScene;
     message: NativeControlsCopyKey;
   } | null>(null);
   const design = scene.design;
+  const previewingMotion =
+    motionPreview?.scene === scene && motionPreview.preset === design?.motionBackground;
   function update(next: PresentationSceneDesign) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...scene,
-      schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 3,
+      schemaVersion: Math.max(scene.schemaVersion, next.motionBackground ? 8 : 3),
       design: next,
     });
     if (!result.success) {
@@ -269,6 +291,87 @@ export function NativeSceneDesignControls({
             <p className={styles.help}>
               {copy("Fixed palettes keep text readable. Fonts use those installed on your device.")}
             </p>
+            <div className={styles.motionSection}>
+              <div className={styles.subsectionHeading}>{motionCopy("Motion background")}</div>
+              <p className={styles.help}>
+                {motionCopy("Choose subtle motion behind your content, or keep the slide still.")}
+              </p>
+              <div
+                className={styles.motionOptions}
+                role="group"
+                aria-label={motionCopy("Motion background")}
+              >
+                {MOTION_BACKGROUNDS.map(({ preset, label }) => {
+                  const selected = design.motionBackground === preset;
+                  const palette = NATIVE_DESIGN_THEMES[design.theme];
+                  return (
+                    <button
+                      key={preset ?? "none"}
+                      type="button"
+                      className={styles.motionOption}
+                      aria-label={motionCopy(label)}
+                      aria-pressed={selected}
+                      onClick={() => {
+                        if (selected) return;
+                        setMotionPreview(null);
+                        const next = { ...design };
+                        if (preset) next.motionBackground = preset;
+                        else delete next.motionBackground;
+                        update(next);
+                      }}
+                    >
+                      <span
+                        className={styles.motionPreview}
+                        aria-hidden="true"
+                        style={{ background: palette.background, color: palette.text }}
+                      >
+                        {preset ? (
+                          <PresentationMotionBackground
+                            preset={preset}
+                            theme={design.theme}
+                            static={!selected || !previewingMotion}
+                            paused={false}
+                          />
+                        ) : null}
+                        <span className={styles.motionPreviewContent}>
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                      </span>
+                      <span className={styles.motionOptionName}>
+                        {motionCopy(label)}
+                        <span className={styles.motionSelected} aria-hidden="true">
+                          {selected ? "✓" : ""}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {design.motionBackground ? (
+                <button
+                  type="button"
+                  className={styles.motionPreviewButton}
+                  onClick={() =>
+                    setMotionPreview(
+                      previewingMotion ? null : { scene, preset: design.motionBackground! },
+                    )
+                  }
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d={previewingMotion ? "M9 5v14M15 5v14" : "m8 5 11 7-11 7Z"}
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {motionCopy(previewingMotion ? "Pause preview" : "Play preview")}
+                </button>
+              ) : null}
+            </div>
             {onApplyDesignToDeck ? (
               <div className={styles.deckAction}>
                 <button

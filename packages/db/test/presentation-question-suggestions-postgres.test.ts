@@ -14,6 +14,7 @@ import {
   expectQuestionSuggestionsInsertionFence,
   expectQuestionSuggestionsLifecycle,
   expectQuestionSuggestionsRevocation,
+  expectQuestionSuggestionsMotionConformance,
   questionSuggestionsFixture,
   questionProposal,
   questionFence,
@@ -91,6 +92,51 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation question suggestions Po
         created_by: null,
       },
     ]);
+  });
+  it.each([false, true])(
+    "admits, completes and applies suggestions on scene8 with the original text digest (motion cleared: %s)",
+    async (cleared) => {
+      const f = await expectQuestionSuggestionsMotionConformance(repository, cleared);
+      const projected = (
+        await administrator.pool.query(
+          `SELECT source,openround_question_suggestions_source_json(source) canonical,
+          encode(sha256(convert_to(openround_question_suggestions_source_json(source),'UTF8')),'hex') digest
+         FROM (SELECT openround_question_suggestions_source($1::jsonb) source) projected`,
+          [JSON.stringify(f.block)],
+        )
+      ).rows[0]!;
+      expect(projected.source).toEqual(f.source);
+      expect(projected.canonical).toBe(presentationQuestionSuggestionsSourceFingerprint(f.source));
+      expect(projected.digest).toBe(presentationQuestionSuggestionsSourceDigest(f.source));
+    },
+  );
+  it("retains scene1–7 source projections and rejects unsupported scene9 and invalid motion design", async () => {
+    const f = await questionSuggestionsFixture(repository);
+    const block = f.presentation.draft.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native source");
+    const project = async (value: unknown) =>
+      (
+        await administrator.pool.query(
+          "SELECT openround_question_suggestions_source($1::jsonb) source",
+          [JSON.stringify(value)],
+        )
+      ).rows[0]!.source;
+    for (const schemaVersion of [1, 2, 3, 4, 5, 6, 7, 8])
+      expect(await project({ ...block, scene: { ...block.scene, schemaVersion } })).toEqual(
+        f.source,
+      );
+    expect(await project({ ...block, scene: { ...block.scene, schemaVersion: 9 } })).toBeNull();
+    expect(
+      await project({
+        ...block,
+        scene: {
+          ...block.scene,
+          schemaVersion: 8,
+          design: { theme: "ocean", font: "serif", spacing: "compact", motionBackground: "none" },
+        },
+      }),
+    ).toBeNull();
+    await repository.deleteAccount(f.actor.userId);
   });
   it("shares monthly allowance and combined presentation capacity across all three queues", async () => {
     await expectQuestionSuggestionsCapacity(repository);

@@ -67,8 +67,13 @@ function presentationBlockDesign(
       !candidate.scene?.design
     )
       return undefined;
-    const { theme, font, spacing } = candidate.scene.design;
-    return { theme, font, spacing };
+    const { theme, font, spacing, motionBackground } = candidate.scene.design;
+    return {
+      theme,
+      font,
+      spacing,
+      ...(motionBackground === undefined ? {} : { motionBackground }),
+    };
   };
   const ownDesign = explicitDesign(blocks[index]);
   if (ownDesign) return ownDesign;

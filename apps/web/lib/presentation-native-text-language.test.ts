@@ -197,6 +197,66 @@ describe("durable native text language updates", () => {
     expect(() => setNativeTextLanguage(freeze(source), "Body:Exact", "fr")).toThrow();
     expect(JSON.stringify(source)).toBe(before);
   });
+  it("keeps translated motion scenes editable without downgrading their scene or document", () => {
+    const source = scene();
+    source.schemaVersion = 8;
+    source.design = { ...source.design!, motionBackground: "aurora" };
+    source.nodes = source.nodes.map((node) =>
+      node.type === "text" ? { ...node, lang: "fr" } : node,
+    );
+    const original = freeze(source),
+      before = JSON.stringify(original);
+    const edited = updateNativeNode(original, "Body:Exact", (node) =>
+      node.type === "text" ? { ...node, text: "Examinez les faits." } : node,
+    );
+    const formatted = updateNativeNode(edited, "Body:Exact", (node) =>
+      node.type === "text"
+        ? { ...node, richText: plainTextToPresentationRichText(node.text) }
+        : node,
+    );
+    const titleEdited = updateNativeNode(formatted, "Title", (node) =>
+      node.type === "text" ? { ...node, text: "Une décision claire" } : node,
+    );
+    for (const next of [edited, formatted, titleEdited]) {
+      expect(next.schemaVersion).toBe(8);
+      expect(next.design).toBe(original.design);
+      expect(text(next, "Body:Exact").lang).toBe("fr");
+      expect(PresentationSceneDraftSchema.safeParse(next).success).toBe(true);
+      const deck = applyNativeSceneToDeck(draft(), blockId, next);
+      expect(deck.schemaVersion).toBe(17);
+      expect(PresentationDraftSchema.safeParse(deck).success).toBe(true);
+    }
+    expect(text(titleEdited, "Body:Exact").text).toBe("Examinez les faits.");
+    expect(text(titleEdited, "Title").text).toBe("Une décision claire");
+    expect(JSON.stringify(original)).toBe(before);
+  });
+  it("adds, corrects and clears pronunciation on scene8, including after motion is removed", () => {
+    const source = scene();
+    source.schemaVersion = 8;
+    source.design = { ...source.design!, motionBackground: "waves" };
+    const original = freeze(source),
+      before = JSON.stringify(original);
+    const added = setNativeTextLanguage(original, "Body:Exact", "ja");
+    const corrected = setNativeTextLanguage(added, "Body:Exact", "fr");
+    const cleared = setNativeTextLanguage(corrected, "Body:Exact", null);
+    for (const next of [added, corrected, cleared]) {
+      expect(next.schemaVersion).toBe(8);
+      expect(next.design).toBe(original.design);
+      expect(PresentationSceneDraftSchema.safeParse(next).success).toBe(true);
+    }
+    expect(text(added, "Body:Exact").lang).toBe("ja");
+    expect(text(corrected, "Body:Exact").lang).toBe("fr");
+    expect(text(cleared, "Body:Exact")).not.toHaveProperty("lang");
+    const { motionBackground, ...stillDesign } = corrected.design!;
+    expect(motionBackground).toBe("waves");
+    const still = { ...corrected, design: stillDesign };
+    const edited = updateNativeNode(still, "Body:Exact", (node) =>
+      node.type === "text" ? { ...node, text: "Updated after disabling motion." } : node,
+    );
+    expect(edited.schemaVersion).toBe(8);
+    expect(PresentationSceneDraftSchema.safeParse(edited).success).toBe(true);
+    expect(JSON.stringify(original)).toBe(before);
+  });
   it("promotes16 for scene7 or translation provenance and keeps all unrelated authoring data intact", () => {
     const original = freeze(draft()),
       before = JSON.stringify(original),

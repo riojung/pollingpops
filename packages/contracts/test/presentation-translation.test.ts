@@ -389,7 +389,7 @@ describe("reviewed selected-text translation contracts", () => {
       expect(schema.parse(scene())).toEqual(scene());
       for (const version of [1, 2, 3, 4, 5, 6])
         expect(schema.safeParse(scene(version)).success).toBe(false);
-      expect(schema.safeParse(scene(8)).success).toBe(false);
+      expect(schema.safeParse(scene(9)).success).toBe(false);
       for (const lang of ["fr-CA", "FR", "ar", null, ""])
         expect(
           schema.safeParse({
@@ -418,7 +418,7 @@ describe("reviewed selected-text translation contracts", () => {
     for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
       const valid = deck();
       expect(schema.safeParse(valid).success).toBe(true);
-      for (const version of [13, 14, 15, 17])
+      for (const version of [13, 14, 15, 18])
         expect(schema.safeParse({ ...valid, schemaVersion: version }).success).toBe(false);
     }
   });

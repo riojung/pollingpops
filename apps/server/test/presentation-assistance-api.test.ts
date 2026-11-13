@@ -322,6 +322,7 @@ describe("Presentation outline assistance API", () => {
 
   it.each([
     "design",
+    "motionBackground",
     "geometry",
     "richText",
     "groups",
@@ -347,6 +348,11 @@ describe("Presentation outline assistance API", () => {
       switch (customization) {
         case "design":
           scene.design!.theme = "midnight";
+          break;
+        case "motionBackground":
+          draft.schemaVersion = 17;
+          scene.schemaVersion = 8;
+          scene.design!.motionBackground = "waves";
           break;
         case "geometry":
           title.frame.x = 8;
@@ -425,6 +431,13 @@ describe("Presentation outline assistance API", () => {
       const inserted = PresentationDraftSchema.parse(applied.json().presentation.draft);
       expect(inserted.blocks).toHaveLength(4);
       expect(inserted.blocks[0]).toEqual(starter);
+      if (customization === "motionBackground") {
+        expect(inserted.schemaVersion).toBe(17);
+        for (const block of inserted.blocks)
+          expect(block).toMatchObject({
+            scene: { schemaVersion: 8, design: { motionBackground: "waves" } },
+          });
+      }
     },
   );
 

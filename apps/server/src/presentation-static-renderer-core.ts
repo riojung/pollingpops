@@ -26,6 +26,7 @@ import {
   type PresentationRichTextRun,
 } from "@openround/contracts";
 import { inspectPresentationVisualImage } from "./presentation-visual-converter.js";
+import { paintPresentationMotionPoster } from "./presentation-motion-poster.js";
 import {
   PresentationStaticExportError,
   PRESENTATION_STATIC_RENDER_LIMITS as limits,
@@ -691,6 +692,7 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
     ctx.fillStyle = palette.background;
     ctx.fillRect(0, 0, W, H);
+    if (scene.design?.motionBackground) paintPresentationMotionPoster(ctx, scene.design, W, H);
     for (const node of scene.nodes) if (node.type === "connector") connector(ctx, scene, node);
     for (const node of scene.nodes)
       if (node.type !== "connector") await drawNode(ctx, node, scene, images, palette);

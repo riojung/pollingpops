@@ -7,7 +7,7 @@ import {
   presentationRichTextToPlainText,
 } from "./presentation-rich-text";
 
-/** Scene versions opt into Presentation document v4, v5, v7, v8, v11, v13 and v16 respectively. */
+/** Scene versions opt into Presentation document v4, v5, v7, v8, v11, v13, v16 and v17 respectively. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
 export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
@@ -15,9 +15,23 @@ export const PRESENTATION_COMPOSITION_SCENE_SCHEMA_VERSION = 4 as const;
 export const PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION = 5 as const;
 export const PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION = 6 as const;
 export const PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION = 7 as const;
+export const PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION = 8 as const;
+export const PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION = 17 as const;
 export const PRESENTATION_SCENE_GEOMETRY_EPSILON = 1e-8;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
+
+/** Built-in decoration only; omission keeps the existing static background. */
+export const PRESENTATION_MOTION_BACKGROUND_PRESETS = [
+  "aurora",
+  "waves",
+  "orbs",
+  "mesh",
+  "ribbons",
+  "stars",
+] as const;
+export const PresentationMotionBackgroundSchema = z.enum(PRESENTATION_MOTION_BACKGROUND_PRESETS);
+export type PresentationMotionBackground = z.infer<typeof PresentationMotionBackgroundSchema>;
 
 /** Named, closed design tokens; omission preserves the scene's established appearance. */
 export const PresentationSceneDesignSchema = z
@@ -25,6 +39,7 @@ export const PresentationSceneDesignSchema = z
     theme: z.enum(["paper", "midnight", "ocean", "sunset"]),
     font: z.enum(["sans", "serif", "mono"]),
     spacing: z.enum(["relaxed", "compact"]),
+    motionBackground: PresentationMotionBackgroundSchema.optional(),
   })
   .strict();
 export type PresentationSceneDesign = z.infer<typeof PresentationSceneDesignSchema>;
@@ -400,6 +415,7 @@ export const PresentationSceneDraftSchema = z
       z.literal(PRESENTATION_INTERACTION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
     design: PresentationSceneDesignSchema.optional(),
@@ -414,6 +430,17 @@ export const PresentationSceneDraftSchema = z
         code: "custom",
         path: ["design"],
         message: "Slide design requires scene schema version 3",
+      });
+    }
+    if (
+      scene.schemaVersion < PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION &&
+      scene.design &&
+      "motionBackground" in scene.design
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["design", "motionBackground"],
+        message: "Motion backgrounds require scene schema version 8",
       });
     }
     const byId = new Map(scene.nodes.map((node) => [node.id, node]));

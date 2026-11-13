@@ -62,9 +62,11 @@ function endpoint(scene: PresentationScene, endpoint: Connector["from"]) {
 function Shape({
   node,
   locale,
+  contentLocale,
 }: {
   node: Extract<FramedNode, { type: "shape" }>;
   locale: SupportedLocale;
+  contentLocale?: SupportedLocale;
 }) {
   const path =
     node.shape === "ellipse"
@@ -77,7 +79,7 @@ function Shape({
       className={styles.shape}
       role="img"
       aria-label={node.label || nativeControlNodeLabel(locale, node).text}
-      lang={node.label ? "" : locale}
+      lang={node.label ? (contentLocale ?? "") : locale}
     >
       <svg viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden="true">
         {path ? (
@@ -407,7 +409,9 @@ function NativeSceneSurface({
                   />
                 )
               ) : null}
-              {node.type === "shape" ? <Shape node={node} locale={locale} /> : null}
+              {node.type === "shape" ? (
+                <Shape node={node} locale={locale} contentLocale={contentLocale} />
+              ) : null}
               {isNativeInteractionNode(node) ? (
                 <NativeSceneInteractionView
                   node={node}

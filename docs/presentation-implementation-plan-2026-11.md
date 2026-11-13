@@ -13,6 +13,84 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Customer template collection — November 12, 2026
+
+The pre-launch template work prioritizes complete, useful examples and faithful previews.
+It improves the existing collection rather than using catalog count as a quality measure.
+The implementation branch is `codex/customer-template-collection`; it starts from main
+independently of the open workspace-color PR.
+
+### Reference observations and product decisions
+
+Sources were inspected on November 12, 2026. These observations describe the public
+libraries; they do not establish market share, customer outcomes or independently measured
+presentation trends.
+
+| Reference                                                                                  | Observed pattern                                                                                 | Polling Pops decision                                                                        |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [Canva presentation library](https://www.canva.com/presentations/templates/)               | Customer-job names, searchable multi-slide designs and visible slide counts                      | Keep real use-case browsing and show complete sequences before creation                      |
+| [Slidesgo 2026 collection](https://slidesgo.com/presentation-trends-2026)                  | Industry, content, style, color and format filters; distinct design families                     | Introduce original Editorial, Briefing and Workshop families with purpose-built compositions |
+| [Adobe Express presentation library](https://www.adobe.com/express/templates/presentation) | Business/education categories, editable matching design elements and whole-presentation examples | Keep text, diagrams and data editable, with one coherent visual language per deck            |
+
+Sources informed browsing and quality standards. Polling Pops scenarios, copy and native
+compositions are original. Static content and existing rendering primitives keep ordinary
+creation independent of per-use AI generation or paid stock assets.
+
+### Delivered scope
+
+- Preserve the 21 Presentation IDs and ten creation languages. Upgrade all 96 slides in
+  the 12 native decks using covers, statements, comparisons, cards, processes, a timeline,
+  editable data views and closings. Preserve existing authored examples, figures and notes.
+  Keep the nine facilitated templates available alongside these content-only decks.
+- Deepen eight existing starter IDs: `source-evaluation`, `percentage-check`,
+  `feedback-skills`, `project-kickoff`, `event-feedback`, `onboarding-experience`,
+  `service-experience` and `learning-needs`. Keep the knowledge packs discoverable as
+  quizzes; put unscored reflection in their facilitator guides.
+- Supply audience, approximate duration, preparation, facilitation, interpretation and
+  follow-up guidance in all ten languages. Preserve creation-language text after later
+  interface-language changes.
+- Give Surveys participant-safe introductions and explicit optional items through the same
+  factory used by preview and creation. Keep owner interpretation guidance separate.
+  Survey templates use the supported unscored polls and labeled ratings.
+- Use dedicated read-only question/questionnaire dialogs, reveal correct-answer reasoning
+  for creator knowledge previews, and show presenter notes in the Presentation preview.
+  Preserve independent copies, idempotent retries, viewer previews and creation permissions.
+
+The expanded activity examples have an explicit job and next action:
+
+| Example               | Questions | Intended use                                                                                  |
+| --------------------- | --------: | --------------------------------------------------------------------------------------------- |
+| Source evaluation     |         6 | Practice evaluating supplied evidence, explain the answer, then recheck with another scenario |
+| Percentage check      |         6 | Work through concrete percentage calculations with explanations and linked rechecks           |
+| Feedback skills       |         4 | Compare responses in supplied workplace scenarios and discuss the reasoning                   |
+| Project kickoff       |         7 | Surface team expectations and uncertainties before agreeing on next steps                     |
+| Event feedback        |         8 | Gather actionable feedback about an event and its follow-up                                   |
+| Onboarding experience |         8 | Identify friction in a new joiner's experience and prioritize support                         |
+| Service experience    |         8 | Review a service interaction without forcing respondents to report a problem                  |
+| Learning needs        |         8 | Identify learning priorities and practical support needs before planning an activity          |
+
+The last four also supply the complete Survey questionnaires. The curated Survey catalog
+retains Team collaboration and Community planning as shorter legacy starters; those two,
+the remaining Round starters and the nine facilitated Presentation templates are not
+represented as newly expanded editorial content.
+
+### Quality evaluation and remaining editorial work
+
+Evaluate each example for task completeness, clear original content, coherent visual
+hierarchy, meaningful interactions, preview fidelity, readable reflow and editability.
+A useful editorial rubric allocates 20 points each to completeness, content and visual
+craft, 15 to interactions, 10 each to preview fidelity and accessibility/reflow, and 5 to
+provenance/editability. An 85-point editorial target is a proposal for customer validation,
+not a score implied by passing automated tests.
+
+Automated checks must catch invalid drafts, wrong arithmetic/answer keys, broken recheck
+links, scored preferences, missing translations, clipping, failed copy creation and
+preview/creation disagreement. Software checks do not establish native-language editorial
+approval or usefulness for a specific customer. The next editorial work is to observe a
+creator adapting and running each workflow, review translations with native speakers,
+and use that evidence to prioritize additional industry scenarios and visual families.
+Free-response Surveys remain a separate capability; these templates do not advertise it.
+
 ## Product definition
 
 The first credible broad release must let an ordinary creator make a pitch, project update,

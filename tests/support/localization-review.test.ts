@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { supportedLocales } from "../../packages/contracts/src/index";
+import { supportedLocales, type StarterId } from "../../packages/contracts/src/index";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -12,6 +12,15 @@ import {
   presentationInsightsCopy,
   presentationInsightsCopyKeys,
 } from "../../apps/web/lib/i18n/presentation-insights-copy";
+import {
+  templateGuideCopy,
+  templateGuideCopyKeys,
+} from "../../apps/web/lib/i18n/template-guide-copy";
+import {
+  instantiateSurveyStarter,
+  starterGuideForLocale,
+  surveyStarterSummariesForLocale,
+} from "../../apps/server/src/starters";
 import {
   assertInvariantParity,
   buildReviewBundle,
@@ -75,11 +84,38 @@ describe("native-language review preparation", () => {
         "creation-goal",
         "creation",
         "template",
+        "template-guide",
       ])
         expect(
           packet.items.some((item) => item.id.startsWith(`ui/${group}/`)),
           group,
         ).toBe(true);
+      const surveyContexts = packet.items.filter((item) => item.id.startsWith("survey/"));
+      const surveyCatalog = surveyStarterSummariesForLocale(locale);
+      expect(
+        surveyContexts.filter((item) => (item.target as any).catalogMetadata !== null),
+      ).toHaveLength(6);
+      for (const item of surveyContexts) {
+        const id = item.id.split("/")[1] as StarterId;
+        const actual = instantiateSurveyStarter(id, locale)!;
+        const context = item.target as any;
+        expect(context).toMatchObject({
+          schemaVersion: actual.schemaVersion,
+          title: actual.title,
+          description: actual.description,
+          category: actual.category,
+          experiencePreset: actual.experiencePreset,
+          questionCount: actual.items.length,
+          guide: starterGuideForLocale(id, locale, true) ?? null,
+          catalogMetadata: surveyCatalog.find((starter) => starter.id === id) ?? null,
+        });
+        expect(context.items.map((entry: any) => entry.required)).toEqual(
+          actual.items.map((entry) => entry.required),
+        );
+        expect(context.items.map((entry: any) => entry.questionContentReference)).toEqual(
+          actual.items.map((_entry, index) => `round/${id}/draft#/questions/${index}`),
+        );
+      }
       expect(packet.items.map((item) => item.id)).toEqual(bundle.items.map((item) => item.id));
       expect(packet.purpose).toBe(
         locale === "en-CA" ? "english-reference" : "native-review-preparation",
@@ -172,6 +208,25 @@ describe("native-language review preparation", () => {
     });
   });
 
+  it("includes every template-guide UI key and binds its source without accepting decisions", () => {
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/template-guide/"));
+    expect(items).toHaveLength(templateGuideCopyKeys.length);
+    for (const key of templateGuideCopyKeys)
+      expect(
+        items.find((item) => item.id === `ui/template-guide/${encodeURIComponent(key)}`),
+      ).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/template-guide-copy.ts",
+          helper: "templateGuideCopy",
+        },
+        english: { template: templateGuideCopy()(key) },
+        target: { template: templateGuideCopy("ko-KR")(key) },
+      });
+    expect(
+      createReviewDecisions(bundle).entries.every((entry) => entry.decision === "pending"),
+    ).toBe(true);
+  });
+
   it("is byte deterministic despite fresh generated identities and changing invocation time", async () => {
     const again = await buildReviewBundle("ko-KR", sourceRef);
     expect(canonicalJson(again)).toBe(canonicalJson(bundle));
@@ -184,6 +239,9 @@ describe("native-language review preparation", () => {
         expect.objectContaining({ path: "pnpm-lock.yaml" }),
         expect.objectContaining({ path: "scripts/localization-review.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-localization.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-launch-collection.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-launch-copy.ts" }),
+        expect.objectContaining({ path: "apps/web/lib/i18n/template-guide-copy.ts" }),
         expect.objectContaining({ path: "apps/web/lib/presentation-template-locales/ko-KR.json" }),
         expect.objectContaining({ path: "packages/contracts/src/surveys.ts" }),
       ]),
@@ -204,11 +262,36 @@ describe("native-language review preparation", () => {
     expect(canonicalJson(numeric.target)).toContain('"correctValue": "4"');
     const survey = bundle.items.find((item) => item.id.startsWith("survey/"))!;
     expect(survey.target).toMatchObject({
-      required: true,
       unscored: true,
       questionContentReference: expect.stringMatching(/^round\/[^/]+\/draft$/),
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          required: expect.any(Boolean),
+          questionContentReference: expect.any(String),
+        }),
+      ]),
     });
     expect(survey.target).not.toHaveProperty("questions");
+    const eventSurvey = bundle.items.find((item) => item.id === "survey/event-feedback/context")!;
+    const eventContext = eventSurvey.target as any;
+    expect(eventContext.items.map((item: any) => item.required)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    const eventRound = bundle.items.find((item) => item.id === "round/event-feedback/metadata")!;
+    expect(eventContext.guide.facilitation).not.toBe((eventRound.target as any).guide.facilitation);
+    expect(eventContext.description).not.toBe(eventContext.guide.facilitation);
+    expect(eventContext.guide.minutes).toBe(5);
+    const legacySurvey = bundle.items.find(
+      (item) => item.id === "survey/team-collaboration/context",
+    )!;
+    expect((legacySurvey.target as any).items.every((item: any) => item.required)).toBe(true);
     const defaults = bundle.items.find((item) => item.id === "defaults/question-scaffolds")!;
     expect(canonicalJson(defaults.target)).toContain(reviewExampleSource.replaceAll('"', '\\"'));
   });
@@ -217,6 +300,9 @@ describe("native-language review preparation", () => {
     const q1 = "00000000-0000-4000-8000-000000000001";
     const q2 = "00000000-0000-4000-8000-000000000002";
     const node = "00000000-0000-4000-8000-000000000003";
+    const secondNode = "00000000-0000-4000-8000-000000000005";
+    const connector = "00000000-0000-4000-8000-000000000006";
+    const group = "00000000-0000-4000-8000-000000000007";
     const scene = {
       title: q1,
       explanation: reviewExampleSource,
@@ -228,7 +314,15 @@ describe("native-language review preparation", () => {
       blocks: [
         {
           id: "00000000-0000-4000-8000-000000000004",
-          scene: { nodes: [{ id: node, text: q1 }], readingOrder: [node] },
+          scene: {
+            nodes: [
+              { id: node, text: q1 },
+              { id: secondNode, text: q2 },
+              { id: connector, from: { nodeId: node }, to: { nodeId: secondNode } },
+            ],
+            groups: [{ id: group, nodeIds: [node, secondNode] }],
+            readingOrder: [node, secondNode, connector],
+          },
         },
       ],
     };
@@ -238,7 +332,19 @@ describe("native-language review preparation", () => {
     expect(normalized.questions[0].linkedRecheckQuestionId).toBe("generated:/questions/1/id");
     expect(normalized.blocks[0].scene.readingOrder).toEqual([
       "generated:/blocks/0/scene/nodes/0/id",
+      "generated:/blocks/0/scene/nodes/1/id",
+      "generated:/blocks/0/scene/nodes/2/id",
     ]);
+    expect(normalized.blocks[0].scene.groups).toEqual([
+      {
+        id: "generated:/blocks/0/scene/groups/0/id",
+        nodeIds: ["generated:/blocks/0/scene/nodes/0/id", "generated:/blocks/0/scene/nodes/1/id"],
+      },
+    ]);
+    expect(normalized.blocks[0].scene.nodes[2]).toMatchObject({
+      from: { nodeId: "generated:/blocks/0/scene/nodes/0/id" },
+      to: { nodeId: "generated:/blocks/0/scene/nodes/1/id" },
+    });
     expect(normalized.blocks[0].scene.nodes[0].text).toBe(q1);
     expect(normalized.questions[0].prompt).toBe(q2);
     expect(normalized.title).toBe(q1);
@@ -249,6 +355,12 @@ describe("native-language review preparation", () => {
     expect(() =>
       normalizeGeneratedIds({ questions: [{ id: q1, linkedRecheckQuestionId: q2 }] }),
     ).toThrow(/unresolved/);
+    expect(() =>
+      normalizeGeneratedIds({ nodes: [{ id: node, from: { nodeId: secondNode } }] }),
+    ).toThrow(/unresolved connector/);
+    expect(() => normalizeGeneratedIds({ groups: [{ id: group, nodeIds: [node] }] })).toThrow(
+      /unresolved scene/,
+    );
   });
 
   it("rejects semantic drift while permitting translated copy", () => {
@@ -311,8 +423,21 @@ describe("native-language review preparation", () => {
       bundle.items.find((item) => item.id === "round/percentage-check/draft")!.target,
     ) as any;
     const originalAnswer = structuredClone(changedAnswer);
-    changedAnswer.questions[0].choices[0].isCorrect = true;
+    expect(changedAnswer.questions[0].type).toBe("numeric");
+    changedAnswer.questions[0].correctValue = "61";
     expect(() => assertInvariantParity(originalAnswer, changedAnswer, "answer key")).toThrow(
+      /invariant/,
+    );
+    const eventSurvey = bundle.items.find((item) => item.id === "survey/event-feedback/context")!
+      .target as any;
+    const changedRequired = structuredClone(eventSurvey);
+    changedRequired.items[3].required = true;
+    expect(() => assertInvariantParity(eventSurvey, changedRequired, "Survey optionality")).toThrow(
+      /invariant/,
+    );
+    const changedGuide = structuredClone(eventSurvey);
+    changedGuide.guide.minutes = 6;
+    expect(() => assertInvariantParity(eventSurvey, changedGuide, "guide duration")).toThrow(
       /invariant/,
     );
   });
@@ -505,6 +630,9 @@ describe("native-language review preparation", () => {
         "apps/web/lib/presentation-template-locales/ko-KR.json",
         "apps/web/lib/i18n/presentation-report-copy.ts",
         "apps/web/lib/i18n/presentation-insights-copy.ts",
+        "apps/web/lib/i18n/template-guide-copy.ts",
+        "apps/server/src/starter-launch-collection.ts",
+        "apps/server/src/starter-launch-copy.ts",
       ]) {
         const changed = resolve(root, path);
         const original = await readFile(changed, "utf8");

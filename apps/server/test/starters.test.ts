@@ -47,7 +47,7 @@ describe("original template library", () => {
       });
       expect(result.success, starter.id).toBe(true);
     }
-    expect(instantiateStarter("event-feedback").questions).toHaveLength(4);
-    expect(instantiateStarter("learning-needs").questions).toHaveLength(4);
+    expect(instantiateStarter("event-feedback").questions).toHaveLength(8);
+    expect(instantiateStarter("learning-needs").questions).toHaveLength(8);
   });
 });

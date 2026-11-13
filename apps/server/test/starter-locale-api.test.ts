@@ -7,7 +7,7 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { STARTER_CONTENT_VERSION, surveyCreationCopy } from "../src/starter-localization.js";
-import { instantiateStarter } from "../src/starters.js";
+import { instantiateStarter, instantiateSurveyStarter } from "../src/starters.js";
 import { signInFromVerificationResponse } from "./support/email-auth.js";
 
 let app: FastifyInstance | undefined;
@@ -137,14 +137,27 @@ describe("explicit starter creation languages", () => {
         headers,
       });
       expect(listed.statusCode, listed.body).toBe(200);
-      expect(listed.json().templates).toHaveLength(17);
-      const payload = { idempotencyKey: randomUUID(), templateId: "training-feedback", locale };
+      expect(listed.json().templates).toHaveLength(6);
+      expect(
+        listed
+          .json()
+          .templates.map((entry: StarterSummary) => entry.id)
+          .sort(),
+      ).toEqual([
+        "community-planning",
+        "event-feedback",
+        "learning-needs",
+        "onboarding-experience",
+        "service-experience",
+        "team-collaboration",
+      ]);
+      const payload = { idempotencyKey: randomUUID(), templateId: "team-collaboration", locale };
       const created = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
       expect(created.statusCode, created.body).toBe(201);
       const survey = created.json().survey;
       const summary = listed
         .json<{ templates: StarterSummary[] }>()
-        .templates.find((entry) => entry.id === "training-feedback")!;
+        .templates.find((entry) => entry.id === "team-collaboration")!;
       expect(survey.draft.title).toBe(summary.title);
       expect(survey.draft.items[0].question.prompt).toBe(summary.previewPrompt);
       expect(survey.draft.description).toBe(surveyCreationCopy(locale).description);
@@ -208,6 +221,100 @@ describe("explicit starter creation languages", () => {
     expect(
       (await app.inject({ method: "GET", url: `/v1/surveys/${source.id}`, headers })).json(),
     ).toEqual(before.json());
+  });
+
+  it("previews enhanced Survey questionnaires without writes and creates matching optional items in every locale", async () => {
+    const { app, headers, repository } = await fixture();
+    const withoutIds = (value: unknown) =>
+      JSON.parse(
+        JSON.stringify(value).replace(
+          /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/giu,
+          "<id>",
+        ),
+      );
+    expect(
+      (await app.inject({ method: "GET", url: "/v1/surveys/templates/event-feedback" })).statusCode,
+    ).toBe(401);
+    for (const locale of supportedLocales) {
+      for (const id of [
+        "project-kickoff",
+        "event-feedback",
+        "onboarding-experience",
+        "service-experience",
+        "learning-needs",
+      ] as const) {
+        const auditCount = repository.audits.length;
+        const preview = await app.inject({
+          method: "GET",
+          url: `/v1/surveys/templates/${id}?locale=${locale}`,
+          headers,
+        });
+        expect(preview.statusCode, preview.body).toBe(200);
+        const projected = preview.json();
+        expect(projected).toMatchObject({
+          contentLocale: locale,
+          contentVersion: STARTER_CONTENT_VERSION,
+          guide: { minutes: 5 },
+        });
+        expect(projected.draft).toEqual(instantiateSurveyStarter(id, locale));
+        expect(
+          (
+            await app.inject({
+              method: "GET",
+              url: `/v1/surveys/templates/${id}?locale=${locale}`,
+              headers,
+            })
+          ).json(),
+        ).toEqual(projected);
+        expect(repository.audits).toHaveLength(auditCount);
+        const payload = { idempotencyKey: randomUUID(), templateId: id, locale };
+        const created = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
+        expect(created.statusCode, created.body).toBe(201);
+        expect(withoutIds(created.json().survey.draft)).toEqual(withoutIds(projected.draft));
+        expect(created.json().survey.draft.guide).toBeUndefined();
+        expect(
+          (await app.inject({ method: "POST", url: "/v1/surveys", headers, payload })).json(),
+        ).toEqual(created.json());
+        const cloned = await app.inject({
+          method: "POST",
+          url: "/v1/surveys",
+          headers,
+          payload: {
+            idempotencyKey: randomUUID(),
+            sourceId: created.json().survey.id,
+            locale: "en-CA",
+          },
+        });
+        expect(cloned.statusCode, cloned.body).toBe(201);
+        const sourceDraft = created.json().survey.draft;
+        const copyDraft = cloned.json().survey.draft;
+        expect(copyDraft.title).toBe(`${sourceDraft.title} (copy)`);
+        expect(withoutIds({ ...copyDraft, title: sourceDraft.title })).toEqual(
+          withoutIds(sourceDraft),
+        );
+      }
+      const round = await app.inject({
+        method: "GET",
+        url: `/v1/starters/source-evaluation?locale=${locale}`,
+        headers,
+      });
+      expect(round.json().draft.questions).toHaveLength(6);
+      expect(round.json().guide).toMatchObject({ minutes: 15 });
+      expect(repository.audits.at(-1)?.action).toBe("survey.created");
+    }
+    expect(
+      (await app.inject({ method: "GET", url: "/v1/surveys/templates/source-evaluation", headers }))
+        .statusCode,
+    ).toBe(422);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/surveys/templates/event-feedback?locale=fr-CA",
+          headers,
+        })
+      ).statusCode,
+    ).toBe(400);
   });
 
   it("rejects unknown, unsupported and ambiguous locale inputs before creating content", async () => {

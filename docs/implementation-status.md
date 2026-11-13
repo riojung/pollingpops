@@ -8,6 +8,47 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Customer template collection November 12, 2026
+
+The `codex/customer-template-collection` source strengthens existing original templates
+for actual creator tasks. All 96 slides across the twelve native Presentation decks use
+Editorial, Briefing or Workshop visual families, with covers, callouts, comparisons,
+processes, a timeline, editable tables/charts and closing actions. The gallery filters
+these families and the preview exposes each slide's presenter guidance. All 21
+Presentation IDs and their ten creation languages remain available.
+
+Eight existing Round starters now contain four to eight substantive questions and
+localized guidance for preparation, facilitation, interpretation and follow-up. Knowledge
+packs retain meaningful answer keys and linked rechecks; preference and feedback questions
+remain unscored. Four of these starters also provide complete eight-question Surveys,
+with participant introductions and explicitly optional items. The Survey catalog curates
+six feedback scenarios while all seventeen compatible legacy template IDs retain preview
+and creation support. The remaining starters are preserved, not declared editorially
+upgraded by this slice.
+
+Round and Survey previews use dedicated read-only dialogs. Survey preview and creation
+share the same factory, including introductions and required flags. Copies remain
+independent, existing permissions and exact retries remain in place, and ordinary template
+creation requires neither AI generation nor paid stock assets. Native-language review
+packets include the current content, guides and preview copy without accepting any review
+decision. See the [reference comparison and delivered scope](presentation-implementation-plan-2026-11.md#customer-template-collection--november-12-2026).
+
+This collection still needs native-language editorial review and observed customer
+adaptation/facilitation before a market-readiness claim. Existing hosted, accessibility,
+customer and release gates are unchanged. The branch starts independently from main;
+the preceding workspace-color PR remains separate.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes 8,502 tests with 514 standard
+opt-in skips, formatting, lint, type checks, all four production build tasks and compiled
+server startup. Sixteen distinct selected production-browser cases pass across desktop
+Chromium/Firefox and phone Chromium/WebKit. Those journeys cover all 96 English native
+slides for text/shape fit, shared data views, presenter guides, independent editable copies,
+publication preservation and Round/Survey preview-to-creation fidelity. An additional 24
+representative German/Korean slides per profile retain complete public text and content
+language with no text/shape or page-width overflow. The browser fixtures pass strict
+TypeScript, scoped lint and formatting. Local captures and measurements are recorded under
+`artifacts/customer-templates/`.
+
 ### Compact workspace collections November 12, 2026
 
 The `codex/workspace-compact-layout` source applies Home's compact header sizing and

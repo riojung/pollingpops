@@ -123,7 +123,10 @@ function harness(survey = false) {
         (element) => element.type === "button" && element.props.children === label,
       );
       if (!found) throw new Error(`Missing button ${label}`);
-      return found.props.onClick as () => Promise<void>;
+      const handler = found.props.onClick as (event: {
+        currentTarget: { focus: () => void };
+      }) => Promise<void>;
+      return () => handler({ currentTarget: { focus: () => undefined } });
     },
     disabled(label: string) {
       return (
@@ -312,6 +315,43 @@ describe("creation-locale starter gallery", () => {
     expect(mocked.push).toHaveBeenCalledWith("/quiz/new-round");
   });
 
+  it("uses the Survey catalog and previews its exact participant copy and optionality for viewers", async () => {
+    mocked.locale = "en-CA";
+    mocked.canEdit = false;
+    const source = draft("ko-KR");
+    const item = summary("ko-KR");
+    mocked.fetch.mockImplementation(async (url: string) => {
+      if (url.startsWith("/v1/surveys/templates?")) return { templates: [item] };
+      if (url.startsWith("/v1/surveys/templates/training-feedback?"))
+        return {
+          draft: {
+            schemaVersion: 2,
+            title: source.title,
+            description: "You may skip the optional question.",
+            category: source.category,
+            experiencePreset: source.experiencePreset,
+            items: [{ required: false, question: source.questions[0] }],
+          },
+        };
+      throw new Error(`Unexpected route ${url}`);
+    });
+    const view = harness(true);
+    view.render();
+    await settle();
+    view.render();
+    expect(mocked.fetch).toHaveBeenCalledWith("/v1/surveys/templates?locale=en-CA");
+    await view.button("Preview questionnaire")();
+    view.render();
+    expect(view.markup()).toContain('id="starter-preview-training-feedback"');
+    expect(view.markup()).toContain("You may skip the optional question.");
+    expect(view.markup()).toContain("Optional");
+    expect(view.markup()).not.toContain("Correct answer");
+    expect(view.markup()).not.toContain("starter.use");
+    expect(
+      mocked.fetch.mock.calls.every(([, options]) => !options?.method || options.method === "GET"),
+    ).toBe(true);
+  });
+
   it("retries a lost Survey creation with the original exact body and locale", async () => {
     let attempts = 0;
     mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
@@ -319,7 +359,7 @@ describe("creation-locale starter gallery", () => {
         if (++attempts === 1) throw new Error("Lost response");
         return { survey: { id: "accepted-survey" } };
       }
-      return { starters: [summary(url.endsWith("ko-KR") ? "ko-KR" : "fr-FR")] };
+      return { templates: [summary(url.endsWith("ko-KR") ? "ko-KR" : "fr-FR")] };
     });
     const view = harness(true);
     view.render();

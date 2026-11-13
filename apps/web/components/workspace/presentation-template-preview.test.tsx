@@ -42,6 +42,12 @@ describe("template creation-language rendering", () => {
         <PresentationTemplatePreview draft={draft} contentLocale="fr-FR" onClose={() => {}} />,
       );
       expect(markup).toMatch(/<h1 lang="fr-FR"[^>]*>/u);
+      if (id === "native-startup-pitch") {
+        expect(markup).toMatch(/role="img" aria-label="[^"]+" lang="fr-FR"/u);
+        expect(markup).toContain('data-template-notes="true"');
+        const opening = draft.blocks[0];
+        expect(opening?.kind === "content" && opening.speakerNotes).toBeTruthy();
+      }
       expect(markup).toContain(presentationTemplateCopy("ko-KR")("Close preview"));
       expect(JSON.stringify(draft)).toBe(snapshot);
     }

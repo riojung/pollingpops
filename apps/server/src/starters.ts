@@ -13,6 +13,14 @@ import {
   type SupportedLocale,
 } from "@openround/contracts";
 import { localizedStarter, localizedStarterDescription } from "./starter-localization.js";
+import { SurveyDraftSchema, type SurveyDraft } from "@openround/contracts/surveys";
+import { surveyCreationCopy } from "./starter-localization.js";
+import {
+  LAUNCH_STARTER_IDS,
+  launchStarter,
+  launchStarterGuide,
+  launchSurveyOptions,
+} from "./starter-launch-collection.js";
 
 const ids = {
   q1: "00000000-0000-4000-8000-000000000001",
@@ -1142,6 +1150,12 @@ addFeedback(
   ],
 );
 
+for (const id of LAUNCH_STARTER_IDS) {
+  const draft = launchStarter(id, "en-CA")!;
+  starterDrafts[id] = draft;
+  metadata[id] = { ...metadata[id]!, description: draft.description };
+}
+
 for (const [id, draft] of Object.entries(starterDrafts)) {
   starterDrafts[id as StarterId] = QuizContentSchema.parse(draft);
 }
@@ -1158,6 +1172,7 @@ export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map(
     questionCount: draft.questions.length,
     previewPrompt: draft.questions[0]!.prompt,
     responseTypes: [...new Set(draft.questions.map((question) => question.type))],
+    guide: launchStarterGuide(id, "en-CA"),
     version: 1,
     roundType: draft.questions.every((q) => !questionTypeDefinition(q.type).scored)
       ? "poll"
@@ -1198,8 +1213,52 @@ export function starterSummariesForLocale(locale: SupportedLocale = "en-CA"): St
     return StarterSummarySchema.parse({
       ...summary,
       title: draft.title,
-      description: localizedStarterDescription(summary.description, draft, locale),
+      description: localizedStarterDescription(summary.description, draft, locale, summary.id),
       previewPrompt: draft.questions[0]!.prompt,
+      guide: launchStarterGuide(summary.id, locale),
     });
+  });
+}
+
+export const starterGuideForLocale = launchStarterGuide;
+
+/** The Survey catalog is deliberately curated; legacy opinion template IDs still copy. */
+export function surveyStarterSummariesForLocale(
+  locale: SupportedLocale = "en-CA",
+): StarterSummary[] {
+  const ids: readonly StarterId[] = [
+    "event-feedback",
+    "onboarding-experience",
+    "team-collaboration",
+    "service-experience",
+    "learning-needs",
+    "community-planning",
+  ];
+  return starterSummariesForLocale(locale)
+    .filter((starter) => ids.includes(starter.id))
+    .map((starter) => ({ ...starter, guide: starterGuideForLocale(starter.id, locale, true) }));
+}
+
+/** Pure preview projection. Creation assigns stable per-request IDs before persisting. */
+export function instantiateSurveyStarter(
+  id: StarterId,
+  locale: SupportedLocale = "en-CA",
+): SurveyDraft | undefined {
+  const template = localizedStarter(starterDrafts[id]!, id, locale);
+  if (
+    !template.questions.every((question) => question.type === "poll" || question.type === "rating")
+  )
+    return undefined;
+  const options = launchSurveyOptions(id, locale);
+  return SurveyDraftSchema.parse({
+    schemaVersion: 2,
+    title: template.title,
+    description: options?.description ?? surveyCreationCopy(locale).description,
+    category: template.category,
+    experiencePreset: template.experiencePreset,
+    items: template.questions.map((question, index) => ({
+      required: !options?.optionalIndexes.includes(index),
+      question,
+    })),
   });
 }

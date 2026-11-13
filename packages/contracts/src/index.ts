@@ -3225,6 +3225,16 @@ export const StarterIdSchema = z.enum([
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
+export const StarterGuideSchema = z.object({
+  audience: z.string().trim().min(1).max(300),
+  minutes: z.number().int().positive().max(180),
+  preparation: z.string().trim().min(1).max(1000),
+  facilitation: z.string().trim().min(1).max(1000),
+  interpretation: z.string().trim().min(1).max(1000),
+  followUp: z.string().trim().min(1).max(1000),
+});
+export type StarterGuide = z.infer<typeof StarterGuideSchema>;
+
 export const StarterSummarySchema = z.object({
   id: StarterIdSchema,
   title: z.string().min(1).max(160),
@@ -3237,6 +3247,7 @@ export const StarterSummarySchema = z.object({
   responseTypes: z.array(QuestionTypeSchema).min(1),
   version: z.literal(1),
   roundType: z.enum(["quiz", "poll", "custom"]).default("custom"),
+  guide: StarterGuideSchema.optional(),
 });
 export type StarterSummary = z.infer<typeof StarterSummarySchema>;
 

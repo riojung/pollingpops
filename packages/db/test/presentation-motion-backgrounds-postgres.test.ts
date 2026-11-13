@@ -247,7 +247,7 @@ describe.skipIf(!(adminUrl && runtimeUrl))("motion background Presentation Postg
         Object.assign(content, { schemaVersion: 16 });
       }),
       mutate((content) => {
-        Object.assign(content, { schemaVersion: 18 });
+        Object.assign(content, { schemaVersion: 19 });
       }),
       mutate((content) => {
         const block = content.blocks[0]!;

@@ -14,6 +14,7 @@ import {
   canvasDiagramShapePath,
   canvasShapeVariantPath,
   presentationSceneTitle,
+  presentationDesignPalette,
   type PresentationScene,
   type PresentationSceneFrame,
   type PresentationSceneNode,
@@ -23,7 +24,7 @@ import { boundNativeSceneFrame } from "../../lib/presentation-native-scene";
 import { nativeControlNodeLabel, nativeControlsCopy } from "./native-controls-copy";
 import { nativeAudienceCopy } from "./native-audience-copy";
 import styles from "./native-scene.module.css";
-import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { useNativeTextOverflow } from "./use-native-text-overflow";
 import { NativeRichTextView } from "./native-rich-text-view";
 import { NativeSceneDataView } from "./native-scene-data-view";
@@ -67,7 +68,9 @@ function Shape({
   node,
   locale,
   contentLocale,
+  palette,
 }: {
+  palette: ReturnType<typeof presentationDesignPalette>;
   node: Extract<FramedNode, { type: "shape" }>;
   locale: SupportedLocale;
   contentLocale?: SupportedLocale;
@@ -78,9 +81,14 @@ function Shape({
       : node.shape === "diamond" || node.shape === "parallelogram"
         ? canvasDiagramShapePath(node.shape, 160, 90)
         : canvasShapeVariantPath(node.shape, 160, 90);
+  const paint = (token: keyof typeof palette | "none" | undefined, fallback: string) =>
+    token === "none" ? "none" : token ? palette[token] : fallback;
+  const fill = paint(node.appearance?.fill, CANVAS_FILL_COLORS[node.color]);
+  const stroke = paint(node.appearance?.stroke, CANVAS_STROKE_COLORS[node.color]);
   return (
     <div
       className={styles.shape}
+      aria-hidden={node.decorative || undefined}
       role="img"
       aria-label={node.label || nativeControlNodeLabel(locale, node).text}
       lang={node.label ? (contentLocale ?? "") : locale}
@@ -89,9 +97,9 @@ function Shape({
         {path ? (
           <path
             d={path}
-            fill={CANVAS_FILL_COLORS[node.color]}
-            stroke={CANVAS_STROKE_COLORS[node.color]}
-            strokeWidth="2"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={node.appearance?.strokeWidth ?? 2}
           />
         ) : (
           <ellipse
@@ -99,13 +107,25 @@ function Shape({
             cy="45"
             rx="78"
             ry="43"
-            fill={CANVAS_FILL_COLORS[node.color]}
-            stroke={CANVAS_STROKE_COLORS[node.color]}
-            strokeWidth="2"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={node.appearance?.strokeWidth ?? 2}
           />
         )}
       </svg>
-      <span aria-hidden="true" style={{ color: node.color === "black" ? "#ffffff" : "#102a43" }}>
+      <span
+        aria-hidden="true"
+        style={{
+          color:
+            node.appearance?.fill === "accent"
+              ? palette.accentText
+              : node.appearance?.fill !== undefined
+                ? palette.text
+                : node.color === "black"
+                  ? "#ffffff"
+                  : "#102a43",
+        }}
+      >
         {node.label}
       </span>
     </div>
@@ -224,7 +244,7 @@ function NativeSceneSurface({
     scene.nodes.some((node) => node.type === "reveal" && node.scope === "broadcast");
   const sceneId = useId();
   const design = scene.design;
-  const palette = design ? NATIVE_DESIGN_THEMES[design.theme] : undefined;
+  const palette = presentationDesignPalette(design);
   const designStyle =
     design && palette
       ? ({
@@ -313,6 +333,7 @@ function NativeSceneSurface({
         data-thumbnail-scene={staticThumbnail ? "true" : undefined}
         data-static-thumbnail={staticThumbnail || undefined}
         data-native-theme={design?.theme}
+        data-native-palette={design?.palette}
         data-native-font={design?.font}
         data-native-spacing={design?.spacing}
         style={designStyle}
@@ -366,14 +387,28 @@ function NativeSceneSurface({
                 </span>
               </p>
             );
-          const style: CSSProperties = {
+          const typography = node.type === "text" ? node.typography : undefined;
+          const style = {
+            ...(typography
+              ? {
+                  "--native-node-size":
+                    typography.size === undefined ? undefined : `${typography.size / 12.8}cqw`,
+                  "--native-node-weight": typography.weight,
+                  "--native-node-align": typography.align,
+                  "--native-node-font": typography.font
+                    ? NATIVE_DESIGN_FONTS[typography.font]
+                    : undefined,
+                  "--native-node-color": typography.color ? palette[typography.color] : undefined,
+                  "--native-node-leading": typography.leading,
+                }
+              : {}),
             left: `${node.frame.x}%`,
             top: `${node.frame.y}%`,
             width: `${node.frame.width}%`,
             height: `${node.frame.height}%`,
             zIndex: scene.nodes.indexOf(node) + 1,
             transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined,
-          };
+          } as CSSProperties;
           return (
             <div
               key={id}
@@ -381,6 +416,10 @@ function NativeSceneSurface({
               style={style}
               data-node-id={id}
               data-node-type={node.type}
+              data-native-typography={typography ? "true" : undefined}
+              data-decorative={
+                node.type === "shape" && node.decorative && !editing ? "true" : undefined
+              }
               data-frame={JSON.stringify(node.frame)}
               data-rotation={node.rotation}
               onClick={
@@ -401,7 +440,7 @@ function NativeSceneSurface({
                     title={node.role === "title"}
                     editing={editing}
                     lang={node.lang ?? contentLocale ?? ""}
-                    layoutKey={JSON.stringify([node.frame, design])}
+                    layoutKey={JSON.stringify([node.frame, design, node.typography])}
                   />
                 ) : (
                   <NativePlainText
@@ -410,7 +449,7 @@ function NativeSceneSurface({
                       (editing ? copy(node.role === "title" ? "Slide title" : "Body text") : "")
                     }
                     title={node.role === "title"}
-                    layoutKey={JSON.stringify([node.frame, design])}
+                    layoutKey={JSON.stringify([node.frame, design, node.typography])}
                     lang={
                       node.text
                         ? (node.lang ?? contentLocale ?? "")
@@ -422,7 +461,12 @@ function NativeSceneSurface({
                 )
               ) : null}
               {node.type === "shape" ? (
-                <Shape node={node} locale={locale} contentLocale={contentLocale} />
+                <Shape
+                  node={node}
+                  locale={locale}
+                  contentLocale={contentLocale}
+                  palette={palette}
+                />
               ) : null}
               {isNativeInteractionNode(node) ? (
                 <NativeSceneInteractionView

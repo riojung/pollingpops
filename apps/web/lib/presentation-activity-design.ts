@@ -1,5 +1,6 @@
 import {
   PRESENTATION_MOTION_BACKGROUND_PRESETS,
+  PRESENTATION_DESIGN_PALETTES,
   type PresentationDraft,
   type PresentationSceneDesign,
 } from "@openround/contracts";
@@ -25,6 +26,9 @@ export function copyPresentationSceneDesign(
         ? value.font
         : INITIAL_NATIVE_DESIGN.font,
     spacing: value?.spacing === "compact" ? "compact" : INITIAL_NATIVE_DESIGN.spacing,
+    ...(value?.palette && Object.hasOwn(PRESENTATION_DESIGN_PALETTES, value.palette)
+      ? { palette: value.palette }
+      : {}),
     ...(value?.motionBackground &&
     PRESENTATION_MOTION_BACKGROUND_PRESETS.includes(value.motionBackground)
       ? { motionBackground: value.motionBackground }

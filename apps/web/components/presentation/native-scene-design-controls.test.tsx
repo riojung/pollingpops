@@ -591,3 +591,22 @@ describe("native design scene budget recovery", () => {
     );
   });
 });
+
+it("clears collection palette only on explicit theme selection, retaining authored node styles", () => {
+  const scene: PresentationScene = {
+    ...createNativeContentBlock().scene!,
+    schemaVersion: 9,
+    design: { ...design, palette: "ink", motionBackground: "waves" },
+  };
+  const onChange = vi.fn();
+  const tree = render(() => NativeSceneDesignControls({ scene, onChange }));
+  change(input(tree, "Slide font"), { value: "mono" });
+  expect(onChange.mock.calls[0]![0].design).toMatchObject({ palette: "ink", font: "mono" });
+  change(input(tree, "Slide spacing"), { value: "relaxed" });
+  expect(onChange.mock.calls[1]![0].design).toMatchObject({ palette: "ink", spacing: "relaxed" });
+  expect(button(tree, "Use Midnight theme").props["aria-pressed"]).toBe(false);
+  click(button(tree, "Use Midnight theme"));
+  expect(onChange.mock.calls[2]![0].design).toEqual({ ...design, motionBackground: "waves" });
+  expect(onChange.mock.calls[2]![0].schemaVersion).toBe(9);
+  expect(onChange.mock.calls[2]![0].nodes).toEqual(scene.nodes);
+});

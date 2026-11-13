@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import type {
@@ -12,7 +12,10 @@ import type {
   DesignLayoutId,
   PresentationDesignId,
 } from "../../apps/web/lib/presentation-designs.ts";
-import { presentationDesignCopy } from "../../apps/web/lib/i18n/presentation-design-copy.ts";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../apps/web/lib/i18n/presentation-design-copy.ts";
 import { nativeEditorCopy } from "../../apps/web/components/presentation/native-editor-copy.ts";
 import {
   closeE01Overlays,
@@ -20,6 +23,7 @@ import {
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
+  openE01Inspector,
   readE01Record,
   selectE01Block,
   type E01Record,
@@ -85,8 +89,12 @@ async function quality(page: Page) {
 }
 
 async function capture(surface: Locator, name: string) {
-  await mkdir("artifacts/presentation-designs", { recursive: true });
-  await surface.screenshot({ path: `artifacts/presentation-designs/${name}.png` });
+  await mkdir("artifacts/presentation-designed-collections", { recursive: true });
+  await surface.screenshot({
+    path: `artifacts/presentation-designed-collections/${name}.png`,
+    // A tall element capture can otherwise stitch the sticky workspace header across its middle.
+    style: "header[class*='topHeader'] { visibility: hidden !important; }",
+  });
 }
 
 /** The server accepts the first creation; only its browser acknowledgement is lost. */
@@ -305,8 +313,8 @@ for (const suffix of ["", " @mobile"]) {
       await dialog.locator(`[data-design-layout="${layout}"]`).click();
       const stage = dialog.locator(`[data-design-preview-layout="${layout}"]`);
       await expectArtwork(stage, "paper");
-      await expect(stage.locator('[data-node-type="text"]').first()).toHaveText(
-        copy.sampleDraft.slides[layout].title,
+      await expect(stage.locator("h1").first()).toHaveText(
+        presentationDesignDraftCopy("studio", "en-CA").slides[layout].title,
       );
       if (layout === "data") await expect(stage.locator('[data-node-type="table"]')).toHaveCount(1);
       if (["cover", "body", "data"].includes(layout))
@@ -363,10 +371,12 @@ for (const suffix of ["", " @mobile"]) {
     await expect(translated).toHaveAttribute("lang", locale);
     await translated.locator('[data-design-layout="body"]').click();
     const translatedStage = translated.locator("[data-design-preview]");
-    await expect(translatedStage.locator('[data-node-type="text"]').first()).toHaveText(
-      localized.sampleDraft.slides.body.title,
+    await expect(translatedStage.locator("h1").first()).toHaveText(
+      presentationDesignDraftCopy("editorial", locale).slides.body.title,
     );
-    await expect(translatedStage).not.toContainText(copy.sampleDraft.slides.body.title);
+    await expect(translatedStage).not.toContainText(
+      presentationDesignDraftCopy("editorial", "en-CA").slides.body.title,
+    );
     await expectArtwork(translatedStage, "paper");
     await quality(page);
     await capture(translatedStage, `${info.project.name}-${locale}-editorial-body`);
@@ -380,14 +390,21 @@ for (const suffix of ["", " @mobile"]) {
     );
     await expect(page).toHaveURL(`/presentation/${record.id}`);
     const created = (await readE01Record(page, record.id)).draft;
-    expect(created.schemaVersion).toBe(8);
+    expect(created.schemaVersion).toBe(18);
     expect(created.blocks).toHaveLength(8);
     expect(created.blocks.map((block) => scene(block).design)).toEqual(
-      Array.from({ length: 8 }, () => ({ theme: "ocean", font: "mono", spacing: "compact" })),
+      Array.from({ length: 8 }, () => ({
+        theme: "ocean",
+        font: "sans",
+        spacing: "compact",
+        palette: "cobalt",
+      })),
     );
     expect(new Set(created.blocks.map((block) => block.id)).size).toBe(8);
     expect(created.blocks.map(headline)).toEqual(
-      DESIGN_LAYOUTS.map((layout) => localized.sampleDraft.slides[layout].title),
+      DESIGN_LAYOUTS.map(
+        (layout) => presentationDesignDraftCopy("blueprint", locale).slides[layout].title,
+      ),
     );
     const inspector = page.locator('button[aria-controls="presentation-object-inspector"]');
     if ((await inspector.getAttribute("aria-expanded")) !== "true") await inspector.click();
@@ -401,9 +418,13 @@ for (const suffix of ["", " @mobile"]) {
       .toBe(editedTitle);
     await page.reload();
     const persisted = (await readE01Record(page, record.id)).draft;
-    expect(persisted.schemaVersion).toBe(8);
+    expect(persisted.schemaVersion).toBe(18);
     expect(persisted.blocks).toHaveLength(8);
-    expect(scene(persisted.blocks[0]!).nodes[0]).toMatchObject({ type: "text", text: editedTitle });
+    expect(
+      scene(persisted.blocks[0]!).nodes.find(
+        (node) => node.type === "text" && node.role === "title",
+      ),
+    ).toMatchObject({ type: "text", text: editedTitle });
   });
 
   test(`design style previews preserve mixed decks, undo atomically and insert only a chosen layout${suffix}`, async ({
@@ -442,7 +463,7 @@ for (const suffix of ["", " @mobile"]) {
       .poll(async () => pollScene((await saved()).blocks[2])?.design?.theme)
       .toBe("ocean");
     const styled = await saved();
-    expect(styled.schemaVersion).toBe(17);
+    expect(styled.schemaVersion).toBe(18);
     expect(styled.blocks.map((block) => block.id)).toEqual(initial.blocks.map((block) => block.id));
     for (const index of [0, 1]) {
       const original = initial.blocks[index]!;
@@ -455,8 +476,9 @@ for (const suffix of ["", " @mobile"]) {
     for (const block of styled.blocks.slice(0, 3))
       expect(scene(block).design).toEqual({
         theme: "ocean",
-        font: "mono",
+        font: "sans",
         spacing: "compact",
+        palette: "cobalt",
         motionBackground: "waves",
       });
     const ordinary = initial.blocks[2] as ContentSlideDraft;
@@ -491,6 +513,7 @@ for (const suffix of ["", " @mobile"]) {
       theme: "sunset",
       font: "serif",
       spacing: "relaxed",
+      palette: "clay",
       motionBackground: "waves",
     });
     expect(scene(isolated.blocks[0]!).nodes).toEqual(scene(initial.blocks[0]!).nodes);
@@ -504,13 +527,22 @@ for (const suffix of ["", " @mobile"]) {
     await expect.poll(async () => (await saved()).blocks.length).toBe(5);
     const expanded = await saved();
     const inserted = expanded.blocks[1]!;
-    expect(expanded.schemaVersion).toBe(17);
+    expect(expanded.schemaVersion).toBe(18);
     expect(expanded.blocks.filter((block) => block.id !== inserted.id)).toEqual(isolated.blocks);
-    expect(scene(inserted).design).toEqual({ theme: "paper", font: "sans", spacing: "relaxed" });
-    expect(scene(inserted).nodes.filter((node) => node.type === "text")).toHaveLength(3);
-    expect(scene(inserted).nodes[0]).toMatchObject({
+    expect(scene(inserted).design).toEqual({
+      theme: "paper",
+      font: "sans",
+      spacing: "relaxed",
+      palette: "cobalt",
+    });
+    expect(
+      scene(inserted).nodes.filter((node) => node.type === "text").length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      scene(inserted).nodes.find((node) => node.type === "text" && node.role === "title"),
+    ).toMatchObject({
       type: "text",
-      text: copy.sampleDraft.slides.split.title,
+      text: presentationDesignDraftCopy("studio", "en-CA").slides.split.title,
     });
     expect(initial.blocks.every((block) => block.id !== inserted.id)).toBe(true);
     await page.reload();
@@ -529,6 +561,31 @@ for (const suffix of ["", " @mobile"]) {
     await expect(activity.locator('[data-design-apply="midnight"]')).toBeEnabled();
     await page.keyboard.press("Escape");
     expect((await saved()).blocks).toEqual(expanded.blocks);
+
+    await selectE01Block(
+      page,
+      presentationDesignDraftCopy("studio", "en-CA").slides.split.title,
+      narrow,
+    );
+    const switchCollection = await openDesign(page, "editorial");
+    await switchCollection
+      .getByRole("combobox", { name: copy.scope, exact: true })
+      .selectOption("slide");
+    await switchCollection.locator('[data-design-apply="editorial"]').click();
+    await expect.poll(async () => pollScene((await saved()).blocks[1])?.design?.font).toBe("serif");
+    const restyled = scene((await saved()).blocks[1]!);
+    expect(
+      restyled.nodes
+        .filter((node) => node.type === "text")
+        .every((node) => node.typography?.font === undefined),
+    ).toBe(true);
+    expect(restyled.nodes.map((node) => (node.type === "connector" ? null : node.frame))).toEqual(
+      scene(inserted).nodes.map((node) => (node.type === "connector" ? null : node.frame)),
+    );
+    const title = page.locator('[data-native-scene="true"] h1').first();
+    await expect
+      .poll(() => title.evaluate((node) => getComputedStyle(node).fontFamily))
+      .toContain("Georgia");
   });
 
   test(`failed design creation can start another while preserving the previously edited target${suffix}`, async ({
@@ -642,10 +699,15 @@ for (const suffix of ["", " @mobile"]) {
       expect(draftAttempts[2]!.id).toBe(fresh.id);
       expect(draftAttempts[2]!.mutation.expectedRevision).toBe(0);
       expect(draftAttempts[2]!.mutation.mutationId).not.toBe(draftAttempts[0]!.mutation.mutationId);
-      expect(fresh.draft.schemaVersion).toBe(8);
+      expect(fresh.draft.schemaVersion).toBe(18);
       expect(fresh.draft.blocks).toHaveLength(8);
       expect(fresh.draft.blocks.map((block) => scene(block).design)).toEqual(
-        Array.from({ length: 8 }, () => ({ theme: "ocean", font: "mono", spacing: "compact" })),
+        Array.from({ length: 8 }, () => ({
+          theme: "ocean",
+          font: "sans",
+          spacing: "compact",
+          palette: "cobalt",
+        })),
       );
       const retained = await readE01Record(page, originalId);
       expect(retained.draftRevision).toBe(edited.draftRevision);
@@ -654,5 +716,290 @@ for (const suffix of ["", " @mobile"]) {
       await page.unroute(creationEndpoint, acceptCreation);
       await page.unroute(draftEndpoint, failFirstDraft);
     }
+  });
+
+  test(`collection object colors and formatted reading colors remain usable${suffix}`, async ({
+    page,
+    browser,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page, undefined, { returnTo: "/templates" });
+    await specialistLocale(page, "en-CA");
+    await page.goto("/templates");
+    const copy = presentationDesignCopy("en-CA");
+    await page.getByRole("tab", { name: copy.designs, exact: true }).click();
+    await page.locator('[data-design-card="signal"] [data-design-create="signal"]').click();
+    await expect(page).toHaveURL(/\/presentation\/[\da-f-]+$/);
+    const id = new URL(page.url()).pathname.split("/").at(-1)!;
+    let record = await readE01Record(page, id);
+    const coverTitle = headline(record.draft.blocks[0]!);
+    const bodyBlock = record.draft.blocks[2]!;
+    const bodyScene = scene(bodyBlock);
+    const body = bodyScene.nodes.find(
+      (node) => node.type === "text" && node.typography?.color === "accentText",
+    );
+    const marker = scene(record.draft.blocks[0]!).nodes.find(
+      (node) => node.type === "shape" && node.appearance?.fill === "background",
+    );
+    if (!body || body.type !== "text" || !marker || marker.type !== "shape")
+      throw new Error("Expected real Signal collection objects");
+    expect(marker.decorative).toBe(true);
+    const markerLabel = "Audience-visible collection note";
+    const bodyTitle = headline(bodyBlock);
+    const imageBlock = record.draft.blocks[4]!;
+    const imageTitle = headline(imageBlock);
+    const placeholder = scene(imageBlock).nodes.find(
+      (node) => node.type === "shape" && !node.decorative,
+    );
+    if (!placeholder || placeholder.type !== "shape")
+      throw new Error("Expected a labeled placeholder");
+    // A real local interaction exposes the reader's accessible-outline switch.
+    bodyScene.nodes.push({
+      id: "reader-details",
+      type: "reveal",
+      scope: "local",
+      label: "Read supporting detail",
+      body: "Public supporting detail",
+      frame: { x: 7, y: 91, width: 60, height: 7 },
+    });
+    bodyScene.readingOrder.push("reader-details");
+    const seeded = await page.request.put(`${e01ApiUrl}/v1/presentations/${id}/draft`, {
+      data: {
+        draft: record.draft,
+        expectedRevision: record.draftRevision,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(seeded.status(), await seeded.text()).toBe(200);
+    await page.reload();
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    if (narrow) await closeE01Overlays(page);
+    let inspector = await openE01Inspector(page, "Content");
+    await inspector
+      .getByRole("combobox", { name: "Selected object", exact: true })
+      .selectOption(marker.id);
+    await inspector
+      .getByRole("combobox", { name: "Object color", exact: true })
+      .selectOption("orange");
+    await inspector.getByRole("textbox", { name: "Shape label", exact: true }).fill(markerLabel);
+    await expect
+      .poll(async () =>
+        scene((await readE01Record(page, id)).draft.blocks[0]!).nodes.find(
+          (node) => node.id === marker.id,
+        ),
+      )
+      .toMatchObject({
+        color: "orange",
+        appearance: { stroke: "none", strokeWidth: 0 },
+        label: markerLabel,
+        decorative: false,
+      });
+    const paint = page.locator(`[data-native-scene-canvas] [data-node-id="${marker.id}"] svg path`);
+    await expect(paint).toHaveAttribute("fill", "#ffdbb5");
+    await selectE01Block(page, imageTitle, narrow);
+    inspector = await openE01Inspector(page, "Content");
+    await inspector
+      .getByRole("combobox", { name: "Selected object", exact: true })
+      .selectOption(placeholder.id);
+    const objectColor = inspector.getByRole("combobox", { name: "Object color", exact: true });
+    await expect(objectColor).toHaveValue("palette");
+    await objectColor.selectOption("black");
+    const labeledShape = page.locator(
+      `[data-native-scene-canvas] [data-node-id="${placeholder.id}"]`,
+    );
+    await expect(labeledShape.locator("svg path")).toHaveAttribute("fill", "#3b4351");
+    await expect(labeledShape.locator('[role="img"] > span')).toHaveCSS(
+      "color",
+      "rgb(255, 255, 255)",
+    );
+    await expect
+      .poll(async () =>
+        scene((await readE01Record(page, id)).draft.blocks[4]!).nodes.find(
+          (node) => node.id === placeholder.id,
+        ),
+      )
+      .toMatchObject({ color: "black", appearance: { strokeWidth: 1 } });
+    await page.reload();
+    if (narrow) await closeE01Overlays(page);
+    await selectE01Block(page, coverTitle, narrow);
+    await expect(paint).toHaveAttribute("fill", "#ffdbb5");
+    await selectE01Block(page, bodyTitle, narrow);
+    inspector = await openE01Inspector(page, "Content");
+    await inspector
+      .getByRole("combobox", { name: "Selected object", exact: true })
+      .selectOption(body.id);
+    await inspector.getByRole("button", { name: "Format text", exact: true }).click();
+    const text = inspector.getByRole("textbox", { name: "Node text", exact: true });
+    await text.focus();
+    await text.evaluate((node) => (node as HTMLTextAreaElement).setSelectionRange(0, 4));
+    await text.press("Shift");
+    await inspector.getByRole("button", { name: "Bold", exact: true }).click();
+    await inspector.getByRole("button", { name: "Italic", exact: true }).click();
+    await expect
+      .poll(async () =>
+        JSON.stringify(
+          scene((await readE01Record(page, id)).draft.blocks[2]!).nodes.find(
+            (node) => node.id === body.id,
+          ),
+        ),
+      )
+      .toContain('"italic":true');
+    const canvasText = page.locator(`[data-native-scene-canvas] [data-node-id="${body.id}"] p`);
+    // Narrow editors use the same semantic reading layout as mobile readers.
+    const expected = narrow ? "rgb(37, 26, 25)" : "rgb(255, 247, 239)";
+    await expect(canvasText).toHaveCSS("color", expected);
+    await expect(canvasText.locator("strong")).toHaveCSS("color", expected);
+    record = await readE01Record(page, id);
+    const published = await page.request.post(`${e01ApiUrl}/v1/presentations/${id}/publish`, {
+      data: { expectedDraftRevision: record.draftRevision },
+    });
+    expect(published.status(), await published.text()).toBe(200);
+    const versionId = (await published.json()).version.id;
+    const token = randomBytes(32).toString("base64url");
+    const shared = await page.request.post(`${e01ApiUrl}/v1/presentations/${id}/shares`, {
+      data: {
+        token,
+        requestId: randomUUID(),
+        versionId,
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    });
+    expect(shared.ok(), await shared.text()).toBe(true);
+    const share = await shared.json();
+    const { viewport, isMobile, hasTouch, userAgent, deviceScaleFactor } = info.project.use;
+    const context = await browser.newContext({
+      baseURL: new URL(page.url()).origin,
+      viewport,
+      isMobile,
+      hasTouch,
+      userAgent,
+      deviceScaleFactor,
+      reducedMotion: "reduce",
+      colorScheme: "light",
+    });
+    try {
+      const reader = await context.newPage();
+      await reader.goto(share.url);
+      const current = reader.getByRole("region", {
+        name: "Current presentation page",
+        exact: true,
+      });
+      await expect(current.locator(`[data-node-id="${marker.id}"] svg path`)).toHaveAttribute(
+        "fill",
+        "#ffdbb5",
+      );
+      // A label authored on collection artwork must also reach mobile and assistive readers.
+      await expect(current.getByRole("img", { name: markerLabel, exact: true })).toBeVisible();
+      await reader
+        .getByRole("navigation", { name: "Presentation pages", exact: true })
+        .getByRole("button")
+        .filter({ hasText: imageTitle })
+        .click();
+      const readerShape = current.locator(`[data-node-id="${placeholder.id}"]`);
+      await expect(readerShape.locator("svg path")).toHaveAttribute("fill", "#3b4351");
+      await expect(readerShape.locator('[role="img"] > span')).toHaveCSS(
+        "color",
+        "rgb(255, 255, 255)",
+      );
+      await reader
+        .getByRole("navigation", { name: "Presentation pages", exact: true })
+        .getByRole("button")
+        .filter({ hasText: bodyTitle })
+        .click();
+      const paragraph = current.locator(`[data-node-id="${body.id}"] p`);
+      await expect(paragraph).toHaveCSS("color", expected);
+      await expect(paragraph.locator("strong")).toHaveCSS("color", expected);
+      await expect(paragraph.locator("em")).toHaveCSS("color", expected);
+      await current.getByRole("button", { name: "Show accessible outline", exact: true }).click();
+      for (const text of [paragraph, paragraph.locator("strong"), paragraph.locator("em")])
+        await expect(text).toHaveCSS("color", "rgb(37, 26, 25)");
+      await quality(reader);
+      await current.getByRole("button", { name: "Show slide layout", exact: true }).click();
+      await expect(paragraph).toHaveCSS("color", expected);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test(`designed collections render distinct covers and fitted coordinated interiors${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(240_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page, undefined, { returnTo: "/templates" });
+    await specialistLocale(page, "en-CA");
+    await page.goto("/templates");
+    const copy = presentationDesignCopy("en-CA");
+    await page.getByRole("tab", { name: copy.designs, exact: true }).click();
+    const panel = page.locator("#template-panel-designs");
+    const signatures = new Set<string>();
+    const overflow: unknown[] = [];
+    for (const [id, family] of Object.entries(designFamilies)) {
+      await panel
+        .locator(`[data-design-card="${id}"]`)
+        .getByRole("button", { name: `${copy.preview}: ${family.name}`, exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: `${copy.preview}: ${family.name}`,
+        exact: true,
+      });
+      const stage = dialog.locator("[data-design-preview]");
+      for (const layout of DESIGN_LAYOUTS) {
+        await dialog.locator(`[data-design-layout="${layout}"]`).click();
+        await expect(stage).toHaveAttribute("data-design-preview-layout", layout);
+        const artwork = stage.locator("[data-thumbnail-scene]");
+        await expect(artwork).toHaveAttribute("data-native-palette", /.+/);
+        const fit = await artwork.locator("h1,p").evaluateAll((nodes) =>
+          nodes
+            .map((node) => ({
+              text: node.textContent,
+              overflowY: node.scrollHeight - node.clientHeight,
+              overflowX: node.scrollWidth - node.clientWidth,
+              font: getComputedStyle(node).fontSize,
+              leading: getComputedStyle(node).lineHeight,
+              padding: getComputedStyle(node).padding,
+              height: node.clientHeight,
+            }))
+            .filter((node) => node.overflowY > 2 || node.overflowX > 2),
+        );
+        if (fit.length) overflow.push({ id, layout, nodes: fit });
+        if (layout === "cover") {
+          const hero = await artwork.locator("h1").evaluate((node) => {
+            const stage = node.closest("[data-thumbnail-scene]")!;
+            return {
+              size: parseFloat(getComputedStyle(node).fontSize),
+              width: (stage as HTMLElement).clientWidth,
+            };
+          });
+          expect((hero.size / hero.width) * 1280, `${id} cover typography`).toBeGreaterThanOrEqual(
+            60,
+          );
+          signatures.add(
+            await artwork
+              .locator("[data-node-id]")
+              .evaluateAll((nodes) =>
+                JSON.stringify(nodes.map((node) => node.getAttribute("data-frame"))),
+              ),
+          );
+          await capture(stage, `${info.project.name}-${id}-designed-cover`);
+        }
+      }
+      await quality(page);
+      await page.keyboard.press("Escape");
+    }
+    await mkdir("artifacts/presentation-designed-collections", { recursive: true });
+    await writeFile(
+      `artifacts/presentation-designed-collections/${info.project.name}-layout-fit.json`,
+      JSON.stringify(overflow, null, 2),
+    );
+    if (info.project.name === "chromium-beta") {
+      await page.setViewportSize({ width: 1728, height: 1080 });
+      await quality(page);
+    }
+    await capture(panel, `${info.project.name}-designed-collections-catalog`);
+    expect(overflow, "All authored template text must fit its frames").toEqual([]);
+    expect(signatures.size).toBe(8);
   });
 }

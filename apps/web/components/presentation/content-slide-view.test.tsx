@@ -274,6 +274,19 @@ describe("ContentSlideView", () => {
 
 describe("contextual deck appearance", () => {
   const design = { theme: "sunset", font: "serif", spacing: "compact" } as const;
+  it("uses the collection palette for ordinary slides without changing their geometry", () => {
+    const block = createContentBlock();
+    const base = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    const themed = renderToStaticMarkup(
+      <ContentSlideView
+        block={block}
+        variant="preview"
+        designOverride={{ ...design, palette: "coral" }}
+      />,
+    );
+    expect(themed).toContain("--content-slide-background:#ff634e");
+    expect(renderedFrames(themed)).toEqual(renderedFrames(base));
+  });
   it("styles source content without changing its stored text or geometry", () => {
     const block = createContentBlock("section");
     block.textElements[0]!.text = "An imported plan remains editable";

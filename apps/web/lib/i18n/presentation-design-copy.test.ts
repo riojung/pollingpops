@@ -1,7 +1,15 @@
-import { supportedLocales } from "@openround/contracts";
+import {
+  PresentationContentSchema,
+  preparePresentationPublication,
+  supportedLocales,
+} from "@openround/contracts";
 import { describe, expect, it } from "vitest";
 import { DESIGN_LAYOUTS, PRESENTATION_DESIGNS, createDesignDraft } from "../presentation-designs";
-import { presentationDesignCopy, presentationDesignSampleCopy } from "./presentation-design-copy";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+  presentationDesignSampleCopy,
+} from "./presentation-design-copy";
 
 describe("Presentation design copy", () => {
   it.each(supportedLocales)(
@@ -21,14 +29,26 @@ describe("Presentation design copy", () => {
       }
       for (const design of PRESENTATION_DESIGNS) {
         expect(copy.descriptions[design.id]).toBeTruthy();
-        const draft = createDesignDraft(design.id, copy.sampleDraft);
+        const familyCopy = presentationDesignDraftCopy(design.id, locale);
+        expect(copy.purposes[design.id]).toBeTruthy();
+        const draft = createDesignDraft(design.id, familyCopy);
+        expect(
+          PresentationContentSchema.safeParse(preparePresentationPublication(draft)).success,
+        ).toBe(true);
         expect(draft.blocks).toHaveLength(8);
         for (const layout of DESIGN_LAYOUTS) {
           expect(copy.layoutLabels[layout]).toBeTruthy();
-          expect(copy.sampleDraft.slides[layout].title).toBeTruthy();
-          expect(copy.sampleDraft.slides[layout].body).toBeTruthy();
+          expect(familyCopy.slides[layout].title).toBeTruthy();
+          expect(familyCopy.slides[layout].title).not.toBe(copy.sampleDraft.slides[layout].title);
+          expect(familyCopy.slides[layout].eyebrow).toBe(copy.purposes[design.id]);
+          expect(familyCopy.slides[layout].body).toBeTruthy();
         }
       }
+      const families = PRESENTATION_DESIGNS.map((design) =>
+        presentationDesignDraftCopy(design.id, locale),
+      );
+      expect(new Set(families.map((family) => family.title)).size).toBe(8);
+      expect(new Set(families.map((family) => family.slides.cover.body)).size).toBe(8);
       expect(copy.sampleDraft).toEqual(presentationDesignSampleCopy(locale));
       if (locale !== "en-CA") {
         expect(copy.description).not.toBe(english.description);

@@ -249,3 +249,147 @@ describe("isolated static Presentation renderer", () => {
     },
   );
 });
+
+describe("styled collection snapshots", () => {
+  it("paints named colors, large right-aligned type and decorative shape geometry across export formats", async () => {
+    const deck = review();
+    const block = deck.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    block.scene = {
+      schemaVersion: 9,
+      aspectRatio: "16:9",
+      design: { theme: "paper", palette: "cobalt", font: "sans", spacing: "compact" },
+      nodes: [
+        {
+          id: "title",
+          type: "text",
+          role: "title",
+          text: "TITLE",
+          typography: {
+            size: 96,
+            weight: 800,
+            font: "serif",
+            align: "right",
+            color: "accent",
+            leading: 0.95,
+          },
+          frame: { x: 10, y: 10, width: 80, height: 25 },
+        },
+        {
+          id: "decoration",
+          type: "shape",
+          shape: "rectangle",
+          color: "blue",
+          label: "Decorative marker",
+          decorative: true,
+          appearance: { fill: "accent", stroke: "none", strokeWidth: 0 },
+          frame: { x: 10, y: 50, width: 30, height: 30 },
+        },
+      ],
+      readingOrder: ["title", "decoration"],
+    };
+    const before = structuredClone(deck);
+    const png = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "png",
+      blockId: block.id,
+    });
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const canvas = createCanvas(1280, 720),
+      ctx = canvas.getContext("2d");
+    ctx.drawImage(await loadImage(png.bytes), 0, 0);
+    expect([...ctx.getImageData(2, 2, 1, 1).data]).toEqual([24, 71, 197, 255]);
+    expect([...ctx.getImageData(250, 450, 1, 1).data]).toEqual([245, 239, 131, 255]);
+    const title = ctx.getImageData(128, 72, 1024, 180).data;
+    let left = 1024,
+      right = 0;
+    for (let y = 0; y < 180; y++)
+      for (let x = 0; x < 1024; x++) {
+        const index = (y * 1024 + x) * 4;
+        if (title[index]! > 200 && title[index + 1]! > 200) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+        }
+      }
+    expect(left).toBeGreaterThan(600);
+    expect(right).toBeGreaterThan(1000);
+    expect(right - left).toBeGreaterThan(200);
+    const html = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "html",
+      blockId: block.id,
+    });
+    expect(html.bytes.toString()).toContain(png.bytes.toString("base64"));
+    expect(html.bytes.toString()).not.toContain("Shape (rectangle): Decorative marker");
+    const pdf = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "pdf",
+      blockId: block.id,
+    });
+    expect(pdf.bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(deck).toEqual(before);
+  }, 20_000);
+});
+
+describe("legacy shape label contrast with retained appearance metadata", () => {
+  it.each([{ strokeWidth: 1 }, { stroke: "none" as const }])(
+    "keeps white labels on recolored black fills with %j",
+    async (appearance) => {
+      const deck = review(),
+        block = deck.blocks[0]!;
+      if (block.kind !== "content") throw new Error("Expected content");
+      block.scene = {
+        schemaVersion: 9,
+        aspectRatio: "16:9",
+        design: { theme: "paper", palette: "default", font: "sans", spacing: "compact" },
+        nodes: [
+          {
+            id: "title",
+            type: "text",
+            role: "title",
+            text: "Shape contrast",
+            frame: { x: 5, y: 5, width: 90, height: 20 },
+          },
+          {
+            id: "shape",
+            type: "shape",
+            shape: "rectangle",
+            color: "black",
+            label: "LABEL",
+            appearance,
+            frame: { x: 20, y: 40, width: 60, height: 40 },
+          },
+        ],
+        readingOrder: ["title", "shape"],
+      };
+      const before = structuredClone(deck);
+      const png = await renderPresentationStatic({
+        review: deck,
+        images: new Map(),
+        format: "png",
+        blockId: block.id,
+      });
+      const { createCanvas } = await import("@napi-rs/canvas");
+      const canvas = createCanvas(1280, 720),
+        ctx = canvas.getContext("2d");
+      ctx.drawImage(await loadImage(png.bytes), 0, 0);
+      expect([...ctx.getImageData(320, 400, 1, 1).data]).toEqual([59, 67, 81, 255]);
+      const label = ctx.getImageData(300, 330, 650, 200).data;
+      let whitePixels = 0;
+      for (let index = 0; index < label.length; index += 4)
+        if (
+          label[index] === 255 &&
+          label[index + 1] === 255 &&
+          label[index + 2] === 255 &&
+          label[index + 3] === 255
+        )
+          whitePixels++;
+      expect(whitePixels).toBeGreaterThan(30);
+      expect(deck).toEqual(before);
+    },
+    20_000,
+  );
+});

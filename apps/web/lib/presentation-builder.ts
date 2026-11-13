@@ -173,6 +173,9 @@ export function promotePresentationOpinionFormats(
     draft.blocks.some((block) => block.kind === "content" && (block.scene?.schemaVersion ?? 0) >= 8)
       ? 17
       : 2,
+    draft.blocks.some((block) => block.kind === "content" && (block.scene?.schemaVersion ?? 0) >= 9)
+      ? 18
+      : 2,
   ) as PresentationDraft["schemaVersion"];
   if (draft.schemaVersion === schemaVersion) return draft;
   return {

@@ -17,7 +17,7 @@ import {
 } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import { nativeEditorCopy, type NativeEditorCopyKey } from "./native-editor-copy";
-import { nativeControlNodeLabel } from "./native-controls-copy";
+import { nativeControlNodeLabel, nativeControlsCopy } from "./native-controls-copy";
 import { clientUuid } from "../../lib/uuid";
 import { setNativeTextLanguage } from "../../lib/presentation-native-text-language";
 import {
@@ -209,7 +209,12 @@ export function NativeSceneEditor({
   const onUploadImage = (...args: Parameters<typeof uploadImage>) => {
     if (permission.current) uploadImage(...args);
   };
-  const [selection, setSelection] = useState<string[]>([scene.nodes[0]!.id]);
+  const first = scene.nodes[0]!;
+  const initialNode =
+    first.type === "shape" && first.decorative
+      ? (scene.nodes.find((node) => node.type === "text" && node.role === "title") ?? first)
+      : first;
+  const [selection, setSelection] = useState<string[]>([initialNode.id]);
   const [imageAlt, setImageAlt] = useState("");
   const [formatError, setFormatError] = useState<NativeEditorCopyKey | null>(null);
   const [changeFailure, setChangeFailure] = useState<{
@@ -219,9 +224,14 @@ export function NativeSceneEditor({
   const validSelection = selection.filter((id) => scene.nodes.some((node) => node.id === id));
   const selectedIds = expandNativeSceneSelection(
     scene,
-    validSelection.length ? validSelection : [scene.nodes[0]!.id],
+    validSelection.length ? validSelection : [initialNode.id],
   );
   const selected = scene.nodes.find((node) => node.id === selectedIds.at(-1))!;
+  const palettePaint =
+    selected.type === "shape" &&
+    [selected.appearance?.fill, selected.appearance?.stroke].some(
+      (paint) => paint !== undefined && paint !== "none",
+    );
   const multiple = selectedIds.length > 1;
   const canMoveSelection = scene.nodes.some(
     (node) => selectedIds.includes(node.id) && node.type !== "connector",
@@ -527,7 +537,15 @@ export function NativeSceneEditor({
                     onChange={(event) =>
                       update(
                         (node) =>
-                          node.type === "shape" ? { ...node, label: event.target.value } : node,
+                          node.type === "shape"
+                            ? {
+                                ...node,
+                                label: event.target.value,
+                                ...(node.decorative && event.target.value.trim()
+                                  ? { decorative: false }
+                                  : {}),
+                              }
+                            : node,
                         "label",
                       )
                     }
@@ -632,15 +650,26 @@ export function NativeSceneEditor({
               <label>
                 {copy("Object color")}
                 <select
-                  value={selected.color}
+                  value={palettePaint ? "palette" : selected.color}
                   onChange={(event) =>
-                    update((node) =>
-                      node.type === "shape" || node.type === "connector"
-                        ? { ...node, color: event.target.value as typeof node.color }
-                        : node,
-                    )
+                    update((node) => {
+                      if (node.type !== "shape" && node.type !== "connector") return node;
+                      const color = event.target.value as typeof node.color;
+                      if (node.type !== "shape" || !node.appearance) return { ...node, color };
+                      const appearance = { ...node.appearance };
+                      // Explicit object color replaces palette paint, while preserving an
+                      // authored outline/no-stroke treatment and its border thickness.
+                      if (appearance.fill !== "none") delete appearance.fill;
+                      if (appearance.stroke !== "none") delete appearance.stroke;
+                      return { ...node, color, appearance };
+                    })
                   }
                 >
+                  {palettePaint ? (
+                    <option value="palette" disabled>
+                      {nativeControlsCopy(locale)("Theme palettes")}
+                    </option>
+                  ) : null}
                   {CanvasColorSchema.options.map((color) => (
                     <option key={color} value={color}>
                       {copy(color)}

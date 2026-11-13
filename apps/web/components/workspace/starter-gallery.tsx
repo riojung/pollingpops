@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { QuestionType, RoundCategory, QuizDraft, SupportedLocale } from "@openround/contracts";
+import type {
+  QuestionType,
+  RoundCategory,
+  QuizDraft,
+  StarterGuide,
+  SupportedLocale,
+} from "@openround/contracts";
+import type { SurveyDraft } from "@openround/contracts/surveys";
+import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
+import { StarterTemplatePreview, type StarterPreviewContent } from "./starter-template-preview";
 import { apiFetch, humanError, ApiClientError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
 import { formatNumber, pluralCategory } from "../../lib/i18n/format";
@@ -47,6 +56,7 @@ export function StarterGallery({
 }) {
   const router = useRouter();
   const { locale, t } = useLocale();
+  const guideCopy = templateGuideCopy(locale);
   const { creator, canEdit, productFeatures } = useWorkspace();
   const [starters, setStarters] = useState<StarterSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +68,8 @@ export function StarterGallery({
   const [type, setType] = useState(roundType);
   const [preview, setPreview] = useState<{
     id: string;
-    draft: QuizDraft;
+    content: StarterPreviewContent;
+    guide?: StarterGuide;
     contentLocale: SupportedLocale;
   } | null>(null);
   const [contentLocale, setContentLocale] = useState(locale);
@@ -75,11 +86,16 @@ export function StarterGallery({
     setLoadError("");
     setLoading(true);
     try {
-      const response = await apiFetch<{ starters: StarterSummary[] }>(
-        `/v1/starters?locale=${locale}`,
-      );
+      const items = survey
+        ? (
+            await apiFetch<{ templates: StarterSummary[] }>(
+              `/v1/surveys/templates?locale=${locale}`,
+            )
+          ).templates
+        : (await apiFetch<{ starters: StarterSummary[] }>(`/v1/starters?locale=${locale}`))
+            .starters;
       if (request !== listRequest.current || latestLocale.current !== locale) return;
-      setStarters(response.starters);
+      setStarters(items);
       setContentLocale(locale);
     } catch (caught) {
       if (request !== listRequest.current || latestLocale.current !== locale) return;
@@ -87,7 +103,7 @@ export function StarterGallery({
     } finally {
       if (request === listRequest.current && latestLocale.current === locale) setLoading(false);
     }
-  }, [locale]);
+  }, [locale, survey]);
 
   useEffect(() => {
     void refresh();
@@ -141,15 +157,17 @@ export function StarterGallery({
     );
 
   const effectiveType = survey ? "poll" : roundType !== "all" ? roundType : type;
-  const orderedStarters = prioritizeStartersForSegment(starters, creator?.segment).filter(
-    (starter) =>
-      (!survey || starter.responseTypes.every((type) => type === "poll" || type === "rating")) &&
-      (effectiveType === "all" || starter.roundType === effectiveType) &&
-      (category === "all" || starter.category === category) &&
-      `${starter.title} ${starter.description}`
-        .toLocaleLowerCase(locale)
-        .includes(search.trim().toLocaleLowerCase(locale)),
-  );
+  const orderedStarters = [...prioritizeStartersForSegment(starters, creator?.segment)]
+    .sort((first, second) => Number(Boolean(second.guide)) - Number(Boolean(first.guide)))
+    .filter(
+      (starter) =>
+        (!survey || starter.responseTypes.every((type) => type === "poll" || type === "rating")) &&
+        (effectiveType === "all" || starter.roundType === effectiveType) &&
+        (category === "all" || starter.category === category) &&
+        `${starter.title} ${starter.description} ${starter.guide?.audience ?? ""}`
+          .toLocaleLowerCase(locale)
+          .includes(search.trim().toLocaleLowerCase(locale)),
+    );
 
   return (
     <div lang={locale} aria-busy={loading}>
@@ -229,6 +247,7 @@ export function StarterGallery({
               className={galleryStyles.templateCard}
               data-category={starter.category}
               key={starter.id}
+              data-template-id={starter.id}
             >
               <div className={galleryStyles.cardTopline}>
                 <span className={galleryStyles.category}>{t(categoryKeys[starter.category])}</span>
@@ -238,6 +257,11 @@ export function StarterGallery({
               </div>
               <h3 lang={contentLocale}>{starter.title}</h3>
               <p lang={contentLocale}>{starter.description}</p>
+              {starter.guide ? (
+                <p className={galleryStyles.audience} lang={contentLocale}>
+                  {starter.guide.audience}
+                </p>
+              ) : null}
               {starter.previewPrompt && preview?.id !== starter.id ? (
                 <div className={galleryStyles.questionSample}>
                   <small>{t("templateLibrary.questionPreview")}</small>
@@ -245,6 +269,13 @@ export function StarterGallery({
                 </div>
               ) : null}
               <div className={galleryStyles.metaLine}>
+                {starter.guide ? (
+                  <span>
+                    {guideCopy("About {minutes} min", {
+                      minutes: formatNumber(locale, starter.guide.minutes),
+                    })}
+                  </span>
+                ) : null}
                 <span>{t(`create.kind.${survey ? "survey" : starter.roundType}`)}</span>
                 <span>
                   {t(
@@ -264,10 +295,12 @@ export function StarterGallery({
                   type="button"
                   disabled={preview?.id !== starter.id && !catalogCurrent}
                   aria-expanded={preview?.id === starter.id}
+                  aria-haspopup="dialog"
                   aria-controls={
                     preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
                   }
-                  onClick={async () => {
+                  onClick={async (event) => {
+                    event.currentTarget.focus();
                     const request = ++previewRequest.current;
                     if (preview?.id === starter.id) {
                       setPreview(null);
@@ -276,12 +309,29 @@ export function StarterGallery({
                     if (!catalogCurrent || latestLocale.current !== locale) return;
                     setActionError("");
                     try {
-                      const result = await apiFetch<{ draft: QuizDraft }>(
-                        `/v1/starters/${starter.id}?locale=${locale}`,
-                      );
+                      let content: StarterPreviewContent;
+                      let guide: StarterGuide | undefined;
+                      if (survey) {
+                        const result = await apiFetch<{ draft: SurveyDraft; guide?: StarterGuide }>(
+                          `/v1/surveys/templates/${starter.id}?locale=${locale}`,
+                        );
+                        content = { kind: "survey", draft: result.draft };
+                        guide = result.guide;
+                      } else {
+                        const result = await apiFetch<{ draft: QuizDraft; guide?: StarterGuide }>(
+                          `/v1/starters/${starter.id}?locale=${locale}`,
+                        );
+                        content = { kind: "round", draft: result.draft };
+                        guide = result.guide;
+                      }
                       if (request !== previewRequest.current || latestLocale.current !== locale)
                         return;
-                      setPreview({ id: starter.id, draft: result.draft, contentLocale: locale });
+                      setPreview({
+                        id: starter.id,
+                        content,
+                        guide: guide ?? starter.guide,
+                        contentLocale: locale,
+                      });
                     } catch (caught) {
                       if (request !== previewRequest.current || latestLocale.current !== locale)
                         return;
@@ -289,7 +339,11 @@ export function StarterGallery({
                     }
                   }}
                 >
-                  {preview?.id === starter.id ? t("starter.closePreview") : t("starter.preview")}
+                  {preview?.id === starter.id
+                    ? t("starter.closePreview")
+                    : survey
+                      ? guideCopy("Preview questionnaire")
+                      : t("starter.preview")}
                 </button>
                 {canEdit && (!survey || productFeatures?.surveys) ? (
                   <button
@@ -304,35 +358,22 @@ export function StarterGallery({
                   <p className={galleryStyles.readOnlyNote}>{t("starter.readOnly")}</p>
                 ) : null}
               </div>
-              {preview?.id === starter.id ? (
-                <ol
-                  className={galleryStyles.preview}
-                  id={`starter-preview-${starter.id}`}
-                  lang={preview.contentLocale}
-                >
-                  {preview.draft.questions.map((question) => (
-                    <li key={question.id}>
-                      {question.prompt}
-                      {"choices" in question ? (
-                        <ul>
-                          {question.choices.map((choice) => (
-                            <li key={choice.id}>{choice.label}</li>
-                          ))}
-                        </ul>
-                      ) : question.type === "rating" ? (
-                        <p>
-                          {question.min} — {question.minLabel} / {question.max} —{" "}
-                          {question.maxLabel}
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
             </article>
           );
         })}
       </div>
+      {preview ? (
+        <StarterTemplatePreview
+          key={preview.id}
+          id={preview.id}
+          content={preview.content}
+          guide={preview.guide}
+          contentLocale={preview.contentLocale}
+          uiLocale={locale}
+          closeLabel={t("starter.closePreview")}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
       {starters.length > 0 && orderedStarters.length === 0 ? (
         <p role="status">{t("starter.noMatches")}</p>
       ) : null}

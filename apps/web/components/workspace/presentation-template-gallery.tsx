@@ -9,6 +9,7 @@ import {
   templateLoadError,
 } from "../../lib/i18n/presentation-template-copy";
 import { formatNumber } from "../../lib/i18n/format";
+import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
 import {
   instantiatePresentationTemplate,
   allPresentationTemplatesForLocale,
@@ -27,6 +28,13 @@ import {
   PresentationTemplateThumbnail,
   PresentationTemplatePreview,
 } from "./presentation-template-preview";
+
+const visualStyleLabels = {
+  editorial: "Editorial",
+  briefing: "Briefing",
+  workshop: "Workshop",
+} as const;
+type VisualStyle = keyof typeof visualStyleLabels;
 
 type TemplateUiKey = Parameters<ReturnType<typeof presentationTemplateCopy>>[0];
 const scenarioFilters: Array<{
@@ -100,9 +108,11 @@ export function PresentationTemplateGallery() {
   const router = useRouter();
   const { locale, t } = useLocale();
   const copy = presentationTemplateCopy(locale);
+  const guideCopy = templateGuideCopy(locale);
   const { canEdit, productFeatures } = useWorkspace();
   const [search, setSearch] = useState("");
   const [scenario, setScenario] = useState("all");
+  const [visualStyle, setVisualStyle] = useState<VisualStyle | "all">("all");
   const [preview, setPreview] = useState<{
     id: PresentationTemplateId;
     locale: SupportedLocale;
@@ -140,15 +150,18 @@ export function PresentationTemplateGallery() {
   const visibleTemplates = templates.filter(
     (template) =>
       (scenario === "all" || selectedFilter.templates.includes(template.id)) &&
+      (visualStyle === "all" ||
+        (template.collection === "native" && template.visualStyle === visualStyle)) &&
       `${template.scenarioLabel} ${discussionScenarios[template.id] ? copy(discussionScenarios[template.id]!) : ""} ${template.title} ${template.description} ${template.id}`
         .toLocaleLowerCase(locale)
         .includes(search.trim().toLocaleLowerCase(locale)),
   );
-  const filtered = search.length > 0 || scenario !== "all";
+  const filtered = search.length > 0 || scenario !== "all" || visualStyle !== "all";
 
   function clearFilters() {
     setSearch("");
     setScenario("all");
+    setVisualStyle("all");
   }
 
   async function useTemplate(id: PresentationTemplateId) {
@@ -198,16 +211,34 @@ export function PresentationTemplateGallery() {
   return (
     <div className={styles.gallery} lang={locale}>
       <div className={styles.filters}>
-        <label className={`field ${styles.search}`}>
-          <span>{t("templateLibrary.searchPresentations")}</span>
-          <input
-            className="input"
-            type="search"
-            aria-controls="presentation-template-results"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
+        <div className={styles.filterFields}>
+          <label className={`field ${styles.search}`}>
+            <span>{t("templateLibrary.searchPresentations")}</span>
+            <input
+              className="input"
+              type="search"
+              aria-controls="presentation-template-results"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <label className={`field ${styles.styleFilter}`}>
+            <span>{guideCopy("Visual style")}</span>
+            <select
+              className="input"
+              value={visualStyle}
+              onChange={(event) => setVisualStyle(event.target.value as VisualStyle | "all")}
+              aria-controls="presentation-template-results"
+            >
+              <option value="all">{guideCopy("All styles")}</option>
+              {Object.entries(visualStyleLabels).map(([value, label]) => (
+                <option value={value} key={value}>
+                  {guideCopy(label)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div
           className={styles.scenarios}
           role="group"
@@ -293,6 +324,11 @@ export function PresentationTemplateGallery() {
                 <h3>{template.title}</h3>
                 <p>{template.description}</p>
                 <div className={styles.metaLine}>
+                  {template.collection === "native" ? (
+                    <span className={styles.designTag}>
+                      {guideCopy(visualStyleLabels[template.visualStyle])}
+                    </span>
+                  ) : null}
                   <span>
                     {copy("Content slides: {count}", { count: formatNumber(locale, contentCount) })}
                   </span>

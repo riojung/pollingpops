@@ -38,12 +38,13 @@ function structure(draft: QuizDraft) {
 }
 
 describe("creation-only original starter catalogs", () => {
-  it("pins the canonical English content so changes require review of positional translations", () => {
+  it("pins reviewed English content and guides alongside complete localized factories", () => {
     const original = JSON.stringify(
       starterSummaries.map((summary) => ({ summary, draft: instantiateStarter(summary.id) })),
     ).replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/giu, "<id>");
     expect(createHash("sha256").update(original).digest("hex")).toBe(
-      "b55f6c1322b9b9cb69c32512e2a3fe48791060416165afe226351f34569a85d8",
+      // Launch collection v2: eight reviewed deeper originals, keyed translations, and guides.
+      "c3bc7f80dc6edd78f43e1408da74cc441cb8143dfc9b4d016149b8fa75712be0",
     );
   });
   it.each(supportedLocales)(
@@ -111,11 +112,9 @@ describe("creation-only original starter catalogs", () => {
     );
     expect(instantiateStarter("exit-ticket").title).toBe("Exit ticket");
     expect(instantiateStarter("percentage-check", "ko-KR").questions[0]).toMatchObject({
-      choices: [
-        { label: "$55", isCorrect: false },
-        { label: "$60", isCorrect: true },
-        { label: "$75", isCorrect: false },
-      ],
+      type: "numeric",
+      correctValue: "60",
+      tolerance: "0",
     });
     expect(instantiateStarter("technical-concept-check", "fr-FR").questions[1]).toMatchObject({
       correctValue: "4",

@@ -14,6 +14,7 @@ import {
 import { useLocale } from "../locale-provider";
 import { presentationTemplateCopy } from "../../lib/i18n/presentation-template-copy";
 import { formatNumber } from "../../lib/i18n/format";
+import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
 import { ContentSlideView } from "../presentation/content-slide-view";
 import { handleModalKeyDown } from "../presentation/presentation-modal-focus";
 import styles from "./presentation-template-preview.module.css";
@@ -134,6 +135,7 @@ export function PresentationTemplatePreview({
 }) {
   const { locale } = useLocale();
   const copy = presentationTemplateCopy(locale);
+  const guideCopy = templateGuideCopy(locale);
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(0);
   const block = draft.blocks[index];
@@ -220,6 +222,13 @@ export function PresentationTemplatePreview({
       <div className={styles.stage} data-template-preview-slide={index + 1} lang={contentLocale}>
         {block ? <PresentationTemplateSlide block={block} contentLocale={contentLocale} /> : null}
       </div>
+      {block?.kind === "content" && block.speakerNotes ? (
+        <details className={styles.notes} data-template-notes>
+          <summary>{guideCopy("Presenter guide")}</summary>
+          <p>{guideCopy("Template notes explain how to adapt and present this example.")}</p>
+          <div lang={contentLocale}>{block.speakerNotes}</div>
+        </details>
+      ) : null}
       <p className={styles.keyboard}>
         {copy(
           "Use Left and Right arrow keys, Home or End to navigate. Escape closes the preview. When a table or chart has focus, these keys scroll its data; use the slide buttons to navigate.",

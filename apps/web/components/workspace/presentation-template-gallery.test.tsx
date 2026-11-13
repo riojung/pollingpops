@@ -289,6 +289,34 @@ describe("Presentation template gallery", () => {
     expect(recordCreationEvent).not.toHaveBeenCalled();
   });
 
+  it("combines visual style and customer job, and clears both without creating an artifact", () => {
+    const view = harness(() => PresentationTemplateGallery());
+    view.render();
+    const style = () => view.find((node) => node.type === "select");
+    (style().props.onChange as (event: unknown) => void)({ target: { value: "briefing" } });
+    view.render();
+    expect(elements(view.render()).filter((node) => node.props["data-template-id"])).toHaveLength(
+      4,
+    );
+    expect(view.card("native-research-findings")).toBeDefined();
+    const pitch = view.find(
+      (node) => node.type === "button" && node.props.children === "Pitch & propose",
+    );
+    (pitch.props.onClick as () => void)();
+    view.render();
+    expect(view.markup()).toContain("starter.noMatches");
+    const clear = view.find(
+      (node) => node.type === "button" && node.props.children === "Clear filters",
+    );
+    (clear.props.onClick as () => void)();
+    view.render();
+    expect(style().props.value).toBe("all");
+    expect(elements(view.render()).filter((node) => node.props["data-template-id"])).toHaveLength(
+      21,
+    );
+    expect(mocked.fetch).not.toHaveBeenCalled();
+  });
+
   it.each(["read-only", "feature disabled"])(
     "keeps previews available without creation for %s",
     (mode) => {

@@ -265,3 +265,9 @@
     min-block-size: 44px;
   }
 }
+
+.templateCard > .audience {
+  color: var(--ui-accent-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+}

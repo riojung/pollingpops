@@ -6,6 +6,7 @@ import {
   type PresentationScene,
   type PresentationSceneChartNode,
   type PresentationSceneDesign,
+  type PresentationSceneFrame,
   type PresentationSceneNode,
   type PresentationSceneTableNode,
 } from "@openround/contracts";
@@ -30,7 +31,13 @@ const scenarioLabels = {
 
 export type NativePresentationTemplateId = keyof typeof scenarioLabels;
 
+/** Source-only art direction. Geometry is shared by every authored creation locale. */
+export type NativeTemplateLayout =
+  "cover" | "statement" | "process" | "timeline" | "comparison" | "cards" | "closing" | "data";
+export type NativeTemplateVisualStyle = "editorial" | "briefing" | "workshop";
+
 export interface NativeTemplateSlide {
+  layout: NativeTemplateLayout;
   title: string;
   body: string;
   notes: string;
@@ -49,6 +56,7 @@ export interface NativePresentationTemplate {
   category: "business" | "technical" | "education";
   theme: PresentationSceneDesign["theme"];
   font: PresentationSceneDesign["font"];
+  visualStyle: NativeTemplateVisualStyle;
   collection: "native";
   scenarioLabel: string;
   blocks: ReadonlyArray<NativeTemplateSlide & { kind: "content" }>;
@@ -62,6 +70,7 @@ export const nativePresentationTemplates: readonly NativePresentationTemplate[] 
     category: entry.category as NativePresentationTemplate["category"],
     theme: entry.theme as NativePresentationTemplate["theme"],
     font: entry.font as NativePresentationTemplate["font"],
+    visualStyle: entry.visualStyle as NativeTemplateVisualStyle,
     collection: "native",
     scenarioLabel: scenarioLabels[entry.id as NativePresentationTemplateId],
     blocks: (entry.slides as NativeTemplateSlide[]).map((block) => ({
@@ -161,6 +170,22 @@ function openingSentence(body: string) {
   return sentence ?? body;
 }
 
+type Shape = Extract<PresentationSceneNode, { type: "shape" }>;
+const accents: Record<PresentationSceneDesign["theme"], Shape["color"]> = {
+  paper: "amber",
+  midnight: "lavender",
+  ocean: "sky",
+  sunset: "orange",
+};
+
+/** Keep the translated heading and its explanation adjacent in narrow reading flow. */
+function columnParts(text: string) {
+  const boundary = text.search(/[:：?？,，、]/u);
+  return boundary >= 0
+    ? { label: text.slice(0, boundary + 1), body: text.slice(boundary + 1).trimStart() }
+    : { label: text, body: "" };
+}
+
 function createSlide(
   template: NativePresentationTemplate,
   copy: NativeTemplateSlide,
@@ -173,27 +198,28 @@ function createSlide(
   // Charts already carry a public summary and use the remaining slide for the plot and data.
   // Table/column leads stay short; complete copy and adaptation guidance remain in the notes.
   const lead = hasData || hasColumns ? openingSentence(copy.body) : copy.body;
-  const nodes: PresentationSceneNode[] = [
-    {
-      id: createId(),
-      type: "text",
-      role: "title",
-      text: copy.title,
-      frame: { x: 7, y: 3, width: 86, height: 24 },
-    },
-  ];
-  if (!hasChart)
+  const nodes: PresentationSceneNode[] = [];
+  const groups: NonNullable<PresentationScene["groups"]> = [];
+  const text = (value: string, frame: PresentationSceneFrame, role: "title" | "body" = "body") => {
+    const node: PresentationSceneNode = { id: createId(), type: "text", role, text: value, frame };
+    nodes.push(node);
+    return node.id;
+  };
+  const shape = (label: string, frame: PresentationSceneFrame, id = createId()) => {
     nodes.push({
-      id: createId(),
-      type: "text",
-      role: "body",
-      text: lead,
-      frame: hasData
-        ? { x: 7, y: 29, width: 86, height: 20 }
-        : hasColumns
-          ? { x: 7, y: 29, width: 86, height: 26 }
-          : { x: 7, y: 33, width: 86, height: 61 },
+      id,
+      type: "shape",
+      shape: "rounded_rectangle",
+      color: accents[template.theme],
+      label,
+      frame,
     });
+    return id;
+  };
+  const title = (frame: PresentationSceneFrame) => text(copy.title, frame, "title");
+
+  if (hasData || hasColumns) title({ x: 7, y: 3, width: 86, height: 24 });
+  if (hasData && !hasChart) text(lead, { x: 7, y: 29, width: 86, height: 20 });
   if (copy.illustrativeTable) {
     nodes.push({
       id: createId(),
@@ -216,33 +242,85 @@ function createSlide(
       })),
     });
   } else if (copy.columns) {
-    const gap = 4;
+    text(lead, { x: 7, y: 29, width: 86, height: 15 });
+    const timeline = copy.layout === "timeline";
+    const connected = timeline || copy.layout === "process";
+    const gap = connected ? 7 : 6;
     const width = (86 - gap * (copy.columns.length - 1)) / copy.columns.length;
-    copy.columns.forEach((text, index) => {
-      const colon = text.search(/[:：]/u);
-      nodes.push({
-        id: createId(),
-        type: "text",
-        role: "body",
-        text,
-        ...(colon > 0
-          ? {
-              richText: {
-                paragraphs: [
-                  {
-                    kind: "paragraph",
-                    runs: [
-                      { text: text.slice(0, colon + 1), bold: true },
-                      { text: text.slice(colon + 1) },
-                    ],
-                  },
-                ],
-              },
-            }
-          : {}),
-        frame: { x: 7 + index * (width + gap), y: 59, width, height: 38 },
-      });
+    // Allocate endpoints before creating nodes so connectors retain the same semantic order
+    // as the step cards, including in the renderer's stacked mobile/reading view.
+    const headingIds = copy.columns.map(() => createId());
+    copy.columns.forEach((column, index) => {
+      const parts = columnParts(column);
+      const x = 7 + index * (width + gap);
+      const y = 46 + index * 18;
+      const heading = shape(
+        parts.label,
+        timeline ? { x: 7, y, width: 26, height: 14 } : { x, y: 48, width, height: 20 },
+        headingIds[index],
+      );
+      const description = text(
+        parts.body,
+        timeline ? { x: 38, y, width: 55, height: 14 } : { x, y: 71, width, height: 26 },
+      );
+      groups.push({ id: createId(), nodeIds: [heading, description] });
+      if (connected && index < copy.columns!.length - 1)
+        nodes.push({
+          id: createId(),
+          type: "connector",
+          from: { nodeId: heading, anchor: timeline ? "bottom" : "right" },
+          to: { nodeId: headingIds[index + 1]!, anchor: timeline ? "top" : "left" },
+          // The renderer supplies its localized Connection label and the named endpoints.
+          label: "",
+          color: accents[template.theme],
+        });
     });
+  } else if (copy.layout === "cover") {
+    if (template.visualStyle === "briefing") {
+      title({ x: 7, y: 7, width: 62, height: 43 });
+      shape(template.scenarioLabel, { x: 74, y: 7, width: 19, height: 32 });
+      text(copy.body, { x: 7, y: 57, width: 86, height: 36 });
+    } else if (template.visualStyle === "workshop") {
+      title({ x: 37, y: 7, width: 56, height: 39 });
+      shape(template.scenarioLabel, { x: 7, y: 7, width: 24, height: 20 });
+      text(copy.body, { x: 7, y: 56, width: 86, height: 37 });
+    } else {
+      title({ x: 7, y: 25, width: 86, height: 27 });
+      shape(template.scenarioLabel, { x: 7, y: 7, width: 50, height: 11 });
+      text(copy.body, { x: 7, y: 61, width: 86, height: 32 });
+    }
+  } else if (copy.layout === "statement") {
+    title({ x: 7, y: 7, width: 86, height: 26 });
+    // The first authored sentence is the takeaway, followed by its complete qualification.
+    // Both source pieces stay intact; condensed translations may have no second sentence.
+    const sentence = openingSentence(copy.body);
+    const callout = sentence.length <= 200 ? sentence : template.scenarioLabel;
+    const detail =
+      sentence.length <= 200 ? copy.body.slice(sentence.length).trimStart() : copy.body;
+    if (template.visualStyle === "briefing") {
+      shape(callout, { x: 7, y: 38, width: 86, height: 24 });
+      text(detail, { x: 7, y: 67, width: 86, height: 29 });
+    } else if (template.visualStyle === "workshop") {
+      shape(callout, { x: 7, y: 38, width: 33, height: 58 });
+      text(detail, { x: 46, y: 38, width: 47, height: 58 });
+    } else {
+      shape(callout, { x: 7, y: 38, width: 52, height: 54 });
+      text(detail, { x: 65, y: 38, width: 28, height: 54 });
+    }
+  } else if (copy.layout === "closing") {
+    if (template.visualStyle === "briefing") {
+      title({ x: 7, y: 7, width: 49, height: 45 });
+      text(copy.body, { x: 62, y: 7, width: 31, height: 86 });
+      shape(template.scenarioLabel, { x: 7, y: 67, width: 49, height: 15 });
+    } else if (template.visualStyle === "workshop") {
+      title({ x: 7, y: 7, width: 86, height: 26 });
+      text(copy.body, { x: 7, y: 43, width: 61, height: 50 });
+      shape(template.scenarioLabel, { x: 75, y: 45, width: 18, height: 35 });
+    } else {
+      title({ x: 7, y: 7, width: 86, height: 27 });
+      text(copy.body, { x: 37, y: 43, width: 56, height: 49 });
+      shape(template.scenarioLabel, { x: 7, y: 49, width: 25, height: 29 });
+    }
   }
   const scene: PresentationScene = {
     schemaVersion: 4,
@@ -252,6 +330,7 @@ function createSlide(
       font: template.font,
       spacing: hasData || hasColumns ? "compact" : "relaxed",
     },
+    ...(groups.length ? { groups } : {}),
     nodes,
     readingOrder: nodes.map((node) => node.id),
   };
@@ -263,7 +342,7 @@ function createSlide(
     mediaId: null,
     mediaAlt: null,
     speakerNotes:
-      !hasChart && lead === copy.body
+      !hasChart && lead === copy.body && copy.layout !== "statement"
         ? copy.notes
         : `${copy.body}\n\n${presentationTemplateLocaleCatalog(locale)?.presenterNotes ?? "Presenter notes:"} ${copy.notes}`,
     scene,

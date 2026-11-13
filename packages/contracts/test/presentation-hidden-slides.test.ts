@@ -349,7 +349,7 @@ describe("Presentation slide visibility contract", () => {
       expect(schema.parse({ ...deck([legacySlide()]), schemaVersion: 13 }).schemaVersion).toBe(13);
       expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 14 }).success).toBe(true);
       expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 15 }).success).toBe(true);
-      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 17 }).success).toBe(false);
+      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 18 }).success).toBe(false);
     }
   });
 });

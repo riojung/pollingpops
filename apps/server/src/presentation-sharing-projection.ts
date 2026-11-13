@@ -5,6 +5,7 @@ import {
   type PresentationSceneNode,
 } from "@openround/contracts";
 import type { PresentationShareRecord, PresentationVersionRecord } from "@openround/db";
+import { presentationBlockDesign } from "./presentation-block-design.js";
 const nodeFields: Record<PresentationSceneNode["type"], readonly string[]> = {
   text: ["role", "text", "richText", "lang"],
   image: ["mediaId", "altText", "fit", "focalPoint"],
@@ -46,6 +47,10 @@ export function projectPresentationReview(
 ) {
   const source = PresentationContentSchema.parse(version.content);
   const blocks = source.blocks.map((block) => {
+    const design = presentationBlockDesign(source.blocks, block.id);
+    // Freeze inherited motion before an export selects a single page. Omitting static-only
+    // inheritance preserves established legacy export output and recipient wire records.
+    const motionDesign = design?.motionBackground ? { design } : {};
     if (block.kind === "content")
       return {
         id: block.id,
@@ -61,12 +66,14 @@ export function projectPresentationReview(
         })),
         mediaId: block.mediaId,
         mediaAlt: block.mediaAlt,
+        ...motionDesign,
         ...(block.scene ? { scene: projectScene(block.scene) } : {}),
       };
     const q = block.question;
     return {
       id: block.id,
       kind: block.kind,
+      ...motionDesign,
       question: {
         type: q.type,
         prompt: q.prompt,

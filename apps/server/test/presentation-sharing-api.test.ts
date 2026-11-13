@@ -7,16 +7,18 @@ import { presentationSharingFixture } from "../../../packages/db/test/support/pr
 import { registerPresentationSharingRoutes } from "../src/presentation-sharing-routes.js";
 import { ConfigSchema } from "../src/config.js";
 import { projectPresentationReview } from "../src/presentation-sharing-projection.js";
+import { publishMotionBackgroundFixture } from "./support/presentation-motion-backgrounds.js";
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
-async function fixture() {
+async function fixture(motionBackground = false) {
   const repository = new MemoryRepository(),
     mediaId = randomUUID(),
-    f = await presentationSharingFixture(repository, "api-share", mediaId);
+    source = await presentationSharingFixture(repository, "api-share", mediaId),
+    f = motionBackground ? await publishMotionBackgroundFixture(source) : source;
   const enabled = { value: true };
   const readImage = vi.fn(async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   const config = ConfigSchema.parse({
@@ -55,6 +57,21 @@ async function fixture() {
   return { ...f, repository, app, enabled, readImage, mediaId, input, create, read };
 }
 describe("private Presentation review APIs", () => {
+  it("preserves a frozen motion preset through a private review without source or answer data", async () => {
+    const f = await fixture(true);
+    const created = await f.create();
+    expect(created.statusCode, created.body).toBe(201);
+    const read = await f.read(created.json().share.id);
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().blocks[0]).toMatchObject({
+      scene: { schemaVersion: 8, design: { motionBackground: "ribbons" } },
+    });
+    expect(read.body).not.toMatch(/PRIVATE_|speakerNotes|citations|correctValue|explanation/);
+    expect(
+      (await f.presentations.getPresentationVersion(f.actor.workspaceId, f.version.id))?.content,
+    ).toEqual(f.content);
+  });
+
   it("returns typed410 only for an unaccepted expired request and preserves accepted expired receipt recovery", async () => {
     const f = await fixture(),
       original = { ...f.input, expiresAt: new Date(Date.now() + 86_400_000).toISOString() };

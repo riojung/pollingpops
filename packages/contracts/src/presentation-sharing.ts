@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PresentationLiveContentBlockSchema } from "./presentation-content";
+import { PresentationSceneDesignSchema } from "./presentation-scene";
 
 export const CreatePresentationShareSchema = z
   .object({
@@ -39,6 +40,7 @@ const reviewQuestion = z
   .object({
     id: z.string().uuid(),
     kind: z.literal("question"),
+    design: PresentationSceneDesignSchema.optional(),
     question: z
       .object({
         type: z.enum([

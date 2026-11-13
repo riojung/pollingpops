@@ -255,7 +255,7 @@ describe("reviewed Presentation text assistance contracts", () => {
       });
       expect(next.blocks[0]).toEqual({ ...old.blocks[0], textAssistance: metadata });
       expect(next.spatial).toEqual(old.spatial);
-      expect(schema.safeParse({ ...next, schemaVersion: 17 }).success).toBe(false);
+      expect(schema.safeParse({ ...next, schemaVersion: 18 }).success).toBe(false);
     }
     expect(JSON.stringify(PresentationDraftSchema.parse(old))).toBe(bytes);
   });

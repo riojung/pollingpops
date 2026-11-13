@@ -1,0 +1,188 @@
+.background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  container-type: inline-size;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.layer {
+  position: absolute;
+  inset: -20%;
+  opacity: 0.14;
+  animation: drift 28s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.background[data-motion-playing="true"] .layer {
+  animation-play-state: running;
+}
+.layer:nth-child(2) {
+  animation-duration: 36s;
+  animation-direction: alternate-reverse;
+}
+.layer:nth-child(3) {
+  animation-duration: 44s;
+}
+.background[data-motion-background="aurora"] .layer:nth-child(1) {
+  background: radial-gradient(ellipse at 24% 8%, var(--motion-a), transparent 60%);
+}
+.background[data-motion-background="aurora"] .layer:nth-child(2) {
+  background: radial-gradient(ellipse at 82% 30%, var(--motion-b), transparent 55%);
+}
+.background[data-motion-background="aurora"] .layer:nth-child(3) {
+  background: radial-gradient(ellipse at 42% 100%, var(--motion-c), transparent 55%);
+}
+.background[data-motion-background="waves"] .layer {
+  inset: 60% -25% -60%;
+  border-radius: 48% 52% 0 0;
+  background: var(--motion-a);
+  animation-name: wave;
+  opacity: 0.08;
+}
+.background[data-motion-background="waves"] .layer:nth-child(2) {
+  inset-block-start: 68%;
+  background: var(--motion-b);
+  transform: rotate(-7deg);
+}
+.background[data-motion-background="waves"] .layer:nth-child(3) {
+  inset-block-start: 76%;
+  background: var(--motion-c);
+  transform: rotate(8deg);
+}
+.background[data-motion-background="orbs"] .layer:nth-child(1) {
+  background: radial-gradient(circle at 12% 25%, var(--motion-a), transparent 30%);
+}
+.background[data-motion-background="orbs"] .layer:nth-child(2) {
+  background: radial-gradient(circle at 86% 68%, var(--motion-b), transparent 32%);
+}
+.background[data-motion-background="orbs"] .layer:nth-child(3) {
+  background: radial-gradient(circle at 65% 12%, var(--motion-c), transparent 26%);
+}
+.background[data-motion-background="mesh"] .layer:nth-child(1) {
+  background:
+    radial-gradient(ellipse at 0 0, var(--motion-a), transparent 60%),
+    radial-gradient(ellipse at 100% 100%, var(--motion-b), transparent 60%);
+}
+.background[data-motion-background="mesh"] .layer:nth-child(2) {
+  background:
+    radial-gradient(ellipse at 100% 0, var(--motion-c), transparent 55%),
+    radial-gradient(ellipse at 0 100%, var(--motion-b), transparent 55%);
+}
+.background[data-motion-background="mesh"] .layer:nth-child(3) {
+  background-image:
+    linear-gradient(var(--motion-a) 1px, transparent 1px),
+    linear-gradient(90deg, var(--motion-a) 1px, transparent 1px);
+  background-size: 20% 25%;
+  opacity: 0.06;
+}
+.background[data-motion-background="ribbons"] .layer {
+  inset: 45% -30% -60%;
+  border: 4cqw solid var(--motion-a);
+  border-radius: 50%;
+  transform: rotate(-25deg);
+  animation-name: ribbon;
+  opacity: 0.1;
+}
+.background[data-motion-background="ribbons"] .layer:nth-child(2) {
+  inset-block-start: 57%;
+  border-color: var(--motion-b);
+}
+.background[data-motion-background="ribbons"] .layer:nth-child(3) {
+  inset-block-start: 70%;
+  border-color: var(--motion-c);
+}
+.background[data-motion-background="stars"] .layer {
+  opacity: 0.18;
+  animation-name: stars;
+  background:
+    radial-gradient(circle at 14% 22%, var(--motion-a) 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 12%, var(--motion-b) 0 2px, transparent 3px),
+    radial-gradient(circle at 88% 68%, var(--motion-c) 0 2px, transparent 3px),
+    radial-gradient(circle at 28% 74%, var(--motion-a) 0 2px, transparent 3px),
+    radial-gradient(circle at 60% 55%, var(--motion-b) 0 1px, transparent 2px),
+    radial-gradient(circle at 44% 35%, var(--motion-c) 0 1px, transparent 2px);
+}
+.background[data-motion-background="stars"] .layer:nth-child(2) {
+  background-position: 8cqw -6cqw;
+}
+.background[data-motion-background="stars"] .layer:nth-child(3) {
+  background-position: -10cqw 8cqw;
+}
+@keyframes drift {
+  from {
+    transform: translate(-3%, -2%) scale(1);
+  }
+  to {
+    transform: translate(4%, 3%) scale(1.08);
+  }
+}
+@keyframes wave {
+  from {
+    transform: translate(-3%, 2%) rotate(-6deg);
+  }
+  to {
+    transform: translate(3%, -3%) rotate(6deg);
+  }
+}
+@keyframes ribbon {
+  from {
+    transform: translate(-2%, 3%) rotate(-25deg);
+  }
+  to {
+    transform: translate(4%, -3%) rotate(-17deg);
+  }
+}
+@keyframes stars {
+  from {
+    transform: translate(-1%, 2%);
+  }
+  to {
+    transform: translate(2%, -2%);
+  }
+}
+.controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+  padding-block: 6px;
+  color: var(--ui-text-subtle);
+}
+.controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.controls button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.controls p {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .background .layer {
+    animation: none;
+  }
+}
+@media print {
+  .background .layer {
+    animation: none;
+  }
+  .controls {
+    display: none;
+  }
+}

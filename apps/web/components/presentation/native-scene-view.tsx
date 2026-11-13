@@ -34,6 +34,10 @@ import {
   type NativeSceneInteractionRuntime,
 } from "./native-scene-interaction-view";
 import { selectedNativeSceneBounds } from "../../lib/presentation-native-geometry";
+import {
+  PresentationMotionBackground,
+  PresentationMotionControls,
+} from "./presentation-motion-background";
 
 type FramedNode = Exclude<PresentationSceneNode, { type: "connector" }>;
 type Connector = Extract<PresentationSceneNode, { type: "connector" }>;
@@ -144,6 +148,8 @@ interface NativeSceneViewProps {
   interactionEditing?: boolean;
   /** Inert fixed-layout artwork for a creator's filmstrip, including on phones. */
   staticThumbnail?: boolean;
+  /** Freeze decorative backgrounds in inert layout comparisons. */
+  motionStatic?: boolean;
   /** Canvas supplies normal-flow selection controls outside the authored slide. */
   hideGeometryControls?: boolean;
   /** Creator-only passive annotations, never rendered by delivery or thumbnail callers. */
@@ -203,6 +209,7 @@ function NativeSceneSurface({
   interactionEditing = false,
   interactionRuntime,
   staticThumbnail = false,
+  motionStatic = false,
   hideGeometryControls = false,
   editorOverlay,
 }: NativeSceneViewProps) {
@@ -310,6 +317,11 @@ function NativeSceneSurface({
         data-native-spacing={design?.spacing}
         style={designStyle}
       >
+        <PresentationMotionBackground
+          preset={design?.motionBackground}
+          theme={design?.theme ?? "paper"}
+          static={staticThumbnail || motionStatic || outline}
+        />
         <svg
           className={styles.connections}
           aria-hidden="true"
@@ -551,6 +563,9 @@ function NativeSceneSurface({
           : null}
         {editing ? editorOverlay : null}
       </article>
+      {!staticThumbnail && !motionStatic && !outline ? (
+        <PresentationMotionControls preset={design?.motionBackground} locale={locale} />
+      ) : null}
     </div>
   );
 }

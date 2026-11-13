@@ -82,7 +82,7 @@ function LayoutPreview({
             data-layout-plane="true"
             style={{ width: PLANE_WIDTH, height: PLANE_HEIGHT, transform: `scale(${scale})` }}
           >
-            <NativeSceneView scene={scene} fixedLayout locale={locale} />
+            <NativeSceneView scene={scene} fixedLayout motionStatic locale={locale} />
           </div>
         </div>
         <NativeSceneFitFeedback root={root} scene={scene} locale={locale} />

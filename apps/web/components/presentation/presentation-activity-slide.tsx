@@ -12,6 +12,10 @@ import {
 } from "./presentation-activity-copy";
 import { useNativeTextOverflow } from "./use-native-text-overflow";
 import styles from "./presentation-activity-slide.module.css";
+import {
+  PresentationMotionBackground,
+  PresentationMotionControls,
+} from "./presentation-motion-background";
 
 /** Audience-safe shape shared by draft artwork and phase-fenced delivery projections. */
 export interface PresentationActivityQuestion {
@@ -200,6 +204,11 @@ export function PresentationActivitySlide({
       lang={locale}
     >
       <div className={styles.stage}>
+        <PresentationMotionBackground
+          preset={design.motionBackground}
+          theme={design.theme}
+          static={staticThumbnail || readingView}
+        />
         <article
           {...(staticThumbnail ? {} : overflow)}
           className={styles.surface}
@@ -314,6 +323,9 @@ export function PresentationActivitySlide({
           </div>
         </article>
       </div>
+      {!staticThumbnail && !readingView ? (
+        <PresentationMotionControls preset={design.motionBackground} locale={locale} />
+      ) : null}
       {!staticThumbnail && needsRoom ? (
         <div className={styles.fitGuidance}>
           <span>{copy.fitGuidance}</span>

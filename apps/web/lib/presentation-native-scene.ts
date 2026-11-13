@@ -151,9 +151,11 @@ export function updateNativeNode(
   const nodes = scene.nodes.map((node) => (node.id === id ? update(node) : node));
   return synchronizeNativeHotspots(scene, {
     ...scene,
-    schemaVersion: nodes.some((node) => node.type === "text" && node.lang !== undefined)
-      ? 7
-      : scene.schemaVersion,
+    schemaVersion:
+      scene.schemaVersion < 7 &&
+      nodes.some((node) => node.type === "text" && node.lang !== undefined)
+        ? 7
+        : scene.schemaVersion,
     nodes,
   });
 }

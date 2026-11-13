@@ -214,7 +214,7 @@ describe("durable bounded Presentation spatial layout", () => {
         ...content,
         schemaVersion: 16,
       });
-      expect(() => parse({ ...content, schemaVersion: 17 }, 17)).toThrow("Unsupported");
+      expect(() => parse({ ...content, schemaVersion: 18 }, 18)).toThrow("Unsupported");
     }
     expect(JSON.stringify(original)).toBe(bytes);
     expect(upcastPresentationContent({ ...content, spatial: undefined }, 14)).not.toHaveProperty(

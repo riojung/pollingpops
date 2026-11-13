@@ -149,17 +149,21 @@ for (const suffix of ["desktop", "phone @mobile"]) {
         await page.emulateMedia({ colorScheme: mode });
         await page.goto("/library");
         await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
-        const typeColors = [];
-        for (const type of ["rounds", "presentations", "surveys"]) {
+        for (const [type, kind, label] of [
+          ["rounds", "round", "Rounds"],
+          ["presentations", "presentation", "Presentations"],
+          ["surveys", "survey", "Surveys"],
+        ]) {
           const tab = page.locator(`#${type}-tab`);
           await tab.click();
           await expect(tab).toHaveAttribute("aria-selected", "true");
-          await expect(tab.locator('svg[aria-hidden="true"]')).toHaveCount(1);
-          typeColors.push(await tab.evaluate((node) => getComputedStyle(node).backgroundColor));
+          await expect(tab).toHaveAccessibleName(new RegExp(`^${label} \\d+$`));
+          await expect(
+            tab.locator(`svg[aria-hidden="true"][focusable="false"][data-kind="${kind}"]`),
+          ).toHaveCount(1);
           await expect(collection(page).getByRole("article")).toHaveCount(8);
           colors[`library-${type}-${mode}`] = await readableSignals(page.locator("main"));
         }
-        expect(new Set(typeColors).size).toBe(3);
         await page.locator("#rounds-tab").click();
         for (const view of ["grid", "list"] as const) {
           await page

@@ -50,8 +50,8 @@
   top: 0;
   left: 14px;
   right: 14px;
-  height: 3px;
-  background: var(--result-kind-ink);
+  height: 2px;
+  background: var(--ui-border);
   content: "";
   border-radius: 0 0 4px 4px;
 }

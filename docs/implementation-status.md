@@ -8,6 +8,24 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace palette refinement November 13, 2026
+
+The `codex/workspace-muted-colors` source refines the workspace colors below into a
+shared neutral and sage palette across Library, Sessions, Results, Home and Assignments.
+Type previews and icons use neutral surfaces and text, with one sage selected-tab treatment.
+Routine draft and processing badges are neutral; published and active work use soft sage.
+Status icons and translated labels carry the lifecycle meaning, with red reserved for work
+that needs attention. Full-height colored card rails are removed. Host, Resume and report
+actions follow the charcoal primary-button style; Edit and Assign use neutral outlined
+buttons. Unselected favorite stars and Results widget dividers are also neutral.
+
+Validation: 51 focused contrast and signal tests, web lint, formatting and a production beta
+build pass. Four production browser journeys pass across desktop Chromium/Firefox and phone
+Chromium/WebKit, covering both themes, grid/list density, resolved text contrast, action
+eligibility, keyboard focus, forced colors and German labels. Local fixture screenshots and
+metrics are under `artifacts/workspace-colors/`. An independent read-only CSS review found
+no actionable issues. This local styling refinement does not advance release acceptance gates.
+
 ### Workspace type and lifecycle colors November 12, 2026
 
 The `codex/workspace-semantic-colors` source adds shared type, lifecycle and action

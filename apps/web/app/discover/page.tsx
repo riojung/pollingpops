@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
 import { useLocale } from "../../components/locale-provider";
 import { StarterGallery } from "../../components/workspace/starter-gallery";
 import { WorkspacePage } from "../../components/workspace/workspace-shell";
@@ -24,6 +25,17 @@ function PresentationCreateLink({ card = false }: { card?: boolean }) {
   ) : (
     <Link className={hub.heroPrimary} href="/create/presentation">
       {t("pages.discover.presentation.create")}
+    </Link>
+  );
+}
+
+function PresentationDesignLink() {
+  const { locale } = useLocale();
+  const { productFeatures } = useWorkspace();
+  if (!productFeatures?.presentations) return null;
+  return (
+    <Link className="button-quiet" href="/templates#designs">
+      {presentationDesignCopy(locale).browseDesigns}
     </Link>
   );
 }
@@ -81,6 +93,7 @@ export default function DiscoverPage() {
             <h2>{t("pages.discover.explore.title")}</h2>
             <p>{t("pages.discover.explore.description")}</p>
           </div>
+          <PresentationDesignLink />
         </div>
         <div className={hub.cardGrid}>
           <Link className={hub.quickCard} href="/templates">

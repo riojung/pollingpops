@@ -8,6 +8,43 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation design library November 13, 2026
+
+The `codex/presentation-design-library` source adds a separate Presentation design collection
+alongside the existing content templates. Eight original families provide 64 native layouts:
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas. All ten
+creation languages have discovery, preview and illustrative slide copy. Templates → Designs,
+the dedicated design starting point and the editor's Presentation designs control expose the
+same collection. The template library retains its existing Rounds default.
+
+Applying style to a content slide or the whole presentation preserves objects, geometry,
+rich text, language, notes, media references, questions and existing motion. Ordinary content
+slides use the established native adapter. Activities inherit nearby visible content styling;
+image-based imports retain the colors in their artwork. Adding one layout is a separate,
+undoable operation with fresh IDs and its own selected design. New-design creation freezes
+the account-scoped creation and draft requests for idempotent retries, including lost POST
+acknowledgements and gallery remounts. Failed attempts expose a localized Start another action
+that creates a fresh presentation while keeping any previously created draft unchanged.
+Preview includes authenticated images and a complete
+reading alternative. Static exports now retain inherited static palettes/fonts on activities
+as well as native and ordinary pages.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,746 tests and 521 opt-in skips,
+including formatting, lint, types, all four production builds and compiled startup. All 64
+layout recipes pass publication validation. Twelve production browser journeys pass across
+desktop Chromium/Firefox and phone Chromium/WebKit: separate discovery, real layout previews,
+German/Korean copy, keyboard focus, accessibility/reflow, lost creation acknowledgements,
+editable creation, content/motion preservation, undo/redo, scope isolation, layout insertion
+and save/reload. A real revision-conflict scenario verifies safe retries and fresh creation
+without changing the previously edited target. The browser fixture also passes a separate
+TypeScript check. Independent read-only reviews verified the addressed motion, byte-budget,
+creation-lifecycle and retained-attempt recovery issues.
+Local captures and a source receipt are under `artifacts/presentation-designs/`.
+
+See [design research and behavior](evidence/presentation-design-library-2026-11.md). The
+collection adds no dependency, external asset service, per-use AI request or schema migration.
+Hosted, native-language, customer and physical-device acceptance gates remain separate.
+
 ### Workspace palette refinement November 13, 2026
 
 The `codex/workspace-muted-colors` source refines the workspace colors below into a

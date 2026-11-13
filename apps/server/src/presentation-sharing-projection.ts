@@ -48,9 +48,9 @@ export function projectPresentationReview(
   const source = PresentationContentSchema.parse(version.content);
   const blocks = source.blocks.map((block) => {
     const design = presentationBlockDesign(source.blocks, block.id);
-    // Freeze inherited motion before an export selects a single page. Omitting static-only
-    // inheritance preserves established legacy export output and recipient wire records.
-    const motionDesign = design?.motionBackground ? { design } : {};
+    // Freeze inherited appearance before an export selects a single page. Donor-less
+    // legacy presentations still omit design and retain their original rendering.
+    const effectiveDesign = design ? { design } : {};
     if (block.kind === "content")
       return {
         id: block.id,
@@ -66,14 +66,14 @@ export function projectPresentationReview(
         })),
         mediaId: block.mediaId,
         mediaAlt: block.mediaAlt,
-        ...motionDesign,
+        ...effectiveDesign,
         ...(block.scene ? { scene: projectScene(block.scene) } : {}),
       };
     const q = block.question;
     return {
       id: block.id,
       kind: block.kind,
-      ...motionDesign,
+      ...effectiveDesign,
       question: {
         type: q.type,
         prompt: q.prompt,

@@ -8,7 +8,7 @@ import {
   type PresentationSceneDesign,
 } from "@openround/contracts";
 import type { PresentationVersionRecord } from "@openround/db";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { presentationBlockDesign } from "../src/presentation-block-design.js";
 import { paintPresentationMotionPoster } from "../src/presentation-motion-poster.js";
 import { projectPresentationReview } from "../src/presentation-sharing-projection.js";
@@ -82,7 +82,7 @@ function question(value: number) {
     },
   };
 }
-function fixture() {
+function fixture(staticFont?: PresentationSceneDesign["font"]) {
   const draft = PresentationDraftSchema.parse({
     schemaVersion: 17,
     title: "Inherited public motion",
@@ -101,6 +101,12 @@ function fixture() {
       question(11),
     ],
   });
+  if (staticFont)
+    for (const block of draft.blocks)
+      if (block.kind === "content" && block.scene?.design) {
+        delete block.scene.design.motionBackground;
+        if (block.scene.design.theme === "ocean") block.scene.design.font = staticFont;
+      }
   const version: PresentationVersionRecord = {
     id: id(500),
     workspaceId: id(501),
@@ -136,7 +142,7 @@ const samples = [
   [1160, 680],
 ] as const;
 
-describe("static export inherited motion design", () => {
+describe("static export inherited presentation design", () => {
   it("uses the complete visible donor context, keeps static barriers and preserves source bytes/privacy", () => {
     const { draft, version } = fixture(),
       frozen = JSON.stringify(version);
@@ -151,7 +157,7 @@ describe("static export inherited motion design", () => {
     expect(review.blocks.some((block) => block.id === id(3))).toBe(false);
     for (const blockId of [1, 2, 5, 6, 7])
       expect(review.blocks.find((block) => block.id === id(blockId))!.design).toEqual(ocean);
-    expect(review.blocks.find((block) => block.id === id(9))).not.toHaveProperty("design");
+    expect(review.blocks.find((block) => block.id === id(9))!.design).toEqual(still);
     const native = review.blocks.find((block) => block.id === id(5))!;
     expect(native).toMatchObject({ scene: { schemaVersion: 1 } });
     expect(native).not.toHaveProperty("scene.design");
@@ -213,7 +219,7 @@ describe("static export inherited motion design", () => {
       expect(document.numPages).toBe(review.blocks.length);
       expect(await document.getJSActions()).toBeNull();
       for (const [index, block] of review.blocks.entries()) {
-        if (!block.design?.motionBackground) continue;
+        if (!block.design) continue;
         const expected = await decode((await render({ ...review, blocks: [block] }, "png")).bytes),
           page = await document.getPage(index + 1),
           ctx = createCanvas(1280, 720).getContext("2d");
@@ -230,18 +236,153 @@ describe("static export inherited motion design", () => {
     }
   }, 20_000);
 
-  it("leaves no-motion legacy exports unchanged and rejects non-public design fields", async () => {
+  it.each(["serif", "mono"] as const)(
+    "paints inherited static palettes and %s fonts on native, ordinary and question single-page PNGs",
+    async (font) => {
+      const { draft, version } = fixture(font),
+        frozen = JSON.stringify(version),
+        review = project(version),
+        design: PresentationSceneDesign = { theme: "ocean", font, spacing: "compact" };
+      for (const blockId of [1, 2, 5, 6, 7]) {
+        expect(presentationBlockDesign(draft.blocks, id(blockId))).toEqual(design);
+        const block = review.blocks.find((block) => block.id === id(blockId))!;
+        expect(block.design).toEqual(design);
+        // Render the selected page without its source donors, as an isolated PNG export does.
+        const fontSetter = vi.spyOn(
+          Object.getPrototypeOf(createCanvas(1, 1).getContext("2d")),
+          "font",
+          "set",
+        );
+        let bytes: Buffer;
+        try {
+          bytes = (await render({ ...review, blocks: [block] }, "png")).bytes;
+          // Generic families can share a fallback on export hosts. Verify the requested
+          // family at the real canvas boundary while checking rendered palette pixels below.
+          const expectedFamily = font === "mono" ? "monospace" : "serif";
+          expect(fontSetter.mock.calls.length).toBeGreaterThan(0);
+          expect(
+            fontSetter.mock.calls.every(([value]) =>
+              String(value).endsWith(` ${expectedFamily}, StaticCJK, StaticEmoji`),
+            ),
+          ).toBe(true);
+        } finally {
+          fontSetter.mockRestore();
+        }
+        const ctx = await decode(bytes);
+        for (const [x, y] of samples)
+          expect(Array.from(ctx.getImageData(x, y, 1, 1).data)).toEqual([234, 248, 250, 255]);
+        const pixels = ctx.getImageData(0, 0, 1280, 320).data;
+        let textPixels = 0;
+        for (let index = 0; index < pixels.length; index += 4)
+          if (
+            pixels[index] === 17 &&
+            pixels[index + 1] === 57 &&
+            pixels[index + 2] === 69 &&
+            pixels[index + 3] === 255
+          )
+            textPixels++;
+        expect(textPixels).toBeGreaterThan(100);
+        if (block.kind === "content" && block.scene) {
+          const explicit = await render(
+            {
+              ...review,
+              blocks: [
+                {
+                  ...block,
+                  design: undefined,
+                  scene: { ...block.scene, schemaVersion: 3, design },
+                },
+              ],
+            },
+            "png",
+          );
+          expect(bytes.equals(explicit.bytes)).toBe(true);
+        }
+      }
+      expect(review.blocks.find((block) => block.id === id(9))!.design).toEqual(still);
+      expect(JSON.stringify(review)).not.toMatch(
+        /PRIVATE_|isCorrect|speakerNotes|explanation|hidden/,
+      );
+      expect(JSON.stringify(version)).toBe(frozen);
+    },
+  );
+
+  it.each(["html", "offline_html"] as const)(
+    "embeds every static design page in %s with identical PNG appearance",
+    async (format) => {
+      const { version } = fixture("mono"),
+        frozen = JSON.stringify(version),
+        review = project(version),
+        result = await render(review, format),
+        html = result.bytes.toString("utf8"),
+        snapshots = [...html.matchAll(/class="snapshot" src="data:image\/png;base64,([^"]+)"/g)];
+      expect(snapshots).toHaveLength(review.blocks.length);
+      for (const [index, block] of review.blocks.entries()) {
+        const png = await render({ ...review, blocks: [block] }, "png");
+        expect(Buffer.from(snapshots[index]![1]!, "base64").equals(png.bytes)).toBe(true);
+      }
+      expect(html).not.toMatch(/PRIVATE_|isCorrect|speakerNotes|explanation/);
+      expect(html).not.toMatch(/<(?:script|iframe|video|audio)\b|animation|requestAnimationFrame/i);
+      expect(JSON.stringify(version)).toBe(frozen);
+    },
+  );
+
+  it("round-trips static palette and font rasters for every page type through PDF", async () => {
+    const { version } = fixture("mono"),
+      frozen = JSON.stringify(version),
+      review = project(version),
+      result = await render(review, "pdf"),
+      pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs"),
+      task = pdfjs.getDocument({
+        data: new Uint8Array(result.bytes),
+        useSystemFonts: false,
+        verbosity: 0,
+      });
+    const document = await task.promise;
+    try {
+      expect(document.numPages).toBe(review.blocks.length);
+      expect(await document.getJSActions()).toBeNull();
+      for (const [index, block] of review.blocks.entries()) {
+        const expected = await decode((await render({ ...review, blocks: [block] }, "png")).bytes),
+          page = await document.getPage(index + 1),
+          ctx = createCanvas(1280, 720).getContext("2d");
+        await page.render({
+          canvas: null,
+          canvasContext: ctx as unknown as CanvasRenderingContext2D,
+          viewport: page.getViewport({ scale: 1 }),
+        }).promise;
+        // The PDF embeds lossless page images, including the text's font rasterization.
+        expect(
+          Buffer.from(ctx.getImageData(0, 0, 1280, 720).data).equals(
+            Buffer.from(expected.getImageData(0, 0, 1280, 720).data),
+          ),
+        ).toBe(true);
+      }
+      expect(JSON.stringify(version)).toBe(frozen);
+    } finally {
+      await task.destroy();
+    }
+  }, 20_000);
+
+  it("leaves donor-less legacy exports unchanged and rejects non-public design fields", async () => {
     const { version } = fixture();
     for (const block of version.content.blocks)
-      if (block.kind === "content" && block.scene?.design)
-        delete block.scene.design.motionBackground;
+      if (block.kind === "content" && block.scene) delete block.scene.design;
     const review = project(version);
     expect(review.blocks.every((block) => block.design === undefined)).toBe(true);
     for (const blockId of [1, 2, 5, 6, 7]) {
       const block = review.blocks.find((block) => block.id === id(blockId))!,
-        expected = await render({ ...review, blocks: [block] }, "png"),
-        deliveredStatic = await render({ ...review, blocks: [{ ...block, design: still }] }, "png");
-      expect(deliveredStatic.bytes.equals(expected.bytes)).toBe(true);
+        ctx = await decode((await render({ ...review, blocks: [block] }, "png")).bytes),
+        expected = createCanvas(1280, 720).getContext("2d");
+      if (block.kind === "content" && !block.scene) {
+        const gradient = expected.createLinearGradient(0, 0, 1280, 720);
+        gradient.addColorStop(0, "#f8fbff");
+        gradient.addColorStop(1, "#fff");
+        expected.fillStyle = gradient;
+      } else expected.fillStyle = block.kind === "question" ? "#f8fbff" : "#fff";
+      expected.fillRect(0, 0, 1280, 720);
+      for (const [x, y] of samples)
+        expect(ctx.getImageData(x, y, 1, 1).data).toEqual(expected.getImageData(x, y, 1, 1).data);
     }
     const question = review.blocks.find((block) => block.kind === "question")!;
     for (const design of [

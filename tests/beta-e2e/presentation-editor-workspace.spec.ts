@@ -1,6 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
+import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { ContentSlideDraft, PresentationScene } from "../../packages/contracts/src/index.ts";
+import type {
+  ContentSlideDraft,
+  InteractiveQuestionBlockDraft,
+  PresentationScene,
+} from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import {
   closeE01Overlays,
@@ -12,6 +17,7 @@ import {
   openE01Inspector,
   openE01Navigator,
   readE01Record,
+  selectE01Block,
   type E01Record,
 } from "./presentation-e01-support";
 
@@ -71,6 +77,106 @@ async function expectIcon(control: Locator) {
   await expect(control.locator('svg[aria-hidden="true"]')).toHaveCount(1);
 }
 
+async function expectLargeTextArea(input: Locator) {
+  await expect(input).toBeEditable();
+  await input.scrollIntoViewIfNeeded();
+  await expect
+    .poll(async () => {
+      const bounds = await input.boundingBox();
+      return bounds?.height ?? 0;
+    })
+    .toBeGreaterThanOrEqual(280);
+  await withinViewport(input.page(), input);
+  expect(
+    await input.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return style.overflowY;
+    }),
+  ).toMatch(/auto|scroll/);
+}
+
+async function selectText(input: Locator, start: number, end: number) {
+  await input.focus();
+  await input.evaluate(
+    (element, range) => {
+      (element as HTMLTextAreaElement).setSelectionRange(range.start, range.end);
+    },
+    { start, end },
+  );
+  // React observes the browser selection after a real keyboard event in every engine.
+  await input.press("Shift");
+}
+
+async function expectCompactTabs(inspector: Locator, sections: Array<[string, string]>) {
+  const tabs = inspector.getByRole("tablist", { name: "Inspector sections", exact: true });
+  await withinViewport(inspector.page(), tabs);
+  await expect(tabs.getByRole("tab")).toHaveCount(sections.length);
+  for (const [id, label] of sections) {
+    const tab = tabs.locator(`#inspector-tab-${id}`);
+    await expect(tab).toHaveAccessibleName(label);
+    await expect(tab).toHaveAttribute("aria-label", label);
+    await expect(tab).toHaveAttribute("title", label);
+    await expect(tab).toHaveAttribute("aria-controls", "inspector-panel");
+    await expectIcon(tab);
+    expect((await tab.innerText()).trim()).toBe(id === "readiness" ? "1" : "");
+  }
+  const geometry = await tabs.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return {
+      height: bounds.height,
+      fits: element.scrollWidth <= element.clientWidth + 1,
+      buttons: Array.from(element.querySelectorAll('[role="tab"]'), (tab) => {
+        const rect = tab.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      }),
+    };
+  });
+  expect(geometry.height).toBeLessThanOrEqual(52);
+  expect(geometry.fits).toBe(true);
+  const rowTop = geometry.buttons[0]!.y;
+  for (const [index, bounds] of geometry.buttons.entries()) {
+    expect(Math.abs(bounds.y - rowTop)).toBeLessThanOrEqual(1);
+    expect(bounds.height).toBeGreaterThanOrEqual(40);
+    expect(bounds.width).toBeGreaterThanOrEqual(40);
+    if (index > 0) {
+      const previous = geometry.buttons[index - 1]!;
+      expect(bounds.x).toBeGreaterThanOrEqual(previous.x + previous.width - 1);
+    }
+  }
+  await expect(
+    tabs.locator('#inspector-tab-readiness [data-inspector-tab-badge][aria-hidden="true"]'),
+  ).toHaveText("1");
+
+  async function active(id: string) {
+    const selected = tabs.locator(`#inspector-tab-${id}`);
+    await expect(selected).toBeFocused();
+    await expect(selected).toHaveAttribute("aria-selected", "true");
+    await expect(selected).toHaveAttribute("tabindex", "0");
+    await expect(tabs.locator('[aria-selected="true"]')).toHaveCount(1);
+    await expect(tabs.locator('[tabindex="0"]')).toHaveCount(1);
+    await expect(inspector.getByRole("tabpanel")).toHaveAttribute(
+      "aria-labelledby",
+      `inspector-tab-${id}`,
+    );
+  }
+  const first = tabs.locator(`#inspector-tab-${sections[0]![0]}`);
+  const lastId = sections.at(-1)![0];
+  await first.click();
+  await first.focus();
+  await active(sections[0]![0]);
+  for (const [key, destination] of [
+    ["ArrowLeft", lastId],
+    ["ArrowRight", sections[0]![0]],
+    ["End", lastId],
+    ["Home", sections[0]![0]],
+    ["ArrowRight", sections[1]![0]],
+    ["ArrowLeft", sections[0]![0]],
+  ]) {
+    await inspector.page().keyboard.press(key!);
+    await active(destination!);
+  }
+}
+
 async function openNativePicker(page: Page, name: "Insert more" | "Interactions") {
   await closeE01Overlays(page);
   const trigger = page.locator(`summary[aria-label="${name}"]`);
@@ -82,6 +188,205 @@ async function openNativePicker(page: Page, name: "Insert more" | "Interactions"
 }
 
 for (const suffix of ["", " @mobile"]) {
+  test(`compact icon tabs preserve content and activity keyboard navigation${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(90_000);
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    await page.setViewportSize(narrow ? { width: 390, height: 844 } : { width: 1280, height: 720 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signInBeta(page);
+    const activity: InteractiveQuestionBlockDraft = {
+      id: randomUUID(),
+      kind: "question",
+      question: {
+        id: randomUUID(),
+        type: "numeric",
+        prompt: "Release checkpoint",
+        correctValue: "7",
+        tolerance: "-1",
+        unit: null,
+        timeLimitSeconds: 30,
+        basePoints: 100,
+        explanation: "Private scoring rationale",
+        mediaId: null,
+        mediaAlt: null,
+      },
+    };
+    const record = await createE01Deck(page, [e01Slide("Release plan"), activity]);
+    await enterE01Editor(page, record.id, narrow);
+    const contentSections: Array<[string, string]> = [
+      ["content", "Content"],
+      ["layout", "Layout"],
+      ["media", "Media"],
+      ["notes", "Notes"],
+      ["accessibility", "Access"],
+      ["readiness", "Ready (1)"],
+    ];
+    const activitySections: Array<[string, string]> = [
+      ["build", "Build"],
+      ["diagnose", "Diagnose"],
+      ["recover", "Recover"],
+      ["readiness", "Ready (1)"],
+    ];
+    for (const width of [narrow ? 390 : 1280, 320]) {
+      await page.setViewportSize({ width, height: width === 1280 ? 720 : 844 });
+      await selectE01Block(page, "Release plan", width <= 920);
+      const inspector = await openE01Inspector(page, "Content");
+      await expectCompactTabs(inspector, contentSections);
+      await selectE01Block(page, "Release checkpoint", width <= 920);
+      const toggle = page.locator('button[aria-controls="presentation-object-inspector"]');
+      if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+      await expectCompactTabs(inspector, activitySections);
+      await noOverflow(page);
+    }
+    await accessible(page);
+    expect((await readE01Record(page, record.id)).draft).toEqual(record.draft);
+  });
+
+  test(`large text editor preserves long formatted body and links through save and reload${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(120_000);
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    const viewport = narrow ? { width: 390, height: 844 } : { width: 1280, height: 720 };
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signInBeta(page);
+    const record = await workspaceDeck(page);
+    const body = currentSlide(record).scene.nodes[1]!;
+    const inspector = page.locator("#presentation-object-inspector");
+    const input = inspector.getByRole("textbox", { name: "Node text", exact: true });
+    const selected = inspector.getByRole("combobox", { name: "Selected object", exact: true });
+    await enterE01Editor(page, record.id, narrow);
+    await openE01Inspector(page, "Content");
+    await selected.selectOption(body.id);
+    await expectLargeTextArea(input);
+    await page.setViewportSize({ width: 320, height: 844 });
+    // The resize observer closes desktop panels when entering the compact layout.
+    if (!narrow) await expect(inspector).toBeHidden();
+    await openE01Inspector(page, "Content");
+    await expectLargeTextArea(input);
+    await noOverflow(page);
+    await page.setViewportSize(viewport);
+    if (!narrow) await expect(inspector).toBeVisible();
+    await openE01Inspector(page, "Content");
+    const paragraphs = [
+      "Coordinate the release with the agreed owner and a clear decision date.",
+      "Read the launch brief",
+      ...Array.from(
+        { length: 15 },
+        (_, index) =>
+          `Planning note ${index + 1}: confirm the audience, review the evidence, and record the next action before the release review.`,
+      ),
+    ];
+    const longText = paragraphs.join("\n");
+    await input.fill(longText);
+    await expect
+      .poll(async () => e01Body((await readE01Record(page, record.id)).draft))
+      .toBe(longText);
+    await inspector.getByRole("button", { name: "Format text", exact: true }).click();
+    const toolbar = inspector.locator('[aria-label="Text formatting"]');
+    await expect(toolbar).toBeVisible();
+    await expectLargeTextArea(input);
+    const [toolbarBounds, inputBounds] = await Promise.all([
+      toolbar.boundingBox(),
+      input.boundingBox(),
+    ]);
+    expect(toolbarBounds!.y + toolbarBounds!.height).toBeLessThanOrEqual(inputBounds!.y);
+    await toolbar.scrollIntoViewIfNeeded();
+    await page.screenshot({ scale: "css", path: info.outputPath("large-rich-text-editor.png") });
+    await selectText(input, 0, "Coordinate".length);
+    await inspector.getByRole("button", { name: "Bold", exact: true }).click();
+    await expect(inspector.getByRole("button", { name: "Bold", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const linkStart = longText.indexOf(paragraphs[1]!);
+    await selectText(input, linkStart, linkStart + paragraphs[1]!.length);
+    const link = "https://example.com/launch-brief";
+    const address = inspector.getByRole("textbox", { name: "Link address", exact: true });
+    await address.fill(link);
+    await inspector.getByRole("button", { name: "Apply link", exact: true }).click();
+    await openE01Inspector(page, "Layout");
+    await openE01Inspector(page, "Content");
+    await expect(selected).toHaveValue(body.id);
+    await expect(input).toHaveValue(longText);
+    await expect(address).toHaveValue(link);
+
+    // The last line remains reachable in the textarea's own scroll area.
+    await selectText(input, longText.length, longText.length);
+    await input.press("End");
+    await input.pressSequentially(" Final review complete.");
+    const revised = `${longText} Final review complete.`;
+    await expect(input).toHaveValue(revised);
+    await expect(input).toBeFocused();
+    await expect.poll(() => input.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect
+      .poll(() =>
+        input.evaluate((element) => {
+          const textarea = element as HTMLTextAreaElement;
+          // Firefox reveals the last text line without scrolling its trailing padding into view.
+          const paddingBottom = Number.parseFloat(getComputedStyle(textarea).paddingBottom);
+          return textarea.scrollHeight - textarea.clientHeight - textarea.scrollTop - paddingBottom;
+        }),
+      )
+      .toBeLessThanOrEqual(2);
+    const expectedRichText = {
+      paragraphs: paragraphs.map((text, index) => ({
+        kind: "paragraph",
+        runs:
+          index === 0
+            ? [{ text: "Coordinate", bold: true }, { text: text.slice("Coordinate".length) }]
+            : index === 1
+              ? [{ text, href: link }]
+              : [
+                  {
+                    text: index === paragraphs.length - 1 ? `${text} Final review complete.` : text,
+                  },
+                ],
+      })),
+    };
+    await expect
+      .poll(async () => currentSlide(await readE01Record(page, record.id)).scene.nodes[1])
+      .toMatchObject({ id: body.id, text: revised, richText: expectedRichText });
+    const saved = currentSlide(await readE01Record(page, record.id));
+    await noOverflow(page);
+    await page.reload();
+    await openE01Inspector(page, "Content");
+    await selected.selectOption(body.id);
+    await expect(input).toHaveValue(revised);
+    await expectLargeTextArea(input);
+    const canvasBody = page.locator(`[data-native-scene] [data-node-id="${body.id}"]`);
+    await expect(canvasBody.locator("strong")).toHaveText("Coordinate");
+    await expect(
+      canvasBody.getByRole("link", { name: paragraphs[1]!, exact: true }),
+    ).toHaveAttribute("href", link);
+    await page.setViewportSize({ width: 320, height: 844 });
+    if (!narrow) await expect(inspector).toBeHidden();
+    await openE01Inspector(page, "Content");
+    await expectLargeTextArea(input);
+    await expect(input).toHaveValue(revised);
+    for (const control of [
+      inspector.getByRole("button", { name: "Bold", exact: true }),
+      inspector.getByRole("button", { name: "Italic", exact: true }),
+      inspector.getByRole("combobox", { name: "Paragraph style", exact: true }),
+      address,
+      inspector.getByRole("button", { name: "Apply link", exact: true }),
+    ]) {
+      await control.scrollIntoViewIfNeeded();
+      await withinViewport(page, control);
+    }
+    await toolbar.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      scale: "css",
+      path: info.outputPath("large-rich-text-editor-320px.png"),
+    });
+    await noOverflow(page);
+    await accessible(page);
+    expect(currentSlide(await readE01Record(page, record.id))).toEqual(saved);
+  });
+
   test(`grouped Content and visual Layout controls preserve editable slide history${suffix}`, async ({
     page,
   }, info) => {

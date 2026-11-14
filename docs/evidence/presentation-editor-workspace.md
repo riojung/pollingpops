@@ -68,3 +68,26 @@ assistance and remaining localization stay in the implementation gap map. Manual
 technology, physical devices, managed browsers, observed creator tasks and hosted cost/capacity
 qualification remain open. New source is local and has not been deployed to the running Docker
 application.
+
+## Compact tools and text editing follow-up
+
+Source: `codex/presentation-editor-text-tools`.
+
+Slide tools now use a single 48px icon row for both native content and activities. Localized
+tooltips, a visible current-section label, readiness counts, and the existing roving tab
+keyboard navigation keep each section identifiable. The heading no longer repeats an eyebrow.
+
+Selected text uses a compact formatting row above the writing surface, with selection-aware
+bold/italic and paragraph controls, clear formatting, grouped link tools, and localized
+character counts. Body fields have a 300px minimum height; title fields have a 180px minimum.
+Both plain and formatted text can resize vertically and scroll internally. Text limits,
+authored language, plain-text paste, document history, permissions, and publication contracts
+retain their existing behavior.
+
+Verification for this follow-up: **4,927 web tests passed**; web and browser-fixture type
+checks, scoped lint/formatting, and the production web build passed. **20 distinct production
+browser cases** were verified across Chromium desktop, Firefox desktop, Chromium phone, and
+WebKit phone, including 320px geometry and automated Axe checks. The final matrix passed 19
+cases; the remaining Firefox long-text case passed separately after correcting a test assertion
+to exclude visible bottom padding from its scroll calculation. No application source changed
+between those final browser runs. Desktop and 320px screenshots were visually inspected.

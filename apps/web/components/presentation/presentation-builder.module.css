@@ -777,33 +777,6 @@
   border-left: 1px solid var(--ui-border);
 }
 
-.inspectorTabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 5px;
-  padding: 12px;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.inspectorTab,
-.inspectorTabActive {
-  min-height: 36px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--ui-text-subtle);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: capitalize;
-  background: transparent;
-  cursor: pointer;
-}
-
-.inspectorTabActive {
-  color: var(--ui-accent-ink);
-  background: var(--ui-accent-soft);
-}
-
 .inspectorBody {
   height: calc(100% - 126px);
   padding: 22px;
@@ -1733,22 +1706,29 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 14px 12px;
-  font-size: 15px;
+  padding: 9px 12px 6px;
+  font-size: 14px;
 }
 .inspectorHeading > div {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 .inspectorHeading h2 {
   margin: 0;
   font-size: inherit;
   font-weight: 700;
+  white-space: nowrap;
 }
-.inspectorEyebrow {
+.inspectorCurrentSection {
+  min-width: 0;
+  overflow: hidden;
   color: var(--ui-text-muted);
-  font-size: 10px;
-  font-weight: 550;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .inspectorHeading button {
   display: grid;
@@ -1766,29 +1746,31 @@
   background: var(--ui-surface-hover);
 }
 .inspectorTabs {
-  display: grid;
+  display: flex;
   flex: 0 0 auto;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 10px 10px;
-  padding: 4px;
+  gap: 2px;
+  margin: 0 10px 12px;
+  padding: 3px;
   border: 1px solid var(--ui-border);
   border-radius: 11px;
   background: var(--ui-surface-soft);
 }
 .inspectorTab,
 .inspectorTabActive {
+  position: relative;
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
-  gap: 5px;
-  min-height: 52px;
-  padding: 7px 2px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 2px;
+  border: 0;
   border-radius: 7px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: none;
+  color: var(--ui-text-subtle);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 .inspectorTab svg,
 .inspectorTabActive svg {
@@ -1805,6 +1787,25 @@
   box-shadow:
     var(--ui-shadow-sm),
     inset 0 -2px var(--ui-accent);
+}
+.inspectorTab:focus-visible,
+.inspectorTabActive:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 1px;
+}
+.inspectorTabBadge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 14px;
+  padding: 1px 3px;
+  border: 1px solid var(--ui-surface);
+  border-radius: 7px;
+  color: var(--ui-warning-text);
+  background: var(--ui-warning-bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 .inspectorBody {
   flex: 1 1 auto;

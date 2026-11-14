@@ -50,7 +50,6 @@ import {
 import { formatDateTime } from "../../lib/i18n/format";
 import {
   addContentTextElement,
-  addPresentationSection,
   applyContentSlideLayout,
   assignPresentationBlockToSection,
   changePresentationQuestionType,
@@ -67,7 +66,6 @@ import {
   normalizePresentationRecoveryDraft,
   presentationReadiness,
   presentationInteractionTargets,
-  presentationSectionForBlock,
   promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
@@ -173,7 +171,14 @@ import {
   type TextAssistanceTarget,
   type TextAssistanceRecovery,
 } from "../../lib/presentation-text-assistance-client";
-import { PresentationSections } from "./presentation-sections";
+import { PresentationSectionHeader, PresentationSections } from "./presentation-sections";
+import { PresentationNavigatorResize } from "./presentation-navigator-resize";
+import {
+  addPresentationSectionAtBlock,
+  canMovePresentationSection,
+  movePresentationSection,
+  presentationSectionRuns,
+} from "../../lib/presentation-sections";
 import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
@@ -590,6 +595,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [presentChoiceOpen, setPresentChoiceOpen] = useState(false);
   const [draft, setDraft] = useState<PresentationDraft | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+  const lastNavigatorSelection = useRef<string | null>(null);
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
   const [mapOpen, setMapOpen] = useState(false);
@@ -864,6 +871,41 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const sectionRuns = useMemo(
+    () => presentationSectionRuns(draft?.blocks ?? [], draft?.sections),
+    [draft?.blocks, draft?.sections],
+  );
+  useEffect(() => {
+    if (!selectedBlockId || lastNavigatorSelection.current === selectedBlockId) return;
+    const run = sectionRuns.find((run) => run.blocks.some((block) => block.id === selectedBlockId));
+    if (!run) return;
+    lastNavigatorSelection.current = selectedBlockId;
+    const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+    setCollapsedSections((current) => {
+      if (!current.has(collapseKey)) return current;
+      const next = new Set(current);
+      next.delete(collapseKey);
+      return next;
+    });
+    const frame = requestAnimationFrame(() => {
+      if (mapOpen)
+        mapPanel.current
+          ?.querySelector<HTMLElement>('[aria-current="step"]')
+          ?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Section changes may change a run. Only a new slide selection expands it;
+    // the author may deliberately collapse the section containing the current slide.
+  }, [mapOpen, sectionRuns, selectedBlockId]);
+  useEffect(() => {
+    if (!mapOpen) return;
+    const frame = requestAnimationFrame(() =>
+      mapPanel.current
+        ?.querySelector<HTMLElement>('[aria-current="step"]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [mapOpen]);
   const questionSuggestionSource = selectedBlock
     ? presentationQuestionSuggestionSource(selectedBlock)
     : null;
@@ -3400,12 +3442,17 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             onEnable={() => {
               if (canEdit) commit(enablePresentationSections);
             }}
-            onAdd={() => {
+            onAdd={(title) => {
               if (!canEdit) return;
               const sectionId = clientUuid();
               // A generated title is authored exactly once, in the creation locale.
               commit((current) =>
-                addPresentationSection(current, sectionId, sectionsSpatial("New section")),
+                addPresentationSectionAtBlock(
+                  current,
+                  sectionId,
+                  title ?? sectionsSpatial("New section"),
+                  selectedBlockId,
+                ),
               );
             }}
             onRename={(sectionId, title) =>
@@ -3419,96 +3466,160 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               commit((current) => assignPresentationBlockToSection(current, blockId, sectionId))
             }
           />
-          <ol className={styles.blockList}>
-            {draft.blocks.map((block, index) => (
-              <li key={block.id} className={styles.filmstripItem}>
-                <PresentationSlideThumbnail
-                  block={block}
-                  design={resolvePresentationContentDesign(draft.blocks, block.id)}
-                  priority={index < 3 || selectedBlockId === block.id}
-                  mediaEnabled={mapOpen}
-                  mediaScope={{
-                    actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
-                    presentationId,
-                  }}
-                />
-                <button
-                  aria-current={selectedBlockId === block.id ? "step" : undefined}
-                  className={selectedBlockId === block.id ? styles.blockActive : styles.blockButton}
-                  onClick={() => setSelectedBlockId(block.id)}
-                  type="button"
-                >
-                  <span className={styles.thumbnailSpace} aria-hidden="true" />
-                  <span className={styles.blockNumber}>{index + 1}</span>
-                  <span className={styles.blockText}>
-                    <small>
-                      {block.kind === "content"
-                        ? t("delivery.presentation.contentSlide")
-                        : `${t(
-                            (block.question.delivery ?? "main") === "recheck"
-                              ? "delivery.builder.recheck"
-                              : "delivery.presentation.interactiveQuestion",
-                          )} · ${t(questionTypeMessageKeys[block.question.type])}`}
-                    </small>
-                    <strong
-                      lang={
-                        (block.kind === "content"
-                          ? contentSlideTitle(block)
-                          : block.question.prompt
-                        ).trim()
-                          ? (nativeSlideTitleLanguage(block) ?? "")
-                          : undefined
-                      }
-                    >
-                      {(block.kind === "content"
-                        ? contentSlideTitle(block)
-                        : block.question.prompt
-                      ).trim() ||
-                        t(
-                          block.kind === "content"
-                            ? "delivery.builder.slide"
-                            : "delivery.builder.question",
-                          { number: index + 1 },
-                        )}
-                    </strong>
-                    {presentationSectionForBlock(draft.sections, block.id) ? (
-                      <span
-                        className={styles.sectionBadge}
-                        lang={
-                          presentationSectionForBlock(draft.sections, block.id)?.title ? "" : locale
-                        }
-                      >
-                        {presentationSectionForBlock(draft.sections, block.id)?.title ||
-                          sectionsSpatial("Unnamed section")}
-                      </span>
-                    ) : null}
-                  </span>
-                  {block.kind === "content" && block.hidden ? (
-                    <span className={styles.hiddenBadge} lang={locale}>
-                      {commands.hidden}
-                    </span>
-                  ) : issuesByBlock.has(block.id) ? (
-                    <span
-                      className={styles.issueBadge}
-                      aria-label={t(
-                        issuesByBlock.get(block.id) === 1
-                          ? "delivery.builder.issueCount.one"
-                          : "delivery.builder.issueCount.other",
-                        { count: issuesByBlock.get(block.id) ?? 0 },
+          <div className={styles.filmstripScroll} data-slide-filmstrip="true">
+            {sectionRuns.map((run) => {
+              const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+              // The last removed section may merge unsectioned runs. Without a
+              // remaining header, an old collapse preference must not hide slides.
+              const collapsed =
+                Boolean(draft.sections?.length) && collapsedSections.has(collapseKey);
+              return (
+                <div key={run.key} data-section-run={run.section?.id ?? "unsectioned"}>
+                  {draft.sections?.length ? (
+                    <PresentationSectionHeader
+                      section={run.section}
+                      runKey={run.key}
+                      count={run.blocks.length}
+                      continued={run.continued}
+                      collapsed={collapsed}
+                      disabled={!canEdit}
+                      fragmented={Boolean(
+                        run.section &&
+                        sectionRuns.filter(
+                          (candidate) =>
+                            candidate.section?.id === run.section?.id && candidate.blocks.length,
+                        ).length > 1,
                       )}
-                    >
-                      {issuesByBlock.get(block.id)}
-                    </span>
+                      canMove={(direction) =>
+                        Boolean(
+                          run.section &&
+                          canMovePresentationSection(draft, run.section.id, direction),
+                        )
+                      }
+                      onToggle={() =>
+                        setCollapsedSections((current) => {
+                          const next = new Set(current);
+                          if (next.has(collapseKey)) next.delete(collapseKey);
+                          else next.add(collapseKey);
+                          return next;
+                        })
+                      }
+                      onRename={(sectionId, title) =>
+                        canEdit &&
+                        commit((current) => renamePresentationSection(current, sectionId, title))
+                      }
+                      onDelete={(sectionId) => {
+                        if (!canEdit) return;
+                        commit((current) => removePresentationSection(current, sectionId));
+                        requestAnimationFrame(() =>
+                          mapPanel.current
+                            ?.querySelector<HTMLElement>('[aria-current="step"]')
+                            ?.focus({ preventScroll: true }),
+                        );
+                      }}
+                      onMove={(sectionId, direction) =>
+                        canEdit &&
+                        commit((current) => movePresentationSection(current, sectionId, direction))
+                      }
+                    />
                   ) : null}
-                </button>
-                {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
-                  <span className={styles.recoveryLink}>
-                    ↳ {t("delivery.presentationBuilder.pairedRecovery")}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ol>
+                  <ol
+                    className={styles.blockList}
+                    id={`section-slides-${run.key}`}
+                    start={run.startIndex + 1}
+                    hidden={collapsed}
+                  >
+                    {run.blocks.map((block, runIndex) => {
+                      const index = run.startIndex + runIndex;
+                      return (
+                        <li
+                          key={block.id}
+                          className={styles.filmstripItem}
+                          data-slide-id={block.id}
+                        >
+                          <PresentationSlideThumbnail
+                            block={block}
+                            design={resolvePresentationContentDesign(draft.blocks, block.id)}
+                            priority={index < 3 || selectedBlockId === block.id}
+                            mediaEnabled={mapOpen && !collapsed}
+                            mediaScope={{
+                              actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+                              presentationId,
+                            }}
+                          />
+                          <button
+                            aria-current={selectedBlockId === block.id ? "step" : undefined}
+                            className={
+                              selectedBlockId === block.id ? styles.blockActive : styles.blockButton
+                            }
+                            onClick={() => setSelectedBlockId(block.id)}
+                            type="button"
+                          >
+                            <span className={styles.thumbnailSpace} aria-hidden="true" />
+                            <span className={styles.blockNumber}>{index + 1}</span>
+                            <span className={styles.blockText}>
+                              <small>
+                                {block.kind === "content"
+                                  ? t("delivery.presentation.contentSlide")
+                                  : `${t(
+                                      (block.question.delivery ?? "main") === "recheck"
+                                        ? "delivery.builder.recheck"
+                                        : "delivery.presentation.interactiveQuestion",
+                                    )} · ${t(questionTypeMessageKeys[block.question.type])}`}
+                              </small>
+                              <strong
+                                lang={
+                                  (block.kind === "content"
+                                    ? contentSlideTitle(block)
+                                    : block.question.prompt
+                                  ).trim()
+                                    ? (nativeSlideTitleLanguage(block) ?? "")
+                                    : undefined
+                                }
+                              >
+                                {(block.kind === "content"
+                                  ? contentSlideTitle(block)
+                                  : block.question.prompt
+                                ).trim() ||
+                                  t(
+                                    block.kind === "content"
+                                      ? "delivery.builder.slide"
+                                      : "delivery.builder.question",
+                                    { number: index + 1 },
+                                  )}
+                              </strong>
+                            </span>
+                            {block.kind === "content" && block.hidden ? (
+                              <span className={styles.hiddenBadge} lang={locale}>
+                                {commands.hidden}
+                              </span>
+                            ) : issuesByBlock.has(block.id) ? (
+                              <span
+                                className={styles.issueBadge}
+                                aria-label={t(
+                                  issuesByBlock.get(block.id) === 1
+                                    ? "delivery.builder.issueCount.one"
+                                    : "delivery.builder.issueCount.other",
+                                  { count: issuesByBlock.get(block.id) ?? 0 },
+                                )}
+                              >
+                                {issuesByBlock.get(block.id)}
+                              </span>
+                            ) : null}
+                          </button>
+                          {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
+                            <span className={styles.recoveryLink}>
+                              ↳ {t("delivery.presentationBuilder.pairedRecovery")}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
+          </div>
           <div className={styles.addActions}>
             <button
               className={styles.newSlideButton}
@@ -3610,6 +3721,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </div>
         </aside>
 
+        <PresentationNavigatorResize enabled={mapOpen && !compactEditor} />
         <main className={styles.canvasArea} id="presentation-canvas">
           <div className={styles.compactCommands} inert={builderMutationBlocked || preparingImport}>
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">

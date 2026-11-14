@@ -18,6 +18,7 @@ import {
 } from "../../lib/presentation-native-data";
 import { nativeDataCopy, nativeDataFeedback } from "./native-data-copy";
 import styles from "./native-scene-data.module.css";
+import { NativeInspectorSection } from "./native-inspector-section";
 
 type DraftState = {
   revision: string;
@@ -176,57 +177,91 @@ export function NativeSceneDataEditor({
           </label>
         </>
       )}
-      <label>
-        {copy("Paste CSV or TSV data")}
-        <textarea
-          lang=""
-          rows={5}
-          value={state.paste}
-          placeholder={copy(
-            chart ? "Category,Series\nAlpha,10\nBeta,20" : "Category,Value\nAlpha,10\nBeta,20",
+      <NativeInspectorSection title={copy("Paste CSV or TSV data")} icon="import" name="data-paste">
+        <label>
+          {copy("Paste CSV or TSV data")}
+          <textarea
+            lang=""
+            rows={5}
+            value={state.paste}
+            placeholder={copy(
+              chart ? "Category,Series\nAlpha,10\nBeta,20" : "Category,Value\nAlpha,10\nBeta,20",
+            )}
+            onChange={(event) => {
+              const paste = event.target.value;
+              if (new TextEncoder().encode(paste).byteLength > PRESENTATION_SCENE_MAX_BYTES) {
+                setStaged({
+                  ...state,
+                  error: "Paste at most 128 KiB of data. Your staged cells are unchanged.",
+                  status: "",
+                });
+                return;
+              }
+              setStaged({ ...state, paste, error: "", status: "" });
+            }}
+          />
+        </label>
+        <p className={styles.help}>
+          {copy(
+            chart
+              ? "Use a header row with category then series names, followed by up to 20 categories and 4 numeric series. Pie charts need one nonnegative series with a positive total."
+              : "Use a header row and up to 20 data rows, with up to 6 columns. Table cells stay literal text.",
+          )}{" "}
+          {copy(
+            "Commas, tabs, quoted cells and quoted newlines are supported. Preview before applying.",
           )}
-          onChange={(event) => {
-            const paste = event.target.value;
-            if (new TextEncoder().encode(paste).byteLength > PRESENTATION_SCENE_MAX_BYTES) {
-              setStaged({
-                ...state,
-                error: "Paste at most 128 KiB of data. Your staged cells are unchanged.",
-                status: "",
-              });
-              return;
-            }
-            setStaged({ ...state, paste, error: "", status: "" });
-          }}
-        />
-      </label>
-      <p className={styles.help}>
-        {copy(
-          chart
-            ? "Use a header row with category then series names, followed by up to 20 categories and 4 numeric series. Pie charts need one nonnegative series with a positive total."
-            : "Use a header row and up to 20 data rows, with up to 6 columns. Table cells stay literal text.",
-        )}{" "}
-        {copy(
-          "Commas, tabs, quoted cells and quoted newlines are supported. Preview before applying.",
-        )}
-      </p>
-      <div className={styles.actions}>
+        </p>
+        <div className={styles.actions}>
+          <button
+            type="button"
+            disabled={!state.paste}
+            onClick={() => {
+              const result = parseNativeDataPaste(state.paste);
+              if (!result.success) {
+                setStaged({ ...state, error: result.error, status: "" });
+                return;
+              }
+              edit({ ...draft, grid: result.data });
+            }}
+          >
+            {copy("Preview pasted data")}
+          </button>
+        </div>
+      </NativeInspectorSection>
+      <div className={`${styles.actions} ${styles.gridActions}`}>
+        <button type="button" disabled={rowCount >= 20} onClick={addRow}>
+          {copy(chart ? "Add category" : "Add table row")}
+        </button>
         <button
           type="button"
-          disabled={!state.paste}
-          onClick={() => {
-            const result = parseNativeDataPaste(state.paste);
-            if (!result.success) {
-              setStaged({ ...state, error: result.error, status: "" });
-              return;
-            }
-            edit({ ...draft, grid: result.data });
-          }}
+          disabled={rowCount <= 1}
+          onClick={() => edit({ ...draft, grid: draft.grid.slice(0, -1) })}
         >
-          {copy("Preview pasted data")}
+          {copy(chart ? "Remove last category" : "Remove last table row")}
+        </button>
+        <button
+          type="button"
+          disabled={columns >= (chart ? 5 : 6) || (chart && draft.chartType === "pie")}
+          onClick={addColumn}
+        >
+          {copy(chart ? "Add series" : "Add table column")}
+        </button>
+        <button
+          type="button"
+          disabled={columns <= (chart ? 2 : 1)}
+          onClick={() => edit({ ...draft, grid: draft.grid.map((row) => row.slice(0, -1)) })}
+        >
+          {copy(chart ? "Remove last series" : "Remove last table column")}
         </button>
       </div>
-      <div className={styles.gridWrap}>
-        <table className={styles.editGrid}>
+      <div
+        className={styles.gridWrap}
+        role="region"
+        tabIndex={0}
+        aria-label={copy(chart ? "Chart data editor" : "Table data editor")}
+        data-native-data-scroll="true"
+      >
+        <table className={styles.editGrid} style={{ minWidth: `${columns * 160}px` }}>
           <caption>
             {chart
               ? copy("Staged chart data · {rows} rows, {series} series", {
@@ -295,32 +330,6 @@ export function NativeSceneDataEditor({
             ))}
           </tbody>
         </table>
-      </div>
-      <div className={styles.actions}>
-        <button type="button" disabled={rowCount >= 20} onClick={addRow}>
-          {copy(chart ? "Add category" : "Add table row")}
-        </button>
-        <button
-          type="button"
-          disabled={rowCount <= 1}
-          onClick={() => edit({ ...draft, grid: draft.grid.slice(0, -1) })}
-        >
-          {copy(chart ? "Remove last category" : "Remove last table row")}
-        </button>
-        <button
-          type="button"
-          disabled={columns >= (chart ? 5 : 6) || (chart && draft.chartType === "pie")}
-          onClick={addColumn}
-        >
-          {copy(chart ? "Add series" : "Add table column")}
-        </button>
-        <button
-          type="button"
-          disabled={columns <= (chart ? 2 : 1)}
-          onClick={() => edit({ ...draft, grid: draft.grid.map((row) => row.slice(0, -1)) })}
-        >
-          {copy(chart ? "Remove last series" : "Remove last table column")}
-        </button>
       </div>
       <p className={styles.help}>
         {copy(

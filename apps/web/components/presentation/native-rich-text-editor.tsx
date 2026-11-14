@@ -22,6 +22,7 @@ import {
 } from "./native-text-video-copy";
 import { formatNumber } from "../../lib/i18n/format";
 import { EditorIcon } from "./presentation-editor-chrome";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
 import styles from "./native-rich-text-editor.module.css";
 
 type TextNode = Extract<PresentationSceneNode, { type: "text" }>;
@@ -163,23 +164,7 @@ export function NativeRichTextEditor({
       setError(null);
       if (JSON.stringify(next) !== JSON.stringify(node)) onChange(next, field);
       if (restore) {
-        const { start, end } = range.current;
-        cancelRestore();
-        const epoch = restoreEpoch.current;
-        // Formatting controls may take focus, but they operate on the remembered text range.
-        pendingRestore.current = requestAnimationFrame(() => {
-          if (epoch !== restoreEpoch.current) return;
-          pendingRestore.current = null;
-          const element = input.current;
-          if (!element) return;
-          element.focus({ preventScroll: true });
-          element.setSelectionRange(start, end);
-          const next = { start: element.selectionStart, end: element.selectionEnd };
-          range.current = next;
-          setSelection((current) =>
-            current.start === next.start && current.end === next.end ? current : next,
-          );
-        });
+        restoreSelection();
       }
     } catch (caught) {
       setError(
@@ -189,6 +174,25 @@ export function NativeRichTextEditor({
         ),
       );
     }
+  }
+  function restoreSelection() {
+    const { start, end } = range.current;
+    cancelRestore();
+    const epoch = restoreEpoch.current;
+    // Object typography and inline formatting both retain the last deliberate text range.
+    pendingRestore.current = requestAnimationFrame(() => {
+      if (epoch !== restoreEpoch.current) return;
+      pendingRestore.current = null;
+      const element = input.current;
+      if (!element) return;
+      element.focus({ preventScroll: true });
+      element.setSelectionRange(start, end);
+      const next = { start: element.selectionStart, end: element.selectionEnd };
+      range.current = next;
+      setSelection((current) =>
+        current.start === next.start && current.end === next.end ? current : next,
+      );
+    });
   }
   function mark(kind: "bold" | "italic") {
     apply(() => toggleNativeRichTextMark(richText, range.current.start, range.current.end, kind));
@@ -210,6 +214,14 @@ export function NativeRichTextEditor({
           {formatNumber(locale, node.text.length)} / {formatNumber(locale, limit)}
         </span>
       </div>
+      <NativeSceneTypographyControls
+        node={node}
+        locale={locale}
+        onChange={(next, field) => {
+          setError(null);
+          onChange(next, field);
+        }}
+      />
       <div className={styles.writingSurface}>
         <div className={styles.toolbar} role="group" aria-label={copy("Text formatting")}>
           <button

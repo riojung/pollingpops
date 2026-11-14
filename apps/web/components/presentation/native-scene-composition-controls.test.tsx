@@ -112,7 +112,8 @@ function harness(initial = fixture(), initialSelection = ["a", "b"], callback?: 
   }
   function button(label: string) {
     const found = elements(tree).find(
-      (element) => element.type === "button" && text(element) === label,
+      (element) =>
+        element.type === "button" && (element.props["aria-label"] ?? text(element)) === label,
     );
     if (!found) throw new Error(`Missing ${label}`);
     return found;

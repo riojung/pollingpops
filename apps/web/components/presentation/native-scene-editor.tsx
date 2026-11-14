@@ -33,6 +33,9 @@ import {
 import { type SceneImageRenderer } from "./native-scene-view";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
+import { NativeInspectorSection } from "./native-inspector-section";
+import { layoutAssistanceCopy } from "./layout-assistance-copy";
 import { NativeSceneCompositionControls } from "./native-scene-composition-controls";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
@@ -280,8 +283,11 @@ export function NativeSceneEditor({
   const framed = scene.nodes.filter((node) => node.type !== "connector");
   const readingIndex = scene.readingOrder.indexOf(selected.id);
   function update(updater: (node: PresentationSceneNode) => PresentationSceneNode, field?: string) {
+    const next = updateNativeNode(scene, selected.id, updater);
     onChange(
-      updateNativeNode(scene, selected.id, updater),
+      next.nodes.some((node) => node.type === "text" && node.typography)
+        ? { ...next, schemaVersion: next.schemaVersion >= 9 ? next.schemaVersion : 9 }
+        : next,
       field ? `native:${selected.id}:${field}` : undefined,
     );
   }
@@ -400,382 +406,408 @@ export function NativeSceneEditor({
         </p>
       </div>
       <div hidden={sectionHidden("content")} data-native-inspector-section="content">
-        <fieldset
-          disabled={!canEdit && !isNativeInteractionNode(selected)}
-          className={`${inspectorStyles.card} ${inspectorStyles.contentCard}`}
-          data-native-text-fields="true"
-          onKeyDown={(event) => {
-            if (
-              !(event.target instanceof HTMLTextAreaElement) ||
-              !event.target.hasAttribute("data-native-text-input") ||
-              event.altKey ||
-              (!event.metaKey && !event.ctrlKey)
-            )
-              return;
-            const key = event.key.toLowerCase();
-            if (key !== "z" && !(event.ctrlKey && key === "y")) return;
-            const action = key === "y" || event.shiftKey ? onRedo : onUndo;
-            if (!action) return;
-            event.preventDefault();
-            event.stopPropagation();
-            restoreHistory(action);
-          }}
+        <NativeInspectorSection
+          key={selected.id}
+          title={copy(multiple ? "Last selected object" : "Selected object")}
+          icon={context.icon}
+          name="content"
+          defaultOpen
         >
-          <legend>
-            <EditorIcon name="content" />
-            {copy(multiple ? "Last selected object" : "Selected object")}
-          </legend>
-          <p className={inspectorStyles.sectionHint}>{copy(context.hint)}</p>
-          <div className={inspectorStyles.contentFields}>
-            <div lang={locale} style={{ display: "contents" }}>
-              <NativeSceneInteractionEditor
-                locale={locale}
-                disabled={!canEdit}
-                scene={scene}
-                node={isNativeInteractionNode(selected) ? selected : null}
-                onChange={onChange}
-                navigationTargets={navigationTargets}
-                onPreview={onPreviewInteraction}
-                previewUnavailableReason={previewInteractionUnavailableReason}
-              />
-            </div>
-            {selected.type === "text" && selected.richText ? (
+          <fieldset
+            disabled={!canEdit && !isNativeInteractionNode(selected)}
+            className={`${inspectorStyles.card} ${inspectorStyles.contentCard}`}
+            data-native-text-fields="true"
+            onKeyDown={(event) => {
+              if (
+                !(event.target instanceof HTMLTextAreaElement) ||
+                !event.target.hasAttribute("data-native-text-input") ||
+                event.altKey ||
+                (!event.metaKey && !event.ctrlKey)
+              )
+                return;
+              const key = event.key.toLowerCase();
+              if (key !== "z" && !(event.ctrlKey && key === "y")) return;
+              const action = key === "y" || event.shiftKey ? onRedo : onUndo;
+              if (!action) return;
+              event.preventDefault();
+              event.stopPropagation();
+              restoreHistory(action);
+            }}
+          >
+            <legend>
+              <EditorIcon name="content" />
+              {copy(multiple ? "Last selected object" : "Selected object")}
+            </legend>
+            <p className={inspectorStyles.sectionHint}>{copy(context.hint)}</p>
+            <div className={inspectorStyles.contentFields}>
               <div lang={locale} style={{ display: "contents" }}>
-                <NativeRichTextEditor
+                <NativeSceneInteractionEditor
                   locale={locale}
-                  key={selected.id}
-                  node={selected}
-                  onUndo={onUndo ? () => restoreHistory(onUndo) : undefined}
-                  onRedo={onRedo ? () => restoreHistory(onRedo) : undefined}
-                  onChange={(node, field) => {
-                    const next = updateNativeNode(scene, selected.id, () => node);
-                    onChange(
-                      {
-                        ...next,
-                        schemaVersion: scene.schemaVersion >= 2 ? scene.schemaVersion : 2,
-                      },
-                      field ? `native:${selected.id}:${field}` : undefined,
-                    );
-                  }}
-                />
-              </div>
-            ) : selected.type === "text" ? (
-              <div className={inspectorStyles.plainTextEditor}>
-                <div className={inspectorStyles.plainTextTools}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      let richText;
-                      try {
-                        richText = plainTextToPresentationRichText(selected.text);
-                      } catch {
-                        setFormatError(
-                          "This text cannot be formatted within the slide's limits. Use at most 100 paragraphs, remove unsupported control characters, or reduce the slide's content.",
-                        );
-                        return;
-                      }
-                      setFormatError(null);
-                      onChange({
-                        ...updateNativeNode(scene, selected.id, () => ({
-                          ...selected,
-                          text: presentationRichTextToPlainText(richText),
-                          richText,
-                        })),
-                        schemaVersion: scene.schemaVersion >= 2 ? scene.schemaVersion : 2,
-                      });
-                    }}
-                  >
-                    <EditorIcon name="format" />
-                    <span>{copy("Format text")}</span>
-                  </button>
-                </div>
-                <label>
-                  {copy(selected.role === "title" ? "Native slide title" : "Node text")}
-                  <textarea
-                    data-native-text-input="true"
-                    data-text-role={selected.role}
-                    rows={selected.role === "title" ? 6 : 12}
-                    aria-label={copy(
-                      selected.role === "title" ? "Native slide title" : "Node text",
-                    )}
-                    lang={selected.lang ?? ""}
-                    maxLength={selected.role === "title" ? 160 : 4000}
-                    value={selected.text}
-                    onChange={(event) =>
-                      update(
-                        (node) =>
-                          node.type === "text" ? { ...node, text: event.target.value } : node,
-                        "text",
-                      )
-                    }
-                  />
-                </label>
-                <p className={inspectorStyles.textLength} aria-hidden="true">
-                  {new Intl.NumberFormat(locale).format(selected.text.length)} /{" "}
-                  {new Intl.NumberFormat(locale).format(selected.role === "title" ? 160 : 4000)}
-                </p>
-                {formatError ? (
-                  <p role="alert" className={styles.formatError}>
-                    {copy(formatError)}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {selected.type === "table" || selected.type === "chart" ? (
-              <div lang={locale} style={{ display: "contents" }}>
-                <NativeSceneDataEditor
-                  locale={locale}
-                  key={selected.id}
+                  disabled={!canEdit}
                   scene={scene}
-                  node={selected}
+                  node={isNativeInteractionNode(selected) ? selected : null}
                   onChange={onChange}
+                  navigationTargets={navigationTargets}
+                  onPreview={onPreviewInteraction}
+                  previewUnavailableReason={previewInteractionUnavailableReason}
                 />
               </div>
-            ) : null}
-            {selected.type === "shape" ? (
-              <>
-                <label>
-                  {copy("Shape label")}
-                  <input
-                    lang=""
-                    maxLength={200}
-                    value={selected.label}
-                    onChange={(event) =>
-                      update(
-                        (node) =>
-                          node.type === "shape"
-                            ? {
-                                ...node,
-                                label: event.target.value,
-                                ...(node.decorative && event.target.value.trim()
-                                  ? { decorative: false }
-                                  : {}),
-                              }
-                            : node,
-                        "label",
-                      )
-                    }
+              {selected.type === "text" && selected.richText ? (
+                <div lang={locale} style={{ display: "contents" }}>
+                  <NativeRichTextEditor
+                    locale={locale}
+                    key={selected.id}
+                    node={selected}
+                    onUndo={onUndo ? () => restoreHistory(onUndo) : undefined}
+                    onRedo={onRedo ? () => restoreHistory(onRedo) : undefined}
+                    onChange={(node, field) => {
+                      const next = updateNativeNode(scene, selected.id, () => node);
+                      const minimumVersion = node.typography ? 9 : 2;
+                      onChange(
+                        {
+                          ...next,
+                          schemaVersion:
+                            scene.schemaVersion >= minimumVersion
+                              ? scene.schemaVersion
+                              : minimumVersion,
+                        },
+                        field ? `native:${selected.id}:${field}` : undefined,
+                      );
+                    }}
                   />
-                </label>
+                </div>
+              ) : selected.type === "text" ? (
+                <div className={inspectorStyles.plainTextEditor}>
+                  <div className={inspectorStyles.plainTextTools}>
+                    <NativeSceneTypographyControls
+                      node={selected}
+                      locale={locale}
+                      onChange={(node, field) => update(() => node, field)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        let richText;
+                        try {
+                          richText = plainTextToPresentationRichText(selected.text);
+                        } catch {
+                          setFormatError(
+                            "This text cannot be formatted within the slide's limits. Use at most 100 paragraphs, remove unsupported control characters, or reduce the slide's content.",
+                          );
+                          return;
+                        }
+                        setFormatError(null);
+                        onChange({
+                          ...updateNativeNode(scene, selected.id, () => ({
+                            ...selected,
+                            text: presentationRichTextToPlainText(richText),
+                            richText,
+                          })),
+                          schemaVersion: scene.schemaVersion >= 2 ? scene.schemaVersion : 2,
+                        });
+                      }}
+                    >
+                      <EditorIcon name="format" />
+                      <span>{copy("Format text")}</span>
+                    </button>
+                  </div>
+                  <label>
+                    {copy(selected.role === "title" ? "Native slide title" : "Node text")}
+                    <textarea
+                      data-native-text-input="true"
+                      data-text-role={selected.role}
+                      rows={selected.role === "title" ? 6 : 12}
+                      aria-label={copy(
+                        selected.role === "title" ? "Native slide title" : "Node text",
+                      )}
+                      lang={selected.lang ?? ""}
+                      maxLength={selected.role === "title" ? 160 : 4000}
+                      value={selected.text}
+                      onChange={(event) =>
+                        update(
+                          (node) =>
+                            node.type === "text" ? { ...node, text: event.target.value } : node,
+                          "text",
+                        )
+                      }
+                    />
+                  </label>
+                  <p className={inspectorStyles.textLength} aria-hidden="true">
+                    {new Intl.NumberFormat(locale).format(selected.text.length)} /{" "}
+                    {new Intl.NumberFormat(locale).format(selected.role === "title" ? 160 : 4000)}
+                  </p>
+                  {formatError ? (
+                    <p role="alert" className={styles.formatError}>
+                      {copy(formatError)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {selected.type === "table" || selected.type === "chart" ? (
+                <div lang={locale} style={{ display: "contents" }}>
+                  <NativeSceneDataEditor
+                    locale={locale}
+                    key={selected.id}
+                    scene={scene}
+                    node={selected}
+                    onChange={onChange}
+                  />
+                </div>
+              ) : null}
+              {selected.type === "shape" ? (
+                <>
+                  <label>
+                    {copy("Shape label")}
+                    <input
+                      lang=""
+                      maxLength={200}
+                      value={selected.label}
+                      onChange={(event) =>
+                        update(
+                          (node) =>
+                            node.type === "shape"
+                              ? {
+                                  ...node,
+                                  label: event.target.value,
+                                  ...(node.decorative && event.target.value.trim()
+                                    ? { decorative: false }
+                                    : {}),
+                                }
+                              : node,
+                          "label",
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    {copy("Shape")}
+                    <select
+                      value={selected.shape}
+                      onChange={(event) =>
+                        update((node) =>
+                          node.type === "shape"
+                            ? { ...node, shape: event.target.value as typeof node.shape }
+                            : node,
+                        )
+                      }
+                    >
+                      {shapes.map((shape) => (
+                        <option key={shape} value={shape}>
+                          {copy(shapeLabels[shape])}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : null}
+              {selected.type === "connector" ? (
+                <>
+                  <label>
+                    {copy("Connector label")}
+                    <input
+                      lang=""
+                      maxLength={200}
+                      value={selected.label}
+                      onChange={(event) =>
+                        update(
+                          (node) =>
+                            node.type === "connector"
+                              ? { ...node, label: event.target.value }
+                              : node,
+                          "label",
+                        )
+                      }
+                    />
+                  </label>
+                  {(["from", "to"] as const).map((side) => (
+                    <div key={side} className={inspectorStyles.propertyGrid}>
+                      <label>
+                        {copy(side === "from" ? "Connect from" : "Connect to")}
+                        <select
+                          value={selected[side].nodeId}
+                          onChange={(event) =>
+                            update((node) =>
+                              node.type === "connector"
+                                ? { ...node, [side]: { ...node[side], nodeId: event.target.value } }
+                                : node,
+                            )
+                          }
+                        >
+                          {framed
+                            .filter(
+                              (node) =>
+                                node.id !== selected[side === "from" ? "to" : "from"].nodeId,
+                            )
+                            .map((node) => {
+                              const label = nativeControlNodeLabel(locale, node);
+                              return (
+                                <option key={node.id} value={node.id} lang={label.language}>
+                                  {label.text}
+                                </option>
+                              );
+                            })}
+                        </select>
+                      </label>
+                      <label>
+                        {copy(side === "from" ? "From anchor" : "To anchor")}
+                        <select
+                          value={selected[side].anchor}
+                          onChange={(event) =>
+                            update((node) =>
+                              node.type === "connector"
+                                ? {
+                                    ...node,
+                                    [side]: {
+                                      ...node[side],
+                                      anchor: event.target.value as typeof node.from.anchor,
+                                    },
+                                  }
+                                : node,
+                            )
+                          }
+                        >
+                          {anchors.map((anchor) => (
+                            <option key={anchor} value={anchor}>
+                              {copy(anchor)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ))}
+                </>
+              ) : null}
+              {selected.type === "shape" || selected.type === "connector" ? (
                 <label>
-                  {copy("Shape")}
+                  {copy("Object color")}
                   <select
-                    value={selected.shape}
+                    value={palettePaint ? "palette" : selected.color}
                     onChange={(event) =>
-                      update((node) =>
-                        node.type === "shape"
-                          ? { ...node, shape: event.target.value as typeof node.shape }
-                          : node,
-                      )
+                      update((node) => {
+                        if (node.type !== "shape" && node.type !== "connector") return node;
+                        const color = event.target.value as typeof node.color;
+                        if (node.type !== "shape" || !node.appearance) return { ...node, color };
+                        const appearance = { ...node.appearance };
+                        // Explicit object color replaces palette paint, while preserving an
+                        // authored outline/no-stroke treatment and its border thickness.
+                        if (appearance.fill !== "none") delete appearance.fill;
+                        if (appearance.stroke !== "none") delete appearance.stroke;
+                        return { ...node, color, appearance };
+                      })
                     }
                   >
-                    {shapes.map((shape) => (
-                      <option key={shape} value={shape}>
-                        {copy(shapeLabels[shape])}
+                    {palettePaint ? (
+                      <option value="palette" disabled>
+                        {nativeControlsCopy(locale)("Theme palettes")}
+                      </option>
+                    ) : null}
+                    {CanvasColorSchema.options.map((color) => (
+                      <option key={color} value={color}>
+                        {copy(color)}
                       </option>
                     ))}
                   </select>
                 </label>
-              </>
-            ) : null}
-            {selected.type === "connector" ? (
-              <>
-                <label>
-                  {copy("Connector label")}
-                  <input
-                    lang=""
-                    maxLength={200}
-                    value={selected.label}
-                    onChange={(event) =>
-                      update(
-                        (node) =>
-                          node.type === "connector" ? { ...node, label: event.target.value } : node,
-                        "label",
-                      )
-                    }
-                  />
-                </label>
-                {(["from", "to"] as const).map((side) => (
-                  <div key={side} className={inspectorStyles.propertyGrid}>
-                    <label>
-                      {copy(side === "from" ? "Connect from" : "Connect to")}
-                      <select
-                        value={selected[side].nodeId}
-                        onChange={(event) =>
-                          update((node) =>
-                            node.type === "connector"
-                              ? { ...node, [side]: { ...node[side], nodeId: event.target.value } }
-                              : node,
-                          )
-                        }
-                      >
-                        {framed
-                          .filter(
-                            (node) => node.id !== selected[side === "from" ? "to" : "from"].nodeId,
-                          )
-                          .map((node) => {
-                            const label = nativeControlNodeLabel(locale, node);
-                            return (
-                              <option key={node.id} value={node.id} lang={label.language}>
-                                {label.text}
-                              </option>
-                            );
-                          })}
-                      </select>
-                    </label>
-                    <label>
-                      {copy(side === "from" ? "From anchor" : "To anchor")}
-                      <select
-                        value={selected[side].anchor}
-                        onChange={(event) =>
-                          update((node) =>
-                            node.type === "connector"
-                              ? {
-                                  ...node,
-                                  [side]: {
-                                    ...node[side],
-                                    anchor: event.target.value as typeof node.from.anchor,
-                                  },
-                                }
-                              : node,
-                          )
-                        }
-                      >
-                        {anchors.map((anchor) => (
-                          <option key={anchor} value={anchor}>
-                            {copy(anchor)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                ))}
-              </>
-            ) : null}
-            {selected.type === "shape" || selected.type === "connector" ? (
-              <label>
-                {copy("Object color")}
-                <select
-                  value={palettePaint ? "palette" : selected.color}
-                  onChange={(event) =>
-                    update((node) => {
-                      if (node.type !== "shape" && node.type !== "connector") return node;
-                      const color = event.target.value as typeof node.color;
-                      if (node.type !== "shape" || !node.appearance) return { ...node, color };
-                      const appearance = { ...node.appearance };
-                      // Explicit object color replaces palette paint, while preserving an
-                      // authored outline/no-stroke treatment and its border thickness.
-                      if (appearance.fill !== "none") delete appearance.fill;
-                      if (appearance.stroke !== "none") delete appearance.stroke;
-                      return { ...node, color, appearance };
-                    })
-                  }
-                >
-                  {palettePaint ? (
-                    <option value="palette" disabled>
-                      {nativeControlsCopy(locale)("Theme palettes")}
-                    </option>
-                  ) : null}
-                  {CanvasColorSchema.options.map((color) => (
-                    <option key={color} value={color}>
-                      {copy(color)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {selected.type === "image" ? (
-              <p className={styles.help}>
-                {copy("Use Media to adjust this image and Access to edit its description.")}
-              </p>
-            ) : null}
-          </div>
-          {selected.type === "text" && onTextAssistance ? (
-            <section
-              className={inspectorStyles.assistanceCard}
-              aria-label={copy("Writing assistance")}
-            >
-              <div className={inspectorStyles.assistanceHeader}>
-                <EditorIcon name="rewrite" />
-                <h3>{copy("Writing assistance")}</h3>
-              </div>
-              <p className={inspectorStyles.sectionHint}>
-                {copy("Refine the selected text with AI.")}
-              </p>
-              <div className={inspectorStyles.assistanceActions}>
-                <button
-                  type="button"
-                  aria-label={copy("Rewrite text")}
-                  disabled={
-                    textAssistanceDisabled ||
-                    multiple ||
-                    Boolean(selected.richText) ||
-                    !selected.text.trim()
-                  }
-                  onClick={() => requestTextAssistance("rewrite")}
-                >
-                  <EditorIcon name="rewrite" />
-                  <span>{copy("Rewrite")}</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={copy("Shorten text")}
-                  disabled={
-                    textAssistanceDisabled ||
-                    multiple ||
-                    Boolean(selected.richText) ||
-                    !selected.text.trim()
-                  }
-                  onClick={() => requestTextAssistance("shorten")}
-                >
-                  <EditorIcon name="shorten" />
-                  <span>{copy("Shorten")}</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={copy("Translate text")}
-                  disabled={
-                    textAssistanceDisabled ||
-                    multiple ||
-                    Boolean(selected.richText) ||
-                    !selected.text.trim()
-                  }
-                  onClick={() => requestTextAssistance("translate")}
-                >
-                  <EditorIcon name="translate" />
-                  <span>{copy("Translate")}</span>
-                </button>
-              </div>
-              {selected.richText ? (
-                <p>
-                  {copy(
-                    "Text assistance supports plain text only. Formatted text cannot be rewritten or shortened. Translation also requires plain text.",
-                  )}
-                </p>
-              ) : multiple ? (
-                <p>{copy("Select one plain text object to use text assistance.")}</p>
-              ) : !selected.text.trim() ? (
-                <p>{copy("Enter some text before using text assistance.")}</p>
               ) : null}
-            </section>
-          ) : null}
-          <div className={inspectorStyles.objectFooter}>
-            {selected.type === "text" && selected.role === "title" ? (
-              <p className={inspectorStyles.sectionHint}>
-                {copy("The slide title stays on this slide.")}
-              </p>
+              {selected.type === "image" ? (
+                <p className={styles.help}>
+                  {copy("Use Media to adjust this image and Access to edit its description.")}
+                </p>
+              ) : null}
+            </div>
+            {selected.type === "text" && onTextAssistance ? (
+              <NativeInspectorSection
+                title={copy("Writing assistance")}
+                icon="rewrite"
+                name="writing-assistance"
+              >
+                <section
+                  className={inspectorStyles.assistanceCard}
+                  aria-label={copy("Writing assistance")}
+                >
+                  <div className={inspectorStyles.assistanceHeader}>
+                    <EditorIcon name="rewrite" />
+                    <h3>{copy("Writing assistance")}</h3>
+                  </div>
+                  <p className={inspectorStyles.sectionHint}>
+                    {copy("Refine the selected text with AI.")}
+                  </p>
+                  <div className={inspectorStyles.assistanceActions}>
+                    <button
+                      type="button"
+                      aria-label={copy("Rewrite text")}
+                      disabled={
+                        textAssistanceDisabled ||
+                        multiple ||
+                        Boolean(selected.richText) ||
+                        !selected.text.trim()
+                      }
+                      onClick={() => requestTextAssistance("rewrite")}
+                    >
+                      <EditorIcon name="rewrite" />
+                      <span>{copy("Rewrite")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={copy("Shorten text")}
+                      disabled={
+                        textAssistanceDisabled ||
+                        multiple ||
+                        Boolean(selected.richText) ||
+                        !selected.text.trim()
+                      }
+                      onClick={() => requestTextAssistance("shorten")}
+                    >
+                      <EditorIcon name="shorten" />
+                      <span>{copy("Shorten")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={copy("Translate text")}
+                      disabled={
+                        textAssistanceDisabled ||
+                        multiple ||
+                        Boolean(selected.richText) ||
+                        !selected.text.trim()
+                      }
+                      onClick={() => requestTextAssistance("translate")}
+                    >
+                      <EditorIcon name="translate" />
+                      <span>{copy("Translate")}</span>
+                    </button>
+                  </div>
+                  {selected.richText ? (
+                    <p>
+                      {copy(
+                        "Text assistance supports plain text only. Formatted text cannot be rewritten or shortened. Translation also requires plain text.",
+                      )}
+                    </p>
+                  ) : multiple ? (
+                    <p>{copy("Select one plain text object to use text assistance.")}</p>
+                  ) : !selected.text.trim() ? (
+                    <p>{copy("Enter some text before using text assistance.")}</p>
+                  ) : null}
+                </section>
+              </NativeInspectorSection>
             ) : null}
-            <button
-              className={inspectorStyles.deleteButton}
-              type="button"
-              disabled={!canEdit || (selected.type === "text" && selected.role === "title")}
-              onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
-            >
-              <EditorIcon name="trash" />
-              <span>{copy("Delete object")}</span>
-            </button>
-          </div>
-        </fieldset>
+            <div className={inspectorStyles.objectFooter}>
+              {selected.type === "text" && selected.role === "title" ? (
+                <p className={inspectorStyles.sectionHint}>
+                  {copy("The slide title stays on this slide.")}
+                </p>
+              ) : null}
+              <button
+                className={inspectorStyles.deleteButton}
+                type="button"
+                disabled={!canEdit || (selected.type === "text" && selected.role === "title")}
+                onClick={() => onChange(removeNativeSceneNodes(scene, [selected.id]))}
+              >
+                <EditorIcon name="trash" />
+                <span>{copy("Delete object")}</span>
+              </button>
+            </div>
+          </fieldset>
+        </NativeInspectorSection>
       </div>
       <fieldset
         disabled={!canEdit}
@@ -790,19 +822,25 @@ export function NativeSceneEditor({
             <p>{copy("Arrange the slide and refine the selected object.")}</p>
           </div>
         </div>
-        <div className={inspectorStyles.suggestionCard} lang={locale}>
-          <NativeSceneLayoutSuggestions
-            locale={locale}
-            scene={scene}
-            sourceKey={layoutSuggestionsSourceKey}
-            disabled={layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending}
-            onChange={(next) => {
-              if (layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending)
-                return false;
-              return onChange(next);
-            }}
-          />
-        </div>
+        <NativeInspectorSection
+          title={layoutAssistanceCopy(locale)("Local layout suggestions")}
+          icon="sparkle"
+          name="suggestions"
+        >
+          <div className={inspectorStyles.suggestionCard} lang={locale}>
+            <NativeSceneLayoutSuggestions
+              locale={locale}
+              scene={scene}
+              sourceKey={layoutSuggestionsSourceKey}
+              disabled={layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending}
+              onChange={(next) => {
+                if (layoutSuggestionsDisabled || mediaState !== "idle" || attachmentPending)
+                  return false;
+                return onChange(next);
+              }}
+            />
+          </div>
+        </NativeInspectorSection>
         <NativeSceneDesignControls
           scene={scene}
           onChange={onChange}
@@ -821,71 +859,78 @@ export function NativeSceneEditor({
           selectedId={selected.id}
           onChange={onChange}
         />
-        <fieldset className={inspectorStyles.card}>
-          <legend>
-            <EditorIcon name="layout" />
-            {copy("Position and size")}
-          </legend>
-          {selected.type !== "connector" ? (
-            <div className={styles.frameFields}>
-              {(["x", "y", "width", "height"] as const).map((field) => (
-                <label key={field}>
-                  {copy("Object {field} (%)", { field: copy(field) })}
-                  <input
-                    aria-label={copy("Object {field} (%)", { field: copy(field) })}
-                    type="number"
-                    min={field === "x" || field === "y" ? 0 : 1}
-                    max={100}
-                    step={1}
-                    value={Math.round(selected.frame[field] * 100) / 100}
-                    onChange={(event) => {
-                      const value = event.target.valueAsNumber;
-                      if (!Number.isFinite(value)) return;
-                      update(
-                        (node) =>
-                          node.type === "connector"
-                            ? node
-                            : {
-                                ...node,
-                                frame: boundNativeSceneFrame({ ...node.frame, [field]: value }),
-                              },
-                        `frame:${field}`,
-                      );
-                    }}
-                  />
-                </label>
-              ))}
-            </div>
-          ) : null}
-          {multiple ? (
-            <div className={styles.actions} aria-label={copy("Selection actions")}>
-              {(
-                [
-                  ["left", -1, 0],
-                  ["right", 1, 0],
-                  ["up", 0, -1],
-                  ["down", 0, 1],
-                ] as const
-              ).map(([direction, dx, dy]) => (
+        <NativeInspectorSection
+          title={copy("Position and size")}
+          icon="layout"
+          name="position"
+          defaultOpen
+        >
+          <fieldset className={inspectorStyles.card}>
+            <legend>
+              <EditorIcon name="layout" />
+              {copy("Position and size")}
+            </legend>
+            {selected.type !== "connector" ? (
+              <div className={inspectorStyles.positionFields}>
+                {(["x", "y", "width", "height"] as const).map((field) => (
+                  <label key={field}>
+                    {copy("Object {field} (%)", { field: copy(field) })}
+                    <input
+                      aria-label={copy("Object {field} (%)", { field: copy(field) })}
+                      type="number"
+                      min={field === "x" || field === "y" ? 0 : 1}
+                      max={100}
+                      step={1}
+                      value={Math.round(selected.frame[field] * 100) / 100}
+                      onChange={(event) => {
+                        const value = event.target.valueAsNumber;
+                        if (!Number.isFinite(value)) return;
+                        update(
+                          (node) =>
+                            node.type === "connector"
+                              ? node
+                              : {
+                                  ...node,
+                                  frame: boundNativeSceneFrame({ ...node.frame, [field]: value }),
+                                },
+                          `frame:${field}`,
+                        );
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            {multiple ? (
+              <div className={styles.actions} aria-label={copy("Selection actions")}>
+                {(
+                  [
+                    ["left", -1, 0],
+                    ["right", 1, 0],
+                    ["up", 0, -1],
+                    ["down", 0, 1],
+                  ] as const
+                ).map(([direction, dx, dy]) => (
+                  <button
+                    key={direction}
+                    type="button"
+                    disabled={!canMoveSelection}
+                    onClick={() => onChange(moveNativeSceneNodes(scene, selectedIds, dx, dy))}
+                  >
+                    {copy("Move selection {direction}", { direction: copy(direction) })}
+                  </button>
+                ))}
                 <button
-                  key={direction}
                   type="button"
-                  disabled={!canMoveSelection}
-                  onClick={() => onChange(moveNativeSceneNodes(scene, selectedIds, dx, dy))}
+                  onClick={() => onChange(removeNativeSceneNodes(scene, selectedIds))}
                 >
-                  {copy("Move selection {direction}", { direction: copy(direction) })}
+                  <EditorIcon name="trash" />
+                  <span>{copy("Delete selected objects")}</span>
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => onChange(removeNativeSceneNodes(scene, selectedIds))}
-              >
-                <EditorIcon name="trash" />
-                <span>{copy("Delete selected objects")}</span>
-              </button>
-            </div>
-          ) : null}
-        </fieldset>
+              </div>
+            ) : null}
+          </fieldset>
+        </NativeInspectorSection>
         <details className={styles.editorDisclosure}>
           <summary>{copy("Moving and resizing objects")}</summary>
           <p className={styles.help}>
@@ -911,62 +956,66 @@ export function NativeSceneEditor({
         {selected.type === "image" ? (
           <NativeSceneImageDesignControls scene={scene} node={selected} onChange={onChange} />
         ) : null}
-        <fieldset className={inspectorStyles.card}>
-          <legend>
-            <EditorIcon name="image" />
-            {copy("Add an image")}
-          </legend>
-          <p className={inspectorStyles.sectionHint}>
-            {copy("Start with a useful description, then choose an image.")}
-          </p>
-          <label>
-            {copy("New image description")}
-            <input
-              aria-label={copy("New image description")}
-              lang=""
-              maxLength={300}
-              value={imageAlt}
-              onChange={(event) => setImageAlt(event.target.value)}
+        <NativeInspectorSection title={copy("Add an image")} icon="image" name="add-image">
+          <fieldset className={inspectorStyles.card}>
+            <legend>
+              <EditorIcon name="image" />
+              {copy("Add an image")}
+            </legend>
+            <p className={inspectorStyles.sectionHint}>
+              {copy("Start with a useful description, then choose an image.")}
+            </p>
+            <label>
+              {copy("New image description")}
+              <input
+                aria-label={copy("New image description")}
+                lang=""
+                maxLength={300}
+                value={imageAlt}
+                onChange={(event) => setImageAlt(event.target.value)}
+              />
+            </label>
+            <label>
+              {copy("Add native image")}
+              <input
+                aria-label={copy("Add native image")}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={!uploadsEnabled || mediaState !== "idle" || !canAdd || !imageAlt.trim()}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onUploadImage(file, imageAlt.trim());
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <p className={styles.help}>
+              {copy(
+                attachmentPending
+                  ? "Finish or discard the uploaded image attachment before choosing another image."
+                  : mediaState === "uploading"
+                    ? "Uploading to quarantine…"
+                    : mediaState === "scanning"
+                      ? "Checking image safety…"
+                      : uploadsEnabled
+                        ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
+                        : "Uploads are unavailable until malware scanning is configured.",
+              )}
+            </p>
+          </fieldset>
+        </NativeInspectorSection>
+        <NativeInspectorSection title={copy("Images and video")} icon="media" name="video">
+          <div className={inspectorStyles.mediaCard} lang={locale}>
+            <NativeSceneVideoControls
+              locale={locale}
+              scene={scene}
+              canAdd={canAdd}
+              onChange={onChange}
+              // The accepted node is absent from this render's scene until the parent updates.
+              onSelect={(id) => setSelection([id])}
             />
-          </label>
-          <label>
-            {copy("Add native image")}
-            <input
-              aria-label={copy("Add native image")}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              disabled={!uploadsEnabled || mediaState !== "idle" || !canAdd || !imageAlt.trim()}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onUploadImage(file, imageAlt.trim());
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <p className={styles.help}>
-            {copy(
-              attachmentPending
-                ? "Finish or discard the uploaded image attachment before choosing another image."
-                : mediaState === "uploading"
-                  ? "Uploading to quarantine…"
-                  : mediaState === "scanning"
-                    ? "Checking image safety…"
-                    : uploadsEnabled
-                      ? "JPEG, PNG or WebP up to 10 MB. Describe each image before uploading; clean scanned images are added to this slide."
-                      : "Uploads are unavailable until malware scanning is configured.",
-            )}
-          </p>
-        </fieldset>
-        <div className={inspectorStyles.mediaCard} lang={locale}>
-          <NativeSceneVideoControls
-            locale={locale}
-            scene={scene}
-            canAdd={canAdd}
-            onChange={onChange}
-            // The accepted node is absent from this render's scene until the parent updates.
-            onSelect={(id) => setSelection([id])}
-          />
-        </div>
+          </div>
+        </NativeInspectorSection>
       </fieldset>
       <div hidden={sectionHidden("accessibility")} data-native-inspector-section="accessibility">
         <div className={inspectorStyles.sectionHeader}>

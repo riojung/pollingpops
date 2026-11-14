@@ -6,6 +6,7 @@ import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeSceneView } from "./native-scene-view";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
 import { NativeSceneInteractionMap } from "./native-scene-interaction-map";
+import type { NativeSceneResizeHandle } from "../../lib/presentation-native-geometry";
 
 const mocked = vi.hoisted(() => ({
   hooks: null as null | {
@@ -163,8 +164,13 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     view,
     controls: () => elements(tree).find((child) => child.type === NativeSceneSelectionControls)!,
     interactionMap: () => elements(tree).find((child) => child.type === NativeSceneInteractionMap)!,
-    start: (ev = event(), id = "body", resize = false, handle = true) =>
-      view().props.onNodePointerDown(ev, id, resize, handle),
+    start: (
+      ev = event(),
+      id = "body",
+      resize = false,
+      handle = true,
+      resizeHandle?: NativeSceneResizeHandle,
+    ) => view().props.onNodePointerDown(ev, id, resize, handle, resizeHandle),
     move: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerMove(ev),
     finish: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerUp(ev),
     cancel: (kind: "onPointerCancel" | "onLostPointerCapture") => tree.props[kind](event()),
@@ -233,8 +239,127 @@ describe("native pointer gesture lifecycle", () => {
   it("places selection controls outside the authored surface and disables in-stage handles", () => {
     const editor = harness();
     expect(editor.view().props.hideGeometryControls).toBe(true);
+    expect(editor.view().props.showSelectionHandles).toBe(true);
     expect(elements(editor.controls()).some((node) => node.type === NativeSceneView)).toBe(false);
     expect(editor.controls().props.selectedNodeIds).toEqual(["body", "shape"]);
+  });
+
+  it("drags an object's body immediately and preserves an existing multiselection", () => {
+    const editor = harness();
+    editor.start(editor.event(), "shape", false, false);
+    editor.finish(editor.event({ clientX: 150, clientY: 125, altKey: true }));
+    expect(editor.onSelect).not.toHaveBeenCalled();
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(frame(editor.onChange.mock.calls[0]![0])).toMatchObject({ x: 15, y: 45 });
+    expect(frame(editor.onChange.mock.calls[0]![0], "shape")).toMatchObject({ x: 65, y: 45 });
+  });
+
+  it.each(["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const)(
+    "previews the direct %s handle locally and commits the release position once",
+    (handle) => {
+      const editor = harness(["body"]);
+      const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+      const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+      editor.start(editor.event(), "body", true, true, handle);
+      editor.move(editor.event({ clientX: 100 + horizontal * 20, clientY: 100 + vertical * 10 }));
+      editor.render();
+      expect(editor.onChange).not.toHaveBeenCalled();
+      expect(frame(editor.view().props.scene).width).toBe(20 + Math.abs(horizontal) * 2);
+      editor.finish(editor.event({ clientX: 100 + horizontal * 40, clientY: 100 + vertical * 20 }));
+      expect(editor.onChange).toHaveBeenCalledOnce();
+      expect(frame(editor.onChange.mock.calls[0]![0]).width).toBe(20 + Math.abs(horizontal) * 4);
+      expect(frame(editor.onChange.mock.calls[0]![0]).height).toBe(20 + Math.abs(vertical) * 4);
+      editor.finish();
+      expect(editor.onChange).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("scales a multiselection from a direct corner and retains keyboard handle geometry", () => {
+    const editor = harness();
+    editor.start(editor.event(), "shape", true, true, "nw");
+    editor.finish(editor.event({ clientX: 175, clientY: 112.5 }));
+    const result = editor.onChange.mock.calls[0]![0] as PresentationScene;
+    expect(frame(result).width).toBeCloseTo(18);
+    expect(frame(result, "shape").width).toBeCloseTo(22.5);
+    expect(frame(result, "shape").x + frame(result, "shape").width).toBeCloseTo(85);
+    expect(frame(result, "shape").y + frame(result, "shape").height).toBeCloseTo(65);
+    editor.view().props.onGeometryKey("shape", 0, -1, true, "n");
+    expect(editor.onChange).toHaveBeenCalledTimes(2);
+    expect(frame(editor.onChange.mock.calls[1]![0]).width).toBeCloseTo(20.8);
+  });
+
+  it("preserves interactive descendants and native content scrolling while still selecting their object", () => {
+    class Target {
+      parentElement: Target | null = null;
+      scrollWidth = 100;
+      clientWidth = 100;
+      scrollHeight = 100;
+      clientHeight = 100;
+      constructor(public interactive = false) {}
+      closest() {
+        return this.interactive ? this : null;
+      }
+    }
+    vi.stubGlobal("Element", Target);
+    vi.stubGlobal("HTMLElement", Target);
+    const editor = harness(["body"]);
+    Object.assign(window, { getComputedStyle: () => ({ overflowX: "auto", overflowY: "auto" }) });
+    const linked = editor.event({ target: new Target(true) });
+    editor.start(linked, "shape", false, false);
+    expect(linked.preventDefault).not.toHaveBeenCalled();
+    expect(editor.onSelect).toHaveBeenCalledWith("shape");
+    const scroll = new Target();
+    scroll.scrollHeight = 200;
+    const content = new Target();
+    content.parentElement = scroll;
+    const scrolling = editor.event({ target: content });
+    editor.start(scrolling, "body", false, false);
+    expect(scrolling.preventDefault).not.toHaveBeenCalled();
+    expect(editor.root.setPointerCapture).not.toHaveBeenCalled();
+    // Explicit handles are separate from content and always take the resize gesture.
+    editor.start(editor.event({ target: scroll }), "body", true, true, "e");
+    expect(editor.root.setPointerCapture).toHaveBeenCalledOnce();
+  });
+
+  it("moves a scrollable object's selection border directly, preserving its interior guard and committing once", () => {
+    class ScrollTarget {
+      parentElement = null;
+      scrollWidth = 200;
+      clientWidth = 100;
+      scrollHeight = 200;
+      clientHeight = 100;
+      closest() {
+        return null;
+      }
+    }
+    vi.stubGlobal("Element", ScrollTarget);
+    vi.stubGlobal("HTMLElement", ScrollTarget);
+    const editor = harness(["body"]);
+    Object.assign(window, { getComputedStyle: () => ({ overflowX: "auto", overflowY: "auto" }) });
+    const content = new ScrollTarget();
+    editor.start(editor.event({ target: content }), "body", false, false);
+    editor.move();
+    editor.finish();
+    expect(editor.root.setPointerCapture).not.toHaveBeenCalled();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    // Selection-border strips call the same move operation as an explicit pointer handle.
+    editor.start(editor.event({ target: content }), "body", false, true);
+    editor.move(editor.event({ clientX: 130, clientY: 110, altKey: true }));
+    editor.render();
+    expect(frame(editor.view().props.scene)).toMatchObject({ x: 13, y: 42 });
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.finish(editor.event({ clientX: 150, clientY: 125, altKey: true }));
+    editor.finish();
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(frame(editor.onChange.mock.calls[0]![0])).toEqual({
+      x: 15,
+      y: 45,
+      width: 20,
+      height: 20,
+    });
+    expect(frame(editor.onChange.mock.calls[0]![0], "shape")).toEqual(
+      frame(editor.original, "shape"),
+    );
   });
 
   it("keeps the external pointer control bound to the original scene during previews and cancels before changing selection", () => {
@@ -317,7 +442,7 @@ describe("native pointer gesture lifecycle", () => {
     "discards previews on %s without draft mutation",
     (reason) => {
       const editor = harness();
-      editor.start();
+      editor.start(editor.event(), "body", true, true, "nw");
       editor.move();
       if (reason === "escape") editor.escape();
       else editor.cancel(reason);
@@ -340,6 +465,24 @@ describe("native pointer gesture lifecycle", () => {
     expect(editor.onChange).not.toHaveBeenCalled();
     editor.render(editor.original);
     expect(editor.view().props.scene).toBe(editor.original);
+  });
+
+  it("fences captured body, resize and keyboard handlers immediately when the source changes", () => {
+    const editor = harness();
+    const ownerStart = editor.view().props.onNodePointerDown;
+    const ownerKey = editor.view().props.onGeometryKey;
+    const ownerFinish = editor.tree().props.onPointerUp;
+    editor.start(editor.event(), "body", true, true, "nw");
+    editor.move();
+    const recovered = { ...editor.original, nodes: [...editor.original.nodes] };
+    editor.render(recovered, false);
+    ownerFinish(editor.event({ clientX: 250 }));
+    ownerKey("body", 4, 0, true, "e");
+    ownerStart(editor.event(), "body", false, false);
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.render(recovered);
+    expect(editor.view().props.scene).toBe(recovered);
+    expect(editor.root.releasePointerCapture).toHaveBeenCalledWith(7);
   });
 
   it("cancels capture on unmount", () => {
@@ -397,13 +540,14 @@ describe("native canvas permission boundaries", () => {
     const ownerStart = current.view().props.onNodePointerDown;
     const ownerKey = current.controls().props.onGeometryKey;
     const ownerFinish = current.tree().props.onPointerUp;
-    current.start();
+    current.start(current.event(), "body", true, true, "e");
     current.move();
     current.render();
     expect(current.view().props.scene).not.toBe(current.original);
     current.setCanEdit(false);
     current.render(current.original, false);
     expect(current.view().props.scene).toBe(current.original);
+    expect(current.view().props.showSelectionHandles).toBe(false);
     expect(current.controls().props.disabled).toBe(true);
     ownerFinish(current.event({ clientX: 240 }));
     ownerKey("body", 5, 0, false);

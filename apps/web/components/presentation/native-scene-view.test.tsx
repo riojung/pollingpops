@@ -300,6 +300,91 @@ describe("production native scene rendering", () => {
     expect(scene).toEqual(original);
   });
 
+  it("opts the editing canvas into eight direct handles above selected content, with circular corners and square sides", () => {
+    const scene = nativeSceneFixture();
+    const body = scene.nodes.find((node) => node.id === "body")!;
+    if (body.type === "connector") throw new Error("Expected body");
+    body.rotation = 25;
+    const markup = renderToStaticMarkup(
+      <NativeSceneView
+        scene={scene}
+        onSelect={() => {}}
+        selectedNodeIds={["body"]}
+        hideGeometryControls
+        showSelectionHandles
+        onNodePointerDown={() => {}}
+      />,
+    );
+    expect(markup).toContain('data-native-selection-outline="true"');
+    expect(markup.match(/data-native-resize-handle=/g)).toHaveLength(8);
+    expect(markup.match(/data-native-resize-corner=/g)).toHaveLength(4);
+    expect(markup.match(/data-native-move-border=/g)).toHaveLength(4);
+    const strips = markup.match(/<span[^>]*data-native-move-border[^>]*>/g)!;
+    expect(
+      strips.every((strip) => strip.includes('aria-hidden="true"') && !strip.includes("tabindex")),
+    ).toBe(true);
+    expect(markup).toContain("clamp(16px,");
+    expect(markup).toContain("rotate(25deg)");
+    // The overlay follows all authored nodes, outside text/data/interaction descendants.
+    expect(markup.indexOf('data-native-selection-handles="true"')).toBeGreaterThan(
+      markup.indexOf('data-node-id="edge"'),
+    );
+    expect(markup.indexOf('data-native-move-border="n"')).toBeLessThan(
+      markup.indexOf('data-native-resize-handle="nw"'),
+    );
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8");
+    expect(css).toContain(".selectionOverlay,\n  .snapGuides {\n    display: none;");
+    expect(css).toContain("pointer-events: auto;");
+    expect(css).toContain("width: 32px;");
+  });
+
+  it("keeps move border hit areas outside the authored frame so inner native scrollbars remain usable", () => {
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8");
+    const rule = (selector: string) => css.slice(css.indexOf(`${selector} {`)).split("}")[0]!;
+    expect(rule(".selectionOutline")).toContain("outline-offset: 0;");
+    expect(rule(".selectionOutline")).toContain("pointer-events: none;");
+    // Each 8px hit strip ends exactly at the frame edge, with no area over its content.
+    const borders = [
+      ["n", "-8px 0 auto", "height"],
+      ["e", "0 -8px 0 auto", "width"],
+      ["s", "auto 0 -8px", "height"],
+      ["w", "0 auto 0 -8px", "width"],
+    ];
+    for (const [edge, inset, size] of borders) {
+      const border = rule(`.selectionDragBorder[data-native-move-border="${edge}"]`);
+      expect(border).toContain(`inset: ${inset};`);
+      expect(border).toContain(`${size}: 8px;`);
+    }
+  });
+
+  it("uses one shared handle set for multiple objects and persistent groups, and never exposes it in delivery or thumbnails", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 4;
+    scene.groups = [{ id: "group", nodeIds: ["body", "shape"] }];
+    const props = {
+      scene,
+      selectedNodeIds: ["body"],
+      hideGeometryControls: true,
+      showSelectionHandles: true,
+      onNodePointerDown: () => {},
+    };
+    const markup = renderToStaticMarkup(<NativeSceneView {...props} onSelect={() => {}} />);
+    expect(markup.match(/data-native-resize-handle=/g)).toHaveLength(8);
+    expect(markup.match(/data-native-selection-outline=/g)).toHaveLength(1);
+    expect(markup).toContain("left:8%;top:40%;width:57%;height:30%");
+    for (const preview of [
+      <NativeSceneView key="delivery" {...props} />,
+      <NativeSceneView key="thumbnail" {...props} onSelect={() => {}} staticThumbnail />,
+      <NativeSceneView
+        key="readonly"
+        {...props}
+        onSelect={() => {}}
+        showSelectionHandles={false}
+      />,
+    ])
+      expect(renderToStaticMarkup(preview)).not.toContain("data-native-resize-handle");
+  });
+
   it("exposes complete native authoring controls while requiring a description before upload", () => {
     const markup = renderToStaticMarkup(
       <NativeSceneEditor

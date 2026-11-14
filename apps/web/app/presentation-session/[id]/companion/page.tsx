@@ -560,9 +560,9 @@ export default function PresentationCompanionPage() {
   return (
     <main className={styles.page} lang={locale}>
       <section className={styles.sidecar} aria-label={t("live.companion.title")}>
-        <header>
+        <header className={styles.header}>
           <h1>{t("live.companion.title")}</h1>
-          <p className="muted" role="status" aria-live="polite">
+          <p className={styles.connection} role="status" aria-live="polite">
             {t(
               !pass && captured
                 ? "live.companion.disconnected"
@@ -585,20 +585,6 @@ export default function PresentationCompanionPage() {
         {pass && !snapshot ? <p role="status">{t("live.companion.loading")}</p> : null}
         {snapshot ? (
           <>
-            <PresentationSpatialDelivery
-              spatial={snapshot.spatial}
-              currentBlockIndex={snapshot.currentBlockIndex}
-              phase={snapshot.phase}
-              sourceKey={`${id}:${snapshot.presentationVersionId}`}
-              navigation={snapshot.navigation}
-              disabled={
-                commandState.busy ||
-                !!commandState.pendingCommand ||
-                !pass ||
-                !controllerRef.current?.canMutate()
-              }
-              onJump={(blockId) => void navigate("jump_to_block", blockId)}
-            />
             <div className={styles.current}>
               <span className={styles.phase}>{t(`live.companion.phase.${snapshot.phase}`)}</span>
               <h2 lang="">
@@ -618,6 +604,98 @@ export default function PresentationCompanionPage() {
                 })}
               </p>
             </div>
+            <div className={styles.primaryControls}>
+              <p className={styles.acknowledgement} role="status" aria-live="polite">
+                {t(
+                  commandState.busy
+                    ? "live.companion.waitingAck"
+                    : commandState.pendingCommand
+                      ? "live.companion.unconfirmed"
+                      : confirmed
+                        ? "live.companion.confirmed"
+                        : "live.companion.ready",
+                )}
+              </p>
+              <button
+                className="button full-width"
+                disabled={
+                  !pass ||
+                  commandState.busy ||
+                  !controllerRef.current?.canMutate() ||
+                  (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
+                }
+                onClick={() => void advanceOrRetry()}
+                ref={primaryButtonRef}
+                type="button"
+              >
+                {commandState.pendingCommand && !commandState.busy
+                  ? retryLabel(commandState.pendingCommand)
+                  : t(
+                      commandState.busy
+                        ? "live.common.updating"
+                        : snapshot.primaryAction === "none"
+                          ? "live.companion.noAction"
+                          : companionAdvanceMessageKey(snapshot),
+                    )}
+              </button>
+              <div className={styles.navigationTools}>
+                {snapshot.navigation ? (
+                  <button
+                    className="button-quiet"
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      setOverlay("navigation");
+                    }}
+                    aria-haspopup="dialog"
+                    aria-expanded={overlay === "navigation"}
+                  >
+                    {copy("Open navigation")}
+                  </button>
+                ) : null}
+                <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
+                  {t("live.companion.showJoin")}
+                </button>
+                {results || opinionResults || textResults ? (
+                  <button
+                    className="button-quiet"
+                    onClick={() => setOverlay("results")}
+                    type="button"
+                  >
+                    {t("live.companion.showResults")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <dl className={styles.metrics}>
+              {(
+                [
+                  ["joined", snapshot.roomStatus.joinedCount],
+                  ["answered", snapshot.roomStatus.responseCount],
+                  ["connectedCount", snapshot.roomStatus.connectedCount],
+                  ["disconnected", snapshot.roomStatus.notCurrentlyConnectedCount],
+                ] as const
+              ).map(([label, count]) => (
+                <div key={label}>
+                  <dt>{t(`live.companion.${label}`)}</dt>
+                  <dd>{formatNumber(locale, count)}</dd>
+                </div>
+              ))}
+            </dl>
+            <PresentationSpatialDelivery
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+              navigation={snapshot.navigation}
+              disabled={
+                commandState.busy ||
+                !!commandState.pendingCommand ||
+                !pass ||
+                !controllerRef.current?.canMutate()
+              }
+              onJump={(blockId) => void navigate("jump_to_block", blockId)}
+            />
             {block?.kind === "content" && block.scene?.nodes.some(isNativeInteractionNode) ? (
               <section
                 aria-label={copy("Current slide interactions")}
@@ -640,81 +718,7 @@ export default function PresentationCompanionPage() {
                 />
               </section>
             ) : null}
-            <dl className={styles.metrics}>
-              {(
-                [
-                  ["joined", snapshot.roomStatus.joinedCount],
-                  ["answered", snapshot.roomStatus.responseCount],
-                  ["connectedCount", snapshot.roomStatus.connectedCount],
-                  ["disconnected", snapshot.roomStatus.notCurrentlyConnectedCount],
-                ] as const
-              ).map(([label, count]) => (
-                <div key={label}>
-                  <dt>{t(`live.companion.${label}`)}</dt>
-                  <dd>{formatNumber(locale, count)}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className={styles.acknowledgement} role="status" aria-live="polite">
-              {t(
-                commandState.busy
-                  ? "live.companion.waitingAck"
-                  : commandState.pendingCommand
-                    ? "live.companion.unconfirmed"
-                    : confirmed
-                      ? "live.companion.confirmed"
-                      : "live.companion.ready",
-              )}
-            </p>
-            <button
-              className="button full-width"
-              disabled={
-                !pass ||
-                commandState.busy ||
-                !controllerRef.current?.canMutate() ||
-                (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
-              }
-              onClick={() => void advanceOrRetry()}
-              ref={primaryButtonRef}
-              type="button"
-            >
-              {commandState.pendingCommand && !commandState.busy
-                ? retryLabel(commandState.pendingCommand)
-                : t(
-                    commandState.busy
-                      ? "live.common.updating"
-                      : snapshot.primaryAction === "none"
-                        ? "live.companion.noAction"
-                        : companionAdvanceMessageKey(snapshot),
-                  )}
-            </button>
             <div className={styles.secondary}>
-              {snapshot.navigation ? (
-                <button
-                  className="button-quiet"
-                  type="button"
-                  onClick={(event) => {
-                    event.currentTarget.focus({ preventScroll: true });
-                    setOverlay("navigation");
-                  }}
-                  aria-haspopup="dialog"
-                  aria-expanded={overlay === "navigation"}
-                >
-                  {copy("Open navigation")}
-                </button>
-              ) : null}
-              <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
-                {t("live.companion.showJoin")}
-              </button>
-              {results || opinionResults || textResults ? (
-                <button
-                  className="button-quiet"
-                  onClick={() => setOverlay("results")}
-                  type="button"
-                >
-                  {t("live.companion.showResults")}
-                </button>
-              ) : null}
               {snapshot.canInsertRecoveryPack !== undefined ? (
                 <button
                   className="button-quiet"

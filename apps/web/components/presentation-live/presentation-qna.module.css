@@ -1,21 +1,139 @@
 .container {
-  width: 100%;
-  max-width: 72rem;
+  width: min(1440px, calc(100% - 40px));
   min-width: 0;
-  margin: 1rem auto;
+  margin: 16px auto;
+  color: var(--ui-text);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .compact {
-  max-width: 26rem;
+  width: 100%;
+  max-width: 28rem;
+}
+
+.container[data-presentation-role="participant"] {
+  max-width: 960px;
+}
+
+.container > details {
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
 }
 
 .toggle {
   cursor: pointer;
-  font-weight: 700;
-  padding: 0.75rem 0;
+  padding: 12px 16px;
+  color: var(--ui-text-strong);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.toggle:hover {
+  background: var(--ui-surface-soft);
 }
 
 .toggle:focus-visible {
-  outline: 3px solid var(--accent, #087e83);
-  outline-offset: 4px;
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -3px;
+}
+
+.container :global(.qna-panel) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+
+.container :global(.qna-heading) {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.container :global(.qna-heading) h2,
+.container > :global(.panel) h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.container :global(.eyebrow) {
+  margin: 0 0 4px;
+  font-size: 10px;
+}
+
+.container :global(.notice) {
+  margin-block: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.container :global(.qna-settings) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.container :global(.qna-settings) :global(.field) {
+  margin: 0;
+}
+
+.container :global(.field-label),
+.container :global(.checkbox-field) {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.container :global(.select),
+.container :global(.textarea) {
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.container :global(.button),
+.container :global(.button-quiet),
+.container :global(.button-danger) {
+  min-height: 36px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.container :global(.qna-empty) {
+  margin-block: 12px;
+  padding: 18px;
+  border-radius: 9px;
+}
+
+.container > :global(.panel) {
+  padding: 16px;
+  border-radius: 12px;
+}
+
+@media (max-width: 620px) {
+  .container {
+    width: calc(100% - 20px);
+  }
+
+  .compact {
+    width: 100%;
+  }
+
+  .container :global(.button),
+  .container :global(.button-quiet),
+  .container :global(.button-danger) {
+    min-height: 44px;
+  }
 }

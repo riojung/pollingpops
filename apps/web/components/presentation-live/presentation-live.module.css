@@ -1,128 +1,153 @@
 .page {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 12% 8%, var(--ui-hero-glow-teal), transparent 32%),
-    linear-gradient(
-      145deg,
-      var(--ui-hero-start) 0%,
-      var(--ui-hero-mid) 48%,
-      var(--ui-hero-end) 100%
-    );
-  color: var(--ui-on-hero);
+  min-width: 0;
+  min-height: 100dvh;
+  background: var(--ui-canvas);
+  color: var(--ui-text);
 }
 
 .topbar {
   display: flex;
   flex-wrap: wrap;
-  min-height: 72px;
+  min-height: 60px;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-  background: color-mix(in srgb, var(--ui-hero-start) 85%, transparent);
-  padding: 12px clamp(18px, 4vw, 58px);
-  backdrop-filter: blur(16px);
+  gap: 10px 16px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  padding: 8px clamp(16px, 2.5vw, 36px);
 }
 
 .topbar a {
   color: inherit;
 }
 
+.topbar :global(.brand) {
+  gap: 8px;
+  font-size: 14px;
+}
+
+.topbar :global(.brand-pop),
+.topbar :global(.brand-mark) {
+  width: 32px;
+  height: 36px;
+}
+
+.page :global(.button),
+.page :global(.button-quiet) {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .topbar :global(.button-row) > :is(a, button):not(:global(.button)) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  border: 1px solid color-mix(in srgb, var(--ui-on-hero) 35%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ui-on-hero) 8%, transparent);
-  color: var(--ui-on-hero);
+  min-height: 36px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
   font: inherit;
-  font-size: 0.9rem;
-  font-weight: 750;
-  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 7px 11px;
   text-decoration: none;
 }
 
 .topbar :global(.button-row) > :is(a, button):not(:global(.button)):hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ui-on-hero) 16%, transparent);
-  border-color: var(--ui-on-hero);
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-border-strong);
 }
 
 .topbar :global(.small-button) {
-  min-height: 44px;
+  min-height: 36px;
 }
 
 .topbar :is(a, button):focus-visible {
-  outline-color: var(--ui-on-hero);
+  outline-color: var(--ui-focus);
 }
 
 .stage {
   display: grid;
-  width: min(1240px, calc(100% - 32px));
-  min-height: calc(100vh - 72px);
+  width: min(1440px, calc(100% - 40px));
+  min-width: 0;
   margin: 0 auto;
-  align-content: center;
-  gap: 22px;
-  padding: 36px 0 54px;
+  align-content: start;
+  gap: 16px;
+  padding: 20px 0 32px;
+}
+
+.stage > [role="status"] {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .hostGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 16px;
 }
 
 .canvas,
 .sideCard,
 .joinCard,
 .reportCard {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius);
-  background: var(--ui-surface-translucent);
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
   color: var(--ui-text);
-  box-shadow: var(--ui-shadow-lg);
+  box-shadow: var(--ui-shadow-sm);
 }
 
 .canvas {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  min-height: min(650px, calc(100vh - 160px));
+  min-height: clamp(240px, 38dvh, 420px);
   place-items: center;
-  padding: clamp(28px, 6vw, 78px);
+  padding: clamp(12px, 1.5vw, 24px);
   text-align: center;
 }
 
 .canvasContent {
   min-width: 0;
-  width: min(100%, 850px);
+  width: 100%;
 }
 
 .canvasContent > h1,
 .canvasContent > h2 {
-  margin: 0 0 18px;
-  font-size: clamp(2rem, 5vw, 4.5rem);
-  letter-spacing: -0.045em;
-  line-height: 1.02;
+  margin: 12px 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .canvasContent > p {
-  font-size: clamp(1.05rem, 2vw, 1.45rem);
-  line-height: 1.6;
+  margin: 10px 0;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .sideCard {
   display: grid;
   align-content: start;
-  gap: 18px;
-  padding: 22px;
+  min-width: 0;
+  gap: 12px;
+  padding: 14px;
 }
 
 .joinCode {
   margin: 0;
   color: var(--ui-accent-ink);
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-size: clamp(1.8rem, 3vw, 2.3rem);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.13em;
 }
@@ -130,13 +155,15 @@
 .metricRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .metric {
-  border-radius: 14px;
-  background: var(--ui-accent-soft);
-  padding: 12px;
+  min-width: 0;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+  padding: 10px 12px;
 }
 
 .metric strong,
@@ -145,26 +172,39 @@
 }
 
 .metric strong {
-  font-size: 1.5rem;
+  color: var(--ui-text-strong);
+  font-size: 1.35rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric span {
+  margin-top: 4px;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .choiceGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 28px;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .choice,
 .choiceButton {
-  min-height: 72px;
-  border: 2px solid var(--ui-border-strong);
-  border-radius: 16px;
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
   background: var(--ui-surface-soft);
   color: var(--ui-text);
-  padding: 16px;
+  padding: 12px 14px;
   font: inherit;
-  font-weight: 750;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
   text-align: left;
 }
 
@@ -177,6 +217,19 @@
   cursor: pointer;
 }
 
+.choiceButton:hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+
+.choiceButton:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.choiceButton:disabled {
+  cursor: default;
+}
+
 .choiceButton[aria-pressed="true"] {
   border-color: var(--ui-accent);
   background: var(--ui-accent-soft);
@@ -185,18 +238,19 @@
 
 .joinCard {
   width: min(560px, calc(100% - 32px));
-  margin: 9vh auto 0;
-  padding: clamp(24px, 5vw, 46px);
+  margin: 32px auto 0;
+  padding: clamp(20px, 3vw, 32px);
 }
 
 .joinCard h1 {
   margin-top: 0;
-  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  line-height: 1.2;
 }
 
 .formStack {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .formStack label {
@@ -207,9 +261,10 @@
 
 .formStack input,
 .formStack select {
-  min-height: 52px;
+  min-width: 0;
+  min-height: 44px;
   border: 1px solid var(--ui-border-strong);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--ui-surface);
   color: var(--ui-text);
   padding: 10px 13px;
@@ -221,7 +276,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
 .statusPill {
@@ -230,9 +285,11 @@
   border-radius: 999px;
   background: var(--ui-accent-soft);
   color: var(--ui-accent-ink);
-  padding: 6px 10px;
-  font-size: 0.78rem;
-  font-weight: 800;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
@@ -241,11 +298,12 @@
   min-width: 72px;
   margin: 14px auto 8px;
   border-radius: 999px;
-  background: var(--pop-plum);
-  color: #fff;
-  padding: 8px 14px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-strong);
+  padding: 6px 10px;
   font-variant-numeric: tabular-nums;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .leaderboard {
@@ -268,13 +326,32 @@
 .report {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: 16px;
 }
 
 .reportCard {
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: 22px;
+  padding: 16px 18px;
+}
+
+.reportCard > h1 {
+  margin: 10px 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.reportCard > h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.reportCard > p {
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .reportNickname {
@@ -286,13 +363,13 @@
 .reportGrid {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 12px;
 }
 
 .reportGrid h2 {
   margin-block: 0.75rem;
-  font-size: 1.35rem;
+  font-size: 1rem;
   line-height: 1.3;
   letter-spacing: normal;
 }
@@ -304,7 +381,7 @@
 
 .timeline {
   display: grid;
-  gap: 10px;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -316,7 +393,9 @@
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--ui-border);
-  padding: 10px 0;
+  padding: 9px 0;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .timelineAttribution {
@@ -327,14 +406,32 @@
 
 .setup {
   display: grid;
-  width: min(760px, calc(100% - 32px));
-  margin: 10vh auto 0;
-  gap: 18px;
-  border-radius: 24px;
+  width: min(960px, calc(100% - 40px));
+  min-width: 0;
+  margin: 24px auto;
+  gap: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
   background: var(--ui-surface);
   color: var(--ui-text);
-  padding: clamp(28px, 6vw, 56px);
-  box-shadow: 0 28px 80px rgba(3, 11, 52, 0.3);
+  padding: clamp(20px, 3vw, 32px);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.setup > h1 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.65rem, 3vw, 2.2rem);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.setup > p {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 @media (max-width: 880px) {
@@ -342,40 +439,46 @@
     grid-template-columns: 1fr;
   }
 
-  .sideCard {
-    order: -1;
-  }
-
   .canvas {
-    min-height: 58vh;
+    min-height: 240px;
   }
 }
 
 @media (max-width: 620px) {
   .topbar {
-    min-height: 60px;
+    min-height: 56px;
     padding: 8px 12px;
   }
 
   .stage {
     width: min(100% - 20px, 1240px);
-    min-height: calc(100vh - 60px);
-    padding: 14px 0 32px;
+    padding: 12px 0 24px;
   }
 
   .canvas,
   .sideCard,
   .joinCard,
   .reportCard {
-    border-radius: 17px;
+    border-radius: 12px;
   }
 
   .canvas {
-    padding: 24px 15px;
+    padding: 12px;
   }
 
   .choiceGrid {
     grid-template-columns: 1fr;
+  }
+
+  .page :global(.button),
+  .page :global(.button-quiet),
+  .topbar :global(.button-row) > :is(a, button):not(:global(.button)) {
+    min-height: 44px;
+  }
+
+  .setup {
+    width: calc(100% - 20px);
+    margin-block: 14px;
   }
 }
 

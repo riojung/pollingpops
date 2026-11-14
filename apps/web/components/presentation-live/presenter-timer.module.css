@@ -1,9 +1,9 @@
 .timer {
   min-width: 0;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-small);
-  background: var(--ui-surface);
+  background: var(--ui-surface-soft);
   color: var(--ui-text);
 }
 
@@ -17,45 +17,46 @@
 
 .heading h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.85rem;
 }
 
 .status,
 .description {
   color: var(--ui-text-muted);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .time {
   display: block;
-  margin-top: 12px;
-  font-size: clamp(2rem, 4vw, 3rem);
+  margin-top: 8px;
+  font-size: 2rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
 
 .description {
-  margin: 10px 0 14px;
+  margin: 6px 0 10px;
   line-height: 1.5;
 }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .controls button {
   min-height: 44px;
   flex: 1 1 auto;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--ui-border-strong);
   border-radius: 10px;
-  background: var(--ui-surface-soft);
+  background: var(--ui-surface);
   color: var(--ui-text);
   font: inherit;
   font-weight: 650;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 

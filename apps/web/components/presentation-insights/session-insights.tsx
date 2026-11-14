@@ -22,9 +22,9 @@ import {
 import { presentationInsightsCopy } from "../../lib/i18n/presentation-insights-copy";
 import styles from "./insights.module.css";
 
-function Facts({ rows }: { rows: Array<[string, string]> }) {
+function Facts({ rows, compact = false }: { rows: Array<[string, string]>; compact?: boolean }) {
   return (
-    <dl className={styles.facts}>
+    <dl className={compact ? styles.metadataFacts : styles.facts}>
       {rows.map(([label, value]) => (
         <div key={label}>
           <dt>{label}</dt>
@@ -57,14 +57,27 @@ export function PresentationInsightsDetails({
   const copy = presentationInsightsCopy(locale);
   const view = presentationInsightsView(insights, locale, copy);
   return (
-    <div lang={locale}>
-      <h3>{copy("Delivery coverage")}</h3>
-      <Facts rows={view.facts} />
-      {view.tables.map((table) => (
-        <section key={table.title}>
-          <h3>
-            <TableTitle table={table} />
-          </h3>
+    <div className={styles.details} lang={locale}>
+      <section>
+        <h3>{copy("Delivery coverage")}</h3>
+        <Facts rows={view.facts.slice(8)} />
+      </section>
+      <details className={styles.metadata}>
+        <summary>
+          {copy("Published version")} · {view.facts[0]?.[1]}
+        </summary>
+        <div className={styles.metadataGroups}>
+          <Facts rows={[...view.facts.slice(0, 3), ...view.facts.slice(6, 8)]} compact />
+          <Facts rows={view.facts.slice(3, 6)} compact />
+        </div>
+      </details>
+      {view.tables.map((table, index) => (
+        <details className={styles.tableSection} key={table.title} open={index === 0}>
+          <summary>
+            <h3>
+              <TableTitle table={table} />
+            </h3>
+          </summary>
           <div className={styles.table} tabIndex={0} role="region" aria-label={table.title}>
             <table>
               <caption className="sr-only">
@@ -105,13 +118,13 @@ export function PresentationInsightsDetails({
               </tbody>
             </table>
           </div>
-          {table.note ? <p>{table.note}</p> : null}
-        </section>
+          {table.note ? <p className={styles.note}>{table.note}</p> : null}
+        </details>
       ))}
-      <section>
+      <section className={styles.qna}>
         <h3>{copy("Q&A outcomes")}</h3>
         <Facts rows={view.qna} />
-        <p>{view.qnaNote}</p>
+        <p className={styles.note}>{view.qnaNote}</p>
       </section>
       <details className={styles.notes}>
         <summary>{copy("Reading these insights")}</summary>
@@ -193,7 +206,22 @@ export function PresentationSessionInsightsPanel({
   }
   return (
     <section className={styles.panel} aria-labelledby={headingId} lang={locale}>
-      <h2 id={headingId}>{copy("Session insights")}</h2>
+      <div className={styles.heading}>
+        <h2 id={headingId}>{copy("Session insights")}</h2>
+        {current ? (
+          <div className={styles.actions}>
+            <button type="button" onClick={() => download("csv")}>
+              {copy("Export coverage CSV")}
+            </button>
+            <button type="button" onClick={() => download("html")}>
+              {copy("Download readable summary")}
+            </button>
+            <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+              {copy("Refresh insights")}
+            </button>
+          </div>
+        ) : null}
+      </div>
       {loading ? <p role="status">{copy("Loading session insights…")}</p> : null}
       {unavailable ? (
         <p role="status">
@@ -228,18 +256,7 @@ export function PresentationSessionInsightsPanel({
       ) : null}
       {current ? (
         <>
-          <div className={styles.actions}>
-            <button type="button" onClick={() => download("csv")}>
-              {copy("Export coverage CSV")}
-            </button>
-            <button type="button" onClick={() => download("html")}>
-              {copy("Download readable summary")}
-            </button>
-            <button type="button" onClick={() => setAttempt((value) => value + 1)}>
-              {copy("Refresh insights")}
-            </button>
-          </div>
-          <p>
+          <p className={styles.downloadNotice}>
             {copy("Downloaded copies cannot be revoked. Keep them within the intended audience.")}
           </p>
           <PresentationInsightsDetails insights={current} locale={locale} />

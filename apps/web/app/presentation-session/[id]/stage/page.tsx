@@ -31,7 +31,8 @@ import { isTextQuestion } from "../../../../lib/text-response";
 import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
-import styles from "../../../../components/presentation-live/presentation-delivery.module.css";
+import { Brand } from "../../../../components/brand";
+import styles from "../../../../components/presentation-live/audience-workspace.module.css";
 
 const storage = {
   getItem: (key: string) => window.sessionStorage.getItem(key),
@@ -238,36 +239,69 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
     isTextQuestion(snapshot.currentBlock.question.type) &&
     ["question_reveal", "intervention"].includes(snapshot.phase);
   return (
-    <main className={styles.stagePage} lang={locale}>
-      <div className={styles.stageLayout}>
+    <main className={styles.theaterPage} lang={locale}>
+      <div className={styles.theaterLayout}>
+        <header className={styles.theaterHeader}>
+          <Brand />
+          <p className={styles.theaterTitle} lang={snapshot ? "" : locale}>
+            {snapshot?.title ?? copy("audienceSlide")}
+          </p>
+          <div className={styles.theaterMeta}>
+            {snapshot ? (
+              <>
+                <p>{copy("joinCodeHeader", { code: snapshot.code })}</p>
+                <p>
+                  {snapshot.phase === "lobby"
+                    ? copy("ready")
+                    : snapshot.phase === "finished"
+                      ? copy("complete")
+                      : copy("progress", {
+                          current: formatNumber(locale, snapshot.currentBlockIndex + 1),
+                          total: formatNumber(locale, snapshot.blockCount),
+                        })}
+                </p>
+                {remaining !== null ? (
+                  <p aria-live="off">
+                    {copy("secondsRemaining", { count: formatNumber(locale, remaining) })}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={!fullScreenSupported}
+              onClick={() => void toggleFullScreen()}
+            >
+              {copy(fullScreen ? "exitFullScreen" : "enterFullScreen")}
+            </button>
+          </div>
+        </header>
+        {!fullScreenSupported ? (
+          <p className={styles.theaterNotice}>{copy("fullScreenUnavailable")}</p>
+        ) : null}
+        {fullScreenError ? (
+          <p className={styles.theaterNotice} role="alert">
+            {copy("fullScreenError")}
+          </p>
+        ) : null}
         {unavailable ? (
-          <section className={styles.stageCanvas}>
+          <section className={styles.theaterCanvas}>
             <div>
               <h1>{copy("unavailable")}</h1>
               <p role="alert">{copy("accessExpired")}</p>
             </div>
           </section>
         ) : !snapshot || !token ? (
-          <section className={styles.stageCanvas}>
+          <section className={styles.theaterCanvas}>
             <h1>{copy("connecting")}</h1>
           </section>
         ) : (
           <>
-            <header className={styles.stageHeader}>
-              <p lang="">{snapshot.title}</p>
-              <p>{copy("joinCodeHeader", { code: snapshot.code })}</p>
-              <p>
-                {snapshot.phase === "lobby"
-                  ? copy("ready")
-                  : snapshot.phase === "finished"
-                    ? copy("complete")
-                    : copy("progress", {
-                        current: formatNumber(locale, snapshot.currentBlockIndex + 1),
-                        total: formatNumber(locale, snapshot.blockCount),
-                      })}
+            {reconnecting ? (
+              <p className={styles.theaterNotice} role="status">
+                {copy("reconnecting")}
               </p>
-            </header>
-            {reconnecting ? <p role="status">{copy("reconnecting")}</p> : null}
+            ) : null}
             <PresentationSpatialDelivery
               spatial={snapshot.spatial}
               currentBlockIndex={snapshot.currentBlockIndex}
@@ -277,28 +311,29 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
             <section
               aria-label={copy("audienceSlide")}
               style={questionStyle}
-              className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}
+              className={styles.theaterCanvas}
+              data-kind={
+                snapshot.phase === "lobby" || snapshot.phase === "finished"
+                  ? snapshot.phase
+                  : snapshot.currentBlock?.kind
+              }
+              data-results={opinionSummary || textResults ? "true" : undefined}
               tabIndex={0}
             >
               {snapshot.phase === "lobby" ? (
-                <div className={styles.stageBody}>
+                <div className={styles.theaterBody}>
                   <h1 lang="">{snapshot.title}</h1>
                   <p>{copy("joinWaiting")}</p>
                 </div>
               ) : snapshot.phase === "finished" ? (
-                <div className={styles.stageBody}>
+                <div className={styles.theaterBody}>
                   <h1>{copy("complete")}</h1>
                   <p>{copy("thanks")}</p>
                 </div>
               ) : snapshot.currentBlock ? (
                 <div
-                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary || textResults ? ` ${styles.stageOpinionBody}` : ""}`}
+                  className={`${styles.theaterBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.theaterFrame}` : ""}${opinionSummary || textResults ? ` ${styles.theaterResults}` : ""}`}
                 >
-                  {remaining !== null ? (
-                    <p aria-live="off">
-                      {copy("secondsRemaining", { count: formatNumber(locale, remaining) })}
-                    </p>
-                  ) : null}
                   {textResults &&
                   snapshot.currentBlock.kind === "question" &&
                   isTextQuestion(snapshot.currentBlock.question.type) ? (
@@ -368,19 +403,8 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                 <p>{copy("waiting")}</p>
               )}
             </section>
-            <footer className={styles.stageFooter}>
+            <footer className={styles.theaterFooter}>
               <PresentationDeliveryJoinAccess code={snapshot.code} />
-              <div>
-                <button
-                  type="button"
-                  disabled={!fullScreenSupported}
-                  onClick={() => void toggleFullScreen()}
-                >
-                  {copy(fullScreen ? "exitFullScreen" : "enterFullScreen")}
-                </button>
-                {!fullScreenSupported ? <p>{copy("fullScreenUnavailable")}</p> : null}
-                {fullScreenError ? <p role="alert">{copy("fullScreenError")}</p> : null}
-              </div>
             </footer>
           </>
         )}

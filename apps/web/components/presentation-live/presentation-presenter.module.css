@@ -1,0 +1,303 @@
+.setup {
+  gap: 20px;
+}
+
+.setupHeader {
+  min-width: 0;
+}
+
+.setupHeader h1 {
+  margin: 12px 0 8px;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.setupHeader p {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.setupMetrics {
+  gap: 12px;
+}
+
+.setupMetrics > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface-soft);
+  padding: 14px 16px;
+}
+
+.setupMetrics strong {
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.setupMetrics span {
+  color: var(--ui-text-muted);
+  font-size: 0.85rem;
+}
+
+.setupOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.setupOptions > * {
+  min-width: 0;
+  margin: 0;
+}
+
+.setupOptions > section {
+  grid-column: 1 / -1;
+}
+
+.setupOptions > fieldset:only-child {
+  grid-column: 1 / -1;
+}
+
+.setupOptions > :global(.panel) {
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  box-shadow: none;
+}
+
+.setupOptions :is(p, small) {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.setupOptions h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.setupOptions > label {
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-small);
+}
+
+.setupActions {
+  margin-top: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.headerStatus {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.commandBar {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.commandRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.commandContext {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.commandContext h1 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+
+.commandContext p {
+  margin: 4px 0 0;
+  color: var(--ui-text-muted);
+  font-size: 0.8rem;
+}
+
+.commandActions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.commandActions > :global(.full-width) {
+  width: auto;
+  min-height: 44px;
+}
+
+.commandActions > :global(.button) {
+  min-width: 180px;
+}
+
+.commandBar > div:not(.commandRow) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.commandBar > div:not(.commandRow) p {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.hostGrid {
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+}
+
+.tools {
+  min-width: 0;
+  gap: 14px;
+  padding: 16px;
+  box-shadow: none;
+}
+
+.toolGroup {
+  min-width: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.toolGroup summary {
+  min-height: 44px;
+  color: var(--ui-text);
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.toolGroup summary strong {
+  float: right;
+  margin-inline-start: 8px;
+  color: var(--ui-accent-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.toolGroup summary:focus-visible {
+  outline: 3px solid var(--ui-accent-ink);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.toolGroup[open] summary {
+  margin-bottom: 10px;
+}
+
+.companionTools > section {
+  display: grid;
+  gap: 8px;
+}
+
+.companionTools:empty {
+  display: none;
+}
+
+.liveMetrics > div {
+  background: var(--ui-surface-soft);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.liveMetrics strong {
+  font-size: 1.3rem;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.liveMetrics span,
+.roomStatus,
+.keyboardHint {
+  color: var(--ui-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.roomStatus,
+.keyboardHint {
+  margin: 0;
+}
+
+@media (max-width: 1000px) {
+  .hostGrid {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+}
+
+@media (max-width: 880px) {
+  .hostGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tools {
+    order: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .setupOptions,
+  .setupMetrics,
+  .tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .commandBar {
+    top: 0;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .commandContext {
+    flex-basis: 100%;
+  }
+
+  .commandActions {
+    width: 100%;
+  }
+
+  .commandActions > :global(.full-width) {
+    flex: 1 1 auto;
+  }
+
+  .commandActions > :global(.button) {
+    min-width: min(180px, 100%);
+  }
+}

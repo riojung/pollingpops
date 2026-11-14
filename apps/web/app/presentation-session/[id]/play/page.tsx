@@ -18,7 +18,7 @@ import { ContentSlideView } from "../../../../components/presentation/content-sl
 import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
-import styles from "../../../../components/presentation-live/presentation-live.module.css";
+import styles from "../../../../components/presentation-live/audience-workspace.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
 import { presentationDeliveryCopy } from "../../../../lib/i18n/presentation-delivery-copy";
@@ -269,21 +269,28 @@ export default function PresentationParticipantPage() {
             : copy("notSaved");
 
   return (
-    <main className={styles.page}>
+    <main className={styles.participantPage} lang={locale}>
       <header className={styles.topbar}>
-        <Brand inverted />
-        <span>
-          {snapshot
-            ? t("live.common.joinedCount", {
-                count: formatNumber(locale, snapshot.participantCount),
-              })
-            : t("live.common.connecting")}
-        </span>
+        <Brand />
+        <div className={styles.headerStatus}>
+          <span>
+            {snapshot
+              ? t("live.common.joinedCount", {
+                  count: formatNumber(locale, snapshot.participantCount),
+                })
+              : t("live.common.connecting")}
+          </span>
+          <p
+            aria-live="polite"
+            className={styles.connectionStatus}
+            data-state={saveState === "idle" ? connection : saveState}
+            role="status"
+          >
+            {deliveryStatus}
+          </p>
+        </div>
       </header>
       <div className={styles.stage}>
-        <p aria-live="polite" className="muted" role="status">
-          {deliveryStatus}
-        </p>
         {error ? (
           <p className="error" lang="en-CA" role="alert">
             {error}
@@ -297,7 +304,11 @@ export default function PresentationParticipantPage() {
             sourceKey={`${id}:${snapshot.presentationVersionId}`}
           />
         ) : null}
-        <section className={styles.canvas} aria-live="polite">
+        <section
+          className={styles.canvas}
+          data-kind={block?.kind ?? snapshot?.phase ?? "connecting"}
+          aria-live="polite"
+        >
           <div className={styles.canvasContent}>
             {!snapshot ? <p>{t("live.presentationPlay.restoring")}</p> : null}
             {snapshot?.phase === "lobby" ? (
@@ -309,61 +320,68 @@ export default function PresentationParticipantPage() {
             ) : null}
             {block?.kind === "content" ? (
               <>
-                <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
-                <ContentSlideView
-                  block={block}
-                  interactionRuntime={presentationInteractionRuntime(snapshot, {
-                    mode: "live_audience",
-                  })}
-                  interactionSourceKey={JSON.stringify([
-                    id,
-                    audienceToken,
-                    connection === "fallback",
-                  ])}
-                  renderSceneImage={(mediaId, altText) => (
-                    <PresentationMedia
-                      key={mediaId}
-                      sessionId={id}
-                      mediaId={mediaId}
-                      altText={altText}
-                      participant
-                    />
-                  )}
-                  media={
-                    <PresentationMedia
-                      altText={block.mediaAlt}
-                      mediaId={block.mediaId}
-                      participant
-                      sessionId={id}
-                    />
-                  }
-                  variant="live"
-                />
-                <p className="muted">{t("live.presentationPlay.noResponse")}</p>
+                <div className={styles.contentStatus}>
+                  <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
+                  <p>{t("live.presentationPlay.noResponse")}</p>
+                </div>
+                <div className={styles.slideFrame}>
+                  <ContentSlideView
+                    block={block}
+                    designOverride={block.design}
+                    interactionRuntime={presentationInteractionRuntime(snapshot, {
+                      mode: "live_audience",
+                    })}
+                    interactionSourceKey={JSON.stringify([
+                      id,
+                      audienceToken,
+                      connection === "fallback",
+                    ])}
+                    renderSceneImage={(mediaId, altText) => (
+                      <PresentationMedia
+                        key={mediaId}
+                        sessionId={id}
+                        mediaId={mediaId}
+                        altText={altText}
+                        participant
+                      />
+                    )}
+                    media={
+                      <PresentationMedia
+                        altText={block.mediaAlt}
+                        mediaId={block.mediaId}
+                        participant
+                        sessionId={id}
+                      />
+                    }
+                    variant="live"
+                  />
+                </div>
               </>
             ) : null}
             {block?.kind === "question" ? (
               <>
-                <span className={styles.statusPill}>
-                  {snapshot?.phase === "intervention"
-                    ? t("live.presentationPlay.reviewRecover")
-                    : snapshot?.acceptingResponses
-                      ? t("live.presentationPlay.respondNow")
-                      : t("live.presentationPlay.responseClosed")}
-                </span>
-                {remainingSeconds !== null ? (
-                  <p className={styles.timer} aria-live="off">
-                    {formatNumber(locale, remainingSeconds, {
-                      style: "unit",
-                      unit: "second",
-                      unitDisplay: "narrow",
-                    })}
-                  </p>
-                ) : snapshot?.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
-                  <p className="muted" lang={locale} role="status">
-                    {t("live.common.flexOpen")}
-                  </p>
-                ) : null}
+                <div className={styles.questionStatus}>
+                  <span className={styles.statusPill}>
+                    {snapshot?.phase === "intervention"
+                      ? t("live.presentationPlay.reviewRecover")
+                      : snapshot?.acceptingResponses
+                        ? t("live.presentationPlay.respondNow")
+                        : t("live.presentationPlay.responseClosed")}
+                  </span>
+                  {remainingSeconds !== null ? (
+                    <p className={styles.timer} aria-live="off">
+                      {formatNumber(locale, remainingSeconds, {
+                        style: "unit",
+                        unit: "second",
+                        unitDisplay: "narrow",
+                      })}
+                    </p>
+                  ) : snapshot?.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
+                    <p className="muted" lang={locale} role="status">
+                      {t("live.common.flexOpen")}
+                    </p>
+                  ) : null}
+                </div>
                 <h1 lang="">{block.question.prompt}</h1>
                 <PresentationMedia
                   altText={block.question.mediaAlt}

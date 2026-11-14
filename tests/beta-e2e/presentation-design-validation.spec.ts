@@ -159,7 +159,9 @@ test("a slide design over the byte limit shows recovery guidance and preserves t
   await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
   const alert = page.getByRole("alert").filter({ hasText: designError });
   await expect(alert).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Base color theme", exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
   expect(await attemptedSave).toBe(false);
   expect(observed.saves).toEqual([]);
@@ -174,7 +176,7 @@ test("a slide design over the byte limit shows recovery guidance and preserves t
   expect(reduced.schemaVersion).toBe(4);
   await openE01Inspector(page, "Layout");
   await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
+  await expect(page.getByRole("combobox", { name: "Base color theme", exact: true })).toHaveValue(
     "paper",
   );
   await expect.poll(async () => (await readE01Record(page, record.id)).draft.schemaVersion).toBe(7);

@@ -13,6 +13,35 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Expanded design collection and application — November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration adds 22 original visual systems to
+the existing eight, reaching 30 collections and 240 editable native layouts. Each addition
+owns its cover and seven coordinated interior compositions. Ten-language discovery and
+example narratives cover business, education, creative and impact needs. Ten overlapping
+categories add Corporate, Creative, Academic, Nature, Playful and Geometric discovery.
+
+The [additional public-template benchmark](evidence/presentation-expanded-designs-2026-11.md)
+records eight more visually inspected covers and interiors. The original eight families and
+their existing identifiers remain stable. Typed composition modules share bounded native
+primitives; no new contract version, migration, dependency or paid asset service is needed.
+
+Existing-deck application defaults to Full design, mapping meaningful authored objects into
+family content regions and replacing only unreferenced decorative artwork. Colors and fonts
+retains the earlier geometry-preserving behavior. Complex connected/grouped/interactive or
+imported canvases retain geometry with an explicit notice. Previews and commits use one
+validated transformation; meaningful IDs, content, reading order, provenance, notes and motion
+must survive with single-step undo. Base color theme controls must identify a collection palette
+honestly and explain their difference from a full layout application.
+
+Discovery initially renders twelve covers and progressively reveals the remaining collections.
+Full-catalog search and category filters apply before pagination; preview decks are constructed
+only on demand. Acceptance covers all 300 localized example decks, 240 English layouts'
+rendered heading/paragraph fit, separate content regions, panel contrast, keyboard browsing,
+localized creation and reload, layout insertion, and full-design preview/apply/undo/reload on
+existing authored work. Results belong in [implementation status](implementation-status.md);
+local checks do not establish hosted, physical-device or native-language human acceptance.
+
 ## Authored visual collections — November 13, 2026
 
 The `codex/presentation-designed-collections` follow-up deepens the eight design families into

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useLocale } from "../locale-provider";
 import { nativeControlsCopy, type NativeControlsCopyKey } from "./native-controls-copy";
+import { presentationDesignApplicationCopy } from "../../lib/i18n/presentation-design-application-copy";
 import { motionBackgroundCopy, type MotionBackgroundCopyKey } from "./motion-background-copy";
 import { PresentationMotionBackground } from "./presentation-motion-background";
 import {
@@ -138,6 +139,7 @@ export function NativeSceneDesignControls({
 }) {
   const { locale } = useLocale();
   const copy = nativeControlsCopy(locale);
+  const applicationCopy = presentationDesignApplicationCopy(locale);
   const motionCopy = motionBackgroundCopy(locale);
   const [motionPreview, setMotionPreview] = useState<{
     scene: PresentationScene;
@@ -190,13 +192,18 @@ export function NativeSceneDesignControls({
           <>
             <div className={styles.themeField}>
               <label className={styles.field}>
-                {copy("Slide theme")}
+                {applicationCopy.baseColorTheme}
                 <select
-                  value={design.theme}
+                  value={design.palette ? "presentation-design" : design.theme}
                   onChange={(event) =>
                     updateTheme(event.target.value as PresentationSceneDesign["theme"])
                   }
                 >
+                  {design.palette ? (
+                    <option value="presentation-design" disabled>
+                      {applicationCopy.fromPresentationDesign}
+                    </option>
+                  ) : null}
                   {(Object.keys(NATIVE_DESIGN_THEMES) as PresentationSceneDesign["theme"][]).map(
                     (theme) => (
                       <option key={theme} value={theme}>
@@ -252,6 +259,7 @@ export function NativeSceneDesignControls({
                 ))}
               </div>
             </div>
+            <p className={styles.help}>{applicationCopy.baseThemeNotice}</p>
             <div className={styles.designFields}>
               <label className={styles.field}>
                 <span className={styles.fieldLabel}>
@@ -388,7 +396,7 @@ export function NativeSceneDesignControls({
                   onClick={() => onApplyDesignToDeck(design)}
                 >
                   <EditorIcon name="slides" />
-                  {copy("Apply design to all native slides")}
+                  {applicationCopy.applyStyleToNativeSlides}
                 </button>
                 <p className={styles.help}>
                   {copy("Ordinary slides and activities keep their own design.")}

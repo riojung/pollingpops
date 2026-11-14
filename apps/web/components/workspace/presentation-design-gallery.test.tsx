@@ -1,4 +1,4 @@
-import type { PresentationDraft, SupportedLocale } from "@openround/contracts";
+import type { ContentSlideDraft, PresentationDraft, SupportedLocale } from "@openround/contracts";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,6 +8,12 @@ import {
   presentationDesignDraftCopy,
 } from "../../lib/i18n/presentation-design-copy";
 import { createDesignDraft, PRESENTATION_DESIGNS } from "../../lib/presentation-designs";
+import { PRESENTATION_DESIGN_CATEGORIES } from "../../lib/presentation-design-categories";
+import { presentationDesignApplicationCopy } from "../../lib/i18n/presentation-design-application-copy";
+import {
+  createDesignedNativeContentBlock,
+  createNativeRevealNode,
+} from "../../lib/presentation-native-scene";
 import {
   PresentationDesignArtwork,
   PresentationDesignGallery,
@@ -151,14 +157,14 @@ afterEach(() => {
 });
 
 describe("Presentation design library", () => {
-  it("renders eight distinct packs with real static native scenes and stable preview identities", () => {
+  it("renders a compact first page with real static covers and stable preview identities", () => {
     const first = renderToStaticMarkup(<PresentationDesignGallery />);
     const second = renderToStaticMarkup(<PresentationDesignGallery />);
-    for (const family of PRESENTATION_DESIGNS)
+    for (const family of PRESENTATION_DESIGNS.slice(0, 12))
       expect(first).toContain(`data-design-card="${family.id}"`);
-    expect(first.match(/data-static-thumbnail="true"/g)).toHaveLength(8);
+    expect(first.match(/data-static-thumbnail="true"/g)).toHaveLength(12);
     expect(first).toContain(presentationDesignDraftCopy("studio", "en-CA").slides.cover.title);
-    for (const family of PRESENTATION_DESIGNS)
+    for (const family of PRESENTATION_DESIGNS.slice(0, 12))
       expect(first).toContain(presentationDesignCopy().purposes[family.id]);
     expect(first).toBe(second);
     expect(mocked.request).not.toHaveBeenCalled();
@@ -180,6 +186,48 @@ describe("Presentation design library", () => {
     click(view.find((node) => node.type === "button" && node.props.children === "Clear filters"));
     view.render();
     expect(view.markup()).toContain('data-design-card="studio"');
+    expect(mocked.request).not.toHaveBeenCalled();
+  });
+
+  it("offers every category as a compact filter and searches beyond the first page", () => {
+    const view = gallery();
+    view.render();
+    const copy = presentationDesignCopy();
+    for (const id of PRESENTATION_DESIGN_CATEGORIES)
+      expect(
+        view.find((node) => node.type === "button" && node.props.children === copy.categories[id]),
+      ).toBeDefined();
+    click(
+      view.find((node) => node.type === "button" && node.props.children === copy.categories.nature),
+    );
+    view.render();
+    expect(view.markup()).toContain('data-design-card="botanica"');
+    expect(view.markup()).not.toContain('data-design-card="ledger"');
+    expect(mocked.request).not.toHaveBeenCalled();
+  });
+
+  it("reveals additional collections and searches the complete catalog after resetting filters", () => {
+    const view = gallery();
+    view.render();
+    expect(view.markup().match(/data-design-card=/g)).toHaveLength(12);
+    expect(view.markup()).not.toContain('data-design-card="beacon"');
+    click(
+      view.find((node) => node.type === "button" && node.props.children === "Show more designs"),
+    );
+    view.render();
+    expect(view.markup().match(/data-design-card=/g)).toHaveLength(24);
+    expect(view.markup()).toContain('data-design-card="beacon"');
+    click(view.find((node) => node.type === "button" && node.props.children === "Minimal"));
+    view.render();
+    click(view.find((node) => node.type === "button" && node.props.children === "Clear filters"));
+    view.render();
+    expect(view.markup().match(/data-design-card=/g)).toHaveLength(12);
+    (view.find((node) => node.type === "input").props.onChange as (event: unknown) => void)({
+      target: { value: "nonprofit" },
+    });
+    view.render();
+    expect(view.markup().match(/data-design-card=/g)).toHaveLength(1);
+    expect(view.markup()).toContain('data-design-card="beacon"');
     expect(mocked.request).not.toHaveBeenCalled();
   });
 
@@ -595,6 +643,8 @@ describe("Design preview actions", () => {
       currentDraft: ownDraft,
       selectedBlockId: ownDraft.blocks[0]!.id,
     });
+    click(view.find((node) => node.props["data-design-application-choice"] === "style"));
+    view.render();
     const artwork = view.find((node) => node.type === PresentationDesignArtwork);
     const previewBlock = artwork.props.block as PresentationDraft["blocks"][number];
     expect(JSON.stringify(previewBlock)).toContain("Our actual product story");
@@ -602,10 +652,72 @@ describe("Design preview actions", () => {
     expect(JSON.stringify(ownDraft)).toBe(original);
     expect(view.markup()).toContain(presentationDesignCopy().inheritanceNotice);
     click(view.find((node) => node.props["data-design-apply"] === "midnight"));
-    expect(props.onApply).toHaveBeenCalledWith("midnight", "deck");
+    expect(props.onApply).toHaveBeenCalledWith("midnight", "deck", "style");
     expect(props.onInsert).not.toHaveBeenCalled();
     expect(props.onClose).toHaveBeenCalledOnce();
     expect(mocked.request).not.toHaveBeenCalled();
+  });
+
+  it("defaults to full design, previews the chosen mode without a mutation and applies that mode", () => {
+    const content = createDesignedNativeContentBlock();
+    for (const node of content.scene!.nodes)
+      if (node.type === "text")
+        node.text =
+          node.role === "title" ? "Our current story" : "Preserve this authored explanation.";
+    const currentDraft = {
+      ...createDesignDraft("studio", presentationDesignCopy().sampleDraft),
+      blocks: [content],
+    };
+    const { view, props } = setup({ currentDraft, selectedBlockId: content.id });
+    const original = JSON.stringify(props.currentDraft);
+    const layoutChoice = view.find(
+      (node) => node.props["data-design-application-choice"] === "layout",
+    );
+    expect(layoutChoice.props["aria-pressed"]).toBe(true);
+    expect(view.find((node) => node.props["data-design-apply"] === "midnight").props.children).toBe(
+      "Apply design",
+    );
+    const fullPreview = view.find((node) => node.type === PresentationDesignArtwork).props
+      .block as ContentSlideDraft;
+    const title = (block: ContentSlideDraft) => {
+      const node = block.scene!.nodes.find((node) => node.type === "text" && node.role === "title");
+      if (node?.type !== "text") throw new Error("Expected title fixture");
+      return node;
+    };
+    expect(title(fullPreview).frame).not.toEqual(title(content).frame);
+    expect(props.onApply).not.toHaveBeenCalled();
+    click(view.find((node) => node.props["data-design-application-choice"] === "style"));
+    view.render();
+    const stylePreview = view.find((node) => node.type === PresentationDesignArtwork).props
+      .block as ContentSlideDraft;
+    expect(title(stylePreview).frame).toEqual(title(content).frame);
+    expect(JSON.stringify(fullPreview)).not.toBe(JSON.stringify(stylePreview));
+    expect(view.find((node) => node.props["data-design-apply"] === "midnight").props.children).toBe(
+      "Apply style",
+    );
+    click(view.find((node) => node.props["data-design-application-choice"] === "layout"));
+    view.render();
+    expect(JSON.stringify(props.currentDraft)).toBe(original);
+    click(view.find((node) => node.props["data-design-apply"] === "midnight"));
+    expect(props.onApply).toHaveBeenCalledExactlyOnceWith("midnight", "deck", "layout");
+    expect(mocked.request).not.toHaveBeenCalled();
+  });
+
+  it("explains retained complex layouts only when the full design preview retains them", () => {
+    const currentDraft = createDesignDraft("studio", presentationDesignCopy().sampleDraft);
+    const first = currentDraft.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native fixture");
+    const reveal = createNativeRevealNode();
+    first.scene.nodes.push(reveal);
+    first.scene.readingOrder.push(reveal.id);
+    const { view } = setup({ currentDraft, selectedBlockId: first.id });
+    expect(view.find((node) => node.props["data-design-retained-layout"] === true)).toBeDefined();
+    expect(view.markup()).toContain(
+      presentationDesignApplicationCopy().retainedLayoutNotice.split("{count}")[1]!,
+    );
+    click(view.find((node) => node.props["data-design-application-choice"] === "style"));
+    view.render();
+    expect(view.markup()).not.toContain("data-design-retained-layout");
   });
 
   it("keeps rejected actions open and offers insertion only for an explicitly chosen sample layout", () => {

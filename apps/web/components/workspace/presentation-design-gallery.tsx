@@ -15,13 +15,21 @@ import {
   presentationDesignCopy,
   presentationDesignDraftCopy,
 } from "../../lib/i18n/presentation-design-copy";
+import { presentationDesignApplicationCopy } from "../../lib/i18n/presentation-design-application-copy";
+import {
+  PRESENTATION_DESIGN_CATEGORIES,
+  matchesPresentationDesignCategory,
+  type PresentationDesignCategory,
+} from "../../lib/presentation-design-categories";
 import {
   DESIGN_LAYOUTS,
   PRESENTATION_DESIGNS,
   applyPresentationDesign,
   createDesignDraft,
+  createDesignSlide,
   summarizePresentationDesign,
   type DesignLayoutId,
+  type PresentationDesignApplicationMode,
   type PresentationDesignId,
 } from "../../lib/presentation-designs";
 import { clientUuid } from "../../lib/uuid";
@@ -36,7 +44,11 @@ import styles from "./presentation-design-gallery.module.css";
 export interface PresentationDesignGalleryProps {
   draft?: PresentationDraft;
   selectedBlockId?: string;
-  onApply?: (id: PresentationDesignId, scope: "deck" | "slide") => boolean | void;
+  onApply?: (
+    id: PresentationDesignId,
+    scope: "deck" | "slide",
+    application: PresentationDesignApplicationMode,
+  ) => boolean | void;
   onInsert?: (id: PresentationDesignId, layout: DesignLayoutId) => boolean | void;
   disabled?: boolean;
   renderSceneImage?: SceneImageRenderer;
@@ -325,7 +337,10 @@ export function PresentationDesignGallery({
   canCreateRef.current = canCreate;
   const resultId = useId();
   const [search, setSearch] = useState("");
-  const [style, setStyle] = useState("all");
+  const [category, setCategory] = useState<"all" | PresentationDesignCategory>("all");
+  const [visibleCount, setVisibleCount] = useState(12);
+  const grid = useRef<HTMLDivElement>(null);
+  const revealFocus = useRef<PresentationDesignId | null>(null);
   const [preview, setPreview] = useState<PreviewDesign | null>(null);
   const [busy, setBusy] = useState<PresentationDesignId | null>(null);
   const [error, setError] = useState("");
@@ -346,27 +361,42 @@ export function PresentationDesignGallery({
       setBusy(null);
     }
   }, [canCreate, ownerKey]);
-  const samples = useMemo(
+  // Gallery cards need only a cover. Build the other seven layouts when preview opens.
+  const covers = useMemo(
     () =>
       new Map(
         PRESENTATION_DESIGNS.map((design) => [
           design.id,
-          createDesignDraft(
+          createDesignSlide(
             design.id,
-            presentationDesignDraftCopy(design.id, locale),
+            "cover",
+            presentationDesignDraftCopy(design.id, locale).slides.cover,
             previewIdFactory(design.id),
           ),
         ]),
       ),
     [locale],
   );
-  const visible = PRESENTATION_DESIGNS.filter(
+  const matching = PRESENTATION_DESIGNS.filter(
     (design) =>
-      (style === "all" || design.style === style) &&
-      `${design.name} ${copy.purposes[design.id]} ${copy.descriptions[design.id]} ${copy[design.style]}`
+      (category === "all" || matchesPresentationDesignCategory(design, category)) &&
+      `${design.name} ${copy.purposes[design.id]} ${copy.descriptions[design.id]} ${PRESENTATION_DESIGN_CATEGORIES.filter(
+        (id) => matchesPresentationDesignCategory(design, id),
+      )
+        .map((id) => copy.categories[id])
+        .join(" ")}`
         .toLocaleLowerCase(locale)
         .includes(search.trim().toLocaleLowerCase(locale)),
   );
+  const visible = matching.slice(0, visibleCount);
+  useEffect(() => {
+    const target = revealFocus.current;
+    if (!target) return;
+    grid.current
+      ?.querySelector<HTMLButtonElement>(`[data-design-card="${target}"] button`)
+      ?.focus();
+    revealFocus.current = null;
+  }, [visibleCount]);
 
   async function startDesign(
     id: PresentationDesignId,
@@ -485,7 +515,11 @@ export function PresentationDesignGallery({
 
   function openPreview(id: PresentationDesignId, trigger: HTMLButtonElement) {
     trigger.focus();
-    setPreview({ id, locale, draft: samples.get(id)! });
+    setPreview({
+      id,
+      locale,
+      draft: createDesignDraft(id, presentationDesignDraftCopy(id, locale), previewIdFactory(id)),
+    });
   }
 
   return (
@@ -498,35 +532,44 @@ export function PresentationDesignGallery({
             type="search"
             value={search}
             aria-controls={resultId}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setVisibleCount(12);
+            }}
           />
         </label>
-        <div className={styles.styleFilters} role="group" aria-label={copy.styles}>
-          {(["all", "minimal", "editorial", "bold", "technical"] as const).map((value) => (
+        <div className={styles.categoryFilters} role="group" aria-label={copy.categoryLabel}>
+          {(["all", ...PRESENTATION_DESIGN_CATEGORIES] as const).map((value) => (
             <button
               className={styles.filter}
               type="button"
               key={value}
-              aria-pressed={style === value}
+              aria-pressed={category === value}
               aria-controls={resultId}
-              onClick={() => setStyle(value)}
+              onClick={() => {
+                setCategory(value);
+                setVisibleCount(12);
+              }}
             >
-              {value === "all" ? copy.allStyles : copy[value]}
+              {value === "all" ? copy.allStyles : copy.categories[value]}
             </button>
           ))}
         </div>
       </div>
       <div className={styles.resultSummary}>
         <p role="status" aria-live="polite">
-          {formatNumber(locale, visible.length)} · {copy.title}
+          {copy.showingDesigns
+            .replace("{visible}", formatNumber(locale, visible.length))
+            .replace("{count}", formatNumber(locale, matching.length))}
         </p>
-        {search || style !== "all" ? (
+        {search || category !== "all" ? (
           <button
             className={styles.clear}
             type="button"
             onClick={() => {
               setSearch("");
-              setStyle("all");
+              setCategory("all");
+              setVisibleCount(12);
             }}
           >
             {copy.clearFilters}
@@ -567,9 +610,9 @@ export function PresentationDesignGallery({
           <p className={styles.notice}>{copy.startAnotherHint}</p>
         </div>
       ) : null}
-      <div className={styles.grid} id={resultId}>
+      <div className={styles.grid} id={resultId} ref={grid}>
         {visible.map((design) => {
-          const sample = samples.get(design.id)!;
+          const cover = covers.get(design.id)!;
           const palette = PRESENTATION_DESIGN_PALETTES[design.design.palette];
           return (
             <article className={styles.card} key={design.id} data-design-card={design.id}>
@@ -580,10 +623,7 @@ export function PresentationDesignGallery({
                 aria-label={`${copy.preview}: ${design.name}`}
                 onClick={(event) => openPreview(design.id, event.currentTarget)}
               >
-                <PresentationDesignArtwork
-                  block={sample.blocks[0] as ContentSlideDraft}
-                  locale={locale}
-                />
+                <PresentationDesignArtwork block={cover} locale={locale} />
                 <span className={styles.previewBadge} aria-hidden="true">
                   {copy.preview}
                 </span>
@@ -620,6 +660,21 @@ export function PresentationDesignGallery({
           );
         })}
       </div>
+      {visible.length < matching.length ? (
+        <div className={styles.loadMore}>
+          <button
+            className="button-quiet small-button"
+            type="button"
+            aria-controls={resultId}
+            onClick={() => {
+              revealFocus.current = matching[visibleCount]?.id ?? null;
+              setVisibleCount((count) => count + 12);
+            }}
+          >
+            {copy.showMoreDesigns}
+          </button>
+        </div>
+      ) : null}
       {visible.length === 0 ? <p className={styles.empty}>{copy.noMatches}</p> : null}
       {preview ? (
         <PresentationDesignPreview
@@ -682,11 +737,13 @@ export function PresentationDesignPreview({
 }) {
   const { locale } = useLocale();
   const copy = presentationDesignCopy(locale);
+  const applicationCopy = presentationDesignApplicationCopy(locale);
   const family = PRESENTATION_DESIGNS.find((design) => design.id === preview.id)!;
   const dialog = useRef<HTMLDialogElement>(null);
   const [layoutIndex, setLayoutIndex] = useState(0);
   const [mode, setMode] = useState<"samples" | "content">(currentDraft ? "content" : "samples");
   const [scope, setScope] = useState<"deck" | "slide">("deck");
+  const [application, setApplication] = useState<PresentationDesignApplicationMode>("layout");
   const [error, setError] = useState("");
   const selected = currentDraft?.blocks.find((block) => block.id === selectedBlockId);
   const summary = currentDraft
@@ -696,13 +753,17 @@ export function PresentationDesignPreview({
     if (!currentDraft) return null;
     try {
       return {
-        ...applyPresentationDesign(currentDraft, preview.id, { scope, blockId: selectedBlockId }),
+        ...applyPresentationDesign(currentDraft, preview.id, {
+          scope,
+          blockId: selectedBlockId,
+          application,
+        }),
         error: "",
       };
     } catch (caught) {
-      return { draft: currentDraft, error: humanError(caught) };
+      return { draft: currentDraft, summary: undefined, error: humanError(caught) };
     }
-  }, [currentDraft, preview.id, scope, selectedBlockId]);
+  }, [currentDraft, preview.id, scope, selectedBlockId, application]);
   const contentBlock =
     styled?.draft.blocks.find(
       (block) => block.id === selectedBlockId && block.kind === "content",
@@ -782,38 +843,65 @@ export function PresentationDesignPreview({
         </button>
       </header>
       {currentDraft ? (
-        <div className={styles.editorControls}>
-          <div className={styles.styleFilters} role="group" aria-label={copy.preview}>
-            <button
-              className={styles.filter}
-              type="button"
-              aria-pressed={mode === "content"}
-              onClick={() => setMode("content")}
-            >
-              {copy.yourContent}
-            </button>
-            <button
-              className={styles.filter}
-              type="button"
-              aria-pressed={mode === "samples"}
-              onClick={() => setMode("samples")}
-            >
-              {copy.layoutSamples}
-            </button>
+        <div className={styles.applicationSettings}>
+          <div className={styles.editorControls}>
+            <div className={styles.styleFilters} role="group" aria-label={copy.preview}>
+              <button
+                className={styles.filter}
+                type="button"
+                aria-pressed={mode === "content"}
+                onClick={() => setMode("content")}
+              >
+                {copy.yourContent}
+              </button>
+              <button
+                className={styles.filter}
+                type="button"
+                aria-pressed={mode === "samples"}
+                onClick={() => setMode("samples")}
+              >
+                {copy.layoutSamples}
+              </button>
+            </div>
+            <label className={`field ${styles.scope}`}>
+              <span>{copy.scope}</span>
+              <select
+                className="input"
+                value={scope}
+                onChange={(event) => setScope(event.target.value as "deck" | "slide")}
+              >
+                <option value="deck">{copy.deck}</option>
+                <option value="slide" disabled={selected?.kind !== "content"}>
+                  {copy.slide}
+                </option>
+              </select>
+            </label>
           </div>
-          <label className={`field ${styles.scope}`}>
-            <span>{copy.scope}</span>
-            <select
-              className="input"
-              value={scope}
-              onChange={(event) => setScope(event.target.value as "deck" | "slide")}
+          <div className={styles.applicationControls}>
+            <div
+              className={styles.applicationChoices}
+              role="group"
+              aria-label={applicationCopy.applicationLabel}
             >
-              <option value="deck">{copy.deck}</option>
-              <option value="slide" disabled={selected?.kind !== "content"}>
-                {copy.slide}
-              </option>
-            </select>
-          </label>
+              {(["layout", "style"] as const).map((value) => (
+                <button
+                  className={styles.filter}
+                  key={value}
+                  type="button"
+                  aria-pressed={application === value}
+                  data-design-application-choice={value}
+                  onClick={() => setApplication(value)}
+                >
+                  {value === "layout" ? applicationCopy.fullDesign : applicationCopy.colorsAndFonts}
+                </button>
+              ))}
+            </div>
+            <p className={styles.notice}>
+              {application === "layout"
+                ? applicationCopy.fullDesignDescription
+                : applicationCopy.styleDescription}
+            </p>
+          </div>
         </div>
       ) : null}
       <div className={styles.stageHeading}>
@@ -830,6 +918,7 @@ export function PresentationDesignPreview({
         <div
           className={styles.stage}
           data-design-preview={mode}
+          data-design-application={mode === "content" ? application : undefined}
           data-design-preview-layout={mode === "samples" ? layout : undefined}
         >
           <PresentationDesignArtwork
@@ -880,7 +969,15 @@ export function PresentationDesignPreview({
       {summary && summary.importedSlides > 0 ? (
         <p className={styles.notice}>{copy.importedNotice}</p>
       ) : null}
-      <p className={styles.notice}>{currentDraft ? copy.applyDescription : copy.staticPreview}</p>
+      {application === "layout" && Boolean(styled?.summary?.retainedLayoutSlides) ? (
+        <p className={styles.notice} role="status" data-design-retained-layout>
+          {applicationCopy.retainedLayoutNotice.replace(
+            "{count}",
+            formatNumber(locale, styled!.summary!.retainedLayoutSlides),
+          )}
+        </p>
+      ) : null}
+      {!currentDraft ? <p className={styles.notice}>{copy.staticPreview}</p> : null}
       {error || creationError || styled?.error ? (
         <p className="error" role="alert" lang="en-CA">
           {error || creationError || styled?.error}
@@ -937,9 +1034,13 @@ export function PresentationDesignPreview({
                 disabled={
                   disabled || !summary?.eligibleSlides || Boolean(styled?.error) || !onApply
                 }
-                onClick={() => commit(onApply ? () => onApply(preview.id, scope) : undefined)}
+                onClick={() =>
+                  commit(onApply ? () => onApply(preview.id, scope, application) : undefined)
+                }
               >
-                {copy.apply}
+                {application === "layout"
+                  ? applicationCopy.applyDesign
+                  : applicationCopy.applyStyle}
               </button>
             </>
           ) : (

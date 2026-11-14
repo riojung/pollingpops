@@ -96,6 +96,7 @@ import {
   applyPresentationDesign,
   createDesignSlide,
   type DesignLayoutId,
+  type PresentationDesignApplicationMode,
   type PresentationDesignId,
 } from "../../lib/presentation-designs";
 import {
@@ -1540,10 +1541,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setInspectorTab(block.kind === "content" ? "content" : "build");
   }
 
-  function applyDesignFromLibrary(id: PresentationDesignId, scope: "deck" | "slide") {
+  function applyDesignFromLibrary(
+    id: PresentationDesignId,
+    scope: "deck" | "slide",
+    application: PresentationDesignApplicationMode,
+  ) {
     if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
       return false;
-    const options = { scope, ...(selectedBlockId ? { blockId: selectedBlockId } : {}) };
+    const options = {
+      scope,
+      application,
+      ...(selectedBlockId ? { blockId: selectedBlockId } : {}),
+    };
     // Preflight the latest local document before closing a preview. The functional commit
     // repeats validation against its authoritative snapshot rather than replacing later edits.
     applyPresentationDesign(JSON.parse(latestDraftJson.current) as PresentationDraft, id, options);

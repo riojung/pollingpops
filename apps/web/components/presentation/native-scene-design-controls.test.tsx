@@ -116,10 +116,10 @@ describe("native design controls", () => {
     const onChange = vi.fn(),
       onApplyDesignToDeck = vi.fn();
     const tree = NativeSceneDesignControls({ scene, onChange, onApplyDesignToDeck });
-    change(input(tree, "Slide theme"), { value: "ocean" });
+    change(input(tree, "Base color theme"), { value: "ocean" });
     expect(onChange.mock.calls[0]![0].design).toEqual({ ...design, theme: "ocean" });
     expect(onChange.mock.calls[0]![0].nodes).toEqual(scene.nodes);
-    click(button(tree, "Apply design to all native slides"));
+    click(button(tree, "Apply style to native slides"));
     expect(onApplyDesignToDeck).toHaveBeenCalledExactlyOnceWith(design);
   });
 
@@ -142,8 +142,39 @@ describe("native design controls", () => {
       nodes: scene.nodes,
       readingOrder: scene.readingOrder,
     });
-    for (const label of ["Slide theme", "Slide font", "Slide spacing"])
+    for (const label of ["Base color theme", "Slide font", "Slide spacing"])
       expect(input(tree, label).type).toBe("select");
+  });
+
+  it("identifies collection colors without claiming a base theme is selected and permits explicit override", () => {
+    const scene: PresentationScene = {
+      ...createNativeContentBlock().scene!,
+      schemaVersion: 9,
+      design: { theme: "paper", font: "serif", spacing: "relaxed", palette: "forest" },
+    };
+    const onChange = vi.fn();
+    const tree = render(() => NativeSceneDesignControls({ scene, onChange }));
+    const theme = input(tree, "Base color theme");
+    expect(theme.props.value).toBe("presentation-design");
+    expect(
+      elements(theme).find(
+        (node) => node.type === "option" && node.props.value === "presentation-design",
+      )?.props,
+    ).toMatchObject({
+      disabled: true,
+      children: "From presentation design",
+    });
+    expect(button(tree, "Use Paper theme").props["aria-pressed"]).toBe(false);
+    expect(text(tree)).toContain("Base themes change colors only.");
+    expect(onChange).not.toHaveBeenCalled();
+    change(theme, { value: "ocean" });
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0]![0].design).toEqual({
+      theme: "ocean",
+      font: "serif",
+      spacing: "relaxed",
+    });
+    expect(onChange.mock.calls[0]![0].nodes).toEqual(scene.nodes);
   });
 
   it("offers seven labeled motion choices as native buttons with one selected static default", () => {
@@ -228,7 +259,7 @@ describe("native design controls", () => {
     const tree = render(() => NativeSceneDesignControls({ scene, onChange, onApplyDesignToDeck }));
     click(button(tree, "Soft waves"));
     expect(onChange).not.toHaveBeenCalled();
-    change(input(tree, "Slide theme"), { value: "ocean" });
+    change(input(tree, "Base color theme"), { value: "ocean" });
     change(input(tree, "Slide font"), { value: "sans" });
     change(input(tree, "Slide spacing"), { value: "relaxed" });
     for (const [next] of onChange.mock.calls) {
@@ -241,7 +272,7 @@ describe("native design controls", () => {
     expect(cleared.schemaVersion).toBe(8);
     expect(cleared.design).toEqual(design);
     expect(cleared.design).not.toHaveProperty("motionBackground");
-    click(button(tree, "Apply design to all native slides"));
+    click(button(tree, "Apply style to native slides"));
     expect(onApplyDesignToDeck).toHaveBeenCalledExactlyOnceWith(motionDesign);
     expect(scene).toEqual(original);
   });
@@ -304,7 +335,7 @@ describe("native design controls", () => {
     scene.nodes.push(reveal, image);
     scene.readingOrder.push(reveal.id, image.id);
     const onChange = vi.fn();
-    change(input(NativeSceneDesignControls({ scene, onChange }), "Slide theme"), {
+    change(input(NativeSceneDesignControls({ scene, onChange }), "Base color theme"), {
       value: "ocean",
     });
     change(input(NativeSceneImageDesignControls({ scene, node: image, onChange }), "Image fit"), {
@@ -464,12 +495,12 @@ describe("native design scene budget recovery", () => {
     const onChange = vi.fn();
     const component = () => NativeSceneDesignControls({ scene, onChange });
     let tree = render(component);
-    expect(() => change(input(tree, "Slide theme"), { value: "midnight" })).not.toThrow();
+    expect(() => change(input(tree, "Base color theme"), { value: "midnight" })).not.toThrow();
     tree = render(component);
     expect(alert(tree)).toBeDefined();
     expect(onChange).not.toHaveBeenCalled();
     expect(scene).toEqual(original);
-    change(input(tree, "Slide theme"), { value: "ocean" });
+    change(input(tree, "Base color theme"), { value: "ocean" });
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0]![0].design.theme).toBe("ocean");
     expect(alert(render(component))).toBeUndefined();

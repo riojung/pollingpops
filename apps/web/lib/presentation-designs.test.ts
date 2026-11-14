@@ -7,6 +7,7 @@ import {
   contentSlideMediaFrame,
   preparePresentationPublication,
   resolveContentSlideFrames,
+  presentationDesignPalette,
   type PresentationDraft,
   type PresentationScene,
 } from "@openround/contracts";
@@ -74,13 +75,30 @@ function native(block: PresentationDraft["blocks"][number]): PresentationScene {
 }
 
 describe("original presentation design catalog", () => {
-  it("has eight independent visual families and eight coordinated layout recipes each", () => {
-    expect(PRESENTATION_DESIGNS).toHaveLength(8);
+  it("keeps rotated Confetti accents clear of the image caption's reading region", () => {
+    const scene = native(createDesignSlide("confetti", "image_left", slideCopy));
+    const caption = scene.nodes.find(
+      (node) => node.type === "text" && node.text === slideCopy.body,
+    );
+    const accent = scene.nodes.find((node) => node.type === "shape" && node.rotation === 22);
+    if (caption?.type !== "text" || accent?.type !== "shape")
+      throw Error("Expected caption and accent");
+    // CSS rotation works in pixels, so account for the slide's 16:9 aspect ratio.
+    const radians = (accent.rotation! * Math.PI) / 180;
+    const paintedWidth =
+      Math.abs(accent.frame.width * 12.8 * Math.cos(radians)) +
+      Math.abs(accent.frame.height * 7.2 * Math.sin(radians));
+    const paintedLeft = accent.frame.x + accent.frame.width / 2 - paintedWidth / 25.6;
+    expect(paintedLeft).toBeGreaterThanOrEqual(caption.frame.x + caption.frame.width);
+  });
+
+  it("has 30 independent visual families and eight coordinated layout recipes each", () => {
+    expect(PRESENTATION_DESIGNS).toHaveLength(30);
     expect(DESIGN_LAYOUTS).toHaveLength(8);
     expect(new Set(PRESENTATION_DESIGNS.map((design) => JSON.stringify(design.design))).size).toBe(
-      8,
+      30,
     );
-    expect(new Set(PRESENTATION_DESIGNS.map((design) => design.id)).size).toBe(8);
+    expect(new Set(PRESENTATION_DESIGNS.map((design) => design.id)).size).toBe(30);
     const covers = PRESENTATION_DESIGNS.map((design) =>
       native(createDesignSlide(design.id, "cover", slideCopy)),
     );
@@ -90,7 +108,7 @@ describe("original presentation design catalog", () => {
           JSON.stringify(scene.nodes.map((node) => ("frame" in node ? node.frame : null))),
         ),
       ).size,
-    ).toBe(8);
+    ).toBe(30);
     for (const scene of covers) {
       const headline = scene.nodes.find((node) => node.type === "text" && node.role === "title");
       expect(headline?.type === "text" && headline.typography?.size).toBeGreaterThanOrEqual(72);
@@ -139,6 +157,81 @@ describe("original presentation design catalog", () => {
       );
       expect(ids.every((id) => !nextIds.has(id))).toBe(true);
       expect(copy).toEqual(original);
+    },
+  );
+
+  it.each(PRESENTATION_DESIGNS.slice(8))(
+    "$id keeps authored content regions separate and text readable on enclosing panels",
+    (design) => {
+      let checkedPanels = 0;
+      const luminance = (hex: string) => {
+        const rgb = [1, 3, 5].map((offset) => {
+          const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        });
+        return rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722;
+      };
+      for (const block of createDesignDraft(design.id, draftCopy(), createIds()).blocks) {
+        const scene = native(block);
+        const content = scene.nodes.filter(
+          (node) => node.type !== "connector" && !(node.type === "shape" && node.decorative),
+        );
+        for (let i = 0; i < content.length; i++) {
+          const first = content[i]!;
+          if (first.type === "connector") continue;
+          for (const next of content.slice(i + 1)) {
+            if (next.type === "connector") continue;
+            const a = first.frame;
+            const b = next.frame;
+            const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+            const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+            expect(
+              overlapX <= 0.01 || overlapY <= 0.01,
+              `${design.id}: ${first.id} and ${next.id} content frames overlap`,
+            ).toBe(true);
+          }
+        }
+        const palette = presentationDesignPalette(scene.design);
+        for (const [index, node] of scene.nodes.entries()) {
+          if (node.type !== "text") continue;
+          let background: string = palette.background;
+          let partialPaint = false;
+          // Check full enclosing flat panels; decorative partial motifs are visually reviewed.
+          for (const behind of scene.nodes.slice(0, index)) {
+            if (behind.type !== "shape") continue;
+            const outer = behind.frame;
+            const inner = node.frame;
+            const fill = behind.appearance?.fill;
+            if (!fill || fill === "none") continue;
+            const overlaps =
+              outer.x < inner.x + inner.width &&
+              outer.x + outer.width > inner.x &&
+              outer.y < inner.y + inner.height &&
+              outer.y + outer.height > inner.y;
+            if (!overlaps) continue;
+            if (
+              !behind.rotation &&
+              ["rectangle", "rounded_rectangle"].includes(behind.shape) &&
+              outer.x <= inner.x &&
+              outer.y <= inner.y &&
+              outer.x + outer.width >= inner.x + inner.width &&
+              outer.y + outer.height >= inner.y + inner.height
+            ) {
+              background = palette[fill];
+              partialPaint = false;
+            } else partialPaint = true;
+          }
+          if (partialPaint) continue;
+          checkedPanels += 1;
+          const ink = luminance(palette[node.typography?.color ?? "text"]);
+          const paper = luminance(background);
+          const contrast = (Math.max(ink, paper) + 0.05) / (Math.min(ink, paper) + 0.05);
+          expect(contrast, `${design.id}: ${node.text} panel contrast`).toBeGreaterThanOrEqual(
+            (node.typography?.size ?? 26) >= 24 ? 3 : 4.5,
+          );
+        }
+      }
+      expect(checkedPanels).toBeGreaterThan(0);
     },
   );
 

@@ -8,6 +8,53 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Expanded presentation designs and full application November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration grows the visual library from eight to
+30 original collections, with 240 coordinated editable layouts. The 22 additions cover
+business strategy, reporting, marketing, roadmaps, technology, research, education, creative
+work, wellbeing, sustainability and community presentations. Ten discovery categories now
+include Corporate, Creative, Academic, Nature, Playful and Geometric alongside the four
+existing visual styles. Collections can belong to more than one useful category.
+
+Eight further Canva sets were inspected at cover and interior level. Their abstract product
+patterns inform original native compositions; competitor artwork and assets are not bundled.
+All 30 collections have distinct example narratives in the existing ten languages, providing
+300 localized decks and 2,400 publication-valid layout recipes. The original eight recipes
+retain their compositions and identifiers.
+
+Applying a design to an existing presentation now defaults to **Full design**: authored
+content moves into the collection's actual composition, with new artwork and typography.
+**Colors and fonts** explicitly retains the previous style-only behavior. Preview and commit
+use the same transformation; apply remains one undo/autosave transaction. Content, meaningful
+object IDs, rich text, notes, citations, motion and activities are preserved. Imported canvases,
+connected diagrams, grouped/interactive/rotated content, or layouts that cannot fit safely retain
+their geometry and show a clear notice. The base-color theme control identifies collection
+palettes as **From presentation design**; explicit base-color overrides keep the applied layout.
+
+The gallery initially shows twelve covers, searches the full catalog and reveals twelve more
+on demand with keyboard focus on the first new collection. Eight-slide preview decks are built
+when opened, avoiding eager construction of all 240 scenes. Typed composition modules and the
+shared composer allow additions without a new contract, migration, subscription or dependency.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,941 tests and 526 existing
+opt-in skips, including formatting, lint, types, all four production build tasks and compiled
+server startup. All 245 focused tests and 4,913 web tests pass. Eight targeted production browser
+checks pass across desktop Chromium/Firefox and phone Chromium/WebKit, including repeat
+application, font changes, retained text layout, preview/apply/undo/reload and base-color overrides.
+The initial complete-catalog browser qualification passed 24 journeys and 960 rendered layout
+checks with no text overflow. The 64 original layout object arrays remain byte-identical to `d82eeab`.
+Captures and receipts are under `artifacts/presentation-expanded-designs/`; the final repository
+checkpoint is `pre-pr-qualification.json`.
+
+Review corrections preserve page markers when moving between footer and header designs,
+including after an intervening font/style change. Full design retains the original slide geometry
+when text still cannot fit at the minimum size; the preview discloses that fallback.
+
+The [additional-template benchmark and original briefs](evidence/presentation-expanded-designs-2026-11.md)
+record inspected sources and scope. Local automated validation does not advance hosted,
+native-language human review or physical-device acceptance gates.
+
 ### Authored presentation collections November 13, 2026
 
 The `codex/presentation-designed-collections` iteration replaces the initial design recipes

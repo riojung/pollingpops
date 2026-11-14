@@ -1,9 +1,15 @@
 import type { SupportedLocale } from "@openround/contracts";
+import {
+  expandedDesignCopyRows,
+  expandedDesignIds,
+  isExpandedPresentationDesignId,
+} from "./presentation-expanded-design-copy";
 import type {
   DesignLayoutId,
   PresentationDesignDraftCopy,
   PresentationDesignId,
 } from "../presentation-designs";
+import type { PresentationDesignCategory } from "../presentation-design-categories";
 
 const uiKeys = [
   "designs",
@@ -44,6 +50,8 @@ const uiKeys = [
   "editorial",
   "bold",
   "technical",
+  "showMoreDesigns",
+  "showingDesigns",
 ] as const;
 type UiKey = (typeof uiKeys)[number];
 
@@ -87,6 +95,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Editorial",
     "Bold",
     "Technical",
+    "Show more designs",
+    "Showing {visible} of {count} designs",
   ],
   "fr-FR": [
     "Designs",
@@ -127,6 +137,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Éditorial",
     "Audacieux",
     "Technique",
+    "Afficher plus de designs",
+    "{visible} designs affichés sur {count}",
   ],
   "de-DE": [
     "Designs",
@@ -167,6 +179,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Redaktionell",
     "Markant",
     "Technisch",
+    "Weitere Designs anzeigen",
+    "{visible} von {count} Designs angezeigt",
   ],
   "es-ES": [
     "Diseños",
@@ -207,6 +221,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Editorial",
     "Llamativo",
     "Técnico",
+    "Mostrar más diseños",
+    "Se muestran {visible} de {count} diseños",
   ],
   "it-IT": [
     "Design",
@@ -247,6 +263,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Editoriale",
     "Deciso",
     "Tecnico",
+    "Mostra altri design",
+    "{visible} design mostrati su {count}",
   ],
   "pt-PT": [
     "Designs",
@@ -287,6 +305,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "Editorial",
     "Marcante",
     "Técnico",
+    "Mostrar mais designs",
+    "A mostrar {visible} de {count} designs",
   ],
   "ja-JP": [
     "デザイン",
@@ -327,6 +347,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "エディトリアル",
     "大胆",
     "テクニカル",
+    "デザインをさらに表示",
+    "{count}件中{visible}件のデザインを表示",
   ],
   "ko-KR": [
     "디자인",
@@ -367,6 +389,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "에디토리얼",
     "대담함",
     "테크니컬",
+    "디자인 더 보기",
+    "디자인 {count}개 중 {visible}개 표시",
   ],
   "zh-CN": [
     "设计",
@@ -407,6 +431,8 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "编辑风格",
     "醒目",
     "技术风格",
+    "显示更多设计",
+    "显示{count}种设计中的{visible}种",
   ],
   "zh-TW": [
     "設計",
@@ -447,10 +473,12 @@ const uiRows: Record<SupportedLocale, string[]> = {
     "編輯風格",
     "醒目",
     "技術風格",
+    "顯示更多設計",
+    "顯示{count}種設計中的{visible}種",
   ],
 };
 
-const designIds = [
+const originalDesignIds = [
   "studio",
   "editorial",
   "midnight",
@@ -459,6 +487,10 @@ const designIds = [
   "signal",
   "monograph",
   "canvas",
+] as const satisfies readonly PresentationDesignId[];
+const designIds = [
+  ...originalDesignIds,
+  ...expandedDesignIds,
 ] as const satisfies readonly PresentationDesignId[];
 const descriptionRows: Record<SupportedLocale, string[]> = {
   "en-CA": [
@@ -640,7 +672,7 @@ const layoutRows: Record<SupportedLocale, string[]> = {
   "zh-TW": ["封面", "章節", "內文", "雙欄", "左側圖片", "右側圖片", "資料", "結尾"],
 };
 
-// Original, generic sample content shared by all eight visual families.
+// Original, generic helper content shared by the visual families.
 const sampleRows: Record<SupportedLocale, string[]> = {
   "en-CA": [
     "Make room for your next idea",
@@ -1030,22 +1062,115 @@ const newCreationCopy: Record<SupportedLocale, { startAnother: string; startAnot
     },
   };
 
+const categoryRows: Record<
+  SupportedLocale,
+  readonly [
+    label: string,
+    corporate: string,
+    creative: string,
+    academic: string,
+    nature: string,
+    playful: string,
+    geometric: string,
+  ]
+> = {
+  "en-CA": [
+    "Design category",
+    "Corporate",
+    "Creative",
+    "Academic",
+    "Nature",
+    "Playful",
+    "Geometric",
+  ],
+  "fr-FR": [
+    "Catégorie de design",
+    "Entreprise",
+    "Créatif",
+    "Académique",
+    "Nature",
+    "Ludique",
+    "Géométrique",
+  ],
+  "de-DE": [
+    "Designkategorie",
+    "Unternehmen",
+    "Kreativ",
+    "Akademisch",
+    "Natur",
+    "Verspielt",
+    "Geometrisch",
+  ],
+  "es-ES": [
+    "Categoría de diseño",
+    "Corporativo",
+    "Creativo",
+    "Académico",
+    "Naturaleza",
+    "Lúdico",
+    "Geométrico",
+  ],
+  "it-IT": [
+    "Categoria di design",
+    "Aziendale",
+    "Creativo",
+    "Accademico",
+    "Natura",
+    "Giocoso",
+    "Geometrico",
+  ],
+  "pt-PT": [
+    "Categoria de design",
+    "Empresarial",
+    "Criativo",
+    "Académico",
+    "Natureza",
+    "Divertido",
+    "Geométrico",
+  ],
+  "ja-JP": ["デザインのカテゴリ", "ビジネス", "クリエイティブ", "学術", "自然", "遊び心", "幾何学"],
+  "ko-KR": ["디자인 카테고리", "기업", "창의적", "학술", "자연", "유쾌함", "기하학"],
+  "zh-CN": ["设计类别", "商务", "创意", "学术", "自然", "趣味", "几何"],
+  "zh-TW": ["設計類別", "商務", "創意", "學術", "自然", "趣味", "幾何"],
+};
+
 export function presentationDesignCopy(locale: SupportedLocale = "en-CA") {
   const ui = Object.fromEntries(
     uiKeys.map((key, index) => [key, uiRows[locale][index]!]),
   ) as Record<UiKey, string>;
+  const [categoryLabel, corporate, creative, academic, nature, playful, geometric] =
+    categoryRows[locale];
+  const categories: Record<PresentationDesignCategory, string> = {
+    minimal: ui.minimal,
+    editorial: ui.editorial,
+    bold: ui.bold,
+    technical: ui.technical,
+    corporate,
+    creative,
+    academic,
+    nature,
+    playful,
+    geometric,
+  };
   return {
     ...ui,
     ...newCreationCopy[locale],
+    categoryLabel,
+    categories,
     openDraft: openDraftLabels[locale],
     importedNotice: notices[locale][0],
     inheritanceNotice: notices[locale][1],
     sampleDraft: presentationDesignSampleCopy(locale),
     purposes: Object.fromEntries(
-      designIds.map((id) => [id, collectionRows[locale][id][0]]),
+      designIds.map((id) => [id, collectionCopyForDesign(id, locale)[0]]),
     ) as Record<PresentationDesignId, string>,
     descriptions: Object.fromEntries(
-      designIds.map((id, index) => [id, descriptionRows[locale][index]!]),
+      designIds.map((id, index) => [
+        id,
+        isExpandedPresentationDesignId(id)
+          ? expandedDesignCopyRows[locale][id][0]
+          : descriptionRows[locale][index]!,
+      ]),
     ) as Record<PresentationDesignId, string>,
     layoutLabels: Object.fromEntries(
       layouts.map((id, index) => [id, layoutRows[locale][index]!]),
@@ -1103,7 +1228,10 @@ type CollectionCopy = readonly [
   data: string,
   closing: string,
 ];
-const collectionRows: Record<SupportedLocale, Record<PresentationDesignId, CollectionCopy>> = {
+const collectionRows: Record<
+  SupportedLocale,
+  Record<(typeof originalDesignIds)[number], CollectionCopy>
+> = {
   "en-CA": {
     studio: [
       "Business proposal",
@@ -2086,13 +2214,24 @@ const collectionRows: Record<SupportedLocale, Record<PresentationDesignId, Colle
   },
 };
 
+function collectionCopyForDesign(
+  designId: PresentationDesignId,
+  locale: SupportedLocale,
+): CollectionCopy {
+  if (isExpandedPresentationDesignId(designId)) {
+    const [, ...collection] = expandedDesignCopyRows[locale][designId];
+    return collection;
+  }
+  return collectionRows[locale][designId];
+}
+
 /** Family-specific examples are opt-in; createDesignSlide always honours caller-authored copy. */
 export function presentationDesignDraftCopy(
   designId: PresentationDesignId,
   locale: SupportedLocale = "en-CA",
 ): PresentationDesignDraftCopy {
   const base = presentationDesignSampleCopy(locale);
-  const [purpose, cover, promise, ...titles] = collectionRows[locale][designId];
+  const [purpose, cover, promise, ...titles] = collectionCopyForDesign(designId, locale);
   const slideTitles = [cover, ...titles];
   return {
     ...base,

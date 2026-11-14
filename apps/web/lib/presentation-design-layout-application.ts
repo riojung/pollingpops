@@ -4,7 +4,7 @@ import {
   type PresentationSceneFrame,
   type PresentationSceneNode,
 } from "@openround/contracts";
-import { createDesignComposer } from "./presentation-design-composer";
+import { canFitDesignTextAtSize, createDesignComposer } from "./presentation-design-composer";
 import type {
   DesignLayoutId,
   PresentationDesignId,
@@ -328,13 +328,30 @@ export function reflowPresentationDesign(
     )
   )
     return scene;
-  // Validate every assigned text region before changing any frames or decoration. If
-  // even the minimum type size cannot fit, the caller retains this slide's layout.
+  // Validate every assigned text region and fixed-size shape label before changing any
+  // frames or decoration. A label cannot use the editable text renderer's shrink loop.
   const fittedText = new Map<string, TextNode["typography"]>();
   for (const node of content) {
-    if (node.type !== "text") continue;
     const slot = assignments.get(node.id);
     if (!slot) continue;
+    if (node.type === "shape" && node.label.trim()) {
+      const { x, y, width, height } = slot.frame;
+      // CSS normal whitespace collapses ASCII whitespace; NBSP and full-width spaces
+      // remain measurable glyphs. Shape spans use 85% width and inherit the family font.
+      if (
+        !canFitDesignTextAtSize(
+          node.label.replace(/[ \t\r\n\f]+/gu, " ").replace(/^ +| +$/gu, ""),
+          [x, y, width * 0.85, height],
+          22,
+          {
+            font: options.design.font,
+            leading: 1.35,
+          },
+        )
+      )
+        return scene;
+    }
+    if (node.type !== "text") continue;
     const typography = fittedTypography(node, slot, options.design.spacing);
     if (!typography) return scene;
     fittedText.set(node.id, typography);

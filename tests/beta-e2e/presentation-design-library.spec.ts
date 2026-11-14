@@ -848,6 +848,96 @@ for (const suffix of ["", " @mobile"]) {
     expect(retained.readingOrder).toEqual(priorities.scene!.readingOrder);
   });
 
+  test(`full designs retain long shape labels and reflow short labels without clipping${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page);
+    await specialistLocale(page, "en-CA");
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    for (const sample of [
+      { label: "W".repeat(200), retained: true },
+      { label: "A\u3000\u3000\u3000".repeat(39) + "A", retained: true },
+      { label: "😀".repeat(100), retained: true },
+      { label: "Short callout", retained: false },
+    ]) {
+      const block = e01Slide(sample.retained ? "Long labelled shape" : "Short labelled shape");
+      const shape = {
+        id: randomUUID(),
+        type: "shape" as const,
+        shape: "rounded_rectangle" as const,
+        color: "sky" as const,
+        label: sample.label,
+        frame: { x: 8, y: 35, width: 84, height: 50 },
+      };
+      block.scene = {
+        ...block.scene!,
+        schemaVersion: 9,
+        nodes: [block.scene!.nodes[0]!, shape],
+        readingOrder: [block.scene!.nodes[0]!.id, shape.id],
+      };
+      const record = await createE01Deck(page, [block], 18);
+      await enterE01Editor(page, record.id, narrow);
+      const preview = await openDesign(page, "linen");
+      const stage = preview.locator('[data-design-preview="content"]');
+      const previewShape = stage.locator(`[data-node-id="${shape.id}"]`);
+      if (sample.retained) {
+        await expect(preview.locator("[data-design-retained-layout]")).toContainText(
+          "Layouts retained: 1.",
+        );
+        await expect(previewShape).toHaveAttribute("data-frame", JSON.stringify(shape.frame));
+      } else {
+        await expect(preview.locator("[data-design-retained-layout]")).toHaveCount(0);
+        await expect(previewShape).toHaveAttribute(
+          "data-frame",
+          JSON.stringify({ x: 19, y: 81, width: 66, height: 12 }),
+        );
+      }
+      const label = previewShape.locator('[role="img"] > span');
+      await expect(label).toHaveText(sample.label);
+      const metrics = await label.evaluate((node) => {
+        const text = node.getBoundingClientRect();
+        const shape = node.parentElement!.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const plane = node.closest<HTMLElement>("[data-thumbnail-scene]")!;
+        return {
+          font: parseFloat(style.fontSize),
+          leading: parseFloat(style.lineHeight),
+          planeWidth: plane.clientWidth,
+          clipped: Math.max(
+            shape.left - text.left,
+            text.right - shape.right,
+            shape.top - text.top,
+            text.bottom - shape.bottom,
+          ),
+        };
+      });
+      expect((metrics.font / metrics.planeWidth) * 1280).toBeCloseTo(22, 1);
+      expect(metrics.leading / metrics.font).toBeCloseTo(1.35, 2);
+      expect(metrics.clipped).toBeLessThanOrEqual(2);
+      await quality(page);
+      await preview.locator('[data-design-apply="linen"]').click();
+      await expect
+        .poll(
+          async () =>
+            pollScene((await readE01Record(page, record.id)).draft.blocks[0])?.design?.palette,
+        )
+        .toBe("sand");
+      await page.reload();
+      const saved = scene((await readE01Record(page, record.id)).draft.blocks[0]!);
+      if (sample.retained) {
+        expect(saved.nodes).toEqual(block.scene.nodes);
+        expect(saved.readingOrder).toEqual(block.scene.readingOrder);
+      } else {
+        expect(saved.nodes.find((node) => node.id === shape.id)).toMatchObject({
+          label: sample.label,
+          frame: { x: 19, y: 81, width: 66, height: 12 },
+        });
+      }
+    }
+  });
+
   test(`failed design creation can start another while preserving the previously edited target${suffix}`, async ({
     page,
   }) => {

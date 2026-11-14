@@ -9,6 +9,70 @@ type Fill = NonNullable<Shape["appearance"]>["fill"];
 type Font = NonNullable<Text["typography"]>["font"];
 const bounds = ([x, y, width, height]: Box): PresentationSceneFrame => ({ x, y, width, height });
 
+function textLines(
+  value: string,
+  capacity: number,
+  font: Font,
+  spaceWidth: number,
+  wordBoundary = /\s+/u,
+  glyphAdvance?: (character: string) => number,
+) {
+  const unitWidth = (word: string) =>
+    Array.from(word).reduce(
+      (width, character) =>
+        width +
+        (glyphAdvance
+          ? glyphAdvance(character)
+          : /[\u2e80-\uffef]/u.test(character)
+            ? 1.03
+            : font === "mono"
+              ? 0.63
+              : /[MW@%]/u.test(character)
+                ? 0.84
+                : /[A-Z]/u.test(character)
+                  ? 0.64
+                  : 0.53),
+      0,
+    );
+  return value.split("\n").reduce((total, paragraph) => {
+    let lines = 1;
+    let used = 0;
+    for (const word of paragraph.split(wordBoundary)) {
+      const width = unitWidth(word);
+      if (used && used + spaceWidth + width > capacity) {
+        lines += 1;
+        used = 0;
+      }
+      if (width > capacity) {
+        lines += Math.ceil(width / capacity) - 1;
+        used = width % capacity;
+      } else used += (used ? spaceWidth : 0) + width;
+    }
+    return total + lines;
+  }, 0);
+}
+
+/** Fixed-size renderers use the same measurement without the editable-text shrink loop. */
+export function canFitDesignTextAtSize(
+  value: string,
+  box: Box,
+  size: number,
+  typography: { font: Font; leading: number },
+) {
+  const capacity = Math.max(1, box[2] * 12.8) / size;
+  const lines = textLines(
+    value,
+    capacity,
+    typography.font,
+    typography.font === "mono" ? 0.63 : 0.3,
+    / +/u,
+    // Fixed captions cannot shrink. Reserve a full em for proportional or Unicode
+    // glyphs, including astral emoji, instead of the editable text fitter's estimates.
+    (character) => (typography.font === "mono" && character.charCodeAt(0) <= 0x7f ? 0.63 : 1.03),
+  );
+  return lines * size * typography.leading <= Math.max(1, box[3] * 7.2) + 1;
+}
+
 /** Small native primitives keep every collection editable and make new collections additive. */
 export function createDesignComposer(
   copy: PresentationDesignSlideCopy,
@@ -29,40 +93,8 @@ export function createDesignComposer(
     // A monospaced space is a full character cell. Reserve it when fitting the new
     // collections and existing-content reflows; zero-inset legacy recipes stay stable.
     const spaceWidth = padding > 0 && font === "mono" ? 0.63 : 0.3;
-    const unitWidth = (word: string) =>
-      Array.from(word).reduce(
-        (width, character) =>
-          width +
-          (/[\u2e80-\uffef]/u.test(character)
-            ? 1.03
-            : font === "mono"
-              ? 0.63
-              : /[MW@%]/u.test(character)
-                ? 0.84
-                : /[A-Z]/u.test(character)
-                  ? 0.64
-                  : 0.53),
-        0,
-      );
-    const lineCount = (fontSize: number) => {
-      const capacity = Math.max(1, box[2] * 12.8 - 2 * padding) / fontSize;
-      return value.split("\n").reduce((total, paragraph) => {
-        let lines = 1;
-        let used = 0;
-        for (const word of paragraph.split(/\s+/u)) {
-          const width = unitWidth(word);
-          if (used && used + spaceWidth + width > capacity) {
-            lines += 1;
-            used = 0;
-          }
-          if (width > capacity) {
-            lines += Math.ceil(width / capacity) - 1;
-            used = width % capacity;
-          } else used += (used ? spaceWidth : 0) + width;
-        }
-        return total + lines;
-      }, 0);
-    };
+    const lineCount = (fontSize: number) =>
+      textLines(value, Math.max(1, box[2] * 12.8 - 2 * padding) / fontSize, font, spaceWidth);
     // Fit localized sample text and long caller copy inside its own editable box. No wording
     // is trimmed, and every family retains its authored maximum type size and proportions.
     let fitted = size;

@@ -128,6 +128,8 @@
   position: relative;
   max-width: 85%;
   font-size: 1.71875cqw;
+  /* Keep fixed-plane label metrics consistent with design-application fit checks. */
+  line-height: 1.35;
   text-align: center;
   overflow-wrap: anywhere;
 }

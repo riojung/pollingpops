@@ -10,6 +10,7 @@ import {
 } from "@openround/contracts";
 import { createContentBlock, createQuestionBlock } from "./presentation-builder";
 import { createPresentationDesignComposition } from "./presentation-design-compositions";
+import { canFitDesignTextAtSize, createDesignComposer } from "./presentation-design-composer";
 import {
   PRESENTATION_DESIGNS,
   applyPresentationDesign,
@@ -93,6 +94,153 @@ function withoutFrame(node: PresentationSceneNode) {
 const layout = { scope: "deck", application: "layout" } as const;
 
 describe("applying full presentation design compositions", () => {
+  it.each([70, 200])(
+    "retains a %i-character shape label atomically when Linen cannot fit it at the rendered size",
+    (length) => {
+      const label: PresentationSceneNode = {
+        id: "complete-label",
+        type: "shape",
+        shape: "rectangle",
+        color: "sky",
+        label: "x".repeat(length),
+        frame,
+      };
+      const source = deck([slide(label)]);
+      const before = structuredClone(source);
+      const original = scene(source.blocks[0]!);
+      // The boundary sample fits at18px, while the actual shape renderer stays22px.
+      const target = [19, 81, 66 * 0.85, 12] as const;
+      expect(canFitDesignTextAtSize(label.label, target, 22, { font: "sans", leading: 1.35 })).toBe(
+        false,
+      );
+      if (length === 70) {
+        expect(
+          canFitDesignTextAtSize(label.label, target, 18, { font: "sans", leading: 1.35 }),
+        ).toBe(true);
+        expect(
+          canFitDesignTextAtSize(label.label, [19, 81, 66, 12], 22, {
+            font: "sans",
+            leading: 1.35,
+          }),
+        ).toBe(true);
+      }
+      const result = applyPresentationDesign(source, "linen", layout);
+      expect(result.summary).toMatchObject({
+        reflowedSlides: 0,
+        retainedLayoutSlides: 1,
+        changedSlides: 1,
+      });
+      expect(scene(result.draft.blocks[0]!).nodes).toBe(original.nodes);
+      expect(scene(result.draft.blocks[0]!).readingOrder).toBe(original.readingOrder);
+      expect(scene(result.draft.blocks[0]!).nodes).toContainEqual(label);
+      expect(PresentationDraftSchema.safeParse(result.draft).success).toBe(true);
+      expect(source).toEqual(before);
+    },
+  );
+
+  it.each(["Ready", "One\nTwo\nThree\nFour"])(
+    "reflows a short or whitespace-collapsed shape label into Linen unchanged: %j",
+    (value) => {
+      const label: PresentationSceneNode = {
+        id: "short-label",
+        type: "shape",
+        shape: "rectangle",
+        color: "sky",
+        label: value,
+        frame,
+      };
+      const result = applyPresentationDesign(deck([slide(label)]), "linen", layout);
+      expect(result.summary).toMatchObject({ reflowedSlides: 1, retainedLayoutSlides: 0 });
+      const changed = scene(result.draft.blocks[0]!).nodes.find((node) => node.id === label.id);
+      expect(changed).toMatchObject({
+        id: label.id,
+        label: value,
+        frame: { x: 19, y: 81, width: 66, height: 12 },
+      });
+      expect(changed).not.toHaveProperty("typography");
+      expect(PresentationDraftSchema.safeParse(result.draft).success).toBe(true);
+    },
+  );
+
+  it("counts full-width monospaced spaces before reflowing a fixed-size shape label", () => {
+    const label: PresentationSceneNode = {
+      id: "monospaced-label",
+      type: "shape",
+      shape: "rectangle",
+      color: "sky",
+      label: Array(80).fill("a").join(" "),
+      frame,
+    };
+    const target = [23, 77, 54 * 0.85, 16] as const;
+    const legacy = createDesignComposer({ title: "", body: "" }, () => "measurement");
+    expect(legacy.text(label.label, target, 22, { font: "mono", leading: 1.35 })).toBe(true);
+    expect(legacy.nodes[0]).toMatchObject({ typography: { size: 22 } });
+    expect(canFitDesignTextAtSize(label.label, target, 22, { font: "mono", leading: 1.35 })).toBe(
+      false,
+    );
+    const source = deck([slide(label)]);
+    const result = applyPresentationDesign(source, "confetti", layout);
+    expect(result.summary).toMatchObject({ reflowedSlides: 0, retainedLayoutSlides: 1 });
+    expect(scene(result.draft.blocks[0]!).nodes).toBe(scene(source.blocks[0]!).nodes);
+    expect(scene(result.draft.blocks[0]!).nodes).toContainEqual(label);
+  });
+
+  it.each([
+    ["ideographic", "A\u3000\u3000\u3000".repeat(39) + "A"],
+    ["nonbreaking", ("A" + "\u00a0".repeat(6)).repeat(27) + "A"],
+  ])("retains a long label with %s spaces that CSS does not collapse", (_kind, value) => {
+    const label: PresentationSceneNode = {
+      id: "international-label",
+      type: "shape",
+      shape: "rectangle",
+      color: "sky",
+      label: value,
+      frame: { x: 8, y: 40, width: 84, height: 50 },
+    };
+    const source = deck([slide(label)]);
+    const result = applyPresentationDesign(source, "linen", layout);
+    expect(result.summary).toMatchObject({ reflowedSlides: 0, retainedLayoutSlides: 1 });
+    expect(scene(result.draft.blocks[0]!).nodes).toBe(scene(source.blocks[0]!).nodes);
+    expect(scene(result.draft.blocks[0]!).nodes).toContainEqual(label);
+  });
+
+  it("retains a valid 200-UTF16-character emoji label that cannot fit at the fixed size", () => {
+    const label: PresentationSceneNode = {
+      id: "emoji-label",
+      type: "shape",
+      shape: "rectangle",
+      color: "sky",
+      label: "😀".repeat(100),
+      frame: { x: 8, y: 40, width: 84, height: 50 },
+    };
+    const source = deck([slide(label)]);
+    expect(label.label.length).toBe(200);
+    expect(PresentationDraftSchema.safeParse(source).success).toBe(true);
+    const result = applyPresentationDesign(source, "linen", layout);
+    expect(result.summary).toMatchObject({ reflowedSlides: 0, retainedLayoutSlides: 1 });
+    expect(scene(result.draft.blocks[0]!).nodes).toBe(scene(source.blocks[0]!).nodes);
+    expect(scene(result.draft.blocks[0]!).nodes).toContainEqual(label);
+  });
+
+  it.each(["A\u3000B", "\u00a0A\u00a0B\u00a0", "Ready 😀"])(
+    "reflows a short international label without changing its glyphs: %j",
+    (value) => {
+      const label: PresentationSceneNode = {
+        id: "short-international-label",
+        type: "shape",
+        shape: "rectangle",
+        color: "sky",
+        label: value,
+        frame,
+      };
+      const result = applyPresentationDesign(deck([slide(label)]), "linen", layout);
+      expect(result.summary).toMatchObject({ reflowedSlides: 1, retainedLayoutSlides: 0 });
+      expect(
+        scene(result.draft.blocks[0]!).nodes.find((node) => node.id === label.id),
+      ).toMatchObject({ label: value, frame: { x: 19, y: 81, width: 66, height: 12 } });
+    },
+  );
+
   it("keeps every Studio layout, authored ID and edge folio stable when Linen is reapplied", () => {
     const source = createDesignDraft("studio", presentationDesignDraftCopy("studio"));
     const first = applyPresentationDesign(source, "linen", layout);

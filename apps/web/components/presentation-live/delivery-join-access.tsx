@@ -8,7 +8,7 @@ import { buildJoinUrl, isLoopbackJoinBase, selectJoinBase } from "../../lib/join
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { useLocale } from "../locale-provider";
 import { presentationDeliveryCopy } from "../../lib/i18n/presentation-delivery-copy";
-import styles from "./presentation-delivery.module.css";
+import styles from "./delivery-join-access.module.css";
 
 export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
   const { locale } = useLocale();
@@ -37,34 +37,49 @@ export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
   const url = buildJoinUrl(base, code);
   return (
     <section className={styles.joinAccess} aria-label={copy("joinPresentation")} lang={locale}>
-      {url ? <QRCodeSVG value={url} size={84} title={copy("scanJoin")} /> : null}
-      <div>
-        <p>
-          {copy("joinCode")} <strong className={styles.joinCode}>{code}</strong>
+      {url ? (
+        <QRCodeSVG
+          className={styles.qrCode}
+          value={url}
+          size={88}
+          marginSize={2}
+          title={copy("scanJoin")}
+        />
+      ) : null}
+      <div className={styles.details}>
+        <p className={styles.codeRow}>
+          <span>{copy("joinCode")}</span>
+          <strong className={styles.joinCode}>{code}</strong>
         </p>
         {url ? (
-          <p>
+          <p className={styles.linkRow}>
             <a href={url} target="_blank" rel="noopener noreferrer">
               <span lang="">{url}</span>
             </a>
           </p>
         ) : null}
-        {url ? (
-          <button
-            className="button-quiet small-button"
-            type="button"
-            onClick={() =>
-              void copyTextToClipboard(url).then((copied) =>
-                setStatus(copied ? "copied" : "copyUnavailable"),
-              )
-            }
-          >
-            {copy("copyJoin")}
-          </button>
+        {base && isLoopbackJoinBase(base) ? (
+          <p className={styles.feedback}>{copy("loopbackAddress")}</p>
         ) : null}
-        {base && isLoopbackJoinBase(base) ? <p>{copy("loopbackAddress")}</p> : null}
-        {status ? <p role="status">{copy(status)}</p> : null}
+        {status ? (
+          <p className={styles.feedback} role="status">
+            {copy(status)}
+          </p>
+        ) : null}
       </div>
+      {url ? (
+        <button
+          className={styles.copyButton}
+          type="button"
+          onClick={() =>
+            void copyTextToClipboard(url).then((copied) =>
+              setStatus(copied ? "copied" : "copyUnavailable"),
+            )
+          }
+        >
+          {copy("copyJoin")}
+        </button>
+      ) : null}
     </section>
   );
 }

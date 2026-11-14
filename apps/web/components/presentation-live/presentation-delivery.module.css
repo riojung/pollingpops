@@ -2,41 +2,46 @@
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
 }
 .privateNotice {
   margin: 0;
-  color: var(--ui-on-hero);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .backstage {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  align-items: start;
+  gap: 12px;
 }
 .panel {
   min-width: 0;
-  padding: 20px;
+  padding: 14px 16px;
   border: 1px solid var(--ui-border);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--ui-surface);
   color: var(--ui-text);
 }
 .panel h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
 }
 .notes {
-  min-height: 12rem;
-  font-size: 1.125rem;
-  line-height: 1.65;
+  min-height: 4rem;
+  font-size: 15px;
+  line-height: 1.7;
   scrollbar-gutter: stable;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 24rem;
+  max-height: 18rem;
   overflow: auto;
 }
 .nextPreview {
-  max-height: 26rem;
+  max-height: 18rem;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -48,7 +53,7 @@
   min-width: 0;
   width: 100%;
 }
-.block h1 {
+.block > h1 {
   font-size: clamp(1.8rem, 4vw, 3.8rem);
   overflow-wrap: anywhere;
 }

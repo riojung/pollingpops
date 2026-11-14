@@ -205,3 +205,41 @@ cases are software checks. They do not establish actual video-conferencing scree
 managed-browser policy acceptance, manual assistive-technology behavior, physical device support,
 native browser zoom, production capacity/cost or hosted rollout success. Those gates remain open.
 The richer phone remote remains optional follow-up work; the existing scoped Companion is retained.
+
+## Live workspace visual refresh
+
+Source: `codex/presentation-live-workspace`, based on `953a4f4`.
+
+Presentation setup, the private presenter workspace, companion, participant view, audience stage,
+navigation, Q&A, reports, insights and the summary dialog now share compact Polling Pops working
+surfaces and typography. Setup and report titles are bounded; the host's primary phase action and
+navigation sit in a sticky command bar. Join details have an explicit disclosure, with a QR card
+that wraps to its available container width. Private notes, the next-slide preview and the local
+timer keep their distinct roles.
+
+The participant view passes through the published block's authored design and fits wide content
+slides to the available viewport. The audience stage uses a minimal neutral theater frame with
+compact branding, full-screen controls and persistent QR/link access. Narrow screens retain the
+existing reading flow and response controls. Reports use a compact overview, evidence rows and
+expandable detail tables; the summary dialog keeps its header visible and provides independently
+scrollable desktop preview and control panes.
+
+Existing command handlers, credential roles, immutable session projections, response submission,
+moderation, exports and share permissions retain their contracts. The refresh uses scoped CSS,
+existing components and original icon glyphs, with no added asset, dependency or service.
+
+Verification of the frozen refresh artifact:
+
+- Full web suite: **4,933 tests passed across 420 files**.
+- **34 production browser cases passed** across Chromium desktop, Firefox desktop, Chromium phone
+  and WebKit phone profiles. These cover setup typography, visible primary controls, expanded QR
+  card geometry, private host cues, frozen session content, audience joining, stage pass isolation,
+  popup/full-screen recovery, companion controls, Q&A, report exports and the summary dialog.
+- Web and browser-fixture type checks, lint, formatting, production web build and source/artifact
+  provenance validation passed. Desktop and phone screenshots were visually inspected.
+- An independent read-only review cleared the changes after the QR card was made responsive to
+  its container width. Navigation tests identify the new icon button's nested accessible text;
+  their localization and focus lifecycle assertions remain in place.
+
+Browser profiles use emulation. Local screenshots and the source/artifact qualification receipt
+are under `artifacts/presentation-live-workspace/`.

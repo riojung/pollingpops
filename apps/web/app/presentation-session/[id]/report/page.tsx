@@ -24,6 +24,7 @@ import {
 import { TextResultsView } from "../../../../components/text-results-view";
 import { isTextQuestion } from "../../../../lib/text-response";
 import { usePresentationReport } from "./use-presentation-report";
+import workspace from "./report-workspace.module.css";
 
 function PresentationReportContent() {
   const { id } = useParams<{ id: string }>();
@@ -92,23 +93,15 @@ function PresentationReportContent() {
   return (
     <main className={styles.page} lang={locale}>
       <header className={styles.topbar}>
-        <CreatorBrand inverted productFeatures={productFeatures} />
+        <CreatorBrand productFeatures={productFeatures} />
         <div className="button-row">
-          {report ? (
-            <button type="button" className="button-quiet" onClick={exportEvidence}>
-              {copy("exportEvidenceCsv")}
-            </button>
-          ) : null}
-          {summaryReady && report ? (
-            <SessionSummaryButton source={{ kind: "presentation", id }} />
-          ) : null}
           <Link href="/results">{t("live.presentationReport.allResults")}</Link>
           <Link href={`/presentation-session/${id}/host`}>
             {t("live.presentationReport.hostView")}
           </Link>
         </div>
       </header>
-      <div className={`${styles.stage} ${styles.report}`}>
+      <div className={`${styles.stage} ${styles.report} ${workspace.workspace}`}>
         {exportFailed ? (
           <p className="error" role="alert">
             {copy("exportFailed")}
@@ -143,53 +136,71 @@ function PresentationReportContent() {
         ) : null}
         {report ? (
           <>
-            <section className={styles.reportCard}>
-              <span className={styles.statusPill}>{copy("finishedReport")}</span>
-              <h1 lang="">{report.title}</h1>
-              <p lang="en-CA">{report.evidenceNote}</p>
-              {timeMode ? (
-                <p className="muted" lang={locale}>
-                  {t("live.common.timeMode")}:{" "}
-                  {t(timeMode === "flex" ? "live.common.flexMode" : "live.common.timedMode")}
+            <section className={`${styles.reportCard} ${workspace.overview}`}>
+              <div className={workspace.overviewHeading}>
+                <span className={styles.statusPill}>{copy("finishedReport")}</span>
+                <h1 className={workspace.title} lang="">
+                  {report.title}
+                </h1>
+                <p className={workspace.evidenceNote} lang="en-CA">
+                  {report.evidenceNote}
                 </p>
-              ) : null}
-              <div className={styles.metricRow}>
-                <div className={styles.metric}>
-                  <strong>{report.participantCount.toLocaleString(locale)}</strong>
-                  <span>{t("live.common.participants")}</span>
-                </div>
-                <div className={styles.metric}>
-                  <strong>
-                    {(hasQuestionEvidence
-                      ? report.responseCount
-                      : report.evidence.length
-                    ).toLocaleString(locale)}
-                  </strong>
-                  <span>
-                    {t(
-                      hasQuestionEvidence
-                        ? "live.common.responses"
-                        : "live.presentationHost.totalBlocks",
-                    )}
-                  </span>
+                <div className={workspace.metadata}>
+                  {timeMode ? (
+                    <p lang={locale}>
+                      {t("live.common.timeMode")}:{" "}
+                      {t(timeMode === "flex" ? "live.common.flexMode" : "live.common.timedMode")}
+                    </p>
+                  ) : null}
+                  {report.schemaVersion === 6 || report.schemaVersion === 7 ? (
+                    <p>
+                      {copy("navigationCounts", {
+                        jumps: report.navigation.jumpCount.toLocaleString(locale),
+                        returns: report.navigation.returnCount.toLocaleString(locale),
+                      })}
+                    </p>
+                  ) : null}
+                  {report.schemaVersion === 7 ? (
+                    <p>
+                      {copy("interactionCounts", {
+                        reveals: report.interactionSummary.revealChangeCount.toLocaleString(locale),
+                        branches: report.interactionSummary.branchCount.toLocaleString(locale),
+                      })}
+                    </p>
+                  ) : null}
                 </div>
               </div>
-              {report.schemaVersion === 6 || report.schemaVersion === 7 ? (
-                <p>
-                  {copy("navigationCounts", {
-                    jumps: report.navigation.jumpCount.toLocaleString(locale),
-                    returns: report.navigation.returnCount.toLocaleString(locale),
-                  })}
-                </p>
-              ) : null}
-              {report.schemaVersion === 7 ? (
-                <p>
-                  {copy("interactionCounts", {
-                    reveals: report.interactionSummary.revealChangeCount.toLocaleString(locale),
-                    branches: report.interactionSummary.branchCount.toLocaleString(locale),
-                  })}
-                </p>
-              ) : null}
+              <div className={workspace.overviewAside}>
+                <div className={workspace.overviewMetrics}>
+                  <div>
+                    <strong>{report.participantCount.toLocaleString(locale)}</strong>
+                    <span>{t("live.common.participants")}</span>
+                  </div>
+                  <div>
+                    <strong>
+                      {(hasQuestionEvidence
+                        ? report.responseCount
+                        : report.evidence.length
+                      ).toLocaleString(locale)}
+                    </strong>
+                    <span>
+                      {t(
+                        hasQuestionEvidence
+                          ? "live.common.responses"
+                          : "live.presentationHost.totalBlocks",
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <div className={workspace.actions}>
+                  <button type="button" className="button-quiet" onClick={exportEvidence}>
+                    {copy("exportEvidenceCsv")}
+                  </button>
+                  {summaryReady ? (
+                    <SessionSummaryButton source={{ kind: "presentation", id }} />
+                  ) : null}
+                </div>
+              </div>
             </section>
             {summaryReady ? (
               <PresentationSessionInsightsPanel
@@ -202,133 +213,145 @@ function PresentationReportContent() {
               />
             ) : null}
             <section
-              className={styles.reportGrid}
+              className={workspace.evidenceList}
               aria-label={t("live.presentationReport.blockEvidence")}
             >
-              {report.evidence.map((block) => {
-                const navigation = presentationReportBlockNavigation(report, block.blockId);
-                return (
-                  <article className={styles.reportCard} key={block.blockId}>
-                    <span className={styles.statusPill}>
-                      {t("live.presentationReport.blockLabel", {
-                        number: (block.blockIndex + 1).toLocaleString(locale),
-                        kind:
-                          block.kind === "content"
-                            ? t("live.presentationPlay.content")
-                            : t("live.roundSetup.item.question"),
-                      })}
-                    </span>
-                    <h2 lang={block.kind === "question" || block.title ? "" : undefined}>
-                      {block.kind === "content"
-                        ? block.title || t("live.presentationReport.contentSlide")
-                        : block.prompt}
-                    </h2>
-                    {navigation ? (
-                      <div>
-                        {navigation.sectionTitle ? (
-                          <p>
-                            {copy("sectionLabel")}: <span lang="">{navigation.sectionTitle}</span>
+              <h2 className={workspace.sectionTitle}>
+                {t("live.presentationReport.blockEvidence")}
+              </h2>
+              <div className={workspace.evidenceRows}>
+                {report.evidence.map((block) => {
+                  const navigation = presentationReportBlockNavigation(report, block.blockId);
+                  return (
+                    <article className={workspace.evidenceCard} key={block.blockId}>
+                      <div className={workspace.blockHeading}>
+                        <span className={styles.statusPill}>
+                          {t("live.presentationReport.blockLabel", {
+                            number: (block.blockIndex + 1).toLocaleString(locale),
+                            kind:
+                              block.kind === "content"
+                                ? t("live.presentationPlay.content")
+                                : t("live.roundSetup.item.question"),
+                          })}
+                        </span>
+                        <h3 lang={block.kind === "question" || block.title ? "" : undefined}>
+                          {block.kind === "content"
+                            ? block.title || t("live.presentationReport.contentSlide")
+                            : block.prompt}
+                        </h3>
+                      </div>
+                      {navigation ? (
+                        <div className={workspace.blockMetadata}>
+                          {navigation.sectionTitle ? (
+                            <p>
+                              {copy("sectionLabel")}: <span lang="">{navigation.sectionTitle}</span>
+                            </p>
+                          ) : null}
+                          <p
+                            className={workspace.deliveryStatus}
+                            data-skipped={navigation.status === "skipped" || undefined}
+                          >
+                            <strong>
+                              {copy(
+                                navigation.status === "skipped"
+                                  ? "skippedNotPresented"
+                                  : "presented",
+                              )}
+                            </strong>
                           </p>
-                        ) : null}
-                        <p>
-                          <strong>
-                            {copy(
-                              navigation.status === "skipped" ? "skippedNotPresented" : "presented",
-                            )}
-                          </strong>
-                        </p>
-                        {navigation.status === "skipped" ? <p>{copy("skippedEvidence")}</p> : null}
-                      </div>
-                    ) : null}
-                    {block.kind === "question" ? (
-                      <SessionOnlyQuickCheckLabel
-                        sessionOnly={"sessionOnly" in block ? block.sessionOnly : undefined}
-                      />
-                    ) : null}
-                    {navigation?.status === "skipped" ? null : block.kind === "content" &&
-                      hasQuestionEvidence ? (
-                      <p>
-                        <strong>{t("live.presentationReport.notAssessed")}</strong>{" "}
-                        {t("live.presentationReport.notAssessedDescription")}
-                      </p>
-                    ) : block.kind === "question" ? (
-                      <div className={styles.metricRow}>
-                        <div className={styles.metric}>
-                          <strong>{block.respondents.toLocaleString(locale)}</strong>
-                          <span>{t("live.presentationReport.respondents")}</span>
                         </div>
-                        <div className={styles.metric}>
-                          {("opinionSummary" in block && block.opinionSummary) ||
-                          isTextQuestion(block.questionType) ? (
-                            <>
-                              <strong>{copy("unscoredOpinion")}</strong>
-                              <span>{copy("assessment")}</span>
-                            </>
-                          ) : (
-                            <>
-                              <strong>
-                                {block.accuracyPercent === null
-                                  ? t("live.common.notScored")
-                                  : `${block.accuracyPercent.toLocaleString(locale)}%`}
-                              </strong>
-                              <span>{t("live.presentationReport.accuracy")}</span>
-                            </>
-                          )}
-                        </div>
-                        <div className={styles.metric}>
-                          <strong>{copy(`questionType.${block.questionType}`)}</strong>
-                          <span>{t("live.presentationReport.questionType")}</span>
-                        </div>
-                        <div className={styles.metric}>
-                          <strong>
-                            {block.averageResponseMs === null
-                              ? "—"
-                              : (block.averageResponseMs / 1_000).toLocaleString(locale, {
-                                  maximumFractionDigits: 1,
-                                  minimumFractionDigits: 1,
-                                  style: "unit",
-                                  unit: "second",
-                                  unitDisplay: "narrow",
-                                })}
-                          </strong>
-                          <span>{t("live.presentationReport.averageResponse")}</span>
-                        </div>
-                      </div>
-                    ) : null}
-                    {navigation?.status !== "skipped" &&
-                    block.kind === "question" &&
-                    "opinionSummary" in block &&
-                    block.opinionSummary ? (
-                      <PresentationOpinionResults summary={block.opinionSummary} />
-                    ) : null}
-                    {navigation?.status !== "skipped" &&
-                    block.kind === "question" &&
-                    isTextQuestion(block.questionType) ? (
-                      "textResults" in block && block.textResults ? (
-                        <TextResultsView
-                          type={block.textResults.kind}
-                          respondents={block.textResults.respondents}
-                          items={
-                            block.textResults.kind === "open_text"
-                              ? block.textResults.entries.map((entry, index) => ({
-                                  answerId: `${block.blockId}:${index}`,
-                                  body: entry.value,
-                                }))
-                              : undefined
-                          }
-                          terms={
-                            block.textResults.kind === "word_cloud"
-                              ? block.textResults.buckets
-                              : undefined
-                          }
+                      ) : null}
+                      {navigation?.status === "skipped" ? <p>{copy("skippedEvidence")}</p> : null}
+                      {block.kind === "question" ? (
+                        <SessionOnlyQuickCheckLabel
+                          sessionOnly={"sessionOnly" in block ? block.sessionOnly : undefined}
                         />
-                      ) : (
-                        <p>{copy("textResultsSuppressed")}</p>
-                      )
-                    ) : null}
-                  </article>
-                );
-              })}
+                      ) : null}
+                      {navigation?.status === "skipped" ? null : block.kind === "content" &&
+                        hasQuestionEvidence ? (
+                        <p>
+                          <strong>{t("live.presentationReport.notAssessed")}</strong>{" "}
+                          {t("live.presentationReport.notAssessedDescription")}
+                        </p>
+                      ) : block.kind === "question" ? (
+                        <div className={workspace.questionMetrics}>
+                          <div>
+                            <strong>{block.respondents.toLocaleString(locale)}</strong>
+                            <span>{t("live.presentationReport.respondents")}</span>
+                          </div>
+                          <div>
+                            {("opinionSummary" in block && block.opinionSummary) ||
+                            isTextQuestion(block.questionType) ? (
+                              <>
+                                <strong>{copy("unscoredOpinion")}</strong>
+                                <span>{copy("assessment")}</span>
+                              </>
+                            ) : (
+                              <>
+                                <strong>
+                                  {block.accuracyPercent === null
+                                    ? t("live.common.notScored")
+                                    : `${block.accuracyPercent.toLocaleString(locale)}%`}
+                                </strong>
+                                <span>{t("live.presentationReport.accuracy")}</span>
+                              </>
+                            )}
+                          </div>
+                          <div>
+                            <strong>{copy(`questionType.${block.questionType}`)}</strong>
+                            <span>{t("live.presentationReport.questionType")}</span>
+                          </div>
+                          <div>
+                            <strong>
+                              {block.averageResponseMs === null
+                                ? "—"
+                                : (block.averageResponseMs / 1_000).toLocaleString(locale, {
+                                    maximumFractionDigits: 1,
+                                    minimumFractionDigits: 1,
+                                    style: "unit",
+                                    unit: "second",
+                                    unitDisplay: "narrow",
+                                  })}
+                            </strong>
+                            <span>{t("live.presentationReport.averageResponse")}</span>
+                          </div>
+                        </div>
+                      ) : null}
+                      {navigation?.status !== "skipped" &&
+                      block.kind === "question" &&
+                      "opinionSummary" in block &&
+                      block.opinionSummary ? (
+                        <PresentationOpinionResults summary={block.opinionSummary} />
+                      ) : null}
+                      {navigation?.status !== "skipped" &&
+                      block.kind === "question" &&
+                      isTextQuestion(block.questionType) ? (
+                        "textResults" in block && block.textResults ? (
+                          <TextResultsView
+                            type={block.textResults.kind}
+                            respondents={block.textResults.respondents}
+                            items={
+                              block.textResults.kind === "open_text"
+                                ? block.textResults.entries.map((entry, index) => ({
+                                    answerId: `${block.blockId}:${index}`,
+                                    body: entry.value,
+                                  }))
+                                : undefined
+                            }
+                            terms={
+                              block.textResults.kind === "word_cloud"
+                                ? block.textResults.buckets
+                                : undefined
+                            }
+                          />
+                        ) : (
+                          <p>{copy("textResultsSuppressed")}</p>
+                        )
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
             </section>
             {hasQuestionEvidence && report.leaderboard.length ? (
               <section className={styles.reportCard}>
@@ -370,7 +393,7 @@ function PresentationReportContent() {
             <section className={styles.reportCard}>
               <h2>{t("live.presentationReport.facilitationTimeline")}</h2>
               <ol
-                className={styles.timeline}
+                className={workspace.timeline}
                 aria-label={t("live.presentationReport.facilitationTimeline")}
               >
                 {report.timeline.map((event) => (

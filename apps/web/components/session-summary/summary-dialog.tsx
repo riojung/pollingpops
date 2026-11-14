@@ -219,191 +219,207 @@ export function SessionSummaryDialog({
           {t("summary.close")}
         </button>
       </div>
-      <p id="session-summary-description">{t("summary.description")}</p>
-      {error ? (
-        <p className="error" role="alert">
-          {error}
+      <div className={styles.dialogBody}>
+        <p id="session-summary-description">{t("summary.description")}</p>
+        {error ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <p role="status" aria-live="polite" className={status ? "success" : "sr-only"}>
+          {status}
         </p>
-      ) : null}
-      <p role="status" aria-live="polite" className={status ? "success" : "sr-only"}>
-        {status}
-      </p>
-      {loading ? <p role="status">{t("summary.loading")}</p> : null}
-      {preview ? (
-        <div className={styles.columns}>
-          <SessionSummaryView
-            summary={{ ...preview.summary, nextSteps: nextSteps.trim() }}
-            headingLevel={3}
-          />
-          <div className={styles.controls}>
-            <section>
-              <h3>{t("summary.downloads")}</h3>
-              <SessionSummaryDownloads
-                access={{ source }}
-                summary={preview.summary}
-                formats={preview.capabilities.downloadFormats}
-                nextSteps={nextSteps}
-                disabled={busy}
+        {loading ? <p role="status">{t("summary.loading")}</p> : null}
+        {preview ? (
+          <div className={styles.columns}>
+            <div
+              className={styles.previewPane}
+              tabIndex={0}
+              role="region"
+              aria-label={t("summary.title")}
+            >
+              <SessionSummaryView
+                summary={{ ...preview.summary, nextSteps: nextSteps.trim() }}
+                headingLevel={3}
               />
-            </section>
-            <section>
-              <h3>{t("summary.create")}</h3>
-              {preview.capabilities.reasonCodes.map((reason) => (
-                <p className="notice" key={reason}>
-                  {t(`summary.reason.${reason}`)}
-                </p>
-              ))}
-              <form onSubmit={(event) => void create(event)}>
-                <label className={styles.field} htmlFor="summary-next-steps">
-                  <span>{t("summary.nextSteps")}</span>
-                  <textarea
-                    className="input"
-                    id="summary-next-steps"
-                    maxLength={2000}
-                    rows={4}
-                    dir="auto"
-                    aria-describedby="summary-next-steps-hint"
-                    value={nextSteps}
-                    disabled={busy}
-                    onChange={(event) => setNextSteps(event.target.value)}
-                  />
-                </label>
-                <p className="muted" id="summary-next-steps-hint">
-                  {t("summary.nextStepsHint")}
-                </p>
-                <label className={styles.field} htmlFor="summary-expiry">
-                  <span>{t("summary.expiryDays")}</span>
-                  <input
-                    className="input"
-                    id="summary-expiry"
-                    type="number"
-                    min={1}
-                    max={30}
-                    required
-                    value={days}
-                    disabled={busy || !preview.capabilities.canCreateShare}
-                    onChange={(event) => setDays(Number(event.target.value))}
-                  />
-                </label>
-                <p className="muted">
-                  {t("summary.expires", {
-                    date: formatDateTime(
-                      locale,
-                      summaryExpiry(preview, Number.isFinite(days) ? days : 7),
-                    ),
-                  })}
-                </p>
-                <p className="muted">
-                  {t("summary.retention", {
-                    date: formatDateTime(locale, preview.sourceExpiresAt),
-                  })}
-                </p>
-                <label className={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={allowDownloads}
-                    disabled={
-                      busy ||
-                      !preview.capabilities.canCreateShare ||
-                      preview.capabilities.downloadFormats.length === 0
-                    }
-                    onChange={(event) => setAllowDownloads(event.target.checked)}
-                  />
-                  <span>{t("summary.allowDownloads")}</span>
-                </label>
-                <p>{t("summary.bearerNotice")}</p>
-                <button
-                  className="button"
-                  type="submit"
-                  disabled={busy || !preview.capabilities.canCreateShare}
-                >
-                  {t(busy ? "summary.working" : "summary.create")}
-                </button>
-              </form>
-              {receipt ? (
-                <div className={styles.receipt}>
-                  <p>{t(receipt.url ? "summary.saveLink" : "summary.replayed")}</p>
-                  {receipt.url ? (
-                    <>
-                      <label className={styles.field} htmlFor="summary-created-link">
-                        <span>{t("summary.link")}</span>
-                        <input
-                          className="input"
-                          id="summary-created-link"
-                          readOnly
-                          value={receipt.url}
-                          onFocus={(event) => event.target.select()}
-                        />
-                      </label>
-                      <button
-                        className="button-quiet"
-                        type="button"
-                        onClick={() => void copyLink()}
-                      >
-                        {t("summary.copy")}
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-            <section>
-              <div className={styles.actions}>
-                <h3>{t("summary.links")}</h3>
-                <button
-                  className="button-quiet small-button"
-                  type="button"
+            </div>
+            <div
+              className={styles.controls}
+              tabIndex={0}
+              role="region"
+              aria-label={t("summary.open")}
+            >
+              <section>
+                <h3>{t("summary.downloads")}</h3>
+                <SessionSummaryDownloads
+                  access={{ source }}
+                  summary={preview.summary}
+                  formats={preview.capabilities.downloadFormats}
+                  nextSteps={nextSteps}
                   disabled={busy}
-                  onClick={() => void refreshShares().catch(() => setError(t("summary.failed")))}
-                >
-                  {t("summary.refresh")}
-                </button>
-              </div>
-              {!shares.length ? (
-                <p>{t("summary.noLinks")}</p>
-              ) : (
-                <ul className={styles.shares}>
-                  {shares.map((share) => {
-                    const inactive =
-                      share.revokedAt !== null || Date.parse(share.expiresAt) <= Date.now();
-                    return (
-                      <li className={styles.share} key={share.id}>
-                        <p>
-                          {t("summary.linkCreated", {
-                            date: formatDateTime(locale, share.createdAt),
-                          })}
-                        </p>
-                        <p>
-                          {t("summary.expires", { date: formatDateTime(locale, share.expiresAt) })}
-                        </p>
-                        <p>
-                          {t(
-                            share.revokedAt
-                              ? "summary.linkRevoked"
-                              : inactive
-                                ? "summary.linkExpired"
-                                : "summary.linkActive",
-                          )}
-                        </p>
-                        {!inactive && preview.capabilities.canRevokeShare ? (
-                          <button
-                            className="button-quiet"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void revoke(share.id)}
-                          >
-                            {t("summary.revoke")}
-                          </button>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+                />
+              </section>
+              <section>
+                <h3>{t("summary.create")}</h3>
+                {preview.capabilities.reasonCodes.map((reason) => (
+                  <p className="notice" key={reason}>
+                    {t(`summary.reason.${reason}`)}
+                  </p>
+                ))}
+                <form onSubmit={(event) => void create(event)}>
+                  <label className={styles.field} htmlFor="summary-next-steps">
+                    <span>{t("summary.nextSteps")}</span>
+                    <textarea
+                      className="input"
+                      id="summary-next-steps"
+                      maxLength={2000}
+                      rows={4}
+                      dir="auto"
+                      aria-describedby="summary-next-steps-hint"
+                      value={nextSteps}
+                      disabled={busy}
+                      onChange={(event) => setNextSteps(event.target.value)}
+                    />
+                  </label>
+                  <p className="muted" id="summary-next-steps-hint">
+                    {t("summary.nextStepsHint")}
+                  </p>
+                  <label className={styles.field} htmlFor="summary-expiry">
+                    <span>{t("summary.expiryDays")}</span>
+                    <input
+                      className="input"
+                      id="summary-expiry"
+                      type="number"
+                      min={1}
+                      max={30}
+                      required
+                      value={days}
+                      disabled={busy || !preview.capabilities.canCreateShare}
+                      onChange={(event) => setDays(Number(event.target.value))}
+                    />
+                  </label>
+                  <p className="muted">
+                    {t("summary.expires", {
+                      date: formatDateTime(
+                        locale,
+                        summaryExpiry(preview, Number.isFinite(days) ? days : 7),
+                      ),
+                    })}
+                  </p>
+                  <p className="muted">
+                    {t("summary.retention", {
+                      date: formatDateTime(locale, preview.sourceExpiresAt),
+                    })}
+                  </p>
+                  <label className={styles.checkbox}>
+                    <input
+                      type="checkbox"
+                      checked={allowDownloads}
+                      disabled={
+                        busy ||
+                        !preview.capabilities.canCreateShare ||
+                        preview.capabilities.downloadFormats.length === 0
+                      }
+                      onChange={(event) => setAllowDownloads(event.target.checked)}
+                    />
+                    <span>{t("summary.allowDownloads")}</span>
+                  </label>
+                  <p>{t("summary.bearerNotice")}</p>
+                  <button
+                    className="button"
+                    type="submit"
+                    disabled={busy || !preview.capabilities.canCreateShare}
+                  >
+                    {t(busy ? "summary.working" : "summary.create")}
+                  </button>
+                </form>
+                {receipt ? (
+                  <div className={styles.receipt}>
+                    <p>{t(receipt.url ? "summary.saveLink" : "summary.replayed")}</p>
+                    {receipt.url ? (
+                      <>
+                        <label className={styles.field} htmlFor="summary-created-link">
+                          <span>{t("summary.link")}</span>
+                          <input
+                            className="input"
+                            id="summary-created-link"
+                            readOnly
+                            value={receipt.url}
+                            onFocus={(event) => event.target.select()}
+                          />
+                        </label>
+                        <button
+                          className="button-quiet"
+                          type="button"
+                          onClick={() => void copyLink()}
+                        >
+                          {t("summary.copy")}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+              <section>
+                <div className={styles.actions}>
+                  <h3>{t("summary.links")}</h3>
+                  <button
+                    className="button-quiet small-button"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void refreshShares().catch(() => setError(t("summary.failed")))}
+                  >
+                    {t("summary.refresh")}
+                  </button>
+                </div>
+                {!shares.length ? (
+                  <p>{t("summary.noLinks")}</p>
+                ) : (
+                  <ul className={styles.shares}>
+                    {shares.map((share) => {
+                      const inactive =
+                        share.revokedAt !== null || Date.parse(share.expiresAt) <= Date.now();
+                      return (
+                        <li className={styles.share} key={share.id}>
+                          <p>
+                            {t("summary.linkCreated", {
+                              date: formatDateTime(locale, share.createdAt),
+                            })}
+                          </p>
+                          <p>
+                            {t("summary.expires", {
+                              date: formatDateTime(locale, share.expiresAt),
+                            })}
+                          </p>
+                          <p>
+                            {t(
+                              share.revokedAt
+                                ? "summary.linkRevoked"
+                                : inactive
+                                  ? "summary.linkExpired"
+                                  : "summary.linkActive",
+                            )}
+                          </p>
+                          {!inactive && preview.capabilities.canRevokeShare ? (
+                            <button
+                              className="button-quiet"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void revoke(share.id)}
+                            >
+                              {t("summary.revoke")}
+                            </button>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </dialog>
   );
 }

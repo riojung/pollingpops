@@ -174,6 +174,7 @@ export function PresentationQnaPanel({
     <div
       className={`${styles.container} ${role === "companion" ? styles.compact : ""}`}
       data-presentation-qna
+      data-presentation-role={role}
       lang={locale}
     >
       {error ? (

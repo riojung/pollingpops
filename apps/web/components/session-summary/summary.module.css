@@ -1,13 +1,19 @@
 .dialog {
-  width: min(64rem, calc(100vw - 2rem));
+  width: min(72rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
-  overflow: auto;
-  padding: clamp(1rem, 3vw, 1.75rem);
+  overflow: hidden;
+  padding: 0;
   border: 1px solid var(--ui-border);
-  border-radius: 1.25rem;
+  border-radius: 1rem;
   background: var(--ui-surface-raised);
   color: var(--ui-text);
   box-shadow: var(--ui-shadow-lg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
 }
 .dialog::backdrop {
   background: var(--ui-overlay);
@@ -20,11 +26,34 @@
   flex-wrap: wrap;
 }
 .heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
   justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-raised);
 }
 .heading h2 {
+  flex: 1 1 200px;
   margin: 0;
-  font-size: clamp(1.35rem, 3vw, 1.8rem);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.dialogBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dialogBody > p {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
 }
 .dialog button,
 .publicPage button {
@@ -32,9 +61,13 @@
 }
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
-  margin-top: 1.5rem;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+  min-height: 0;
+  margin-top: 4px;
+  overflow: hidden;
 }
 .columns > *,
 .summary,
@@ -43,6 +76,20 @@
 }
 .summary {
   overflow-wrap: anywhere;
+}
+.columns > .previewPane,
+.columns > .controls {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.columns > .previewPane {
+  padding-inline-end: 12px;
+}
+.columns > .controls {
+  padding-inline: 16px 8px;
+  border-inline-start: 1px solid var(--ui-border-subtle);
 }
 .summary h1 {
   font-size: clamp(1.75rem, 5vw, 3rem);
@@ -55,6 +102,49 @@
 .question h3,
 .question h5 {
   font-size: 1.05rem;
+}
+.dialog .summary > h3 {
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+.dialog .summary h4 {
+  margin-block: 16px 8px;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+.dialog .question h5 {
+  margin-block: 0 8px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.dialog .summary p,
+.dialog .question p {
+  margin-bottom: 8px;
+}
+.dialog .summary :global(.eyebrow) {
+  margin-bottom: 8px;
+  font-size: 0.6875rem;
+}
+.dialog .metrics {
+  gap: 8px;
+  margin-block: 12px;
+}
+.dialog .metrics div {
+  padding: 10px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 8px;
+}
+.dialog .metrics dt {
+  font-size: 0.75rem;
+}
+.dialog .metrics dd {
+  font-size: 1.25rem;
+}
+.dialog .notes {
+  margin-block: 12px;
+  font-size: 0.8125rem;
 }
 .metrics {
   display: grid;
@@ -102,21 +192,38 @@
 .controls {
   display: grid;
   align-content: start;
-  gap: 1.25rem;
+  gap: 16px;
   min-width: 0;
 }
 .controls section {
   border-top: 1px solid var(--ui-border);
-  padding-top: 1rem;
+  padding-top: 16px;
+}
+.controls > section:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 .controls h3 {
-  margin-top: 0;
-  font-size: 1.15rem;
+  margin: 0 0 10px;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+.controls p {
+  margin-bottom: 8px;
+}
+.controls :global(.muted) {
+  font-size: 0.75rem;
+}
+.controls button {
+  padding: 8px 12px;
+  font-size: 0.8125rem;
 }
 .field {
   display: grid;
-  gap: 0.5rem;
-  margin-block: 0.85rem;
+  gap: 6px;
+  margin-block: 12px;
+  font-size: 0.8125rem;
 }
 .field input,
 .field select,
@@ -128,12 +235,13 @@
 }
 .field textarea {
   resize: vertical;
+  min-height: 96px;
 }
 .checkbox {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  margin-block: 0.85rem;
+  gap: 10px;
+  margin-block: 12px;
 }
 .checkbox input {
   flex: 0 0 auto;
@@ -172,9 +280,41 @@
   border: 1px solid var(--ui-border);
   border-radius: 0.75rem;
 }
-@media (max-width: 720px) {
+@media (max-width: 900px), (max-height: 640px) {
   .columns {
+    flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+  .columns > .previewPane,
+  .columns > .controls {
+    overflow: visible;
+    padding: 0;
+    border-inline-start: 0;
+    scrollbar-gutter: auto;
+  }
+  .controls > section:first-child {
+    border-top: 1px solid var(--ui-border);
+    padding-top: 16px;
+  }
+}
+@media (max-width: 560px) {
+  .dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 12px;
+  }
+  .heading {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .heading h2 {
+    flex-basis: 160px;
+    font-size: 1.125rem;
+  }
+  .dialogBody {
+    padding: 14px;
   }
 }
 @media (max-width: 400px) {

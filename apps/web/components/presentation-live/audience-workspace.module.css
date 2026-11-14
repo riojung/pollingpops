@@ -1,0 +1,446 @@
+.participantPage {
+  min-height: 100dvh;
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+}
+
+.topbar {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--ui-border);
+  padding: 6px clamp(12px, 2.5vw, 28px);
+  background: var(--ui-surface);
+}
+
+.topbar :global(.brand-pop),
+.theaterHeader :global(.brand-pop) {
+  width: 30px;
+  height: 38px;
+}
+
+.headerStatus {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px 16px;
+  font-size: 0.8125rem;
+  color: var(--ui-text-muted);
+}
+
+.connectionStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.connectionStatus::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ui-text-muted);
+  content: "";
+}
+
+.connectionStatus[data-state="connected"]::before,
+.connectionStatus[data-state="fallback"]::before,
+.connectionStatus[data-state="saved"]::before {
+  background: var(--ui-success-text);
+}
+
+.stage {
+  display: grid;
+  width: min(1440px, 100%);
+  align-content: start;
+  gap: 12px;
+  margin: 0 auto;
+  padding: 18px 20px 28px;
+}
+
+.stage > :global(.error) {
+  margin: 0;
+}
+
+.canvas {
+  width: min(920px, 100%);
+  min-width: 0;
+  min-height: 280px;
+  margin: 0 auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  padding: clamp(18px, 2.5vw, 32px);
+  background: var(--ui-surface);
+}
+
+.canvasContent {
+  min-width: 0;
+  width: 100%;
+}
+
+.canvasContent > h1 {
+  margin: 16px 0;
+  font-size: clamp(1.5rem, 2.8vw, 2.25rem);
+  letter-spacing: -0.035em;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.canvasContent > p {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.canvas[data-kind="content"] {
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.contentStatus,
+.questionStatus {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+}
+
+.contentStatus p,
+.questionStatus > p {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.slideFrame {
+  width: min(100%, calc((100dvh - 160px) * 16 / 9));
+  min-width: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.statusPill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.questionStatus > .timer {
+  border-radius: 7px;
+  padding: 5px 9px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.choiceGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.choiceButton {
+  min-height: 56px;
+  min-width: 0;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.choiceButton[aria-pressed="true"] {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--ui-accent);
+}
+
+.formStack {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.formStack input,
+.formStack select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+}
+
+.responseActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.responseActions > :global(.button) {
+  min-width: 180px;
+  min-height: 46px;
+}
+
+.responseActions > p {
+  width: 100%;
+  margin: 0;
+}
+
+.theaterPage {
+  min-height: 100dvh;
+  color: var(--ui-text);
+  background: #171a20;
+}
+
+.theaterLayout {
+  display: flex;
+  min-height: 100dvh;
+  height: 100dvh;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 12px;
+}
+
+.theaterHeader {
+  display: flex;
+  min-height: 56px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 -16px;
+  border-bottom: 1px solid var(--ui-border);
+  padding: 7px 16px;
+  background: var(--ui-surface);
+}
+
+.theaterTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theaterMeta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 16px;
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+}
+
+.theaterMeta p {
+  margin: 0;
+}
+
+.theaterHeader button {
+  min-height: 40px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.theaterNotice {
+  flex-shrink: 0;
+  margin: 0;
+  color: #f1f4f9;
+  font-size: 0.8125rem;
+}
+
+.theaterCanvas {
+  display: flex;
+  min-width: 0;
+  min-height: 200px;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  container-type: size;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+
+.theaterCanvas:focus-visible {
+  outline-color: #f1f4f9;
+}
+
+.theaterCanvas[data-kind="content"] {
+  padding: 0;
+  background: transparent;
+}
+
+.theaterBody {
+  width: min(100%, 1440px);
+  min-width: 0;
+  flex-shrink: 0;
+  margin-block: auto;
+}
+
+.theaterFrame {
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  max-width: 100%;
+  background: var(--ui-surface);
+}
+
+.theaterCanvas[data-kind="question"]:not([data-results="true"]) .theaterBody {
+  width: min(100cqw, calc(100cqh * 16 / 9));
+}
+
+.theaterResults {
+  width: min(100%, 1200px);
+  align-self: center;
+}
+
+.theaterResults > h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.35rem, 2.5vw, 2.15rem);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.theaterFooter {
+  width: min(1440px, 100%);
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.mediaFallback {
+  border: 1px solid var(--ui-border-strong);
+  padding: 12px;
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    gap: 10px;
+    padding-inline: 12px;
+  }
+
+  .headerStatus {
+    display: grid;
+    gap: 3px;
+    justify-items: end;
+    font-size: 0.75rem;
+  }
+
+  .stage {
+    gap: 10px;
+    padding: 12px 10px 24px;
+  }
+
+  .canvas {
+    min-height: 0;
+    border-radius: 12px;
+    padding: 18px 14px;
+  }
+
+  .contentStatus {
+    gap: 6px 10px;
+  }
+
+  .slideFrame {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .choiceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .responseActions > :global(.button) {
+    width: 100%;
+  }
+
+  .theaterLayout {
+    height: auto;
+    gap: 8px;
+    padding: 0 10px 10px;
+  }
+
+  .theaterHeader {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-inline: -10px;
+    padding-inline: 10px;
+  }
+
+  .theaterHeader :global(.brand-name) {
+    display: none;
+  }
+
+  .theaterTitle {
+    flex-basis: calc(100% - 50px);
+  }
+
+  .theaterMeta {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .theaterCanvas {
+    min-height: min(60dvh, 520px);
+    overflow: visible;
+    container-type: inline-size;
+    padding: 12px;
+  }
+
+  .theaterCanvas[data-kind="content"] {
+    min-height: 0;
+  }
+
+  .theaterFrame,
+  .theaterCanvas[data-kind="question"]:not([data-results="true"]) .theaterBody {
+    width: 100%;
+  }
+}

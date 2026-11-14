@@ -5,6 +5,57 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Editor interactions follow-up — November 14, 2026
+
+The `codex/presentation-editor-interactions` slice replaces the detached section forms with
+section headers beside their slides. Authors can create a section at the selected slide,
+rename it, collapse its thumbnails, move a whole contiguous section, or remove its heading
+while preserving the slides. Older noncontiguous memberships remain in their actual playback
+order and show continued headers. Section moves validate paired checks and interaction targets.
+The desktop slide rail has a pointer- and keyboard-operable width separator; its preference
+stays in browser storage. Narrow screens retain the existing drawer and reading-order layout.
+
+Content and Layout tools use independent collapsible groups. Selected text has a persistent
+font-family and font-size toolbar, an expanded writing area, and the existing paragraph,
+emphasis and link controls. Typography uses the existing version-9 scene contract and the
+device's sans, serif and monospace families; it does not rewrite rich-text runs. Staged table
+and chart data has readable column widths, bounded horizontal scrolling and explicit Apply and
+Discard actions. Collapsing a group retains its mounted controls and uncommitted data.
+
+On the wide editing canvas, object bodies can be dragged immediately; selection borders also
+move objects whose interior needs scrolling or links. Border hit areas stay outside the frame
+to preserve native scrollbars. Selected objects have
+eight handles: circular corners and square edge midpoints. Resizing anchors the opposite edge
+or corner; grouped/multiple selections scale together. Rotated geometry remains within the
+slide. Pointer preview stays local, release commits one edit, and cancellation/source changes
+discard the gesture. The normal-flow keyboard Move/Resize controls remain available. Audience,
+preview and static-thumbnail rendering does not gain editing handles.
+
+Interaction references are the documented [PowerPoint section workflow](https://support.microsoft.com/en-us/powerpoint/training/organize-your-powerpoint-slides-into-sections),
+[Google Slides arranging controls](https://support.google.com/docs/answer/1696521?co=GENIE.Platform%3DDesktop&hl=en-gh),
+and [Google's proportional group resizing](https://workspaceupdates.googleblog.com/2025/03/proportional-scaling-objects-in-google-slides.html).
+These inform behavior only. Implementation, icons and layouts are repository-native; no
+competitor assets, copied code, new dependencies or external fonts were added.
+
+Verification: the full web suite passed **5,072 tests across 426 files**. The final border-drag
+refinement also passed **69 canvas/view tests**. **20 production browser journeys** pass across
+Chromium and Firefox desktop and Chromium/WebKit at 320px. They cover direct and border dragging,
+eight anchored handles, multiple selection, preview-versus-save, cancellation and Undo/Redo,
+rail pointer/keyboard resizing and persistence, section creation/rename/reorder/removal,
+last-section reachability, preserved rich text with saved/rendered fonts, mounted staged tables,
+rich-text recovery/publication, panel Axe checks and document overflow. Web and browser-fixture
+type checks, web lint, formatting, production compilation and the local Docker web build pass.
+The refreshed local web service is healthy at port 8080. Captures and the source/artifact-bound
+browser receipt are under `artifacts/presentation-editor-interactions/`. Independent review
+identified the fixed phone selection outline, final-section reachability and scrollbar hit-area
+issues; no outstanding findings remain. This does not replace human or hosted release acceptance.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,101 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. A fresh
+delegated read-only review of the branch diff and staged, unstaged and untracked files found no
+actionable issues.
+
 ## Presenter workflow follow-up — November 14, 2026
 
 The `codex/option-b-presenter-localization` slice closes an English-only gap in the refreshed

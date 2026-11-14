@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PresentationDraft, SupportedLocale } from "@openround/contracts";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { PresentationBuilder } from "./presentation-builder";
-import { PresentationSections } from "./presentation-sections";
+import { PresentationSectionHeader, PresentationSections } from "./presentation-sections";
 import { NativeSceneEditor } from "./native-scene-editor";
 
 interface Hooks {
@@ -118,6 +118,14 @@ function editor() {
     sections: () =>
       elements(render()).find((node) => node.type === PresentationSections)!
         .props as unknown as ReactModule.ComponentProps<typeof PresentationSections>,
+    headers: () =>
+      elements(render())
+        .filter((node) => node.type === PresentationSectionHeader)
+        .map(
+          (node) =>
+            node.props as unknown as ReactModule.ComponentProps<typeof PresentationSectionHeader>,
+        ),
+    lists: () => elements(render()).filter((node) => node.type === "ol"),
     nativeCanEdit: () =>
       elements(render()).find((node) => node.type === NativeSceneEditor)!.props.canEdit,
     historyDisabled: (action: "undo" | "redo") =>
@@ -148,6 +156,20 @@ beforeEach(() => {
 });
 
 describe("Sections builder integration and exact history", () => {
+  it("keeps slides reachable when removing the last section merges a collapsed unsectioned run", () => {
+    const view = editor();
+    view.sections().onAdd();
+    const sectionId = view.saved().sections![0]!.id;
+    view.sections().onAssign(view.initial.blocks[0]!.id, null);
+    const unsectioned = view.headers().find((header) => !header.section)!;
+    unsectioned.onToggle();
+    expect(view.headers().find((header) => !header.section)!.collapsed).toBe(true);
+    view.sections().onDelete(sectionId);
+    expect(view.headers()).toHaveLength(0);
+    expect(view.lists()).toHaveLength(1);
+    expect(view.lists()[0]!.props.hidden).toBe(false);
+    expect(view.saved().blocks).toEqual(view.initial.blocks);
+  });
   it.each([true, false])("projects canEdit=%s to the native scene boundary", (canEdit) => {
     fixture.canEdit = canEdit;
     const view = editor();
@@ -167,7 +189,8 @@ describe("Sections builder integration and exact history", () => {
     expect(fixture.save).toHaveBeenCalledTimes(saves);
     view.sections().onRename(sectionId, "Authored group 原文");
     const renamed = structuredClone(view.saved());
-    view.sections().onAssign(original.blocks[1]!.id, sectionId);
+    expect(renamed.sections![0]!.blockIds).toEqual(original.blocks.map((block) => block.id));
+    view.sections().onAssign(original.blocks[0]!.id, null);
     const assigned = structuredClone(view.saved());
     expect(assigned.sections![0]).toEqual({
       id: sectionId,

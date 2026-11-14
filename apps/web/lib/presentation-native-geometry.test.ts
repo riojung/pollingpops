@@ -8,7 +8,9 @@ import {
   moveNativeSceneNodes,
   removeNativeSceneNodes,
   resizeNativeSceneNode,
+  resizeNativeSceneSelection,
   selectedNativeSceneBounds,
+  type NativeSceneResizeHandle,
 } from "./presentation-native-geometry";
 
 function fixture(): PresentationScene {
@@ -195,6 +197,175 @@ describe("native selection geometry", () => {
       scene = resizeNativeSceneNode(scene, "image", dx, dy);
       expect(PresentationSceneSchema.safeParse(scene).success).toBe(true);
     }
+  });
+});
+
+describe("direct resize handles", () => {
+  const handles: NativeSceneResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+  it.each(handles)("anchors the opposite edge for %s in either pointer direction", (handle) => {
+    const scene = fixture();
+    const before = frame(scene, "body");
+    const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+    const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+    for (const amount of [-4, 4]) {
+      const result = resizeNativeSceneSelection(
+        scene,
+        ["body"],
+        handle,
+        horizontal * amount,
+        vertical * amount,
+      );
+      const after = frame(result, "body");
+      expect(after.width).toBe(before.width + Math.abs(horizontal) * amount);
+      expect(after.height).toBe(before.height + Math.abs(vertical) * amount);
+      expect(after.x).toBe(before.x - (horizontal < 0 ? amount : 0));
+      expect(after.y).toBe(before.y - (vertical < 0 ? amount : 0));
+      expect(result.readingOrder).toBe(scene.readingOrder);
+      expect(result.nodes[2]).toBe(scene.nodes[2]);
+      expect(PresentationSceneSchema.safeParse(result).success).toBe(true);
+    }
+  });
+
+  it.each(handles)(
+    "keeps %s within every slide edge and enforces a minimum without flipping",
+    (handle) => {
+      const scene = fixture();
+      for (const delta of [-1000, 1000]) {
+        const result = resizeNativeSceneSelection(scene, ["body"], handle, delta, delta);
+        const after = frame(result, "body");
+        expect(after.width).toBeGreaterThanOrEqual(1);
+        expect(after.height).toBeGreaterThanOrEqual(1);
+        expect(PresentationSceneSchema.safeParse(result).success).toBe(true);
+        expect(resizeNativeSceneSelection(result, ["body"], handle, delta, delta)).toBe(result);
+      }
+    },
+  );
+
+  it("ignores the perpendicular pointer axis on side handles and invalid/no-op requests", () => {
+    const scene = fixture();
+    expect(resizeNativeSceneSelection(scene, ["body"], "n", 100, 0)).toBe(scene);
+    expect(resizeNativeSceneSelection(scene, ["body"], "w", 0, 100)).toBe(scene);
+    expect(resizeNativeSceneSelection(scene, ["body"], "e", 0, 0)).toBe(scene);
+    expect(resizeNativeSceneSelection(scene, ["body"], "e", Infinity, 2)).toBe(scene);
+    expect(resizeNativeSceneSelection(scene, ["edge", "missing"], "se", 2, 2)).toBe(scene);
+  });
+
+  it.each(handles)(
+    "scales a multi-selection proportionally around the opposite %s anchor",
+    (handle) => {
+      const scene = fixture();
+      const bounds = selectedNativeSceneBounds(scene, ["body", "shape"])!;
+      const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+      const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+      // Shrink to leave every anchor safely inside the slide, including side midpoints.
+      const result = resizeNativeSceneSelection(
+        scene,
+        ["body", "shape"],
+        handle,
+        (-horizontal * bounds.width) / 5,
+        (-vertical * bounds.height) / 5,
+      );
+      const nextBounds = selectedNativeSceneBounds(result, ["body", "shape"])!;
+      const anchor = (position: number, size: number, direction: number) =>
+        position + (direction < 0 ? size : direction ? 0 : size / 2);
+      expect(anchor(nextBounds.x, nextBounds.width, horizontal)).toBeCloseTo(
+        anchor(bounds.x, bounds.width, horizontal),
+      );
+      expect(anchor(nextBounds.y, nextBounds.height, vertical)).toBeCloseTo(
+        anchor(bounds.y, bounds.height, vertical),
+      );
+      for (const id of ["body", "shape"]) {
+        expect(frame(result, id).width / frame(scene, id).width).toBeCloseTo(0.8);
+        expect(frame(result, id).height / frame(scene, id).height).toBeCloseTo(0.8);
+      }
+      expect(PresentationSceneSchema.safeParse(result).success).toBe(true);
+      const grouped = {
+        ...scene,
+        schemaVersion: 4 as const,
+        groups: [{ id: "group", nodeIds: ["body", "shape"] }],
+      };
+      const groupResult = resizeNativeSceneSelection(
+        grouped,
+        ["shape"],
+        handle,
+        (-horizontal * bounds.width) / 5,
+        (-vertical * bounds.height) / 5,
+      );
+      expect(groupResult.nodes).toEqual(result.nodes);
+      expect(groupResult.groups).toBe(grouped.groups);
+    },
+  );
+
+  it.each(handles)("resizes a rotated object at %s in physical slide coordinates", (handle) => {
+    const scene = fixture();
+    scene.schemaVersion = 4;
+    const body = scene.nodes[1]!;
+    if (body.type === "connector") throw new Error("fixture");
+    body.rotation = 35;
+    body.frame = { x: 35, y: 35, width: 20, height: 20 };
+    const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+    const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+    const angle = (35 * Math.PI) / 180;
+    const dx = (horizontal * 32 * Math.cos(angle) - vertical * 18 * Math.sin(angle)) / 16;
+    const dy = (horizontal * 32 * Math.sin(angle) + vertical * 18 * Math.cos(angle)) / 9;
+    const result = resizeNativeSceneSelection(scene, ["body"], handle, dx, dy);
+    const next = frame(result, "body");
+    expect(next.width).toBeCloseTo(20 + Math.abs(horizontal) * 2);
+    expect(next.height).toBeCloseTo(20 + Math.abs(vertical) * 2);
+    function anchor(value: PresentationSceneFrame) {
+      const x = -horizontal * value.width * 8;
+      const y = -vertical * value.height * 4.5;
+      return {
+        x: (value.x + value.width / 2) * 16 + x * Math.cos(angle) - y * Math.sin(angle),
+        y: (value.y + value.height / 2) * 9 + x * Math.sin(angle) + y * Math.cos(angle),
+      };
+    }
+    expect(anchor(next).x).toBeCloseTo(anchor(body.frame).x);
+    expect(anchor(next).y).toBeCloseTo(anchor(body.frame).y);
+    for (const delta of [-1000, 1000])
+      expect(
+        PresentationSceneSchema.safeParse(
+          resizeNativeSceneSelection(scene, ["body"], handle, delta, delta),
+        ).success,
+      ).toBe(true);
+  });
+
+  it("bounds rotated group growth with one scale and leaves the source immutable", () => {
+    const scene = fixture();
+    scene.schemaVersion = 4;
+    const shape = scene.nodes[2]!;
+    if (shape.type === "connector") throw new Error("fixture");
+    shape.rotation = 25;
+    shape.frame = { x: 60, y: 45, width: 20, height: 20 };
+    scene.groups = [{ id: "group", nodeIds: ["body", "shape"] }];
+    const before = structuredClone(scene);
+    for (const handle of handles) {
+      const bounds = selectedNativeSceneBounds(scene, ["body"])!;
+      const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+      const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+      const shrunk = resizeNativeSceneSelection(
+        scene,
+        ["body"],
+        handle,
+        (-horizontal * bounds.width) / 10,
+        (-vertical * bounds.height) / 10,
+      );
+      const after = selectedNativeSceneBounds(shrunk, ["body"])!;
+      const anchor = (position: number, size: number, direction: number) =>
+        position + (direction < 0 ? size : direction ? 0 : size / 2);
+      expect(anchor(after.x, after.width, horizontal)).toBeCloseTo(
+        anchor(bounds.x, bounds.width, horizontal),
+      );
+      expect(anchor(after.y, after.height, vertical)).toBeCloseTo(
+        anchor(bounds.y, bounds.height, vertical),
+      );
+      const result = resizeNativeSceneSelection(scene, ["body"], handle, 1000, 1000);
+      expect(PresentationSceneSchema.safeParse(result).success).toBe(true);
+      expect(frame(result, "shape").width / frame(scene, "shape").width).toBeCloseTo(
+        frame(result, "body").width / frame(scene, "body").width,
+      );
+    }
+    expect(scene).toEqual(before);
   });
 });
 

@@ -252,6 +252,111 @@ export function resizeNativeSceneNode(
   return changed ? synchronizeNativeHotspots(scene, { ...scene, nodes }) : scene;
 }
 
+export type NativeSceneResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+/** Direct handles anchor the opposite edge; a selection scales as one proportional unit. */
+export function resizeNativeSceneSelection(
+  scene: PresentationScene,
+  ids: readonly string[],
+  handle: NativeSceneResizeHandle,
+  dx: number,
+  dy: number,
+): PresentationScene {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || (!dx && !dy)) return scene;
+  const nodes = selectedFramedNodes(scene, ids);
+  if (!nodes.length) return scene;
+  const horizontal = handle.includes("w") ? -1 : handle.includes("e") ? 1 : 0;
+  const vertical = handle.includes("n") ? -1 : handle.includes("s") ? 1 : 0;
+  if (nodes.length > 1) {
+    const bounds = unionBounds(nodes.map(nativeNodePaintedBounds))!;
+    const changeX = (horizontal * dx) / bounds.width;
+    const changeY = (vertical * dy) / bounds.height;
+    const change = !horizontal
+      ? changeY
+      : !vertical
+        ? changeX
+        : Math.abs(changeX) >= Math.abs(changeY)
+          ? changeX
+          : changeY;
+    const minimum = Math.max(
+      ...nodes.map((node) => Math.max(1 / node.frame.width, 1 / node.frame.height)),
+    );
+    const scale = Math.max(minimum, Math.min(100, 1 + change));
+    if (scale === 1) return scene;
+    // Side handles scale from the opposite edge midpoint; corners use the opposite corner.
+    const anchorX = bounds.x + (horizontal < 0 ? bounds.width : horizontal ? 0 : bounds.width / 2);
+    const anchorY = bounds.y + (vertical < 0 ? bounds.height : vertical ? 0 : bounds.height / 2);
+    return boundedResize(scene, (amount) => {
+      const factor = 1 + (scale - 1) * amount;
+      return nodes.map((node) => ({
+        ...node,
+        frame: {
+          x: anchorX + (node.frame.x - anchorX) * factor,
+          y: anchorY + (node.frame.y - anchorY) * factor,
+          width: node.frame.width * factor,
+          height: node.frame.height * factor,
+        },
+      }));
+    });
+  }
+  const node = nodes[0]!;
+  if (!node.rotation) {
+    const { x, y, width, height } = node.frame;
+    const nextWidth = horizontal
+      ? Math.max(1, Math.min(width + horizontal * dx, horizontal < 0 ? x + width : 100 - x))
+      : width;
+    const nextHeight = vertical
+      ? Math.max(1, Math.min(height + vertical * dy, vertical < 0 ? y + height : 100 - y))
+      : height;
+    if (nextWidth === width && nextHeight === height) return scene;
+    return withNodes(scene, [
+      {
+        ...node,
+        frame: {
+          x: horizontal < 0 ? Math.max(0, x + width - nextWidth) : x,
+          y: vertical < 0 ? Math.max(0, y + height - nextHeight) : y,
+          width: nextWidth,
+          height: nextHeight,
+        },
+      },
+    ]);
+  }
+  // Pointer deltas and rotation use physical 16:9 slide coordinates, rather than square % units.
+  const angle = (node.rotation * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const width = node.frame.width * 16;
+  const height = node.frame.height * 9;
+  const nextWidth = horizontal
+    ? Math.max(16, Math.min(1600, width + horizontal * (dx * 16 * cos + dy * 9 * sin)))
+    : width;
+  const nextHeight = vertical
+    ? Math.max(9, Math.min(900, height + vertical * (-dx * 16 * sin + dy * 9 * cos)))
+    : height;
+  if (nextWidth === width && nextHeight === height) return scene;
+  return boundedResize(scene, (amount) => {
+    const dw = (nextWidth - width) * amount;
+    const dh = (nextHeight - height) * amount;
+    const cx =
+      (node.frame.x + node.frame.width / 2) * 16 +
+      (horizontal * dw * cos - vertical * dh * sin) / 2;
+    const cy =
+      (node.frame.y + node.frame.height / 2) * 9 +
+      (horizontal * dw * sin + vertical * dh * cos) / 2;
+    return [
+      {
+        ...node,
+        frame: {
+          x: (cx - (width + dw) / 2) / 16,
+          y: (cy - (height + dh) / 2) / 9,
+          width: (width + dw) / 16,
+          height: (height + dh) / 9,
+        },
+      },
+    ];
+  });
+}
+
 /** Keep the required title, and remove all connectors whose actual endpoint is being removed. */
 export function removeNativeSceneNodes(
   scene: PresentationScene,

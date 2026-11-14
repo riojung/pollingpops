@@ -7,6 +7,7 @@ import {
   type SupportedLocale,
 } from "@openround/contracts";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
 import { toggleNativeRichTextMark } from "../../lib/presentation-rich-text";
 
 const mocked = vi.hoisted(() => ({
@@ -172,6 +173,31 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("native formatting controls", () => {
+  it("retains the selected range and rich content when object typography changes before inline formatting", () => {
+    const editor = harness();
+    editor.select(5, 8);
+    const original = structuredClone(editor.node());
+    const typography = editor.find((element) => element.type === NativeSceneTypographyControls);
+    typography.props.onChange(
+      { ...editor.node(), typography: { font: "serif", size: 48 } },
+      "typography:font",
+    );
+    editor.render();
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().richText).toEqual(original.richText);
+    editor.click("Bold");
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toEqual(
+      toggleNativeRichTextMark(original.richText!, 5, 8, "bold"),
+    );
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([5, 8]);
+    editor.click("Remove formatting");
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toBeUndefined();
+  });
   it("keeps the compact controls named and associates the writing area with its label and localized count", () => {
     const editor = harness();
     const textarea = editor.find((element) => element.type === "textarea");

@@ -1,7 +1,7 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type PresentationScene } from "@openround/contracts";
+import { type PresentationScene, type SupportedLocale } from "@openround/contracts";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeSceneView } from "./native-scene-view";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
@@ -98,6 +98,14 @@ function harness(selectedNodeIds = ["body", "shape"]) {
   let width = 1000;
   const root = {
     focus: vi.fn(),
+    contains: (target: { parentElement?: unknown } | null) => {
+      let element = target;
+      while (element) {
+        if (element === root) return true;
+        element = element.parentElement as typeof element;
+      }
+      return false;
+    },
     querySelector: () => ({ getBoundingClientRect: () => ({ width, height: 500 }) }),
     setPointerCapture: vi.fn((id: number) => capture.add(id)),
     hasPointerCapture: (id: number) => capture.has(id),
@@ -108,10 +116,13 @@ function harness(selectedNodeIds = ["body", "shape"]) {
   const onChange = vi.fn();
   const onSelect = vi.fn();
   const onEditInteraction = vi.fn();
+  const onArrangeSelection = vi.fn();
   const original = fixture();
   let scene = original;
   let tree: ReactElement<Record<string, any>>;
   let canEdit = true;
+  let locale: SupportedLocale = "en-CA";
+  let selection = selectedNodeIds;
   function render(next = scene, flush = true) {
     scene = next;
     hooks.cursor = 0;
@@ -119,12 +130,14 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     try {
       tree = NativeSceneCanvas({
         scene,
+        locale,
         canEdit,
         renderImage: () => null,
-        selectedNodeIds,
+        selectedNodeIds: selection,
         onSelect,
         onChange,
         onEditInteraction,
+        onArrangeSelection,
       });
     } finally {
       mocked.hooks = null;
@@ -141,6 +154,7 @@ function harness(selectedNodeIds = ["body", "shape"]) {
       clientX: 100,
       clientY: 100,
       shiftKey: false,
+      target: root,
       currentTarget: root,
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
@@ -154,10 +168,17 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     setCanEdit: (value: boolean) => {
       canEdit = value;
     },
+    setLocale: (value: SupportedLocale) => {
+      locale = value;
+    },
+    setSelection: (value: string[]) => {
+      selection = value;
+    },
     tree: () => tree,
     onChange,
     onSelect,
     onEditInteraction,
+    onArrangeSelection,
     root,
     event,
     render,
@@ -175,6 +196,11 @@ function harness(selectedNodeIds = ["body", "shape"]) {
     finish: (ev = event({ clientX: 200, clientY: 150 })) => tree.props.onPointerUp(ev),
     cancel: (kind: "onPointerCancel" | "onLostPointerCapture") => tree.props[kind](event()),
     escape: () => tree.props.onKeyDown(event({ key: "Escape" })),
+    key: (key = "ArrowRight", overrides: Record<string, unknown> = {}) => {
+      const ev = event({ key, ...overrides });
+      tree.props.onKeyDown(ev);
+      return ev;
+    },
     setNarrow: () => {
       narrow = true;
     },
@@ -190,6 +216,71 @@ function frame(scene: PresentationScene, id = "body") {
   const node = scene.nodes.find((node) => node.id === id)!;
   if (node.type === "connector") throw new Error("Expected framed node");
   return node.frame;
+}
+
+/** A small DOM stand-in keeps these event-boundary tests independent of a browser renderer. */
+class KeyboardTarget {
+  parentElement: KeyboardTarget | null = null;
+  scrollWidth = 100;
+  clientWidth = 100;
+  scrollHeight = 100;
+  clientHeight = 100;
+  overflowX = "visible";
+  overflowY = "visible";
+  isContentEditable = false;
+  constructor(
+    private tag = "div",
+    private attributes: Record<string, string> = {},
+  ) {}
+  getAttribute(name: string) {
+    return this.attributes[name] ?? null;
+  }
+  closest(selectors: string): KeyboardTarget | null {
+    for (const selector of selectors.split(",").map((value) => value.trim())) {
+      if (selector === "[contenteditable]:not([contenteditable='false'])") {
+        if (
+          this.attributes.contenteditable !== undefined &&
+          this.attributes.contenteditable !== "false"
+        )
+          return this;
+      } else if (selector.startsWith("[")) {
+        const [, name, value] = selector.match(/^\[([^=\]]+)(?:='([^']*)')?\]$/) ?? [];
+        if (
+          name &&
+          this.attributes[name] !== undefined &&
+          (value === undefined || this.attributes[name] === value)
+        )
+          return this;
+      } else if (this.tag === selector) return this;
+    }
+    return this.parentElement instanceof KeyboardTarget
+      ? this.parentElement.closest(selectors)
+      : null;
+  }
+}
+
+function keyboardHarness(selectedNodeIds = ["body", "shape"]) {
+  const editor = harness(selectedNodeIds);
+  vi.stubGlobal("Element", KeyboardTarget);
+  vi.stubGlobal("HTMLElement", KeyboardTarget);
+  Object.assign(window, {
+    getComputedStyle: (target: KeyboardTarget) => ({
+      overflowX: target.overflowX,
+      overflowY: target.overflowY,
+    }),
+  });
+  return {
+    ...editor,
+    element: (
+      tag = "div",
+      attributes: Record<string, string> = {},
+      parent: KeyboardTarget | typeof editor.root = editor.root,
+    ) => {
+      const target = new KeyboardTarget(tag, attributes);
+      target.parentElement = parent as KeyboardTarget;
+      return target;
+    },
+  };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -362,9 +453,9 @@ describe("native pointer gesture lifecycle", () => {
     );
   });
 
-  it("keeps the external pointer control bound to the original scene during previews and cancels before changing selection", () => {
+  it("keeps the selection strip bound to the original scene during previews and cancels before changing selection", () => {
     const editor = harness();
-    editor.controls().props.onPointerDown(editor.event(), "shape", true, true);
+    editor.start(editor.event(), "shape", true, true, "se");
     editor.move();
     editor.render();
     expect(editor.controls().props.scene).toBe(editor.original);
@@ -378,7 +469,7 @@ describe("native pointer gesture lifecycle", () => {
     expect(editor.onChange).not.toHaveBeenCalled();
   });
 
-  it("resizes a persistent group from the external handle proportionally and commits only on release", () => {
+  it("resizes a persistent group from a direct handle proportionally and commits only on release", () => {
     const editor = harness();
     const scene = {
       ...editor.original,
@@ -386,7 +477,7 @@ describe("native pointer gesture lifecycle", () => {
       groups: [{ id: "group", nodeIds: ["body", "shape"] }],
     };
     editor.render(scene);
-    editor.controls().props.onPointerDown(editor.event(), "shape", true, true);
+    editor.start(editor.event(), "shape", true, true, "se");
     editor.move(editor.event({ clientX: 150, clientY: 125 }));
     editor.render();
     expect(editor.onChange).not.toHaveBeenCalled();
@@ -400,16 +491,14 @@ describe("native pointer gesture lifecycle", () => {
     expect(frame(result, "title")).toEqual(frame(scene, "title"));
   });
 
-  it("keeps external keyboard move/resize available in phone reading mode", () => {
+  it("keeps canvas keyboard movement and direct keyboard resize available in phone reading mode", () => {
     const editor = harness(["body"]);
     editor.setNarrow();
-    editor
-      .controls()
-      .props.onPointerDown(editor.event({ pointerType: "touch" }), "body", true, true);
+    editor.start(editor.event({ pointerType: "touch" }), "body", true, true, "se");
     expect(editor.root.setPointerCapture).not.toHaveBeenCalled();
-    editor.controls().props.onGeometryKey("body", 5, 0, false);
+    editor.key("ArrowRight", { shiftKey: true });
     expect(frame(editor.onChange.mock.calls[0]![0]).x).toBe(15);
-    editor.controls().props.onGeometryKey("body", 0, 1, true);
+    editor.view().props.onGeometryKey("body", 0, 1, true, "s");
     expect(frame(editor.onChange.mock.calls[1]![0]).height).toBe(21);
   });
   it("previews a whole selection locally and commits once on release", () => {
@@ -538,7 +627,7 @@ describe("native canvas permission boundaries", () => {
   it("discards an in-flight preview on permission loss and fences captured geometry handlers before effects", () => {
     const current = harness();
     const ownerStart = current.view().props.onNodePointerDown;
-    const ownerKey = current.controls().props.onGeometryKey;
+    const ownerKey = current.view().props.onGeometryKey;
     const ownerFinish = current.tree().props.onPointerUp;
     current.start(current.event(), "body", true, true, "e");
     current.move();
@@ -564,8 +653,242 @@ describe("native canvas permission boundaries", () => {
     expect(current.onChange).not.toHaveBeenCalled();
     current.setCanEdit(true);
     current.render();
-    current.controls().props.onGeometryKey("body", 1, 0, false);
+    current.key();
     expect(current.onChange).toHaveBeenCalledOnce();
     expect(frame(current.onChange.mock.calls[0]![0]).x).toBe(11);
+  });
+});
+
+describe("native canvas selection arrow keys", () => {
+  it("makes the canvas a localized keyboard stop with group semantics", () => {
+    const editor = harness();
+    expect(editor.tree().props.tabIndex).toBe(0);
+    expect(editor.tree().props.role).toBe("group");
+    expect(editor.tree().props["aria-label"]).toBe("Slide canvas");
+    expect(editor.tree().props["aria-description"]).toContain("arrow keys");
+    editor.setLocale("ko-KR");
+    editor.render();
+    expect(editor.tree().props.lang).toBe("ko-KR");
+    expect(editor.tree().props["aria-label"]).not.toBe("Slide canvas");
+    expect(editor.tree().props["aria-description"]).not.toContain("arrow keys");
+  });
+
+  it.each([
+    ["ArrowRight", false, 1, 0],
+    ["ArrowLeft", false, -1, 0],
+    ["ArrowDown", false, 0, 1],
+    ["ArrowUp", false, 0, -1],
+    ["ArrowRight", true, 5, 0],
+    ["ArrowUp", true, 0, -5],
+  ])("moves the whole selection once for %s with Shift=%s", (key, shiftKey, dx, dy) => {
+    const editor = harness();
+    const ev = editor.key(String(key), { shiftKey });
+    expect(ev.preventDefault).toHaveBeenCalledOnce();
+    expect(ev.stopPropagation).toHaveBeenCalledOnce();
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    const result = editor.onChange.mock.calls[0]![0] as PresentationScene;
+    expect(frame(result)).toEqual({
+      x: 10 + Number(dx),
+      y: 40 + Number(dy),
+      width: 20,
+      height: 20,
+    });
+    expect(frame(result, "shape")).toEqual({
+      x: 60 + Number(dx),
+      y: 40 + Number(dy),
+      width: 25,
+      height: 25,
+    });
+    expect(frame(result, "title")).toBe(frame(editor.original, "title"));
+    expect(editor.onSelect).not.toHaveBeenCalled();
+    expect(editor.view().props.scene).toBe(editor.original);
+    expect(editor.root.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it("uses the latest committed scene on each key press and keeps group members together at bounds", () => {
+    const editor = keyboardHarness(["body"]);
+    const scene: PresentationScene = {
+      ...editor.original,
+      schemaVersion: 4,
+      groups: [{ id: "group", nodeIds: ["body", "shape"] }],
+      nodes: editor.original.nodes.map((node) =>
+        node.id === "shape" && node.type !== "connector"
+          ? { ...node, frame: { ...node.frame, x: 73 } }
+          : node,
+      ),
+    };
+    editor.render(scene);
+    // A selected persistent group's member is selected chrome even when only its peer is explicit.
+    const member = editor.element("div", { "data-node-id": "shape" });
+    editor.key("ArrowRight", { shiftKey: true, target: member });
+    const result = editor.onChange.mock.calls[0]![0] as PresentationScene;
+    expect(frame(result).x).toBe(12);
+    expect(frame(result, "shape").x).toBe(75);
+    expect(result.groups).toBe(scene.groups);
+    expect(result.readingOrder).toBe(scene.readingOrder);
+    editor.render(result);
+    editor.onChange.mockClear();
+    const boundary = editor.key("ArrowRight");
+    expect(boundary.preventDefault).toHaveBeenCalledOnce();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.key("ArrowLeft");
+    expect(frame(editor.onChange.mock.calls[0]![0]).x).toBe(11);
+  });
+
+  it("accepts selected object chrome and selection outlines, while ignoring unrelated descendants", () => {
+    const editor = keyboardHarness();
+    const object = editor.element("div", { "data-node-id": "body" });
+    const content = editor.element("span", {}, object);
+    editor.key("ArrowRight", { target: content });
+    const outline = editor.element("div", { "data-native-selection-outline": "true" });
+    const border = editor.element("span", { "data-native-move-border": "n" }, outline);
+    editor.key("ArrowRight", { target: border });
+    expect(editor.onChange).toHaveBeenCalledTimes(2);
+    for (const target of [
+      editor.element("p"),
+      editor.element("div", { "data-node-id": "title" }),
+      new KeyboardTarget("div", { "data-node-id": "body" }),
+    ]) {
+      const ev = editor.key("ArrowRight", { target });
+      expect(ev.preventDefault).not.toHaveBeenCalled();
+    }
+    expect(editor.onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["select", {}],
+    ["input", {}],
+    ["textarea", {}],
+    ["button", {}],
+    ["a", { href: "/preview" }],
+    ["details", {}],
+    ["summary", {}],
+    ["div", { contenteditable: "true" }],
+    ["div", { contenteditable: "" }],
+    ["div", { contenteditable: "plaintext-only" }],
+    ["div", { role: "textbox" }],
+    ["div", { role: "slider" }],
+    ["span", { "data-native-resize-handle": "se" }],
+  ])("leaves %s keyboard behavior with the focused descendant", (tag, attributes) => {
+    const editor = keyboardHarness(["body"]);
+    const object = editor.element("div", { "data-node-id": "body" });
+    const control = editor.element(tag, attributes, object);
+    const descendant = editor.element("span", {}, control);
+    const ev = editor.key("ArrowRight", { target: descendant });
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+    expect(ev.stopPropagation).not.toHaveBeenCalled();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.onSelect).not.toHaveBeenCalled();
+  });
+
+  it.each(["overflowX", "overflowY"] as const)(
+    "preserves keyboard scrolling for %s content",
+    (axis) => {
+      const editor = keyboardHarness(["body"]);
+      const object = editor.element("div", { "data-node-id": "body" });
+      const scroll = editor.element("div", {}, object);
+      scroll[axis] = "auto";
+      scroll.scrollWidth = 200;
+      scroll.scrollHeight = 200;
+      const text = editor.element("span", {}, scroll);
+      const ev = editor.key("ArrowDown", { target: text });
+      expect(ev.preventDefault).not.toHaveBeenCalled();
+      expect(editor.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { altKey: true },
+    { nativeEvent: { isComposing: true } },
+    { nativeEvent: { keyCode: 229 } },
+    { defaultPrevented: true },
+  ])("ignores modified, composing and already-handled keys: %j", (overrides) => {
+    const editor = harness(["body"]);
+    const ev = editor.key("ArrowRight", overrides);
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
+  it.each([{ selection: [] }, { selection: ["missing"] }, { selection: ["connection"] }])(
+    "does not create an edit for an immovable selection $selection",
+    ({ selection }) => {
+      const editor = harness(selection);
+      const scene: PresentationScene = {
+        ...editor.original,
+        nodes: [
+          ...editor.original.nodes,
+          {
+            id: "connection",
+            type: "connector",
+            from: { nodeId: "body", anchor: "right" },
+            to: { nodeId: "shape", anchor: "left" },
+            label: "Connection",
+            color: "blue",
+          },
+        ],
+        readingOrder: [...editor.original.readingOrder, "connection"],
+      };
+      editor.render(scene);
+      const ev = editor.key();
+      expect(ev.preventDefault).not.toHaveBeenCalled();
+      expect(editor.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores keys during pointer gestures without cancelling the preview or capture", () => {
+    const editor = harness(["body"]);
+    editor.start();
+    editor.move(editor.event({ clientX: 130, clientY: 110, altKey: true }));
+    editor.render();
+    const preview = editor.view().props.scene;
+    const ev = editor.key("ArrowRight");
+    editor.render();
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.view().props.scene).toBe(preview);
+    expect(editor.root.releasePointerCapture).not.toHaveBeenCalled();
+    editor.finish(editor.event({ clientX: 150, clientY: 125, altKey: true }));
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(frame(editor.onChange.mock.calls[0]![0]).x).toBe(15);
+  });
+
+  it("fences stale scene, selection and permission handlers before effects", () => {
+    const editor = harness(["body"]);
+    const oldSceneKey = editor.tree().props.onKeyDown;
+    const recovered = { ...editor.original, nodes: [...editor.original.nodes] };
+    editor.render(recovered, false);
+    oldSceneKey(editor.event({ key: "ArrowRight" }));
+    const oldSelectionKey = editor.tree().props.onKeyDown;
+    editor.setSelection(["shape"]);
+    editor.render(recovered, false);
+    oldSelectionKey(editor.event({ key: "ArrowRight" }));
+    const oldPermissionKey = editor.tree().props.onKeyDown;
+    editor.setCanEdit(false);
+    editor.render(recovered, false);
+    oldPermissionKey(editor.event({ key: "ArrowRight" }));
+    editor.key();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.setCanEdit(true);
+    editor.render(recovered);
+    editor.key();
+    expect(editor.onChange).toHaveBeenCalledOnce();
+    expect(frame(editor.onChange.mock.calls[0]![0], "shape").x).toBe(61);
+  });
+
+  it("cancels a pointer preview when opening Arrange and keeps the callback outside history", () => {
+    const editor = harness();
+    expect(editor.controls().props.onPointerDown).toBeUndefined();
+    expect(editor.controls().props.onGeometryKey).toBeUndefined();
+    editor.start();
+    editor.move();
+    editor.controls().props.onArrange();
+    editor.render();
+    expect(editor.onArrangeSelection).toHaveBeenCalledOnce();
+    expect(editor.view().props.scene).toBe(editor.original);
+    expect(editor.root.releasePointerCapture).toHaveBeenCalledWith(7);
+    editor.finish();
+    expect(editor.onChange).not.toHaveBeenCalled();
   });
 });

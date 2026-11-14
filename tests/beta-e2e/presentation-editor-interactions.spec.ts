@@ -8,6 +8,7 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 import {
   createE01Deck,
+  closeE01Overlays,
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
@@ -249,6 +250,75 @@ test("selected objects drag and resize directly with visible corner and side han
 });
 
 for (const narrow of [false, true]) {
+  test(`compact object controls preserve keyboard editing and precise arrangement${narrow ? " @mobile" : ""}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(120_000);
+    if (narrow) await page.setViewportSize({ width: 320, height: 844 });
+    const { record } = await editorFixture(page, narrow);
+    const saved = async () => firstScene((await readE01Record(page, record.id)).draft);
+    const controls = page.locator('[data-native-selection-controls="true"]');
+    const picker = controls.getByRole("combobox", { name: "Canvas object", exact: true });
+    await expect(controls.getByRole("button", { name: /^(Move|Resize) / })).toHaveCount(0);
+    await closeE01Overlays(page);
+    await picker.selectOption("shape");
+    const before = await saved();
+    const canvas = page.locator('[data-native-scene-canvas="true"]');
+    await canvas.press("ArrowRight");
+    await expect.poll(async () => frame(await saved(), "shape").x).toBe(56);
+    await canvas.press("Shift+ArrowDown");
+    await expect.poll(async () => frame(await saved(), "shape").y).toBe(33);
+    const moved = await saved();
+    expect(frame(moved, "shape").width).toBe(frame(before, "shape").width);
+    expect(frame(moved, "body")).toEqual(frame(before, "body"));
+    await canvas.press("Alt+ArrowRight");
+    expect(await saved()).toEqual(moved);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(saved).toEqual(before);
+    // Arrow keys in the picker keep native selection behavior without editing geometry.
+    await picker.press("ArrowDown");
+    await picker.press("Escape");
+    expect(await saved()).toEqual(before);
+    await picker.selectOption("shape");
+    const inspector = await openE01Inspector(page, "Layout");
+    const position = inspector.locator('[data-native-inspector-group="position"]');
+    await position.locator(":scope > summary").click();
+    await expect(position).not.toHaveAttribute("open", "");
+    await closeE01Overlays(page);
+    await controls.getByRole("button", { name: "Arrange objects", exact: true }).click();
+    await expect(inspector.getByRole("tab", { name: "Layout", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(position).toHaveAttribute("open", "");
+    await expect(
+      position.getByRole("spinbutton", { name: "Object x (%)", exact: true }),
+    ).toBeFocused();
+    await position.getByRole("spinbutton", { name: "Object width (%)", exact: true }).fill("33.33");
+    await expect.poll(async () => frame(await saved(), "shape").width).toBe(33.33);
+    await closeE01Overlays(page);
+    await noOverflow(page);
+    expect((await controls.boundingBox())!.height).toBeLessThan(narrow ? 150 : 75);
+    // Native WebKit selects may ignore text padding; the type icon gets its own space.
+    const pickerIcon = await picker.locator("..").locator(":scope > svg").boundingBox();
+    const pickerBounds = await picker.boundingBox();
+    expect(pickerIcon!.x + pickerIcon!.width + 4).toBeLessThanOrEqual(pickerBounds!.x);
+    expect(pickerBounds!.height).toBeGreaterThanOrEqual(40);
+    const accessibility = await new AxeBuilder({ page })
+      .include('[data-native-selection-controls="true"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+      .analyze();
+    expect(accessibility.violations).toEqual([]);
+    await controls.screenshot({ path: info.outputPath("compact-object-toolbar.png") });
+    await page.screenshot({
+      path: info.outputPath("compact-editor-workspace.png"),
+      fullPage: true,
+    });
+    await page.reload();
+    expect(frame(await saved(), "shape").width).toBe(33.33);
+  });
+
   test(`section headers keep slide order clear and the navigator adapts${narrow ? " @mobile" : ""}`, async ({
     page,
   }, info) => {

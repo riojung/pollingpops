@@ -94,6 +94,7 @@ function editorHarness(
     inspectorTarget?: HTMLElement | null;
     inspectorSection?: "content" | "layout" | "media" | "accessibility";
     onInspectSelection?: () => void;
+    onArrangeSelection?: () => void;
   } = {},
 ) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
@@ -150,6 +151,39 @@ afterEach(() => {
 });
 
 describe("interaction insertion picker", () => {
+  it("opens and focuses precise arrangement without modifying the selected object", () => {
+    const arrange = vi.fn();
+    const focus = vi.fn();
+    const position = {
+      open: false,
+      querySelector: vi.fn((selector: string) =>
+        selector === ":scope > summary"
+          ? {
+              click: () => {
+                position.open = true;
+              },
+            }
+          : { focus },
+      ),
+    };
+    const target = { nodeType: 1, querySelector: vi.fn(() => position) } as unknown as HTMLElement;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    const editor = editorHarness({ inspectorTarget: target, onArrangeSelection: arrange });
+    editor.render("idle");
+    const before = structuredClone(editor.scene);
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    (canvas.props.onArrangeSelection as () => void)();
+    expect(arrange).toHaveBeenCalledOnce();
+    expect(target.querySelector).toHaveBeenCalledWith('[data-native-inspector-group="position"]');
+    expect(position.open).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(editor.scene).toEqual(before);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["Add reveal panel", true],
     ["Add reveal panel", false],

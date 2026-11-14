@@ -460,27 +460,8 @@ export function NativeSceneEditor({
                 />
               </div>
             ) : selected.type === "text" ? (
-              <>
-                <label>
-                  {copy(selected.role === "title" ? "Native slide title" : "Node text")}
-                  <textarea
-                    data-native-text-input="true"
-                    aria-label={copy(
-                      selected.role === "title" ? "Native slide title" : "Node text",
-                    )}
-                    lang={selected.lang ?? ""}
-                    maxLength={selected.role === "title" ? 160 : 4000}
-                    value={selected.text}
-                    onChange={(event) =>
-                      update(
-                        (node) =>
-                          node.type === "text" ? { ...node, text: event.target.value } : node,
-                        "text",
-                      )
-                    }
-                  />
-                </label>
-                <div className={styles.actions}>
+              <div className={inspectorStyles.plainTextEditor}>
+                <div className={inspectorStyles.plainTextTools}>
                   <button
                     type="button"
                     onClick={() => {
@@ -508,12 +489,37 @@ export function NativeSceneEditor({
                     <span>{copy("Format text")}</span>
                   </button>
                 </div>
+                <label>
+                  {copy(selected.role === "title" ? "Native slide title" : "Node text")}
+                  <textarea
+                    data-native-text-input="true"
+                    data-text-role={selected.role}
+                    rows={selected.role === "title" ? 6 : 12}
+                    aria-label={copy(
+                      selected.role === "title" ? "Native slide title" : "Node text",
+                    )}
+                    lang={selected.lang ?? ""}
+                    maxLength={selected.role === "title" ? 160 : 4000}
+                    value={selected.text}
+                    onChange={(event) =>
+                      update(
+                        (node) =>
+                          node.type === "text" ? { ...node, text: event.target.value } : node,
+                        "text",
+                      )
+                    }
+                  />
+                </label>
+                <p className={inspectorStyles.textLength} aria-hidden="true">
+                  {new Intl.NumberFormat(locale).format(selected.text.length)} /{" "}
+                  {new Intl.NumberFormat(locale).format(selected.role === "title" ? 160 : 4000)}
+                </p>
                 {formatError ? (
                   <p role="alert" className={styles.formatError}>
                     {copy(formatError)}
                   </p>
                 ) : null}
-              </>
+              </div>
             ) : null}
             {selected.type === "table" || selected.type === "chart" ? (
               <div lang={locale} style={{ display: "contents" }}>

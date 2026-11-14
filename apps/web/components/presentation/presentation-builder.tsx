@@ -4271,10 +4271,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         >
           <div className={styles.inspectorHeading}>
             <div>
-              <span className={styles.inspectorEyebrow}>
-                {nativeEditorUi("Customize your slide")}
-              </span>
               <h2>{nativeEditorUi("Slide tools")}</h2>
+              <span className={styles.inspectorCurrentSection}>
+                {inspectorTabs.find((tab) => tab.id === inspectorTab)?.label}
+              </span>
             </div>
             <button
               type="button"
@@ -4287,6 +4287,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           <div
             className={styles.inspectorTabs}
             role="tablist"
+            aria-orientation="horizontal"
             aria-label={t("delivery.presentationBuilder.inspectorSections")}
             onKeyDown={moveInspectorTab}
           >
@@ -4295,6 +4296,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 id={`inspector-tab-${tab.id}`}
                 aria-controls="inspector-panel"
                 aria-selected={inspectorTab === tab.id}
+                aria-label={tab.label}
+                title={tab.label}
+                data-state={tab.id === "readiness" && issues.length ? "attention" : undefined}
                 className={
                   inspectorTab === tab.id ? styles.inspectorTabActive : styles.inspectorTab
                 }
@@ -4305,7 +4309,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 type="button"
               >
                 <EditorIcon name={inspectorTabIcons[tab.id]} />
-                <span>{tab.label}</span>
+                {tab.id === "readiness" && issues.length ? (
+                  <span
+                    className={styles.inspectorTabBadge}
+                    data-inspector-tab-badge
+                    aria-hidden="true"
+                  >
+                    {new Intl.NumberFormat(locale).format(issues.length)}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

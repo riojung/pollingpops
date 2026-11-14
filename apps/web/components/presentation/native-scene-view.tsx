@@ -34,7 +34,12 @@ import {
   isNativeInteractionNode,
   type NativeSceneInteractionRuntime,
 } from "./native-scene-interaction-view";
-import { selectedNativeSceneBounds } from "../../lib/presentation-native-geometry";
+import {
+  expandNativeSceneSelection,
+  selectedNativeSceneBounds,
+  type NativeSceneResizeHandle,
+} from "../../lib/presentation-native-geometry";
+import { nativeResizeDirectionLabel } from "./native-scene-resize-copy";
 import {
   PresentationMotionBackground,
   PresentationMotionControls,
@@ -172,6 +177,8 @@ interface NativeSceneViewProps {
   motionStatic?: boolean;
   /** Canvas supplies normal-flow selection controls outside the authored slide. */
   hideGeometryControls?: boolean;
+  /** Opt-in creator canvas handles; previews and delivery never enable this. */
+  showSelectionHandles?: boolean;
   /** Creator-only passive annotations, never rendered by delivery or thumbnail callers. */
   editorOverlay?: ReactNode;
   interactionRuntime?: NativeSceneInteractionRuntime;
@@ -179,12 +186,19 @@ interface NativeSceneViewProps {
   selectedNodeIds?: readonly string[];
   onSelect?: (id: string, additive?: boolean) => void;
   onFrameChange?: (id: string, frame: PresentationSceneFrame) => void;
-  onGeometryKey?: (id: string, dx: number, dy: number, resize: boolean) => void;
+  onGeometryKey?: (
+    id: string,
+    dx: number,
+    dy: number,
+    resize: boolean,
+    resizeHandle?: NativeSceneResizeHandle,
+  ) => void;
   onNodePointerDown?: (
     event: PointerEvent<HTMLElement>,
     id: string,
     resize: boolean,
     handle: boolean,
+    resizeHandle?: NativeSceneResizeHandle,
   ) => void;
 }
 
@@ -231,6 +245,7 @@ function NativeSceneSurface({
   staticThumbnail = false,
   motionStatic = false,
   hideGeometryControls = false,
+  showSelectionHandles = false,
   editorOverlay,
 }: NativeSceneViewProps) {
   const copy = nativeAudienceCopy(locale);
@@ -262,14 +277,31 @@ function NativeSceneSurface({
       : undefined;
   const nodes = new Map(scene.nodes.map((node) => [node.id, node]));
   const editing = !staticThumbnail && Boolean(onSelect);
-  function frameKey(event: KeyboardEvent<HTMLButtonElement>, node: FramedNode, resize: boolean) {
+  const selectionIds = expandNativeSceneSelection(
+    scene,
+    selectedNodeIds ?? (selectedNodeId ? [selectedNodeId] : []),
+  );
+  const selection = scene.nodes.filter(
+    (node): node is FramedNode => node.type !== "connector" && selectionIds.includes(node.id),
+  );
+  const selectionFrame =
+    selection.length === 1 ? selection[0]!.frame : selectedNativeSceneBounds(scene, selectionIds);
+  const selectionRotation = selection.length === 1 ? (selection[0]!.rotation ?? 0) : 0;
+  const selectionMember =
+    selection.find((node) => node.id === selectedNodeIds?.at(-1)) ?? selection[0];
+  function frameKey(
+    event: KeyboardEvent<HTMLButtonElement>,
+    node: FramedNode,
+    resize: boolean,
+    resizeHandle?: NativeSceneResizeHandle,
+  ) {
     const step = event.shiftKey ? 5 : 1;
     const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
     const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
     if (!dx && !dy) return;
     event.preventDefault();
     if (onGeometryKey) {
-      onGeometryKey(node.id, dx, dy, resize);
+      onGeometryKey(node.id, dx, dy, resize, resizeHandle);
       return;
     }
     onSelect?.(node.id);
@@ -336,6 +368,7 @@ function NativeSceneSurface({
         data-native-palette={design?.palette}
         data-native-font={design?.font}
         data-native-spacing={design?.spacing}
+        data-native-direct-selection={editing && showSelectionHandles ? "true" : undefined}
         style={designStyle}
       >
         <PresentationMotionBackground
@@ -562,7 +595,7 @@ function NativeSceneSurface({
             </div>
           );
         })}
-        {editing
+        {editing && !showSelectionHandles
           ? scene.groups?.map((group, index) => {
               if (!group.nodeIds.every((id) => selectedNodeIds?.includes(id))) return null;
               const bounds = selectedNativeSceneBounds(scene, group.nodeIds)!;
@@ -605,6 +638,96 @@ function NativeSceneSurface({
               );
             })
           : null}
+        {editing &&
+        showSelectionHandles &&
+        onNodePointerDown &&
+        selectionFrame &&
+        selection.length ? (
+          <div
+            className={styles.selectionOverlay}
+            data-native-selection-handles="true"
+            style={{ zIndex: scene.nodes.length + 2 }}
+          >
+            <div
+              className={styles.selectionOutline}
+              data-native-selection-outline="true"
+              data-native-group={
+                scene.groups?.find(
+                  (group) =>
+                    group.nodeIds.length === selection.length &&
+                    group.nodeIds.every((id) => selection.some((node) => node.id === id)),
+                )?.id
+              }
+              style={{
+                left: `${selectionFrame.x}%`,
+                top: `${selectionFrame.y}%`,
+                width: `${selectionFrame.width}%`,
+                height: `${selectionFrame.height}%`,
+                transform: selectionRotation ? `rotate(${selectionRotation}deg)` : undefined,
+              }}
+            >
+              {(["n", "e", "s", "w"] as const).map((edge) => (
+                <span
+                  key={edge}
+                  className={styles.selectionDragBorder}
+                  data-native-move-border={edge}
+                  aria-hidden="true"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onNodePointerDown(event, selectionMember!.id, false, true);
+                  }}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              ))}
+            </div>
+            {(["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const).map((handle) => {
+              const dx =
+                (handle.includes("w") ? -0.5 : handle.includes("e") ? 0.5 : 0) *
+                selectionFrame.width *
+                16;
+              const dy =
+                (handle.includes("n") ? -0.5 : handle.includes("s") ? 0.5 : 0) *
+                selectionFrame.height *
+                9;
+              const angle = (selectionRotation * Math.PI) / 180;
+              const x =
+                selectionFrame.x +
+                selectionFrame.width / 2 +
+                (dx * Math.cos(angle) - dy * Math.sin(angle)) / 16;
+              const y =
+                selectionFrame.y +
+                selectionFrame.height / 2 +
+                (dx * Math.sin(angle) + dy * Math.cos(angle)) / 9;
+              const member = selectionMember!;
+              const label = `${controlCopy("Resize {name}. Use arrow keys to change size.", { name: nativeControlNodeLabel(locale, member).text })} ${nativeResizeDirectionLabel(locale, handle)}`;
+              return (
+                <button
+                  key={handle}
+                  type="button"
+                  lang={locale}
+                  className={styles.directResizeHandle}
+                  data-native-resize-handle={handle}
+                  data-native-resize-corner={handle.length === 2 || undefined}
+                  aria-label={label}
+                  title={label}
+                  style={
+                    {
+                      left: `clamp(16px, ${x}%, calc(100% - 16px))`,
+                      top: `clamp(16px, ${y}%, calc(100% - 16px))`,
+                      "--native-handle-angle": `${selectionRotation}deg`,
+                    } as CSSProperties
+                  }
+                  onKeyDown={(event) => frameKey(event, member, true, handle)}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onNodePointerDown(event, member.id, true, true, handle);
+                  }}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              );
+            })}
+          </div>
+        ) : null}
         {editing ? editorOverlay : null}
       </article>
       {!staticThumbnail && !motionStatic && !outline ? (

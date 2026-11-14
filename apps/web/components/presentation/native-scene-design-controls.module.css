@@ -194,8 +194,54 @@
   display: grid;
   min-width: 0;
   gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.motionSection > .subsectionHeading {
+  display: none;
+}
+
+.compositionActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.section .compositionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface);
+  font-size: 11px;
+}
+.section .compositionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.section .compositionButton:hover:not(:disabled) {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-soft);
+}
+.compositionButton svg {
+  width: 16px;
+  height: 16px;
+}
+.compositionButton:nth-child(2n + 3) {
+  margin-top: 3px;
+}
+.screenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .motionOptions {

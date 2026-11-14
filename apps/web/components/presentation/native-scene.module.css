@@ -197,6 +197,99 @@
 .editableNode {
   cursor: grab;
 }
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.selectionOutline {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 2px solid #1769aa;
+  outline-offset: 0;
+  pointer-events: none;
+}
+.selectionDragBorder {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  background: #1769aa12;
+}
+.selectionDragBorder[data-native-move-border="n"] {
+  inset: -8px 0 auto;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="e"] {
+  inset: 0 -8px 0 auto;
+  width: 8px;
+}
+.selectionDragBorder[data-native-move-border="s"] {
+  inset: auto 0 -8px;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="w"] {
+  inset: 0 auto 0 -8px;
+  width: 8px;
+}
+@media (min-width: 701px) {
+  .stage[data-native-direct-selection="true"] .selected {
+    outline: none;
+  }
+}
+.directResizeHandle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.directResizeHandle::after {
+  content: "";
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #1769aa;
+  background: #fff;
+  transform: rotate(var(--native-handle-angle, 0deg));
+}
+.directResizeHandle[data-native-resize-corner]::after {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+.directResizeHandle[data-native-resize-handle="n"],
+.directResizeHandle[data-native-resize-handle="s"] {
+  cursor: ns-resize;
+}
+.directResizeHandle[data-native-resize-handle="w"],
+.directResizeHandle[data-native-resize-handle="e"] {
+  cursor: ew-resize;
+}
+.directResizeHandle[data-native-resize-handle="nw"],
+.directResizeHandle[data-native-resize-handle="se"] {
+  cursor: nwse-resize;
+}
+.directResizeHandle[data-native-resize-handle="ne"],
+.directResizeHandle[data-native-resize-handle="sw"] {
+  cursor: nesw-resize;
+}
+.directResizeHandle:focus-visible {
+  outline: 3px solid #1769aa;
+  outline-offset: -2px;
+  background: #ffffffcc;
+}
 .handles {
   position: absolute;
   inset: 0;
@@ -377,6 +470,7 @@
     display: none;
   }
   .groupOutline,
+  .selectionOverlay,
   .snapGuides {
     display: none;
   }

@@ -13,6 +13,8 @@ import { NativeSceneEditor } from "./native-scene-editor";
 import { EditorDisclosure, EditorIcon } from "./presentation-editor-chrome";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
+import { NativeInspectorSection } from "./native-inspector-section";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
 import type {
@@ -757,6 +759,54 @@ describe("native external video insertion selection", () => {
 });
 
 describe("native design and rich text coexistence", () => {
+  it("persists plain and formatted object typography using scene version 9 and normal history fields", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const original = editor.scene.nodes[0]!;
+    const typography = editor.find((element) => element.type === NativeSceneTypographyControls);
+    (typography.props.onChange as (node: unknown, field: string) => void)(
+      { ...original, typography: { font: "mono", size: 64 } },
+      "typography:size",
+    );
+    const styled = editor.onChange.mock.calls[0]![0];
+    expect(styled.schemaVersion).toBe(9);
+    expect(styled.nodes[0]).toEqual({ ...original, typography: { font: "mono", size: 64 } });
+    expect(editor.onChange.mock.calls[0]![1]).toBe(`native:${original.id}:typography:size`);
+    editor.scene.nodes = styled.nodes;
+    editor.scene.schemaVersion = styled.schemaVersion;
+    editor.render("idle");
+    (
+      editor.find((element) => element.type === "button" && controlText(element) === "Format text")
+        .props.onClick as () => void
+    )();
+    const formatted = editor.onChange.mock.calls[1]![0];
+    editor.scene.nodes = formatted.nodes;
+    editor.render("idle");
+    const rich = editor.find((element) => element.type === NativeRichTextEditor);
+    (rich.props.onChange as (node: unknown, field: string) => void)(
+      { ...formatted.nodes[0], typography: { font: "serif", size: 72 } },
+      "typography:font",
+    );
+    expect(editor.onChange.mock.calls[2]![0]).toMatchObject({
+      schemaVersion: 9,
+      nodes: [
+        { ...formatted.nodes[0], typography: { font: "serif", size: 72 } },
+        editor.scene.nodes[1],
+      ],
+    });
+    expect(editor.onChange.mock.calls[2]![1]).toBe(`native:${original.id}:typography:font`);
+  });
+
+  it("keeps selected content open by default and tool disclosures outside the authored document", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const section = editor.find(
+      (element) => element.type === NativeInspectorSection && element.props.name === "content",
+    );
+    expect(section.props.defaultOpen).toBe(true);
+    expect(section.key).toBe(editor.scene.nodes[0]!.id);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
   it.each([3, 4] as const)(
     "keeps scene %s and its composition when formatting, editing and removing formatting",
     (version) => {

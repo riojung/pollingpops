@@ -1,0 +1,85 @@
+.section {
+  min-width: 0;
+  overflow: clip;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--ui-text-strong);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  list-style: none;
+  cursor: pointer;
+}
+
+.heading::-webkit-details-marker {
+  display: none;
+}
+.heading:hover {
+  background: var(--ui-surface-soft);
+}
+.heading:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -3px;
+}
+.heading > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--ui-text-muted);
+}
+.heading > span {
+  flex: 1;
+  min-width: 0;
+}
+.heading > .chevron {
+  display: flex;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  transition: transform 120ms ease;
+}
+.section[open] > .heading {
+  border-bottom: 1px solid var(--ui-border-subtle);
+}
+.section[open] > .heading > .chevron {
+  transform: rotate(180deg);
+}
+.body {
+  min-width: 0;
+  padding: 12px;
+}
+
+/* Retain fieldset semantics and legends without repeating the visible heading. */
+.body > fieldset {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.body > fieldset > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading > .chevron {
+    transition: none;
+  }
+}

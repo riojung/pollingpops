@@ -59,7 +59,27 @@
 .gridWrap {
   min-width: 0;
   max-width: 100%;
+  max-height: 460px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 8px;
+  background: var(--ui-surface-soft, #f6f8fb);
 }
+.gridWrap:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+.gridActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.gridActions button {
+  font-size: 11px;
+}
+
 .editGrid,
 .dataTable {
   border-collapse: collapse;
@@ -175,16 +195,6 @@
     .chartColumns {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
-  }
-  .editGrid tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    padding-block: 5px;
-    border-bottom: 1px solid var(--ui-border, #cbd5e1);
-  }
-  .editGrid th,
-  .editGrid td {
-    display: block;
   }
   .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
     .dataTable,

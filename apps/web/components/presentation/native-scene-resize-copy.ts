@@ -1,0 +1,111 @@
+import type { SupportedLocale } from "@openround/contracts";
+
+const english = {
+  nw: "top left",
+  n: "top",
+  ne: "top right",
+  e: "right",
+  se: "bottom right",
+  s: "bottom",
+  sw: "bottom left",
+  w: "left",
+} as const;
+
+type Direction = keyof typeof english;
+const labels: Record<SupportedLocale, Record<Direction, string>> = {
+  "en-CA": english,
+  "fr-FR": {
+    nw: "en haut à gauche",
+    n: "en haut",
+    ne: "en haut à droite",
+    e: "à droite",
+    se: "en bas à droite",
+    s: "en bas",
+    sw: "en bas à gauche",
+    w: "à gauche",
+  },
+  "de-DE": {
+    nw: "oben links",
+    n: "oben",
+    ne: "oben rechts",
+    e: "rechts",
+    se: "unten rechts",
+    s: "unten",
+    sw: "unten links",
+    w: "links",
+  },
+  "es-ES": {
+    nw: "arriba a la izquierda",
+    n: "arriba",
+    ne: "arriba a la derecha",
+    e: "a la derecha",
+    se: "abajo a la derecha",
+    s: "abajo",
+    sw: "abajo a la izquierda",
+    w: "a la izquierda",
+  },
+  "it-IT": {
+    nw: "in alto a sinistra",
+    n: "in alto",
+    ne: "in alto a destra",
+    e: "a destra",
+    se: "in basso a destra",
+    s: "in basso",
+    sw: "in basso a sinistra",
+    w: "a sinistra",
+  },
+  "pt-PT": {
+    nw: "canto superior esquerdo",
+    n: "em cima",
+    ne: "canto superior direito",
+    e: "à direita",
+    se: "canto inferior direito",
+    s: "em baixo",
+    sw: "canto inferior esquerdo",
+    w: "à esquerda",
+  },
+  "ja-JP": {
+    nw: "左上",
+    n: "上",
+    ne: "右上",
+    e: "右",
+    se: "右下",
+    s: "下",
+    sw: "左下",
+    w: "左",
+  },
+  "ko-KR": {
+    nw: "왼쪽 위",
+    n: "위쪽",
+    ne: "오른쪽 위",
+    e: "오른쪽",
+    se: "오른쪽 아래",
+    s: "아래쪽",
+    sw: "왼쪽 아래",
+    w: "왼쪽",
+  },
+  "zh-CN": {
+    nw: "左上角",
+    n: "上边",
+    ne: "右上角",
+    e: "右边",
+    se: "右下角",
+    s: "下边",
+    sw: "左下角",
+    w: "左边",
+  },
+  "zh-TW": {
+    nw: "左上角",
+    n: "上邊",
+    ne: "右上角",
+    e: "右邊",
+    se: "右下角",
+    s: "下邊",
+    sw: "左下角",
+    w: "左邊",
+  },
+};
+
+export function nativeResizeDirectionLabel(locale: SupportedLocale, direction: Direction): string {
+  return labels[locale][direction];
+}

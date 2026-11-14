@@ -321,6 +321,13 @@ beforeEach(() => {
   });
   vi.stubGlobal("HTMLElement", class {});
   vi.stubGlobal("document", { activeElement: null, querySelector: vi.fn().mockReturnValue(null) });
+  // The hook runner has no browser paint loop. Flush scheduled focus/scroll work
+  // with each effect so navigation effects remain observable in this harness.
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
 afterEach(() => {
   vi.restoreAllMocks();

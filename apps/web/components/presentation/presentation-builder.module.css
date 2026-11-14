@@ -523,7 +523,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  grid-column: 2;
+  grid-column: 3;
   min-width: 0;
   padding: clamp(18px, 4vw, 54px);
   overflow: auto;
@@ -1192,7 +1192,7 @@
   .workspace.mapClosed,
   .workspace.inspectorClosed,
   .workspace.mapClosed.inspectorClosed {
-    grid-template-columns: 0 minmax(0, 1fr) 0;
+    grid-template-columns: 0 0 minmax(0, 1fr) 0;
     height: calc(100vh - var(--presentation-command-height, 122px));
   }
 
@@ -1427,18 +1427,18 @@
   opacity: 0.45;
 }
 .workspace {
-  grid-template-columns: 238px minmax(0, 1fr) 310px;
+  grid-template-columns: var(--presentation-navigator-width, 280px) 8px minmax(0, 1fr) 310px;
   height: calc(100dvh - var(--presentation-command-height, 76px));
   min-height: 0;
 }
 .workspace.mapClosed {
-  grid-template-columns: 0 minmax(0, 1fr) 310px;
+  grid-template-columns: 0 0 minmax(0, 1fr) 310px;
 }
 .workspace.inspectorClosed {
-  grid-template-columns: 238px minmax(0, 1fr) 0;
+  grid-template-columns: var(--presentation-navigator-width, 280px) 8px minmax(0, 1fr) 0;
 }
 .workspace.mapClosed.inspectorClosed {
-  grid-template-columns: 0 minmax(0, 1fr) 0;
+  grid-template-columns: 0 0 minmax(0, 1fr) 0;
 }
 .map {
   background: var(--ui-surface-soft);
@@ -1841,13 +1841,13 @@
     display: none;
   }
   .workspace {
-    grid-template-columns: 210px minmax(0, 1fr) 290px;
+    grid-template-columns: var(--presentation-navigator-width, 280px) 8px minmax(0, 1fr) 290px;
   }
   .workspace.mapClosed {
-    grid-template-columns: 0 minmax(0, 1fr) 290px;
+    grid-template-columns: 0 0 minmax(0, 1fr) 290px;
   }
   .workspace.inspectorClosed {
-    grid-template-columns: 210px minmax(0, 1fr) 0;
+    grid-template-columns: var(--presentation-navigator-width, 280px) 8px minmax(0, 1fr) 0;
   }
   .blockList {
     padding-inline: 9px;
@@ -1899,7 +1899,7 @@
   .workspace.mapClosed,
   .workspace.inspectorClosed,
   .workspace.mapClosed.inspectorClosed {
-    grid-template-columns: 0 minmax(0, 1fr) 0;
+    grid-template-columns: 0 0 minmax(0, 1fr) 0;
     height: calc(100dvh - var(--presentation-command-height, 120px));
   }
   .map,
@@ -2150,5 +2150,65 @@
   }
   .activitySettings {
     padding: 14px;
+  }
+}
+
+/* The navigator width is a local view preference, separate from deck metadata. */
+.workspace {
+  transition: none;
+}
+.map {
+  grid-column: 1;
+  grid-row: 1;
+}
+.inspector {
+  grid-column: 4;
+  grid-row: 1;
+}
+.canvasArea {
+  grid-row: 1;
+}
+.filmstripScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.filmstripScroll .blockList {
+  overflow: visible;
+}
+.blockList[hidden] {
+  display: none;
+}
+.navigatorResize {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--ui-surface-soft);
+}
+.navigatorResize::after {
+  position: absolute;
+  content: "";
+  inset: 0 2px;
+  border-radius: 2px;
+}
+.navigatorResize:hover::after,
+.navigatorResize:focus-visible::after {
+  background: var(--ui-accent);
+}
+.navigatorResize:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+}
+.mapClosed .navigatorResize {
+  display: none;
+}
+@container (max-width: 920px) {
+  .navigatorResize {
+    display: none;
   }
 }

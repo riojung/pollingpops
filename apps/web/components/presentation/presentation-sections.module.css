@@ -1,0 +1,145 @@
+.toolbar {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.toolbar button,
+.header button {
+  font: inherit;
+  cursor: pointer;
+}
+.toolbar button:disabled,
+.header button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.toolbar button:focus-visible,
+.header button:focus-visible,
+.header summary:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.addSection {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+.assignment,
+.nameForm {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+}
+.assignment select,
+.nameForm input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 12px;
+}
+.help {
+  margin: 4px 0;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.formActions button {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font-size: 11px;
+}
+.header {
+  padding: 3px 9px;
+  color: var(--ui-text);
+}
+.headerRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  gap: 5px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 5px;
+  text-align: start;
+  color: inherit;
+  background: transparent;
+}
+.chevron,
+.collapsedChevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.collapsedChevron {
+  transform: rotate(-90deg);
+}
+.headerText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.headerText strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.headerText small {
+  color: var(--ui-text-muted);
+  font-size: 10px;
+}
+.actions {
+  flex: 0 0 auto;
+}
+.actions > summary {
+  min-width: 30px;
+  min-height: 32px;
+  padding: 4px;
+  border-color: transparent;
+  background: transparent;
+}
+.actions > summary > span:last-child {
+  display: none;
+}
+.header .nameForm {
+  margin: 3px 4px 8px;
+}

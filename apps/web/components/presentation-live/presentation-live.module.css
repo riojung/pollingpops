@@ -17,7 +17,7 @@
   padding: 8px clamp(16px, 2.5vw, 36px);
 }
 
-.topbar a {
+.topbar a:not(:global(.button)) {
   color: inherit;
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { useLocale } from "../locale-provider";
+import { presentationWorkspaceCopy } from "../../lib/i18n/presentation-workspace-copy";
 import styles from "./presenter-timer.module.css";
 
 export interface PresenterTimerState {
@@ -94,6 +96,8 @@ function browserTimerStorage(): TimerStorage | null {
 }
 
 function SessionPresenterTimer({ sessionId }: { sessionId: string }) {
+  const { locale } = useLocale();
+  const copy = presentationWorkspaceCopy(locale);
   const descriptionId = useId();
   const [timer, setTimer] = useState<PresenterTimerState | null>(null);
   const [now, setNow] = useState(0);
@@ -128,21 +132,21 @@ function SessionPresenterTimer({ sessionId }: { sessionId: string }) {
   return (
     <>
       <div className={styles.heading}>
-        <h2>Presentation timer</h2>
+        <h2>{copy("Presentation timer")}</h2>
         <span className={styles.status} role="status">
-          {running ? "Running" : timer && timer.elapsedMs > 0 ? "Paused" : "Ready"}
+          {copy(running ? "Running" : timer && timer.elapsedMs > 0 ? "Paused" : "Ready")}
         </span>
       </div>
       <output
         className={styles.time}
         role="timer"
         aria-live="off"
-        aria-label="Elapsed presentation time"
+        aria-label={copy("Elapsed presentation time")}
       >
         {formatPresentationElapsedTime(timer ? elapsedPresentationTime(timer, now) : 0)}
       </output>
       <p className={styles.description} id={descriptionId}>
-        Private to this tab. Reset affects only this timer.
+        {copy("Private to this tab. Reset affects only this timer.")}
       </p>
       <div className={styles.controls} aria-describedby={descriptionId}>
         <button
@@ -150,17 +154,17 @@ function SessionPresenterTimer({ sessionId }: { sessionId: string }) {
           disabled={timer === null || running}
           onClick={() => changeTimer("start")}
         >
-          Start
+          {copy("Start")}
         </button>
         <button
           type="button"
           disabled={timer === null || !running}
           onClick={() => changeTimer("pause")}
         >
-          Pause
+          {copy("Pause")}
         </button>
         <button type="button" disabled={timer === null} onClick={() => changeTimer("reset")}>
-          Reset
+          {copy("Reset")}
         </button>
       </div>
     </>
@@ -174,11 +178,13 @@ export function PresenterTimer({
   sessionId: string;
   className?: string;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationWorkspaceCopy(locale);
   return (
     <section
       className={[styles.timer, className].filter(Boolean).join(" ")}
-      aria-label="Presentation timer"
-      lang="en-CA"
+      aria-label={copy("Presentation timer")}
+      lang={locale}
     >
       <SessionPresenterTimer key={sessionId} sessionId={sessionId} />
     </section>

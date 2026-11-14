@@ -5,6 +5,47 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Presenter workflow follow-up — November 14, 2026
+
+The `codex/option-b-presenter-localization` slice closes an English-only gap in the refreshed
+private Presentation workspace. Connection status, facilitation landmarks, private notes and
+next-slide guidance, connected counts, timer controls and audience-stage access now use the
+selected language across all ten existing locales. Initial connection is labelled Connecting
+rather than Reconnecting. The clock retains its elapsed-time format and session-local state.
+
+The existing language menu is available in the host header, so a presenter can change language
+without leaving the live session. An open language menu suppresses presentation shortcuts even
+when its focused option becomes disabled during a slow save. Language changes preserve the
+running or paused timer, current slide, stage credential and fragment URL, authored slide text,
+private speaker notes and immutable saved draft. The existing credential, command and retry
+handlers retain their session identities. Raw service diagnostics remain explicitly attributed
+to their original English text; authored notes retain their unknown/original language boundary.
+
+The source-bound native-review workflow now includes the 32 private-workspace phrases. Fresh
+packets contain 590 items for each of the ten locales, including English reference material;
+all 5,900 decisions remain pending. No native-language or release acceptance is inferred from
+these translations or automated checks. Previous human decision files are preserved.
+
+Verification: **4,979 web tests across 422 files**, **32 review-tool tests** and **8 production
+browser cases** pass. Browser journeys cover German and Korean on Chromium/Firefox desktop and
+320px Chromium/WebKit phone emulation. They exercise live language changes, running/paused timer
+and refresh continuity, literal authored text, unchanged room revision and saved draft, delayed
+language persistence with keyboard shortcuts, stage popup recovery/revocation, Axe and document
+overflow. The browser fixture counts both realtime and REST commands without logging credential
+payloads. Web/fixture/review-tool type checks, focused lint, formatting and the production build
+pass. Independent review found and verified the open-menu shortcut guard. Local source/artifact
+provenance and captures are under `artifacts/option-b-presenter-localization/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,008 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. The
+subsequent independent review found no actionable issues in tracked or untracked changes.
+
+This is a local software follow-up. Customer observation, native-language editorial acceptance,
+manual accessibility and physical-device review, exact-candidate hosted qualification and the
+user-deferred public launch content remain release work. No staging environment is selected,
+and the release-readiness ledger remains valid at **0 complete / 15 pending** gates.
+
 ## Scope and implementation
 
 | Concern                         | Source implementation                                                                                                                                                                                                                                                                                                                                          |

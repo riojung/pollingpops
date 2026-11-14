@@ -301,3 +301,7 @@
     min-width: min(180px, 100%);
   }
 }
+.headerActions {
+  max-width: 100%;
+  justify-content: flex-end;
+}

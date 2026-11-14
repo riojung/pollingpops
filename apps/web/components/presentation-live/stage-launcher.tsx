@@ -5,6 +5,8 @@ import { PresentationStagePassResponseSchema } from "@openround/contracts";
 import { apiFetch, ApiClientError, humanError } from "../../lib/api";
 import { isolatePresentationCompanionWindow } from "../../lib/presentation-companion-pass";
 import { presentationStageLaunchUrl } from "../../lib/presentation-stage-pass";
+import { useLocale } from "../locale-provider";
+import { presentationWorkspaceCopy } from "../../lib/i18n/presentation-workspace-copy";
 import styles from "./presentation-delivery.module.css";
 
 export function PresentationStageLauncher({
@@ -16,6 +18,8 @@ export function PresentationStageLauncher({
   canEdit: boolean;
   finished: boolean;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationWorkspaceCopy(locale);
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [fallback, setFallback] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,23 +108,29 @@ export function PresentationStageLauncher({
   }
 
   return (
-    <section aria-label="Audience stage controls" className={styles.launch} lang="en-CA">
+    <section aria-label={copy("Audience stage controls")} className={styles.launch} lang={locale}>
       <button
         type="button"
         className="button-quiet full-width"
         disabled={busy || finished}
         onClick={() => void launch()}
       >
-        {busy ? "Updating stage access…" : "Open audience stage"}
+        {copy(busy ? "Updating stage access…" : "Open audience stage")}
       </button>
-      <p>Share the audience stage window. Presenter notes and controls stay in this workspace.</p>
+      <p>
+        {copy(
+          "Share the audience stage window. Presenter notes and controls stay in this workspace.",
+        )}
+      </p>
       {fallback ? (
         <>
           <p role="status">
-            Your browser blocked the stage window. Open it using this link, then share that tab.
+            {copy(
+              "Your browser blocked the stage window. Open it using this link, then share that tab.",
+            )}
           </p>
           <a href={fallback} target="_blank" rel="noopener noreferrer">
-            Open audience stage in a new tab
+            {copy("Open audience stage in a new tab")}
           </a>
         </>
       ) : null}
@@ -131,18 +141,19 @@ export function PresentationStageLauncher({
           disabled={busy}
           onClick={() => void revoke()}
         >
-          Revoke audience stage access
+          {copy("Revoke audience stage access")}
         </button>
       ) : null}
       {error ? (
-        <p role="alert" className="error">
+        <p role="alert" className="error" lang="en-CA">
           {error}
         </p>
       ) : null}
       {staleRevocation ? (
         <p>
-          Use the host tab that opened the current stage, or open a replacement stage here and then
-          revoke it.
+          {copy(
+            "Use the host tab that opened the current stage, or open a replacement stage here and then revoke it.",
+          )}
         </p>
       ) : null}
     </section>

@@ -243,3 +243,35 @@ Verification of the frozen refresh artifact:
 
 Browser profiles use emulation. Local screenshots and the source/artifact qualification receipt
 are under `artifacts/presentation-live-workspace/`.
+
+## Report action contrast and background playback correction
+
+The live header's inherited link color overrode the primary report action's foreground, leaving
+dark text on its dark button. The header rule now excludes primary buttons so their foreground
+continues to follow the light/dark theme's paired accent tokens.
+
+The six motion presets previously started together at the slow end of 28–44 second ease-in-out
+cycles. Their first two seconds produced less than one pixel of travel at a 640px slide width.
+Linear 20–32 second cycles with staggered offsets now make movement apparent promptly while
+retaining bounded decorative artwork, local pause, and offscreen/hidden-page suspension.
+
+Playback and its controls now also honor the app's saved Reduce motion preference and live HTML
+preference changes. This fixes a mismatch where the global accessibility rule had already ended
+the animation but the control still offered Pause. Device reduced motion remains authoritative.
+
+The regression fixture measures actual rendered transform displacement and pause stability for
+every preset, plus participant and audience-stage playback. It also checks app/device reduced
+motion and the report action's light/dark contrast and navigation. It uses original synthetic
+slides and isolated local test sessions; it does not alter customer content.
+
+Verification: **4,939 web tests across 420 files** and **4 production browser cases** passed.
+The browser matrix covers Chromium/Firefox desktop and Chromium/WebKit phone emulation. Web and
+fixture type checks, focused lint, formatting and the production beta build also passed.
+Screenshots and the qualified source/artifact receipt are preserved under
+`artifacts/presentation-playback-fixes/`. These are software checks, not physical-device or
+manual assistive-technology qualification.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed: **8,967 tests passed**, with
+**526 standard opt-in skips**. Formatting, Docker workspace-dependency checks, lint, type checks,
+all four build tasks and compiled-server startup/configuration smoke passed. The independent
+read-only review found no actionable issues.

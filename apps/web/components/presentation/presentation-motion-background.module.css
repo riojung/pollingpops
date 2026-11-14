@@ -11,18 +11,21 @@
   position: absolute;
   inset: -20%;
   opacity: 0.14;
-  animation: drift 28s ease-in-out infinite alternate;
+  /* Keep movement visible from the first frame without accelerating at every slide change. */
+  animation: drift 20s linear -4s infinite alternate;
   animation-play-state: paused;
 }
 .background[data-motion-playing="true"] .layer {
   animation-play-state: running;
 }
 .layer:nth-child(2) {
-  animation-duration: 36s;
+  animation-duration: 26s;
+  animation-delay: -10s;
   animation-direction: alternate-reverse;
 }
 .layer:nth-child(3) {
-  animation-duration: 44s;
+  animation-duration: 32s;
+  animation-delay: -16s;
 }
 .background[data-motion-background="aurora"] .layer:nth-child(1) {
   background: radial-gradient(ellipse at 24% 8%, var(--motion-a), transparent 60%);
@@ -172,6 +175,9 @@
   margin: 0;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+:global(html[data-openround-motion="reduced"]) .background .layer {
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .background .layer {

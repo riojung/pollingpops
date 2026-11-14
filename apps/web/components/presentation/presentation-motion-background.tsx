@@ -55,17 +55,38 @@ export function setPresentationMotionPaused(paused: boolean) {
   window.dispatchEvent(new Event(pauseEvent));
 }
 
-function reducedSnapshot() {
-  return (
-    typeof window !== "undefined" &&
-    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
-  );
+export function getPresentationMotionReduced() {
+  if (typeof window === "undefined") return false;
+  if (
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+    (typeof document !== "undefined" &&
+      document.documentElement.dataset.openroundMotion === "reduced")
+  )
+    return true;
+  try {
+    const preferences = JSON.parse(
+      window.localStorage.getItem("openround:experience-preferences") ?? "null",
+    );
+    return preferences?.reducedMotion === true;
+  } catch {
+    return false;
+  }
 }
 
 function subscribeReduced(listener: () => void) {
   const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   query?.addEventListener("change", listener);
-  return () => query?.removeEventListener("change", listener);
+  window.addEventListener("storage", listener);
+  const observer = new MutationObserver(listener);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-openround-motion"],
+  });
+  return () => {
+    query?.removeEventListener("change", listener);
+    window.removeEventListener("storage", listener);
+    observer.disconnect();
+  };
 }
 
 function hiddenSnapshot() {
@@ -105,7 +126,7 @@ export function PresentationMotionBackground({
   );
   const reduced = useSyncExternalStore(
     enabled ? subscribeReduced : noopSubscribe,
-    enabled ? reducedSnapshot : serverFalse,
+    enabled ? getPresentationMotionReduced : serverFalse,
     serverFalse,
   );
   const hidden = useSyncExternalStore(
@@ -168,7 +189,7 @@ export function PresentationMotionControls({
   );
   const reduced = useSyncExternalStore(
     preset ? subscribeReduced : noopSubscribe,
-    preset ? reducedSnapshot : serverFalse,
+    preset ? getPresentationMotionReduced : serverFalse,
     serverFalse,
   );
   if (!preset) return null;

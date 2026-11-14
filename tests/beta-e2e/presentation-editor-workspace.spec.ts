@@ -132,7 +132,7 @@ for (const suffix of ["", " @mobile"]) {
     await openE01Inspector(page, "Layout");
     const design = inspector.getByRole("group", { name: "Design", exact: true });
     await design
-      .getByRole("combobox", { name: "Slide theme", exact: true })
+      .getByRole("combobox", { name: "Base color theme", exact: true })
       .selectOption("midnight");
     await expect(
       design.getByRole("button", { name: "Use Midnight theme", exact: true }),
@@ -231,7 +231,7 @@ for (const suffix of ["", " @mobile"]) {
       ["Add native text", "Node text", "A newly inserted point"],
       ["Add native shape", "Shape label", "Decision"],
       ["Add native connector", "Connector label", "Next step"],
-    ]) {
+    ] as const) {
       await closeE01Overlays(page);
       const button = page.getByRole("button", { name: action, exact: true });
       await expectIcon(button);

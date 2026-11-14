@@ -28,6 +28,12 @@
   flex-wrap: wrap;
   gap: 0.35rem;
 }
+.categoryFilters {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
 .filter {
   min-block-size: 36px;
   max-inline-size: 100%;
@@ -76,6 +82,11 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.25rem), 1fr));
   gap: 1.5rem 1rem;
+}
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding-block: 1.5rem 0.5rem;
 }
 .card {
   min-inline-size: 0;
@@ -282,6 +293,27 @@
   justify-content: space-between;
   gap: 1rem;
   padding-block: 0.25rem 1rem;
+}
+.applicationSettings {
+  margin-block-end: 1rem;
+  padding-block-end: 0.85rem;
+  border-block-end: 1px solid var(--ui-border-subtle);
+}
+.applicationControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+.applicationChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.applicationControls > p {
+  flex: 1 1 20rem;
+  margin: 0;
+  font-size: 0.75rem;
 }
 .scope {
   display: flex;

@@ -54,6 +54,28 @@ const designFamilies = {
   signal: { name: "Signal", theme: "sunset" },
   monograph: { name: "Monograph", theme: "midnight" },
   canvas: { name: "Canvas", theme: "ocean" },
+  atlas: { name: "Atlas", theme: "paper" },
+  ledger: { name: "Ledger", theme: "paper" },
+  prism: { name: "Prism", theme: "paper" },
+  folio: { name: "Folio", theme: "paper" },
+  horizon: { name: "Horizon", theme: "ocean" },
+  circuit: { name: "Circuit", theme: "midnight" },
+  slate: { name: "Slate", theme: "midnight" },
+  spectrum: { name: "Spectrum", theme: "sunset" },
+  botanica: { name: "Botanica", theme: "paper" },
+  archive: { name: "Archive", theme: "paper" },
+  workshop: { name: "Workshop", theme: "paper" },
+  scholar: { name: "Scholar", theme: "paper" },
+  ribbon: { name: "Ribbon", theme: "sunset" },
+  mosaic: { name: "Mosaic", theme: "paper" },
+  linen: { name: "Linen", theme: "paper" },
+  beacon: { name: "Beacon", theme: "ocean" },
+  summit: { name: "Summit", theme: "paper" },
+  atelier: { name: "Atelier", theme: "paper" },
+  campus: { name: "Campus", theme: "ocean" },
+  meadow: { name: "Meadow", theme: "paper" },
+  confetti: { name: "Confetti", theme: "sunset" },
+  facet: { name: "Facet", theme: "midnight" },
 } as const satisfies Record<PresentationDesignId, { name: string; theme: string }>;
 
 function scene(block: PresentationDraft["blocks"][number]): PresentationScene {
@@ -89,9 +111,9 @@ async function quality(page: Page) {
 }
 
 async function capture(surface: Locator, name: string) {
-  await mkdir("artifacts/presentation-designed-collections", { recursive: true });
+  await mkdir("artifacts/presentation-expanded-designs", { recursive: true });
   await surface.screenshot({
-    path: `artifacts/presentation-designed-collections/${name}.png`,
+    path: `artifacts/presentation-expanded-designs/${name}.png`,
     // A tall element capture can otherwise stitch the sticky workspace header across its middle.
     style: "header[class*='topHeader'] { visibility: hidden !important; }",
   });
@@ -169,6 +191,7 @@ async function openDesign(page: Page, id: PresentationDesignId) {
   const panel = page.locator("#presentation-design-library");
   await expect(panel).toBeVisible();
   const family = designFamilies[id];
+  await panel.getByLabel(copy.search, { exact: true }).fill(id);
   await panel
     .locator(`[data-design-card="${id}"]`)
     .getByRole("button", { name: `${copy.preview}: ${family.name}`, exact: true })
@@ -269,21 +292,19 @@ for (const suffix of ["", " @mobile"]) {
     await expect(page.locator("#template-tab-rounds")).toHaveAttribute("aria-selected", "true");
     await tab.click();
     await expect(tab).toHaveAttribute("aria-selected", "true");
-    await expect(panel.locator("[data-design-card]")).toHaveCount(8);
+    await expect(panel.locator("[data-design-card]")).toHaveCount(12);
+    await expect(panel.getByRole("status")).toHaveText("Showing 12 of 30 designs");
+    await panel.getByRole("button", { name: copy.showMoreDesigns, exact: true }).click();
+    await expect(panel.locator("[data-design-card]")).toHaveCount(24);
+    await expect(panel.locator('[data-design-card="horizon"] button').first()).toBeFocused();
+    await panel.getByRole("button", { name: copy.showMoreDesigns, exact: true }).click();
+    await expect(panel.locator("[data-design-card]")).toHaveCount(30);
+    await expect(panel.locator('[data-design-card="summit"] button').first()).toBeFocused();
     expect(
       await panel
         .locator("[data-design-card]")
         .evaluateAll((cards) => cards.map((card) => card.getAttribute("data-design-card"))),
-    ).toEqual([
-      "studio",
-      "editorial",
-      "midnight",
-      "blueprint",
-      "terracotta",
-      "signal",
-      "monograph",
-      "canvas",
-    ]);
+    ).toEqual(Object.keys(designFamilies));
     await expect(panel.locator("[data-template-id]")).toHaveCount(0);
     await capture(panel, `${info.project.name}-design-catalog-light`);
 
@@ -298,10 +319,32 @@ for (const suffix of ["", " @mobile"]) {
     await expect(panel.locator('[data-design-card="midnight"]')).toBeVisible();
     await panel.getByRole("button", { name: copy.clearFilters, exact: true }).click();
     await panel.getByRole("button", { name: copy.technical, exact: true }).click();
-    await expect(panel.locator("[data-design-card]")).toHaveCount(2);
+    await expect(panel.locator("[data-design-card]")).toHaveCount(7);
     await expect(panel.locator('[data-design-card="blueprint"]')).toBeVisible();
     await expect(panel.locator('[data-design-card="monograph"]')).toBeVisible();
     await panel.getByRole("button", { name: copy.clearFilters, exact: true }).click();
+
+    for (const category of [
+      "corporate",
+      "creative",
+      "academic",
+      "nature",
+      "playful",
+      "geometric",
+    ] as const) {
+      const chip = panel.getByRole("button", { name: copy.categories[category], exact: true });
+      await chip.click();
+      await expect(chip).toHaveAttribute("aria-pressed", "true");
+      expect(await panel.locator("[data-design-card]").count()).toBeGreaterThan(0);
+      if (category === "nature") {
+        expect(
+          await panel
+            .locator("[data-design-card]")
+            .evaluateAll((cards) => cards.map((card) => card.getAttribute("data-design-card"))),
+        ).toEqual(["botanica", "beacon", "meadow"]);
+      }
+      await panel.getByRole("button", { name: copy.clearFilters, exact: true }).click();
+    }
 
     const studioButton = panel
       .locator('[data-design-card="studio"]')
@@ -360,32 +403,34 @@ for (const suffix of ["", " @mobile"]) {
     const localizedTab = page.getByRole("tab", { name: localized.designs, exact: true });
     await expect(localizedTab).toBeVisible();
     await localizedTab.click();
+    await panel.getByLabel(localized.search, { exact: true }).fill("scholar");
     const localizedPreview = page
-      .locator('[data-design-card="editorial"]')
-      .getByRole("button", { name: `${localized.preview}: Editorial`, exact: true });
+      .locator('[data-design-card="scholar"]')
+      .getByRole("button", { name: `${localized.preview}: Scholar`, exact: true });
     await localizedPreview.click();
     const translated = page.getByRole("dialog", {
-      name: `${localized.preview}: Editorial`,
+      name: `${localized.preview}: Scholar`,
       exact: true,
     });
     await expect(translated).toHaveAttribute("lang", locale);
     await translated.locator('[data-design-layout="body"]').click();
     const translatedStage = translated.locator("[data-design-preview]");
     await expect(translatedStage.locator("h1").first()).toHaveText(
-      presentationDesignDraftCopy("editorial", locale).slides.body.title,
+      presentationDesignDraftCopy("scholar", locale).slides.body.title,
     );
     await expect(translatedStage).not.toContainText(
-      presentationDesignDraftCopy("editorial", "en-CA").slides.body.title,
+      presentationDesignDraftCopy("scholar", "en-CA").slides.body.title,
     );
     await expectArtwork(translatedStage, "paper");
     await quality(page);
-    await capture(translatedStage, `${info.project.name}-${locale}-editorial-body`);
+    await capture(translatedStage, `${info.project.name}-${locale}-scholar-body`);
     await page.keyboard.press("Escape");
     await expect(localizedPreview).toBeFocused();
 
+    await panel.getByLabel(localized.search, { exact: true }).fill("scholar");
     const record = await startDesignAfterLostAcknowledgement(
       page,
-      page.locator('[data-design-card="blueprint"] [data-design-create="blueprint"]'),
+      page.locator('[data-design-card="scholar"] [data-design-create="scholar"]'),
       page.locator("#template-panel-designs"),
     );
     await expect(page).toHaveURL(`/presentation/${record.id}`);
@@ -394,8 +439,8 @@ for (const suffix of ["", " @mobile"]) {
     expect(created.blocks).toHaveLength(8);
     expect(created.blocks.map((block) => scene(block).design)).toEqual(
       Array.from({ length: 8 }, () => ({
-        theme: "ocean",
-        font: "sans",
+        theme: "paper",
+        font: "serif",
         spacing: "compact",
         palette: "cobalt",
       })),
@@ -403,7 +448,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(new Set(created.blocks.map((block) => block.id)).size).toBe(8);
     expect(created.blocks.map(headline)).toEqual(
       DESIGN_LAYOUTS.map(
-        (layout) => presentationDesignDraftCopy("blueprint", locale).slides[layout].title,
+        (layout) => presentationDesignDraftCopy("scholar", locale).slides[layout].title,
       ),
     );
     const inspector = page.locator('button[aria-controls="presentation-object-inspector"]');
@@ -443,6 +488,7 @@ for (const suffix of ["", " @mobile"]) {
     await enterE01Editor(page, record.id, narrow);
 
     const preview = await openDesign(page, "blueprint");
+    await preview.locator('[data-design-application-choice="style"]').click();
     await expect(preview.getByRole("combobox", { name: copy.scope, exact: true })).toHaveValue(
       "deck",
     );
@@ -502,6 +548,7 @@ for (const suffix of ["", " @mobile"]) {
     expect((await saved()).blocks).toEqual(styled.blocks);
 
     const current = await openDesign(page, "terracotta");
+    await current.locator('[data-design-application-choice="style"]').click();
     await current.getByRole("combobox", { name: copy.scope, exact: true }).selectOption("slide");
     await expectArtwork(current.locator("[data-design-preview]"), "sunset");
     await current.locator('[data-design-apply="terracotta"]').click();
@@ -519,7 +566,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(scene(isolated.blocks[0]!).nodes).toEqual(scene(initial.blocks[0]!).nodes);
     expect(isolated.blocks.slice(1)).toEqual(styled.blocks.slice(1));
 
-    const insert = await openDesign(page, "studio");
+    const insert = await openDesign(page, "linen");
     await insert.getByRole("button", { name: copy.layoutSamples, exact: true }).click();
     await insert.locator('[data-design-layout="split"]').click();
     await expectArtwork(insert.locator("[data-design-preview]"), "paper");
@@ -533,7 +580,7 @@ for (const suffix of ["", " @mobile"]) {
       theme: "paper",
       font: "sans",
       spacing: "relaxed",
-      palette: "cobalt",
+      palette: "sand",
     });
     expect(
       scene(inserted).nodes.filter((node) => node.type === "text").length,
@@ -542,7 +589,7 @@ for (const suffix of ["", " @mobile"]) {
       scene(inserted).nodes.find((node) => node.type === "text" && node.role === "title"),
     ).toMatchObject({
       type: "text",
-      text: presentationDesignDraftCopy("studio", "en-CA").slides.split.title,
+      text: presentationDesignDraftCopy("linen", "en-CA").slides.split.title,
     });
     expect(initial.blocks.every((block) => block.id !== inserted.id)).toBe(true);
     await page.reload();
@@ -564,10 +611,11 @@ for (const suffix of ["", " @mobile"]) {
 
     await selectE01Block(
       page,
-      presentationDesignDraftCopy("studio", "en-CA").slides.split.title,
+      presentationDesignDraftCopy("linen", "en-CA").slides.split.title,
       narrow,
     );
     const switchCollection = await openDesign(page, "editorial");
+    await switchCollection.locator('[data-design-application-choice="style"]').click();
     await switchCollection
       .getByRole("combobox", { name: copy.scope, exact: true })
       .selectOption("slide");
@@ -586,6 +634,308 @@ for (const suffix of ["", " @mobile"]) {
     await expect
       .poll(() => title.evaluate((node) => getComputedStyle(node).fontFamily))
       .toContain("Georgia");
+  });
+
+  test(`full designs recompose existing content and clarify base themes without losing authored work${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page);
+    await specialistLocale(page, "en-CA");
+    const fixture = mixedBlocks();
+    const record = await createE01Deck(page, fixture, 17);
+    const initial = record.draft;
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    const saved = async () => (await readE01Record(page, record.id)).draft;
+    await enterE01Editor(page, record.id, narrow);
+    const preview = await openDesign(page, "atelier");
+    const stage = preview.locator('[data-design-preview="content"]');
+    await expect(preview.locator('[data-design-application-choice="layout"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(stage).toHaveAttribute("data-design-application", "layout");
+    await expect(preview.locator("[data-design-retained-layout]")).toContainText(
+      "Layouts retained: 1.",
+    );
+    const titleNode = scene(initial.blocks[0]!).nodes.find(
+      (node) => node.type === "text" && node.role === "title",
+    )!;
+    const previewTitle = stage.locator(`[data-node-id="${titleNode.id}"]`);
+    const fullFrame = JSON.parse((await previewTitle.getAttribute("data-frame"))!);
+    expect(fullFrame).not.toEqual("frame" in titleNode ? titleNode.frame : undefined);
+    const expectedFrames = await stage.locator("[data-node-id]").evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: node.getAttribute("data-node-id"),
+        frame: JSON.parse(node.getAttribute("data-frame")!),
+      })),
+    );
+    await expect(stage.locator("h1")).toHaveText("Original moving headline");
+    expect(await saved()).toEqual(initial);
+    // The style-only choice remains available and demonstrates its different scope before applying.
+    await preview.locator('[data-design-application-choice="style"]').click();
+    await expect(previewTitle).toHaveAttribute(
+      "data-frame",
+      JSON.stringify("frame" in titleNode ? titleNode.frame : null),
+    );
+    await preview.locator('[data-design-application-choice="layout"]').click();
+    await expect(previewTitle).toHaveAttribute("data-frame", JSON.stringify(fullFrame));
+    await quality(page);
+    await capture(stage, `${info.project.name}-existing-content-full-design`);
+    await preview.getByRole("button", { name: "Apply design", exact: true }).click();
+    await expect(preview).toHaveCount(0);
+    await expect
+      .poll(async () => pollScene((await saved()).blocks[0])?.design?.palette)
+      .toBe("rose");
+    const applied = await saved();
+    const first = scene(applied.blocks[0]!);
+    expect(
+      first.nodes
+        .filter((node) => node.type !== "connector")
+        .map((node) => ({ id: node.id, frame: node.frame }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    ).toEqual(expectedFrames.sort((a, b) => a.id!.localeCompare(b.id!)));
+    expect(first.nodes.length).toBeGreaterThan(scene(initial.blocks[0]!).nodes.length);
+    for (const original of scene(initial.blocks[0]!).nodes) {
+      const updated = first.nodes.find((node) => node.id === original.id)!;
+      const content = Object.fromEntries(
+        Object.entries(original).filter(([key]) => !["frame", "typography"].includes(key)),
+      );
+      expect(updated).toMatchObject(content);
+    }
+    expect(
+      first.readingOrder.filter((id) => scene(initial.blocks[0]!).readingOrder.includes(id)),
+    ).toEqual(scene(initial.blocks[0]!).readingOrder);
+    expect(first.design?.motionBackground).toBe("waves");
+    expect((applied.blocks[0] as ContentSlideDraft).speakerNotes).toBe(
+      (initial.blocks[0] as ContentSlideDraft).speakerNotes,
+    );
+    expect((applied.blocks[0] as ContentSlideDraft).citations).toEqual(
+      (initial.blocks[0] as ContentSlideDraft).citations,
+    );
+    expect(scene(applied.blocks[1]!).nodes).toEqual(scene(initial.blocks[1]!).nodes);
+    expect(applied.blocks[3]).toEqual(initial.blocks[3]);
+    expect(applied.blocks.map((block) => block.id)).toEqual(
+      initial.blocks.map((block) => block.id),
+    );
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(async () => (await saved()).blocks).toEqual(initial.blocks);
+    await page.getByRole("button", { name: "Redo", exact: true }).click();
+    await expect.poll(async () => (await saved()).blocks).toEqual(applied.blocks);
+    await page.reload();
+    if (narrow) await closeE01Overlays(page);
+    expect((await saved()).blocks).toEqual(applied.blocks);
+    const inspector = await openE01Inspector(page, "Layout");
+    const theme = inspector.getByRole("combobox", { name: "Base color theme", exact: true });
+    await expect(theme).toHaveValue("presentation-design");
+    await expect(theme.locator("option:checked")).toHaveText("From presentation design");
+    await theme.selectOption("paper");
+    await expect
+      .poll(async () => pollScene((await saved()).blocks[0])?.design?.palette ?? null)
+      .toBeNull();
+    const overridden = scene((await saved()).blocks[0]!);
+    expect(overridden.nodes).toEqual(first.nodes);
+    expect(overridden.design).toMatchObject({ theme: "paper", font: "serif", spacing: "relaxed" });
+  });
+
+  test(`reapplying designs preserves header folios and overflowing content keeps its layout${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page, undefined, { returnTo: "/templates" });
+    await specialistLocale(page, "en-CA");
+    await page.goto("/templates");
+    const copy = presentationDesignCopy("en-CA");
+    await page.getByRole("tab", { name: copy.designs, exact: true }).click();
+    await page.locator('[data-design-create="studio"]').click();
+    await expect(page).toHaveURL(/\/presentation\/[\da-f-]+$/);
+    const id = new URL(page.url()).pathname.split("/").at(-1)!;
+    const record = await readE01Record(page, id);
+    // Keep the real eight-layout Studio deck, with brief authored copy that fits Linen's
+    // compact body slots, so a fallback cannot conceal the page-marker regression.
+    for (const block of record.draft.blocks)
+      for (const node of scene(block).nodes)
+        if (
+          node.type === "text" &&
+          node.role === "body" &&
+          (node.typography?.size ?? 30) > 18 &&
+          !/^\d+$/u.test(node.text)
+        )
+          node.text = "Brief supporting point.";
+    const seeded = await page.request.put(`${e01ApiUrl}/v1/presentations/${id}/draft`, {
+      data: {
+        draft: record.draft,
+        expectedRevision: record.draftRevision,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(seeded.status(), await seeded.text()).toBe(200);
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    await page.reload();
+    if (narrow) await closeE01Overlays(page);
+    const folio = scene(record.draft.blocks[0]!).nodes.find(
+      (node) => node.type === "text" && node.text === "01" && node.typography?.size === 14,
+    )!;
+    const first = await openDesign(page, "linen");
+    await first.locator('[data-design-apply="linen"]').click();
+    await expect
+      .poll(async () => {
+        const node = pollScene((await readE01Record(page, id)).draft.blocks[0])?.nodes.find(
+          (node) => node.id === folio.id,
+        );
+        return node && "frame" in node ? node.frame.y : null;
+      })
+      .toBe(8);
+    const applied = await readE01Record(page, id);
+    const repeat = await openDesign(page, "linen");
+    const previewFolio = repeat.locator(
+      `[data-design-preview="content"] [data-node-id="${folio.id}"]`,
+    );
+    const firstFolio = scene(applied.draft.blocks[0]!).nodes.find((node) => node.id === folio.id)!;
+    if (firstFolio.type !== "text") throw Error("Expected page marker");
+    await expect(previewFolio).toHaveAttribute("data-frame", JSON.stringify(firstFolio.frame));
+    await repeat.locator('[data-design-apply="linen"]').click();
+    await expect(repeat).toHaveCount(0);
+    await page.reload();
+    const repeated = await readE01Record(page, id);
+    expect(repeated.draftRevision).toBe(applied.draftRevision);
+    expect(repeated.draft.blocks).toEqual(applied.draft.blocks);
+
+    const priorities = e01Slide("Six priorities");
+    const body = priorities.scene!.nodes.find(
+      (node) => node.type === "text" && node.role === "body",
+    );
+    if (body?.type !== "text") throw Error("Expected priority text");
+    body.text = [
+      "Clarify ownership",
+      "Share the plan",
+      "Check constraints",
+      "Invite feedback",
+      "Record decisions",
+      "Review progress",
+    ].join("\n");
+    const longRecord = await createE01Deck(page, [priorities], 18);
+    await enterE01Editor(page, longRecord.id, narrow);
+    const fallback = await openDesign(page, "linen");
+    await expect(fallback.locator("[data-design-retained-layout]")).toContainText(
+      "Layouts retained: 1.",
+    );
+    const previewBody = fallback.locator(
+      `[data-design-preview="content"] [data-node-id="${body.id}"]`,
+    );
+    await expect(previewBody).toHaveAttribute("data-frame", JSON.stringify(body.frame));
+    await expect(previewBody.locator("p")).toHaveText(body.text);
+    const overflow = await previewBody.locator("p").evaluate((node) => ({
+      x: node.scrollWidth - node.clientWidth,
+      y: node.scrollHeight - node.clientHeight,
+    }));
+    expect(overflow.x).toBeLessThanOrEqual(2);
+    expect(overflow.y).toBeLessThanOrEqual(2);
+    await quality(page);
+    await fallback.locator('[data-design-apply="linen"]').click();
+    await expect
+      .poll(
+        async () =>
+          pollScene((await readE01Record(page, longRecord.id)).draft.blocks[0])?.design?.palette,
+      )
+      .toBe("sand");
+    await page.reload();
+    const retained = scene((await readE01Record(page, longRecord.id)).draft.blocks[0]!);
+    expect(retained.nodes).toEqual(priorities.scene!.nodes);
+    expect(retained.readingOrder).toEqual(priorities.scene!.readingOrder);
+  });
+
+  test(`full designs retain long shape labels and reflow short labels without clipping${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await signInBeta(page);
+    await specialistLocale(page, "en-CA");
+    const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
+    for (const sample of [
+      { label: "W".repeat(200), retained: true },
+      { label: "A\u3000\u3000\u3000".repeat(39) + "A", retained: true },
+      { label: "😀".repeat(100), retained: true },
+      { label: "Short callout", retained: false },
+    ]) {
+      const block = e01Slide(sample.retained ? "Long labelled shape" : "Short labelled shape");
+      const shape = {
+        id: randomUUID(),
+        type: "shape" as const,
+        shape: "rounded_rectangle" as const,
+        color: "sky" as const,
+        label: sample.label,
+        frame: { x: 8, y: 35, width: 84, height: 50 },
+      };
+      block.scene = {
+        ...block.scene!,
+        schemaVersion: 9,
+        nodes: [block.scene!.nodes[0]!, shape],
+        readingOrder: [block.scene!.nodes[0]!.id, shape.id],
+      };
+      const record = await createE01Deck(page, [block], 18);
+      await enterE01Editor(page, record.id, narrow);
+      const preview = await openDesign(page, "linen");
+      const stage = preview.locator('[data-design-preview="content"]');
+      const previewShape = stage.locator(`[data-node-id="${shape.id}"]`);
+      if (sample.retained) {
+        await expect(preview.locator("[data-design-retained-layout]")).toContainText(
+          "Layouts retained: 1.",
+        );
+        await expect(previewShape).toHaveAttribute("data-frame", JSON.stringify(shape.frame));
+      } else {
+        await expect(preview.locator("[data-design-retained-layout]")).toHaveCount(0);
+        await expect(previewShape).toHaveAttribute(
+          "data-frame",
+          JSON.stringify({ x: 19, y: 81, width: 66, height: 12 }),
+        );
+      }
+      const label = previewShape.locator('[role="img"] > span');
+      await expect(label).toHaveText(sample.label);
+      const metrics = await label.evaluate((node) => {
+        const text = node.getBoundingClientRect();
+        const shape = node.parentElement!.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        const plane = node.closest<HTMLElement>("[data-thumbnail-scene]")!;
+        return {
+          font: parseFloat(style.fontSize),
+          leading: parseFloat(style.lineHeight),
+          planeWidth: plane.clientWidth,
+          clipped: Math.max(
+            shape.left - text.left,
+            text.right - shape.right,
+            shape.top - text.top,
+            text.bottom - shape.bottom,
+          ),
+        };
+      });
+      expect((metrics.font / metrics.planeWidth) * 1280).toBeCloseTo(22, 1);
+      expect(metrics.leading / metrics.font).toBeCloseTo(1.35, 2);
+      expect(metrics.clipped).toBeLessThanOrEqual(2);
+      await quality(page);
+      await preview.locator('[data-design-apply="linen"]').click();
+      await expect
+        .poll(
+          async () =>
+            pollScene((await readE01Record(page, record.id)).draft.blocks[0])?.design?.palette,
+        )
+        .toBe("sand");
+      await page.reload();
+      const saved = scene((await readE01Record(page, record.id)).draft.blocks[0]!);
+      if (sample.retained) {
+        expect(saved.nodes).toEqual(block.scene.nodes);
+        expect(saved.readingOrder).toEqual(block.scene.readingOrder);
+      } else {
+        expect(saved.nodes.find((node) => node.id === shape.id)).toMatchObject({
+          label: sample.label,
+          frame: { x: 19, y: 81, width: 66, height: 12 },
+        });
+      }
+    }
   });
 
   test(`failed design creation can start another while preserving the previously edited target${suffix}`, async ({
@@ -934,6 +1284,8 @@ for (const suffix of ["", " @mobile"]) {
     const copy = presentationDesignCopy("en-CA");
     await page.getByRole("tab", { name: copy.designs, exact: true }).click();
     const panel = page.locator("#template-panel-designs");
+    while (await panel.getByRole("button", { name: copy.showMoreDesigns, exact: true }).isVisible())
+      await panel.getByRole("button", { name: copy.showMoreDesigns, exact: true }).click();
     const signatures = new Set<string>();
     const overflow: unknown[] = [];
     for (const [id, family] of Object.entries(designFamilies)) {
@@ -989,9 +1341,9 @@ for (const suffix of ["", " @mobile"]) {
       await quality(page);
       await page.keyboard.press("Escape");
     }
-    await mkdir("artifacts/presentation-designed-collections", { recursive: true });
+    await mkdir("artifacts/presentation-expanded-designs", { recursive: true });
     await writeFile(
-      `artifacts/presentation-designed-collections/${info.project.name}-layout-fit.json`,
+      `artifacts/presentation-expanded-designs/${info.project.name}-layout-fit.json`,
       JSON.stringify(overflow, null, 2),
     );
     if (info.project.name === "chromium-beta") {
@@ -1000,6 +1352,6 @@ for (const suffix of ["", " @mobile"]) {
     }
     await capture(panel, `${info.project.name}-designed-collections-catalog`);
     expect(overflow, "All authored template text must fit its frames").toEqual([]);
-    expect(signatures.size).toBe(8);
+    expect(signatures.size).toBe(30);
   });
 }

@@ -197,7 +197,7 @@ for (const suffix of ["", " @mobile"]) {
     await capture(picker, `${artifact}-picker`);
 
     await inspector
-      .getByRole("button", { name: "Apply design to all native slides", exact: true })
+      .getByRole("button", { name: "Apply style to native slides", exact: true })
       .click();
     await expect
       .poll(async () => native(await saved(), 1).scene.design?.motionBackground)

@@ -1244,10 +1244,10 @@ for (const suffix of ["", " @mobile"]) {
       .toBe(3);
     await clickNavigatorAction(page, "New slide");
     await openE01Inspector(page, "Layout");
-    await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
     await page
-      .getByRole("button", { name: "Apply design to all native slides", exact: true })
-      .click();
+      .getByRole("combobox", { name: "Base color theme", exact: true })
+      .selectOption("midnight");
+    await page.getByRole("button", { name: "Apply style to native slides", exact: true }).click();
     await expect
       .poll(async () => {
         const saved = (await readE01Record(page, destination.id)).draft;

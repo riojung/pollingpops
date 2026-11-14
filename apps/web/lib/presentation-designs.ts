@@ -84,6 +84,160 @@ export const PRESENTATION_DESIGNS = [
     tone: "cool",
     design: { theme: "ocean", font: "sans", spacing: "relaxed", palette: "rose" },
   },
+  {
+    id: "atlas",
+    name: "Atlas",
+    style: "technical",
+    tone: "light",
+    design: { theme: "paper", font: "sans", spacing: "compact", palette: "forest" },
+  },
+  {
+    id: "ledger",
+    name: "Ledger",
+    style: "minimal",
+    tone: "light",
+    design: { theme: "paper", font: "mono", spacing: "compact", palette: "default" },
+  },
+  {
+    id: "prism",
+    name: "Prism",
+    style: "bold",
+    tone: "warm",
+    design: { theme: "paper", font: "sans", spacing: "relaxed", palette: "coral" },
+  },
+  {
+    id: "folio",
+    name: "Folio",
+    style: "editorial",
+    tone: "warm",
+    design: { theme: "paper", font: "serif", spacing: "compact", palette: "sand" },
+  },
+  {
+    id: "horizon",
+    name: "Horizon",
+    style: "technical",
+    tone: "cool",
+    design: { theme: "ocean", font: "mono", spacing: "relaxed", palette: "cobalt" },
+  },
+  {
+    id: "circuit",
+    name: "Circuit",
+    style: "technical",
+    tone: "dark",
+    design: { theme: "midnight", font: "mono", spacing: "compact", palette: "ink" },
+  },
+  {
+    id: "slate",
+    name: "Slate",
+    style: "minimal",
+    tone: "dark",
+    design: { theme: "midnight", font: "sans", spacing: "compact", palette: "ink" },
+  },
+  {
+    id: "spectrum",
+    name: "Spectrum",
+    style: "bold",
+    tone: "warm",
+    design: { theme: "sunset", font: "mono", spacing: "relaxed", palette: "coral" },
+  },
+  {
+    id: "botanica",
+    name: "Botanica",
+    style: "editorial",
+    tone: "cool",
+    design: { theme: "paper", font: "serif", spacing: "relaxed", palette: "forest" },
+  },
+  {
+    id: "archive",
+    name: "Archive",
+    style: "editorial",
+    tone: "warm",
+    design: { theme: "paper", font: "serif", spacing: "compact", palette: "clay" },
+  },
+  {
+    id: "workshop",
+    name: "Workshop",
+    style: "bold",
+    tone: "light",
+    design: { theme: "paper", font: "sans", spacing: "compact", palette: "rose" },
+  },
+  {
+    id: "scholar",
+    name: "Scholar",
+    style: "technical",
+    tone: "light",
+    design: { theme: "paper", font: "serif", spacing: "compact", palette: "cobalt" },
+  },
+  {
+    id: "ribbon",
+    name: "Ribbon",
+    style: "bold",
+    tone: "warm",
+    design: { theme: "sunset", font: "sans", spacing: "relaxed", palette: "rose" },
+  },
+  {
+    id: "mosaic",
+    name: "Mosaic",
+    style: "minimal",
+    tone: "light",
+    design: { theme: "paper", font: "sans", spacing: "relaxed", palette: "rose" },
+  },
+  {
+    id: "linen",
+    name: "Linen",
+    style: "minimal",
+    tone: "warm",
+    design: { theme: "paper", font: "sans", spacing: "relaxed", palette: "sand" },
+  },
+  {
+    id: "beacon",
+    name: "Beacon",
+    style: "bold",
+    tone: "cool",
+    design: { theme: "ocean", font: "sans", spacing: "relaxed", palette: "forest" },
+  },
+  {
+    id: "summit",
+    name: "Summit",
+    style: "minimal",
+    tone: "light",
+    design: { theme: "paper", font: "sans", spacing: "compact", palette: "sand" },
+  },
+  {
+    id: "atelier",
+    name: "Atelier",
+    style: "editorial",
+    tone: "warm",
+    design: { theme: "paper", font: "serif", spacing: "relaxed", palette: "rose" },
+  },
+  {
+    id: "campus",
+    name: "Campus",
+    style: "technical",
+    tone: "cool",
+    design: { theme: "ocean", font: "serif", spacing: "relaxed", palette: "cobalt" },
+  },
+  {
+    id: "meadow",
+    name: "Meadow",
+    style: "minimal",
+    tone: "cool",
+    design: { theme: "paper", font: "sans", spacing: "relaxed", palette: "forest" },
+  },
+  {
+    id: "confetti",
+    name: "Confetti",
+    style: "bold",
+    tone: "warm",
+    design: { theme: "sunset", font: "mono", spacing: "compact", palette: "rose" },
+  },
+  {
+    id: "facet",
+    name: "Facet",
+    style: "bold",
+    tone: "cool",
+    design: { theme: "midnight", font: "mono", spacing: "relaxed", palette: "ink" },
+  },
 ] as const satisfies readonly {
   id: string;
   name: string;
@@ -172,7 +326,17 @@ export function createDesignDraft(
   });
 }
 
-export type PresentationDesignScope = { scope: "deck" | "slide"; blockId?: string };
+import {
+  canReflowPresentationDesign,
+  reflowPresentationDesign,
+} from "./presentation-design-layout-application";
+
+export type PresentationDesignApplicationMode = "layout" | "style";
+export type PresentationDesignScope = {
+  scope: "deck" | "slide";
+  blockId?: string;
+  application?: PresentationDesignApplicationMode;
+};
 export interface PresentationDesignSummary {
   nativeSlides: number;
   ordinarySlides: number;
@@ -183,6 +347,8 @@ export interface PresentationDesignSummary {
 export interface PresentationDesignApplicationSummary extends PresentationDesignSummary {
   changedSlides: number;
   convertedSlides: number;
+  reflowedSlides: number;
+  retainedLayoutSlides: number;
 }
 
 function inScope(block: PresentationDraft["blocks"][number], options: PresentationDesignScope) {
@@ -215,9 +381,9 @@ export function summarizePresentationDesign(
 }
 
 /**
- * Style changes retain native objects and geometry. Ordinary slides use the established
- * deterministic conversion, retaining text/media identities, metadata and resolved frames.
- * Activities retain their questions and inherit nearby content design through existing views.
+ * Style remains the backwards-compatible default. Layout mode applies real family compositions
+ * to existing content; semantically connected canvases retain their exact object geometry.
+ * The complete operation is validated before any result can enter editor history.
  */
 export function applyPresentationDesign(
   draft: PresentationDraft,
@@ -229,7 +395,12 @@ export function applyPresentationDesign(
     ...summarizePresentationDesign(draft, options),
     changedSlides: 0,
     convertedSlides: 0,
+    reflowedSlides: 0,
+    retainedLayoutSlides: 0,
   };
+  const contentIds = draft.blocks
+    .filter((block) => block.kind === "content")
+    .map((block) => block.id);
   let schemaVersion = draft.schemaVersion;
   const blocks = draft.blocks.map((block) => {
     if (!inScope(block, options) || block.kind !== "content") return block;
@@ -245,20 +416,41 @@ export function applyPresentationDesign(
       ...family.design,
       ...(motionBackground ? { motionBackground } : {}),
     };
-    if (
-      !converted &&
+    const sameStyle =
       original.design?.theme === design.theme &&
       original.design.font === design.font &&
       original.design.spacing === design.spacing &&
-      original.design.palette === design.palette
-    )
-      return block;
-    const scene: PresentationScene = {
+      original.design.palette === design.palette;
+    if (options.application !== "layout" && !converted && sameStyle) return block;
+    let reflowedLayout = false;
+    let scene: PresentationScene = {
       ...original,
       schemaVersion: Math.max(original.schemaVersion, 9) as PresentationScene["schemaVersion"],
       design,
       nodes: nativeSceneNodesForDesign(original, design),
     };
+    if (options.application === "layout") {
+      if (
+        canReflowPresentationDesign(original, block.sourceDisclosure?.model === "visual-import-v1")
+      ) {
+        const reflowed = reflowPresentationDesign(original, {
+          blockId: block.id,
+          family: designId,
+          design,
+          first: contentIds[0] === block.id,
+          last: contentIds.at(-1) === block.id,
+          compose: createPresentationDesignComposition,
+        });
+        if (reflowed !== original) {
+          scene = reflowed;
+          reflowedLayout = true;
+          summary.reflowedSlides += 1;
+        } else summary.retainedLayoutSlides += 1;
+      } else summary.retainedLayoutSlides += 1;
+    }
+    if (options.application === "layout" && !reflowedLayout && !converted && sameStyle)
+      return block;
+    if (!converted && JSON.stringify(scene) === JSON.stringify(original)) return block;
     schemaVersion = nativeSceneDocumentVersion(schemaVersion, scene);
     summary.changedSlides += 1;
     if (converted) summary.convertedSlides += 1;

@@ -7,6 +7,7 @@ import { englishMessages, localeDomains } from "../../lib/i18n/catalog";
 import { NativeSceneEditor } from "./native-scene-editor";
 import { createNativeRevealNode } from "../../lib/presentation-native-scene";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
+import { nativeControlsCopy } from "./native-controls-copy";
 import {
   NativeSceneDesignControls,
   NativeSceneLayoutControls,
@@ -100,8 +101,7 @@ describe("native controls real localized rendering", () => {
             scene={scene}
             selectedNodeIds={["body", "shape"]}
             onSelect={vi.fn()}
-            onPointerDown={vi.fn()}
-            onGeometryKey={vi.fn()}
+            onArrange={vi.fn()}
           />
           <NativeSceneDesignControls
             scene={scene}
@@ -135,24 +135,22 @@ describe("native controls real localized rendering", () => {
         for (const text of [
           "선택한 개체 컨트롤",
           "캔버스 개체",
-          "그룹 크기 조절",
           "슬라이드 글꼴",
           "시스템 산세리프",
           "네이티브 레이아웃",
           "개체 배치",
           "그룹화와 회전",
           "이미지 초점 X",
-          "화살표 키",
           "텍스트가 맞는지 확인하세요",
         ])
           expect(html).toContain(text);
         expect(html).toContain("사각형 도형");
         expect(html).not.toContain("Use 종이 theme");
       } else {
-        expect(html).toContain('aria-label="Resize group 1. Use arrow keys to change size."');
         expect(html).toContain('aria-label="Use Paper theme"');
         expect(html).toContain("Check text fit after changing");
       }
+      expect(html).toContain(`aria-label="${nativeControlsCopy(locale)("Arrange objects")}"`);
       expect(scene).toEqual(before);
       expect(changed).not.toHaveBeenCalled();
     },
@@ -233,7 +231,7 @@ describe("native controls real localized rendering", () => {
     };
     const before = structuredClone(markedScene);
     const onSelect = vi.fn(),
-      geometry = vi.fn();
+      arrange = vi.fn();
     measured.feedback = {
       nodes: [markedScene.nodes[0]!, markedScene.nodes[1]!, markedScene.nodes[2]!],
       data: false,
@@ -249,8 +247,7 @@ describe("native controls real localized rendering", () => {
             scene={markedScene}
             selectedNodeIds={["body"]}
             onSelect={onSelect}
-            onPointerDown={vi.fn()}
-            onGeometryKey={geometry}
+            onArrange={arrange}
           />
           <NativeSceneFitFeedback scene={markedScene} root={{ current: null }} />
         </LocaleProvider>,
@@ -262,7 +259,7 @@ describe("native controls real localized rendering", () => {
       expect(html).toContain('value="title" lang="ko-KR">1. 슬라이드 제목');
       expect(markedScene).toEqual(before);
       expect(onSelect).not.toHaveBeenCalled();
-      expect(geometry).not.toHaveBeenCalled();
+      expect(arrange).not.toHaveBeenCalled();
     } finally {
       measured.feedback = null;
     }

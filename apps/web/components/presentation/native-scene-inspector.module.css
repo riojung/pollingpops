@@ -1,7 +1,7 @@
 /* Authoring controls only: audience slide styles remain independent. */
 .toolbar.toolbar {
-  gap: 6px;
-  padding: 10px 16px;
+  gap: 4px;
+  padding: 6px 10px;
 }
 
 .toolbar > div {
@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 38px;
+  min-height: 34px;
   border-color: transparent;
   border-radius: 7px;
   background: transparent;

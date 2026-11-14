@@ -18,6 +18,7 @@ import {
 import { useLocale } from "../locale-provider";
 import { nativeEditorCopy, type NativeEditorCopyKey } from "./native-editor-copy";
 import { nativeControlNodeLabel, nativeControlsCopy } from "./native-controls-copy";
+import { nativeSelectionCopy } from "./native-selection-copy";
 import { clientUuid } from "../../lib/uuid";
 import { setNativeTextLanguage } from "../../lib/presentation-native-text-language";
 import {
@@ -160,6 +161,7 @@ export function NativeSceneEditor({
   inspectorTarget,
   inspectorSection = "content",
   onInspectSelection,
+  onArrangeSelection,
 }: {
   scene: PresentationScene;
   canEdit?: boolean;
@@ -183,9 +185,11 @@ export function NativeSceneEditor({
   inspectorTarget?: HTMLElement | null;
   inspectorSection?: "content" | "layout" | "media" | "accessibility";
   onInspectSelection?: (openInspector?: boolean) => void;
+  onArrangeSelection?: () => void;
 }) {
   const { locale } = useLocale();
   const copy = nativeEditorCopy(locale);
+  const selectionCopy = nativeSelectionCopy(locale);
   const languageNames = new Intl.DisplayNames([locale], { type: "language" });
   const permission = useRef(canEdit);
   permission.current = canEdit;
@@ -934,8 +938,8 @@ export function NativeSceneEditor({
         <details className={styles.editorDisclosure}>
           <summary>{copy("Moving and resizing objects")}</summary>
           <p className={styles.help}>
-            {copy(
-              "On wide screens, drag an object or its move button; drag its resize button to change size. Dragging near an object or slide edge/center shows snap guides; hold Alt to move freely. Press Escape to cancel a drag. Shift-click objects or use the selection checkboxes to move several together. Arrow keys on a move button nudge the selection by 1%, or 5% with Shift. Resize keys proportionally resize a stored group or change the focused object; numeric fields change the last selected object. Narrow screens use the reading-order view with keyboard and numeric controls. Deleting objects also removes their connectors. The title stays on the slide.",
+            {selectionCopy(
+              "On wide slides, drag objects to move them or corner handles to resize. Focus the canvas and use arrow keys; hold Shift for larger steps. Use Arrange for exact position and size.",
             )}
           </p>
         </details>
@@ -1339,6 +1343,22 @@ export function NativeSceneEditor({
           scene={scene}
           renderImage={renderImage}
           selectedNodeIds={selectedIds}
+          onArrangeSelection={
+            onArrangeSelection
+              ? () => {
+                  onArrangeSelection();
+                  requestAnimationFrame(() => {
+                    const position = inspectorTarget?.querySelector<HTMLDetailsElement>(
+                      '[data-native-inspector-group="position"]',
+                    );
+                    if (!position) return;
+                    if (!position.open)
+                      position.querySelector<HTMLElement>(":scope > summary")?.click();
+                    position.querySelector<HTMLInputElement>("input:not(:disabled)")?.focus();
+                  });
+                }
+              : undefined
+          }
           navigationTargets={navigationTargets}
           onEditInteraction={(id) => {
             select(id);

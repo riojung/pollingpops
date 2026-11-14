@@ -5,6 +5,53 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Compact canvas controls — November 14, 2026
+
+The canvas insert toolbar and object-selection area now use tighter spacing. A compact,
+icon-led picker replaces the separate Canvas object heading, Move/Resize buttons and permanent
+instruction paragraph. Group and multiple-selection counts remain visible. Object shortcuts
+are available from a collapsed help control, with labels and instructions in all ten locales.
+The desktop object strip measures 53px high and stays usable at 320px without page overflow.
+
+Selected objects still move and resize directly. Focusing the canvas enables arrow-key nudges
+(1%, or 5% with Shift), with Undo/Redo and the normal save path. Native form controls, links,
+scrollable content, modified key combinations and read-only scenes keep their own behavior.
+Arrange opens Layout, expands Position and size if needed, and focuses the first numeric field
+for precise edits. This replaces the earlier standalone Move/Resize keyboard controls.
+
+Verification: 24 production browser journeys pass across Chromium/Firefox desktop and
+Chromium/WebKit phone layouts. They cover direct editing, canvas versus picker arrow keys,
+Undo, saved geometry, Arrange focus, reload persistence, rich-text recovery/publication,
+toolbar accessibility and page overflow. Focused unit tests, web/browser type checks, web
+lint and formatting pass; the full web suite passes 5,143 tests across 427 files. The local
+Docker web build is deployed and healthy at port 8080. An independent read-only review found
+no actionable issues.
+Captures and browser-build evidence are retained under `artifacts/presentation-canvas-toolbar/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with 9,172 tests and 530
+standard opt-in skips, all four build tasks, and compiled-server startup verification. The first
+run hit the unchanged build-guard test's 250ms child-startup timing limit; the full rerun passed
+without code changes.
+
+## Presentation save precision repair — November 14, 2026
+
+An object dragged or resized to the slide edge could pass the browser's binary64 frame
+calculation and fail PostgreSQL's exact-decimal extent check. The failed transaction preserved
+the pending edit, but every Retry save encountered the same constraint failure.
+
+Forward migration 109 aligns frame extents and image-hotspot containment sums with the contract's
+JavaScript arithmetic. Scalar bounds, rotated-frame checks, content/target validation and stored
+publication bytes retain their existing rules. Existing failed mutations recover through Retry
+save after the migration. The local repair was verified against the original open editor: its
+preserved request saved successfully, and the server reported no further errors.
+
+PostgreSQL 17 Alpine verification passed **233 tests across five suites**. Coverage reproduces
+the constraint failure on migration 108, upgrades to 109, retries the exact failed mutation,
+checks draft/history/publication persistence, preserves existing frozen content, exercises legacy
+scenes and rejects invalid geometry and targets. DB type checks, lint and formatting pass. The
+PostgreSQL CI job now explicitly runs the frame, styled-scene and advanced-interaction suites
+under a restricted runtime account.
+
 ## Editor interactions follow-up — November 14, 2026
 
 The `codex/presentation-editor-interactions` slice replaces the detached section forms with

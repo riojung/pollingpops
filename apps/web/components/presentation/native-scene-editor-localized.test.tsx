@@ -144,7 +144,7 @@ describe("native editor real localized shell", () => {
         expect(html).toContain('value="fr">프랑스어');
       } else if (locale === "en-CA") expect(html).toContain('value="zh-Hans">Chinese (Simplified)');
       expect(languageAt(html, nativeTextVideoCopy(locale)("External video"))).toBe(locale);
-      expect(languageAt(html, 'data-native-scene-canvas="true"')).toBe("en-CA");
+      expect(languageAt(html, 'data-native-scene-canvas="true"')).toBe(locale);
       expect(base).toEqual(before);
       expect(change).not.toHaveBeenCalled();
       expect(upload).not.toHaveBeenCalled();

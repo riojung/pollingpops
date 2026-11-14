@@ -3999,6 +3999,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     setInspectorOpen(true);
                   }
                 }}
+                onArrangeSelection={() => {
+                  setInspectorTab("layout");
+                  if (compactEditor) setMapOpen(false);
+                  setInspectorOpen(true);
+                }}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
                 layoutSuggestionsDisabled={!canEdit || builderMutationBlocked || preparingImport}

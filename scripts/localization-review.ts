@@ -49,6 +49,10 @@ import {
 } from "../apps/web/lib/i18n/presentation-insights-copy";
 import { templateGuideCopy, templateGuideCopyKeys } from "../apps/web/lib/i18n/template-guide-copy";
 import {
+  presentationWorkspaceCopy,
+  presentationWorkspaceCopyKeys,
+} from "../apps/web/lib/i18n/presentation-workspace-copy";
+import {
   instantiateStarter,
   instantiateSurveyStarter,
   starterGuideForLocale,
@@ -309,7 +313,7 @@ function phraseExample(text: string, locale: SupportedLocale) {
         timeStyle: "short",
         timeZone: "UTC",
       }).format(new Date("2026-11-11T17:30:00.000Z"));
-    if (/count|number|limit|days|minutes|total|completed|active/i.test(key))
+    if (/count|number|limit|days|minutes|total|completed|active|connected/i.test(key))
       return new Intl.NumberFormat(locale).format(1234);
     return `[synthetic ${key}: ${reviewExampleSource}]`;
   });
@@ -472,6 +476,12 @@ export async function buildReviewBundle(
       presentationInsightsCopy,
     ],
     ["template-guide", "templateGuideCopy", templateGuideCopyKeys, templateGuideCopy],
+    [
+      "presentation-workspace",
+      "presentationWorkspaceCopy",
+      presentationWorkspaceCopyKeys,
+      presentationWorkspaceCopy,
+    ],
   ] as const) {
     const messages = (language: SupportedLocale) => {
       const copy = factory(language) as (

@@ -17,6 +17,10 @@ import {
   templateGuideCopyKeys,
 } from "../../apps/web/lib/i18n/template-guide-copy";
 import {
+  presentationWorkspaceCopy,
+  presentationWorkspaceCopyKeys,
+} from "../../apps/web/lib/i18n/presentation-workspace-copy";
+import {
   instantiateSurveyStarter,
   starterGuideForLocale,
   surveyStarterSummariesForLocale,
@@ -85,6 +89,7 @@ describe("native-language review preparation", () => {
         "creation",
         "template",
         "template-guide",
+        "presentation-workspace",
       ])
         expect(
           packet.items.some((item) => item.id.startsWith(`ui/${group}/`)),
@@ -249,6 +254,33 @@ describe("native-language review preparation", () => {
     expect(bundle.sourceBinding.canonicalContentHash).toBe(
       contentHash(bundle.items.map(({ id, englishHash }) => ({ id, englishHash }))),
     );
+  });
+
+  it("includes every private presenter phrase with literal examples and pending review", () => {
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/presentation-workspace/"));
+    expect(items).toHaveLength(presentationWorkspaceCopyKeys.length);
+    for (const key of presentationWorkspaceCopyKeys) {
+      const item = items.find(
+        (entry) => entry.id === `ui/presentation-workspace/${encodeURIComponent(key)}`,
+      );
+      expect(item).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/presentation-workspace-copy.ts",
+          helper: "presentationWorkspaceCopy",
+        },
+        english: { template: presentationWorkspaceCopy()(key) },
+        target: { template: presentationWorkspaceCopy("ko-KR")(key) },
+      });
+      expect(
+        createReviewDecisions(bundle).entries.find((entry) => entry.itemId === item!.id),
+      ).toMatchObject({ decision: "pending", reviewerReference: null, reviewedAt: null });
+    }
+    const counts = items.find((item) => item.id.includes(encodeURIComponent("{connected}")));
+    expect((counts!.target as { example: string }).example).not.toContain("synthetic");
+    expect(bundle.sourceBinding.files).toContainEqual({
+      path: "apps/web/lib/i18n/presentation-workspace-copy.ts",
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
   });
 
   it("exposes full generated notes, numeric answers, data and Survey-only context without copying questions twice", () => {
@@ -631,6 +663,7 @@ describe("native-language review preparation", () => {
         "apps/web/lib/i18n/presentation-report-copy.ts",
         "apps/web/lib/i18n/presentation-insights-copy.ts",
         "apps/web/lib/i18n/template-guide-copy.ts",
+        "apps/web/lib/i18n/presentation-workspace-copy.ts",
         "apps/server/src/starter-launch-collection.ts",
         "apps/server/src/starter-launch-copy.ts",
       ]) {

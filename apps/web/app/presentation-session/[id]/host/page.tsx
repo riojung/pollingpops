@@ -11,6 +11,7 @@ import type {
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
+import { LanguageMenu } from "../../../../components/workspace/language-menu";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationCompanionLauncher } from "../../../../components/presentation-live/companion-launcher";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
@@ -29,6 +30,7 @@ import styles from "../../../../components/presentation-live/presentation-live.m
 import presenter from "../../../../components/presentation-live/presentation-presenter.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
+import { presentationWorkspaceCopy } from "../../../../lib/i18n/presentation-workspace-copy";
 import {
   createPresentationRealtimeController,
   presentationRemainingSeconds,
@@ -100,6 +102,7 @@ function advanceMessageKey(
 
 function PresentationHostContent() {
   const { locale, t } = useLocale();
+  const workspaceCopy = presentationWorkspaceCopy(locale);
   const navigationCopy = branchNavigationCopy(locale);
   const sharedCopy = companionCopy(locale);
   const { productFeatures, canEdit } = useWorkspace();
@@ -498,8 +501,10 @@ function PresentationHostContent() {
       return;
     if (
       presentationPresenterAction(event, {
+        // Language options can temporarily lose focus while their choice is saved.
+        // Keep presenter shortcuts out of the open menu for that entire interval.
         dialogOpen: !!document.querySelector(
-          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"], header details[open]',
         ),
       }) !== "advance"
     )
@@ -514,16 +519,18 @@ function PresentationHostContent() {
   }, []);
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <header className={styles.topbar}>
         <CreatorBrand productFeatures={productFeatures} />
-        <div className="button-row">
+        <div className={`button-row ${presenter.headerActions}`}>
           <p aria-live="polite" className={presenter.headerStatus} role="status">
             {connection === "connected"
-              ? "Connected"
+              ? workspaceCopy("Connected")
               : connection === "fallback"
-                ? "Connected using compatibility mode"
-                : "Reconnecting…"}
+                ? workspaceCopy("Connected using compatibility mode")
+                : connection === "connecting"
+                  ? t("live.common.connecting")
+                  : workspaceCopy("Reconnecting…")}
           </p>
           <Link href="/sessions">{t("live.common.sessions")}</Link>
           {snapshot?.phase === "finished" ? (
@@ -531,6 +538,7 @@ function PresentationHostContent() {
               {t("live.presentationSession.viewReport")}
             </Link>
           ) : null}
+          <LanguageMenu />
         </div>
       </header>
       <div className={styles.stage}>
@@ -543,10 +551,15 @@ function PresentationHostContent() {
           <section className={styles.canvas}>{t("live.presentationSession.loading")}</section>
         ) : (
           <>
-            <p className={delivery.privateNotice} lang="en-CA">
-              Private presenter workspace. Share the audience stage window with your audience.
+            <p className={delivery.privateNotice}>
+              {workspaceCopy(
+                "Private presenter workspace. Share the audience stage window with your audience.",
+              )}
             </p>
-            <section className={presenter.commandBar} aria-label="Facilitation controls">
+            <section
+              className={presenter.commandBar}
+              aria-label={workspaceCopy("Facilitation controls")}
+            >
               <div className={presenter.commandRow}>
                 <div className={presenter.commandContext}>
                   <h1 lang="">{snapshot.title}</h1>
@@ -655,7 +668,11 @@ function PresentationHostContent() {
                   }
                   onJump={(blockId) => void navigate("jump_to_block", blockId)}
                 />
-                <section className={styles.canvas} aria-live="polite" aria-label="Current slide">
+                <section
+                  className={styles.canvas}
+                  aria-live="polite"
+                  aria-label={workspaceCopy("Current slide")}
+                >
                   <div className={styles.canvasContent}>
                     {snapshot.phase === "lobby" ? (
                       <>
@@ -790,28 +807,35 @@ function PresentationHostContent() {
                     ) : null}
                   </div>
                 </section>
-                <div className={delivery.backstage} lang="en-CA">
-                  <section className={delivery.panel} aria-label="Private speaker notes">
-                    <h2>Private speaker notes</h2>
+                <div className={delivery.backstage}>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Private speaker notes")}
+                  >
+                    <h2>{workspaceCopy("Private speaker notes")}</h2>
                     <div
                       className={delivery.notes}
                       tabIndex={0}
                       role="group"
-                      aria-label="Speaker notes text"
+                      aria-label={workspaceCopy("Speaker notes text")}
                     >
-                      <p lang={snapshot.presenter?.speakerNotes ? "" : "en-CA"}>
-                        {snapshot.presenter?.speakerNotes || "No speaker notes for this slide."}
+                      <p lang={snapshot.presenter?.speakerNotes ? "" : locale}>
+                        {snapshot.presenter?.speakerNotes ||
+                          workspaceCopy("No speaker notes for this slide.")}
                       </p>
                     </div>
                   </section>
-                  <section className={delivery.panel} aria-label="Next slide preview">
-                    <h2>Next slide preview</h2>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Next slide preview")}
+                  >
+                    <h2>{workspaceCopy("Next slide preview")}</h2>
                     {snapshot.presenter?.nextBlock ? (
                       <div
                         className={delivery.nextPreview}
                         tabIndex={0}
                         role="group"
-                        aria-label="Next slide content"
+                        aria-label={workspaceCopy("Next slide content")}
                       >
                         <PresentationDeliveryBlock
                           accessibilityContext="preview"
@@ -835,8 +859,8 @@ function PresentationHostContent() {
                     ) : (
                       <p>
                         {snapshot.phase === "finished"
-                          ? "Presentation complete."
-                          : "No further slides or activities."}
+                          ? workspaceCopy("Presentation complete.")
+                          : workspaceCopy("No further slides or activities.")}
                       </p>
                     )}
                   </section>
@@ -867,10 +891,14 @@ function PresentationHostContent() {
                     <span>{t("live.presentationSession.responsesNow")}</span>
                   </div>
                 </div>
-                <p className={presenter.roomStatus} aria-live="polite" lang="en-CA">
-                  {formatNumber(locale, snapshot.roomStatus.connectedCount)} connected ·{" "}
-                  {formatNumber(locale, snapshot.roomStatus.notCurrentlyConnectedCount)} not
-                  currently connected
+                <p className={presenter.roomStatus} aria-live="polite">
+                  {workspaceCopy("{connected} connected · {disconnected} not currently connected", {
+                    connected: formatNumber(locale, snapshot.roomStatus.connectedCount),
+                    disconnected: formatNumber(
+                      locale,
+                      snapshot.roomStatus.notCurrentlyConnectedCount,
+                    ),
+                  })}
                 </p>
                 {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
                   <RecoveryPackCardPicker
@@ -898,9 +926,10 @@ function PresentationHostContent() {
                     onFollow={(branchId) => void followBranch(branchId)}
                   />
                 ) : null}
-                <p className={presenter.keyboardHint} lang="en-CA">
-                  Advance with Right Arrow, Page Down or Space when no control or dialog is focused.
-                  Each action waits for server confirmation.
+                <p className={presenter.keyboardHint}>
+                  {workspaceCopy(
+                    "Advance with Right Arrow, Page Down or Space when no control or dialog is focused. Each action waits for server confirmation.",
+                  )}
                 </p>
                 <div className={presenter.companionTools}>
                   <PresentationCompanionLauncher

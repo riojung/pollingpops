@@ -7,19 +7,25 @@ import { isolatePresentationCompanionWindow } from "../../lib/presentation-compa
 import { presentationStageLaunchUrl } from "../../lib/presentation-stage-pass";
 import { useLocale } from "../locale-provider";
 import { presentationWorkspaceCopy } from "../../lib/i18n/presentation-workspace-copy";
+import { stageDisplayCopy } from "./stage-display-copy";
+import { useStageSetupPopup } from "./stage-setup-popup";
 import styles from "./presentation-delivery.module.css";
 
 export function PresentationStageLauncher({
   sessionId,
   canEdit,
   finished,
+  compact = false,
 }: {
   sessionId: string;
   canEdit: boolean;
   finished: boolean;
+  compact?: boolean;
 }) {
   const { locale } = useLocale();
   const copy = presentationWorkspaceCopy(locale);
+  const screen = stageDisplayCopy(locale);
+  const setup = useStageSetupPopup(compact && canEdit);
   const [credentialId, setCredentialId] = useState<string | null>(null);
   const [fallback, setFallback] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -108,54 +114,78 @@ export function PresentationStageLauncher({
   }
 
   return (
-    <section aria-label={copy("Audience stage controls")} className={styles.launch} lang={locale}>
+    <section
+      aria-label={copy("Audience stage controls")}
+      className={`${styles.launch}${compact ? ` ${styles.launchCompact}` : ""}`}
+      data-stage-launcher-compact={compact ? "true" : undefined}
+      lang={locale}
+    >
       <button
         type="button"
-        className="button-quiet full-width"
+        className={compact ? styles.launchScreen : "button-quiet full-width"}
         disabled={busy || finished}
         onClick={() => void launch()}
       >
-        {copy(busy ? "Updating stage access…" : "Open audience stage")}
+        {busy
+          ? copy("Updating stage access…")
+          : compact
+            ? screen.launch
+            : copy("Open audience stage")}
       </button>
-      <p>
-        {copy(
-          "Share the audience stage window. Presenter notes and controls stay in this workspace.",
-        )}
-      </p>
-      {fallback ? (
-        <>
-          <p role="status">
+      <details
+        ref={setup.detailsRef}
+        className={styles.launchOptions}
+        open={fallback || error ? true : undefined}
+        onToggle={setup.position}
+      >
+        <summary>{screen.setup}</summary>
+        <div
+          ref={setup.popupRef}
+          className={styles.launchOptionsBody}
+          data-stage-setup-popup="launcher"
+        >
+          <p>{screen.launcherHelp}</p>
+          <p>
             {copy(
-              "Your browser blocked the stage window. Open it using this link, then share that tab.",
+              "Share the audience stage window. Presenter notes and controls stay in this workspace.",
             )}
           </p>
-          <a href={fallback} target="_blank" rel="noopener noreferrer">
-            {copy("Open audience stage in a new tab")}
-          </a>
-        </>
-      ) : null}
-      {credentialId ? (
-        <button
-          type="button"
-          className="button-quiet full-width"
-          disabled={busy}
-          onClick={() => void revoke()}
-        >
-          {copy("Revoke audience stage access")}
-        </button>
-      ) : null}
-      {error ? (
-        <p role="alert" className="error" lang="en-CA">
-          {error}
-        </p>
-      ) : null}
-      {staleRevocation ? (
-        <p>
-          {copy(
-            "Use the host tab that opened the current stage, or open a replacement stage here and then revoke it.",
-          )}
-        </p>
-      ) : null}
+          {fallback ? (
+            <>
+              <p role="status">
+                {copy(
+                  "Your browser blocked the stage window. Open it using this link, then share that tab.",
+                )}
+              </p>
+              <a href={fallback} target="_blank" rel="noopener noreferrer">
+                {copy("Open audience stage in a new tab")}
+              </a>
+            </>
+          ) : null}
+          {credentialId ? (
+            <button
+              type="button"
+              className="button-quiet full-width"
+              disabled={busy}
+              onClick={() => void revoke()}
+            >
+              {copy("Revoke audience stage access")}
+            </button>
+          ) : null}
+          {error ? (
+            <p role="alert" className="error" lang="en-CA">
+              {error}
+            </p>
+          ) : null}
+          {staleRevocation ? (
+            <p>
+              {copy(
+                "Use the host tab that opened the current stage, or open a replacement stage here and then revoke it.",
+              )}
+            </p>
+          ) : null}
+        </div>
+      </details>
     </section>
   );
 }

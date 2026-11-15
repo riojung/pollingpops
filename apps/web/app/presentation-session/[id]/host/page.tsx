@@ -539,6 +539,15 @@ function PresentationHostContent() {
             </Link>
           ) : null}
           <LanguageMenu />
+          {snapshot ? (
+            <PresentationStageLauncher
+              key={id}
+              sessionId={id}
+              canEdit={canEdit}
+              finished={snapshot.phase === "finished"}
+              compact
+            />
+          ) : null}
         </div>
       </header>
       <div className={styles.stage}>
@@ -874,12 +883,6 @@ function PresentationHostContent() {
                   </summary>
                   <PresentationDeliveryJoinAccess code={snapshot.code} />
                 </details>
-                <PresentationStageLauncher
-                  key={id}
-                  sessionId={id}
-                  canEdit={canEdit}
-                  finished={snapshot.phase === "finished"}
-                />
                 <PresenterTimer sessionId={id} />
                 <div className={`${styles.metricRow} ${presenter.liveMetrics}`}>
                   <div className={styles.metric}>

@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import germanDelivery from "../../apps/web/lib/i18n/domains/live-delivery/de-DE";
 import koreanDelivery from "../../apps/web/lib/i18n/domains/live-delivery/ko-KR";
+import { stageDisplayCopy } from "../../apps/web/components/presentation-live/stage-display-copy";
 import { presentationWorkspaceCopy } from "../../apps/web/lib/i18n/presentation-workspace-copy";
 import { createE01Deck, e01ApiUrl, e01Slide, readE01Record } from "./presentation-e01-support";
 import { specialistLocale } from "./option-b-specialist-support";
@@ -85,7 +86,7 @@ for (const locale of ["de-DE", "ko-KR"] as const) {
         await heldSave;
         await route.continue();
       });
-      await page.locator("header details > summary").click();
+      await page.locator('header summary[role="button"]').click();
       await page.getByRole("radio", { name: /English/ }).press("ArrowDown");
       await saving;
       try {
@@ -153,7 +154,9 @@ for (const locale of ["de-DE", "ko-KR"] as const) {
         exact: true,
       });
       await expect(stage).toHaveAttribute("lang", locale);
-      await stage.getByRole("button", { name: copy("Open audience stage"), exact: true }).click();
+      await stage
+        .getByRole("button", { name: stageDisplayCopy(locale).launch, exact: true })
+        .click();
       const fallback = stage.getByRole("link", {
         name: copy("Open audience stage in a new tab"),
         exact: true,
@@ -177,7 +180,7 @@ for (const locale of ["de-DE", "ko-KR"] as const) {
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: info.outputPath(`presenter-${locale}.png`), fullPage: true });
 
-      await page.locator("header details > summary").click();
+      await page.locator('header summary[role="button"]').click();
       await page.getByRole("radio", { name: /English/ }).click();
       await expect(page.locator("html")).toHaveAttribute("lang", "en-CA");
       await expect(englishTimer.getByRole("status")).toHaveText("Paused");
@@ -187,6 +190,10 @@ for (const locale of ["de-DE", "ko-KR"] as const) {
         name: "Audience stage controls",
         exact: true,
       });
+      const stageSetup = englishStage
+        .locator("summary")
+        .filter({ hasText: stageDisplayCopy("en-CA").setup });
+      if ((await stageSetup.locator("..").getAttribute("open")) === null) await stageSetup.click();
       expect(
         (await englishStage
           .getByRole("link", {

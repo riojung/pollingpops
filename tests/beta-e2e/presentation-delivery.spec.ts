@@ -5,6 +5,7 @@ import {
   test,
   type Browser,
   type BrowserContext,
+  type Locator,
   type Page,
   type TestInfo,
 } from "@playwright/test";
@@ -22,6 +23,11 @@ import { signInBeta } from "./sign-in";
 test.use({ actionTimeout: 30_000 });
 
 type DeliveryFixture = Awaited<ReturnType<typeof createDeliverySession>>;
+
+async function openStageSetup(controls: Locator) {
+  const summary = controls.locator("summary").filter({ hasText: "Second-screen setup" });
+  if ((await summary.locator("..").getAttribute("open")) === null) await summary.click();
+}
 
 function deliverySlide(title: string, notes: string): ContentSlideDraft {
   return {
@@ -275,7 +281,7 @@ for (const suffix of ["", " @mobile"]) {
       });
 
       const stageCreated = page.context().waitForEvent("page");
-      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
       const stage = await stageCreated;
       try {
         await stage.setViewportSize(testInfo.project.use.viewport ?? { width: 1280, height: 720 });
@@ -699,7 +705,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.evaluate(() => {
       window.open = () => null;
     });
-    await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+    await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
     const controls = page.getByRole("region", { name: "Audience stage controls", exact: true });
     await expect(controls.getByRole("status")).toContainText("blocked");
     const fallback = controls.getByRole("link", {
@@ -708,6 +714,7 @@ for (const suffix of ["", " @mobile"]) {
     });
     await expect(fallback).toHaveAttribute("rel", /noopener/);
     await page.context().addInitScript(() => {
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
       Object.defineProperty(Element.prototype, "requestFullscreen", {
         configurable: true,
         value: () =>
@@ -736,6 +743,7 @@ for (const suffix of ["", " @mobile"]) {
         "continue presenting in this tab",
       );
       await expect(stage.getByText(firstTitle.text, { exact: true })).toBeVisible();
+      await stage.getByRole("button", { name: "Exit slide-only view", exact: true }).click();
       const joinAccess = stage.getByRole("region", { name: "Join this Presentation", exact: true });
       await expect(joinAccess).toContainText(fixture.code);
       await expect(joinAccess).toBeInViewport({ ratio: 1 });
@@ -811,7 +819,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
       );
-      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
       const firstResponse = await firstCreated;
       expect(firstResponse.status()).toBe(201);
       const firstPass = (await firstResponse.json()) as PresentationStagePassResponse;
@@ -823,6 +831,7 @@ for (const suffix of ["", " @mobile"]) {
         name: "Revoke audience stage access",
         exact: true,
       });
+      await openStageSetup(firstControls);
       await expect(firstRevoke).toBeEnabled();
 
       // Reuse the control pass so this test isolates stage rotation from host handoff.
@@ -844,7 +853,9 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
       );
-      await otherHost.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await otherHost
+        .getByRole("button", { name: "Present on another screen", exact: true })
+        .click();
       const secondResponse = await secondCreated;
       expect(secondResponse.status()).toBe(201);
       const secondPass = (await secondResponse.json()) as PresentationStagePassResponse;
@@ -856,6 +867,7 @@ for (const suffix of ["", " @mobile"]) {
         name: "Revoke audience stage access",
         exact: true,
       });
+      await openStageSetup(secondControls);
       await expect(secondRevoke).toBeEnabled();
       expect(hostPassRequests).toBe(0);
       expect(
@@ -872,6 +884,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${firstPass.credentialId}`,
       );
+      await openStageSetup(firstControls);
       await firstRevoke.click();
       const staleResponse = await staleRevoked;
       expect(staleResponse.status()).toBe(409);
@@ -911,6 +924,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${secondPass.credentialId}`,
       );
+      await openStageSetup(secondControls);
       await secondRevoke.click();
       expect((await currentRevoked).status()).toBe(204);
       await expect(secondRevoke).toHaveCount(0);
@@ -925,6 +939,7 @@ for (const suffix of ["", " @mobile"]) {
           })
         ).status(),
       ).toBe(401);
+      await openStageSetup(firstControls);
       await expect(firstRevoke).toBeEnabled();
       expect(
         await page.evaluate(({ key, id }) => sessionStorage.getItem(key) === id, {

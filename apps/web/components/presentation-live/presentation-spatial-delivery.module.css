@@ -222,7 +222,57 @@
   margin-block: 4px;
   font-size: 11px;
 }
+.panel.header {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.headerProgress {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.header .disclosure > summary {
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface-soft);
+}
+.header .disclosure {
+  min-width: 0;
+}
+.header .compactBody {
+  position: fixed;
+  z-index: 30;
+  top: var(--presentation-audience-header-height, 64px);
+  inset-inline: 12px;
+  width: auto;
+  max-width: 620px;
+  max-height: min(360px, calc(100dvh - var(--presentation-audience-header-height, 64px) - 16px));
+  margin-inline: auto;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+}
+.header .diagram {
+  height: clamp(100px, 20dvh, 180px);
+}
 @media (max-width: 700px) {
+  .header .disclosure > summary > span,
+  .header .disclosure > summary > .chevron {
+    display: none;
+  }
   .panel {
     padding: 12px;
   }

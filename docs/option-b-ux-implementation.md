@@ -5,6 +5,64 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Audience workspace and second-screen presentation — November 15, 2026
+
+Joined audiences now have page progress and a collapsed spatial-path control in the top
+navigation bar. Opening the path reveals a bounded popup; changing its camera or linear view
+stays local. On wide screens, questions and answers sit beside the current slide or activity
+in an independently scrolling sidebar. Closing and reopening Q&A preserves the unfinished
+question and activity response. Phones use a full-height drawer with background isolation,
+keyboard focus containment, Escape and focus restoration. Unavailable Q&A leaves the slide
+the full workspace width. Long content and activities retain their own scrolling area.
+
+The host header now exposes **Present on another screen** with **Second-screen setup**
+instructions. It opens the existing isolated, read-only audience-stage window. Move that
+window to the projector or other monitor, then choose **Enter full screen** there; the host's
+notes, timer and controls remain in the original window. Fullscreen is requested from the
+user's click on the audience stage only. **Slide-only view** also works when browser fullscreen
+is unavailable or denied. Display controls fade after inactivity and return with a pointer,
+tap or keyboard focus; Exit or Escape restores the normal stage. The focus view hides the
+navigation, join footer and app header and fits native slides to the available screen.
+
+Both setup popups clamp to the visible viewport, including translated phone layouts and
+short windows. New audience and display labels cover all ten existing locales. Stage pass
+isolation, revocation, published snapshots, response submission and server authority retain
+their existing boundaries. No automatic monitor selection or physical second-monitor
+qualification is claimed. Browser fullscreen requires user activation and may be refused
+by the browser; see the [Fullscreen API guidance](https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen).
+
+Verification: 130 focused tests across nine suites pass, along with web type checks, lint,
+formatting and fresh production/Docker web builds. Eight new production browser journeys
+pass across Chromium/Firefox desktop and Chromium/WebKit phones. They cover independent
+Q&A scrolling, preserved drafts and quiz selections, exactly-once response submission,
+header popup geometry and keyboard dismissal, isolated audience-stage launch, user-activated
+fullscreen and denied/unsupported fallback, touch control recovery, Korean 320px layouts,
+short windows, unchanged saved records and Axe checks. Visual review corrected phone
+fullscreen proportions; WebKit qualification corrected body-targeted Escape handling.
+Normal phone reading flow remains separate from fixed slide-only artwork, whose live
+links, media and interactions stay enabled. Local captures and source-bound build evidence
+are under `artifacts/presentation-audience-stage/`.
+
+Eight existing production lifecycle journeys also pass on Chromium desktop and WebKit phones,
+with summary sharing enabled in the test configuration. They retain private-note and frozen
+preview checks, read-only stage access, refresh recovery, pass rotation/revocation, blocked
+popup handling, disconnect/fullscreen-denial recovery, expiry and stale-host fences. This is
+16 selected browser journeys in total, rather than a rerun of the full browser matrix. The
+existing local Docker project received a web-only update and is healthy; the Home route
+returns HTTP 200. Existing services, runtime selection and data volumes were preserved.
+
+The review follow-up initializes the compact setup popup when edit access becomes available.
+A delayed-account regression reproduces the previous missing initialization, then verifies
+positioning, body-focused Escape and outside dismissal after the real session snapshot has
+already rendered. The expanded stage journeys pass on production Chromium desktop and
+WebKit phones after the fix, retaining their fullscreen, isolation and privacy checks. All
+130 focused tests, scoped lint, type checks, formatting and fresh production/Docker builds
+also pass.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,229 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
 ## Presenter preview layout — November 14, 2026
 
 The editor preview now reserves space explicitly for its header, optional spatial path, slide

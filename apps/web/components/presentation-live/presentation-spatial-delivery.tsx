@@ -13,6 +13,7 @@ import {
   localizeSectionsSpatialMessage,
 } from "../../lib/i18n/sections-spatial-copy";
 import { formatNumber } from "../../lib/i18n/format";
+import { dismissStagePopupOnEscape } from "./stage-setup-popup";
 
 interface SpatialDeliveryProps {
   spatial?: PresentationSpatialSnapshot;
@@ -20,6 +21,7 @@ interface SpatialDeliveryProps {
   phase: string;
   sourceKey: string;
   compact?: boolean;
+  placement?: "panel" | "header";
   navigation?: PresentationNavigationSnapshot;
   disabled?: boolean;
   onJump?: (blockId: string) => void;
@@ -39,15 +41,20 @@ function SpatialPath({
   navigation,
   disabled = false,
   compact = false,
+  placement = "panel",
   onJump,
 }: SpatialDeliveryProps & { spatial: PresentationSpatialSnapshot }) {
   const { locale } = useLocale();
   const copy = sectionsSpatialCopy(locale);
+  const header = placement === "header";
+  const compactView = compact || header;
   const [view, setView] = useState<"automatic" | "overview" | "focus">("automatic");
   const [linear, setLinear] = useState(false);
   const [size, setSize] = useState({ width: 800, height: 240 });
   const [selected, setSelected] = useState("");
   const diagram = useRef<HTMLDivElement>(null);
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const panel = useRef<HTMLElement>(null);
   const measureDiagram = useRef<(() => void) | null>(null);
   const selectId = useId();
   const reasonId = useId();
@@ -98,10 +105,28 @@ function SpatialPath({
       observer?.disconnect();
       if (!observer) window.removeEventListener("resize", measure);
     };
-  }, [compact]);
+  }, [compactView, header]);
   useEffect(() => {
-    if (compact && !linear) measureDiagram.current?.();
-  }, [compact, linear]);
+    if (compactView && !linear) measureDiagram.current?.();
+  }, [compactView, linear]);
+  useEffect(() => {
+    if (!header) return;
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !panel.current?.contains(event.target) &&
+        disclosure.current
+      )
+        disclosure.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => dismissStagePopupOnEscape(event, disclosure.current);
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [header]);
 
   const content = (
     <>
@@ -231,14 +256,39 @@ function SpatialPath({
 
   return (
     <section
-      className={`${styles.panel}${compact ? ` ${styles.compact}` : ""}`}
+      ref={panel}
+      className={`${styles.panel}${compactView ? ` ${styles.compact}` : ""}${header ? ` ${styles.header}` : ""}`}
       aria-label={copy("Presentation spatial path")}
-      data-spatial-compact={compact ? "true" : undefined}
-      data-spatial-linear={compact ? String(linear) : undefined}
+      data-spatial-compact={compactView ? "true" : undefined}
+      data-spatial-header={header ? "true" : undefined}
+      data-spatial-linear={compactView ? String(linear) : undefined}
       lang={locale}
+      onKeyDown={(event) => {
+        if (header && event.key === "Escape" && disclosure.current?.open) {
+          event.preventDefault();
+          event.stopPropagation();
+          disclosure.current.open = false;
+          disclosure.current.querySelector("summary")?.focus();
+        }
+      }}
+      onBlur={(event) => {
+        if (
+          header &&
+          event.relatedTarget instanceof Node &&
+          !event.currentTarget.contains(event.relatedTarget) &&
+          disclosure.current
+        )
+          disclosure.current.open = false;
+      }}
     >
-      {compact ? (
+      {header ? (
+        <p className={styles.headerProgress} role="status">
+          {status}
+        </p>
+      ) : null}
+      {compactView ? (
         <details
+          ref={disclosure}
           className={styles.disclosure}
           onToggle={(event) => {
             if (event.currentTarget.open) measureDiagram.current?.();

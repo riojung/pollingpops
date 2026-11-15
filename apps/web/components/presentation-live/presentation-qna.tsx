@@ -17,11 +17,15 @@ export function PresentationQnaPanel({
   token,
   role,
   closed,
+  layout = "panel",
+  onAvailabilityChange,
 }: {
   sessionId: string;
   token: string;
   role: "host" | "participant" | "companion";
   closed: boolean;
+  layout?: "panel" | "sidebar";
+  onAvailabilityChange?: (available: boolean) => void;
 }) {
   const { locale, t } = useLocale();
   const copy = qnaModerationCopy(locale);
@@ -31,6 +35,8 @@ export function PresentationQnaPanel({
   const [revision, setRevision] = useState(0);
   const [open, setOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
+  const sidebar = layout === "sidebar";
+  const showingQuestions = sidebar || open;
   const activationKey = useRef<string | null>(null);
   const inFlight = useRef(false);
   const generation = useRef(0);
@@ -101,6 +107,10 @@ export function PresentationQnaPanel({
   }, [client, discover]);
 
   useEffect(() => {
+    onAvailabilityChange?.(Boolean(availability?.available || error));
+  }, [availability?.available, error, onAvailabilityChange]);
+
+  useEffect(() => {
     if (!availability?.available || availability.activated || closed) return;
     // Stop discovery polling once active; audience notices handle subsequent changes.
     const timer = window.setInterval(() => void discover(), 5_000);
@@ -108,7 +118,7 @@ export function PresentationQnaPanel({
   }, [availability?.available, availability?.activated, closed, discover]);
 
   useEffect(() => {
-    if (!availability?.activated || !open) return;
+    if (!availability?.activated || !showingQuestions) return;
     let refreshTimer: number | null = null;
     const refresh = () => {
       if (refreshTimer !== null) return;
@@ -137,7 +147,7 @@ export function PresentationQnaPanel({
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       subscription.stop();
     };
-  }, [availability?.activated, open, sessionId, token]);
+  }, [availability?.activated, showingQuestions, sessionId, token]);
 
   useEffect(() => {
     setRevision((value) => value + 1);
@@ -170,10 +180,27 @@ export function PresentationQnaPanel({
 
   if (!availability?.available && !error) return null;
   const displayError = localizeQnaModerationError(locale, error);
+  const questions = (
+    <>
+      {role === "companion" ? (
+        <p className="notice">
+          {copy("Companion Q&A is read-only. Use the host window to moderate questions.")}
+        </p>
+      ) : null}
+      <QnaPanel
+        role={role === "host" ? "moderator" : role === "companion" ? "observer" : "participant"}
+        sessionId={sessionId}
+        token={token}
+        revision={revision}
+        scopeKind="presentation"
+      />
+    </>
+  );
   return (
     <div
-      className={`${styles.container} ${role === "companion" ? styles.compact : ""}`}
+      className={`${styles.container} ${role === "companion" ? styles.compact : ""} ${sidebar ? styles.sidebar : ""}`}
       data-presentation-qna
+      data-presentation-qna-layout={layout}
       data-presentation-role={role}
       lang={locale}
     >
@@ -188,33 +215,20 @@ export function PresentationQnaPanel({
         </>
       ) : null}
       {availability?.activated ? (
-        <details
-          open={open}
-          onToggle={(event) => {
-            setOpen(event.currentTarget.open);
-            if (event.currentTarget.open) setHasOpened(true);
-          }}
-        >
-          <summary className={styles.toggle}>{t("live.qna.title")}</summary>
-          {hasOpened ? (
-            <>
-              {role === "companion" ? (
-                <p className="notice">
-                  {copy("Companion Q&A is read-only. Use the host window to moderate questions.")}
-                </p>
-              ) : null}
-              <QnaPanel
-                role={
-                  role === "host" ? "moderator" : role === "companion" ? "observer" : "participant"
-                }
-                sessionId={sessionId}
-                token={token}
-                revision={revision}
-                scopeKind="presentation"
-              />
-            </>
-          ) : null}
-        </details>
+        sidebar ? (
+          questions
+        ) : (
+          <details
+            open={open}
+            onToggle={(event) => {
+              setOpen(event.currentTarget.open);
+              if (event.currentTarget.open) setHasOpened(true);
+            }}
+          >
+            <summary className={styles.toggle}>{t("live.qna.title")}</summary>
+            {hasOpened ? questions : null}
+          </details>
+        )
       ) : availability?.canActivate ? (
         <div className="panel">
           <h2>{t("live.qna.title")}</h2>

@@ -296,7 +296,7 @@ async function createFixture(page: Page, info: TestInfo) {
     companion.getByRole("button", { name: "Start Presentation", exact: true }),
   ).toBeEnabled();
   const audienceStage = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await audienceStage;
   return {
     sessionId,

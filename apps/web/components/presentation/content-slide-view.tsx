@@ -83,6 +83,8 @@ interface ContentSlideViewProps {
   interactionRuntime?: NativeSceneInteractionRuntime;
   /** Inert fixed-layout artwork; ordinary preview/live retain readable phone flow. */
   staticThumbnail?: boolean;
+  /** Keep the authored slide plane on a dedicated display without disabling its interactions. */
+  fixedLayout?: boolean;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -303,6 +305,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
       staticThumbnail={props.staticThumbnail}
+      fixedLayout={props.fixedLayout}
       interactionRuntime={props.interactionRuntime}
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
@@ -319,6 +322,7 @@ function LegacyContentSlideView({
   media,
   variant,
   staticThumbnail = false,
+  fixedLayout = false,
   selectedElementId = null,
   titlePlaceholder = "Give this moment a clear title",
   bodyPlaceholder = "Add the context your audience needs",
@@ -613,6 +617,7 @@ function LegacyContentSlideView({
         }
         data-layout={block.layout}
         data-static-thumbnail={staticThumbnail || undefined}
+        data-content-fixed-layout={fixedLayout || undefined}
         inert={staticThumbnail || undefined}
         aria-hidden={staticThumbnail || undefined}
         lang={contentLocale ?? "en-CA"}

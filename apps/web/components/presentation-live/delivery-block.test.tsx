@@ -8,6 +8,11 @@ import {
 import { PresentationDeliveryBlock } from "./delivery-block";
 import { LocaleProvider } from "../locale-provider";
 import { loadMessages } from "../../lib/i18n/catalog";
+import {
+  createNativeContentBlock,
+  createNativeLinkNode,
+  createNativeRevealNode,
+} from "../../lib/presentation-native-scene";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/presentation-session/session/stage",
@@ -46,6 +51,66 @@ function render(block: PresentationParticipantCurrentBlock) {
 }
 
 describe("Presentation live delivery artwork", () => {
+  it("keeps fixed-layout native display artwork interactive and leaves ordinary delivery unchanged", () => {
+    const draft = createNativeContentBlock();
+    const link = {
+      ...createNativeLinkNode(),
+      label: "Audience evidence",
+      href: "https://example.test/evidence",
+    };
+    const reveal = {
+      ...createNativeRevealNode(),
+      label: "More audience context",
+      body: "Audience context stays closed until requested",
+    };
+    const mediaId = randomUUID();
+    draft.scene!.schemaVersion = 5;
+    draft.scene!.nodes.push(link, reveal, {
+      id: "authorized-image",
+      type: "image",
+      mediaId,
+      altText: "Authorized display image",
+      frame: { x: 70, y: 50, width: 20, height: 30 },
+    });
+    draft.scene!.readingOrder.push(link.id, reveal.id, "authorized-image");
+    const { speakerNotes: privateNotes, ...publicBlock } = draft;
+    void privateNotes;
+    const block = PresentationParticipantCurrentBlockSchema.parse({ ...publicBlock, design });
+    const before = structuredClone(block);
+    const renderMedia = vi.fn((_mediaId, altText) => (
+      <img src="/authorized-stage-image" alt={altText ?? ""} />
+    ));
+    const fixed = renderToStaticMarkup(
+      <PresentationDeliveryBlock
+        block={block}
+        renderMedia={renderMedia}
+        interactionRuntime={{ mode: "live_audience" }}
+        fixedLayout
+      />,
+    );
+    expect(fixed).toMatch(/<article[^>]*data-native-fixed-layout="true"/);
+    expect(fixed).toContain('href="https://example.test/evidence"');
+    expect(fixed).toContain('target="_blank" rel="noopener noreferrer"');
+    expect(fixed).toContain('data-native-interaction="reveal"');
+    expect(fixed).toContain('aria-expanded="false"');
+    expect(fixed).toContain("Show on this screen");
+    expect(fixed).not.toContain(reveal.body);
+    expect(fixed).not.toContain('inert=""');
+    expect(fixed).not.toContain("data-static-thumbnail");
+    expect(renderMedia).toHaveBeenCalledWith(mediaId, "Authorized display image");
+    expect(fixed).toContain('src="/authorized-stage-image"');
+    const ordinary = renderToStaticMarkup(
+      <PresentationDeliveryBlock
+        block={block}
+        renderMedia={renderMedia}
+        interactionRuntime={{ mode: "live_audience" }}
+      />,
+    );
+    expect(ordinary).not.toContain("data-native-fixed-layout");
+    expect(fixed.replace(' data-native-fixed-layout="true"', "")).toBe(ordinary);
+    expect(block).toEqual(before);
+  });
+
   it("localizes Korean moderation guidance using only delivery messages and preserves authored material", async () => {
     const markup = renderToStaticMarkup(
       <LocaleProvider

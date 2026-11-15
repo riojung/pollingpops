@@ -334,13 +334,13 @@
 }
 
 @media (max-width: 700px) {
-  .slide:not(.staticThumbnail) {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) {
     aspect-ratio: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .slide:not(.staticThumbnail) .regions {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .regions {
     position: relative;
     inset: auto;
     display: flex;
@@ -349,7 +349,7 @@
     gap: 12px;
   }
 
-  .slide:not(.staticThumbnail) .region {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .region {
     position: static;
     inset: auto;
     display: flex;
@@ -359,7 +359,7 @@
     pointer-events: auto;
   }
 
-  .slide:not(.staticThumbnail) .textElement {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .textElement {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -368,40 +368,40 @@
     min-height: 0;
   }
 
-  .slide:not(.staticThumbnail) .titleElement > h1,
-  .slide:not(.staticThumbnail) .bodyElement > p {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleElement > h1,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyElement > p {
     height: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .slide:not(.staticThumbnail) .titleElement > h1,
-  .slide:not(.staticThumbnail) .titleInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleElement > h1,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleInput {
     font-size: clamp(28px, 8vw, 42px);
   }
 
-  .slide:not(.staticThumbnail) .bodyElement > p,
-  .slide:not(.staticThumbnail) .bodyInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyElement > p,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyInput {
     font-size: clamp(17px, 4.5vw, 22px);
   }
 
-  .slide:not(.staticThumbnail) .titleInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleInput {
     height: auto;
     min-height: 2.5em;
     overflow-y: hidden;
   }
 
-  .slide:not(.staticThumbnail) .bodyInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyInput {
     height: auto;
     min-height: 6em;
     overflow-y: hidden;
   }
 
-  .slide:not(.staticThumbnail) .fitWarning {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .fitWarning {
     display: none;
   }
 
-  .slide:not(.staticThumbnail) .media {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .media {
     position: relative;
     inset: auto !important;
     width: 100% !important;
@@ -409,11 +409,11 @@
     margin-top: 12px;
   }
 
-  .slide:not(.staticThumbnail) .mediaBayGuide {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .mediaBayGuide {
     display: none;
   }
 
-  .slide:not(.staticThumbnail) .media > img {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .media > img {
     width: auto;
     height: auto;
     max-width: 100%;

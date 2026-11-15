@@ -2,11 +2,12 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SupportedLocale } from "@openround/contracts";
+import { supportedLocales, type SupportedLocale } from "@openround/contracts";
 import { apiFetch, ApiClientError } from "../../lib/api";
 import type * as ApiModule from "../../lib/api";
 import { presentationWorkspaceCopy } from "../../lib/i18n/presentation-workspace-copy";
 import { PresentationStageLauncher } from "./stage-launcher";
+import { stageDisplayCopy } from "./stage-display-copy";
 
 type Effect = { deps?: readonly unknown[]; run: () => void | (() => void); cleanup?: () => void };
 type LauncherHooks = {
@@ -74,13 +75,18 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 
-function launcherHarness() {
+function launcherHarness(overrides: Partial<Parameters<typeof PresentationStageLauncher>[0]> = {}) {
   const hooks: LauncherHooks = { cursor: 0, states: [], effects: new Map(), pending: [] };
   function render() {
     fixture.hooks = hooks;
     hooks.cursor = 0;
     try {
-      return PresentationStageLauncher({ sessionId: "session-a", canEdit: true, finished: false });
+      return PresentationStageLauncher({
+        sessionId: "session-a",
+        canEdit: true,
+        finished: false,
+        ...overrides,
+      });
     } finally {
       fixture.hooks = null;
       for (const effect of hooks.pending.splice(0)) effect.cleanup = effect.run() ?? undefined;
@@ -122,6 +128,52 @@ const pass = {
 };
 
 describe("Audience stage launcher localization", () => {
+  it.each(supportedLocales)(
+    "offers a compact second-screen launch and instructions in %s",
+    (locale) => {
+      fixture.locale = locale;
+      const screen = stageDisplayCopy(locale);
+      const markup = renderToStaticMarkup(
+        <PresentationStageLauncher sessionId="session" canEdit finished={false} compact />,
+      );
+      expect(markup).toContain('data-stage-launcher-compact="true"');
+      expect(markup).toContain(screen.launch);
+      expect(markup).toContain(screen.setup);
+      expect(markup).toContain(screen.launcherHelp);
+      expect(markup).not.toMatch(/<details[^>]*\sopen(?:\s|=|>)/);
+      for (const [key, value] of Object.entries(screen)) {
+        expect(value).toBeTruthy();
+        if (locale !== "en-CA")
+          expect(value).not.toBe(stageDisplayCopy("en-CA")[key as keyof typeof screen]);
+      }
+      expect(apiFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("opens an isolated audience window from the compact action and stores only its revoke identity", async () => {
+    const popup = {
+      opener: {} as unknown,
+      sessionStorage: { clear: vi.fn() },
+      close: vi.fn(),
+      closed: false,
+      location: { replace: vi.fn() },
+    };
+    const { values } = browser(vi.fn(() => popup));
+    vi.mocked(apiFetch).mockResolvedValueOnce(pass);
+    const launcher = launcherHarness({ compact: true });
+    await launcher.click(stageDisplayCopy("en-CA").launch);
+    expect(popup.opener).toBeNull();
+    expect(popup.sessionStorage.clear).toHaveBeenCalledOnce();
+    expect(popup.location.replace).toHaveBeenCalledOnce();
+    const destination = new URL(popup.location.replace.mock.calls[0]![0] as string);
+    expect(destination.search).toBe("");
+    expect(new URLSearchParams(destination.hash.slice(1)).get("pass")).toBe(pass.stageToken);
+    expect([...values.values()]).toEqual([pass.credentialId]);
+    expect(launcher.markup()).not.toContain(pass.stageToken);
+    expect(launcher.markup()).not.toContain("href=");
+    launcher.unmount();
+  });
+
   it.each([
     ["ko-KR", "참여자 화면 제어", "참여자 화면 열기"],
     ["de-DE", "Steuerung der Publikumsbühne", "Publikumsbühne öffnen"],
@@ -155,6 +207,7 @@ describe("Audience stage launcher localization", () => {
       pass.credentialId,
     );
     const english = launcher.markup();
+    expect(english).toMatch(/<details[^>]*\sopen=""/);
     const href = english.match(/href="([^"]+)"/)?.[1];
     expect(href).toBeDefined();
     const destination = new URL(href!);

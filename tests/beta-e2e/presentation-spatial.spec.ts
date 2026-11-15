@@ -17,6 +17,7 @@ import {
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
+  openE01Navigator,
   readE01Record,
 } from "./presentation-e01-support";
 import { signInBeta } from "./sign-in";
@@ -120,6 +121,9 @@ async function createFixture(page: Page, info: TestInfo) {
     )
     .toMatchObject({ x: 18000, y: 17000, width: 1600, height: 900 });
   await arrange.getByRole("button", { name: "Close arrange space", exact: true }).click();
+  await closeE01Overlays(page);
+  const moreOptions = page.locator('summary[aria-label="More options"]');
+  if ((await moreOptions.locator("..").getAttribute("open")) !== null) await moreOptions.click();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect
     .poll(
@@ -205,17 +209,23 @@ async function createFixture(page: Page, info: TestInfo) {
   await preview.getByRole("button", { name: "Next", exact: true }).click();
   await expect(spatialPanel(page)).toContainText("Page 2 of 4");
   await preview.getByRole("button", { name: "Close preview", exact: true }).click();
-  const map = page.getByRole("complementary", { name: "Presentation map", exact: true });
-  if (!(await map.isVisible()))
-    await page.getByRole("button", { name: "Open map", exact: true }).click();
-  await page.getByRole("button", { name: "Add section", exact: true }).click();
-  await page.getByLabel("Section 1 name", { exact: true }).fill(sectionMarker);
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
-  await page
-    .getByRole("combobox", { name: "Selected block section", exact: true })
+  const map = await openE01Navigator(page);
+  await map.locator(`[data-slide-id="${closing.id}"]`).getByRole("button").first().click();
+  const sectionTools = map.getByRole("region", { name: "Sections and navigation", exact: true });
+  await sectionTools.getByRole("button", { name: "Add section", exact: true }).click();
+  const sectionName = sectionTools.getByRole("textbox", { name: "Section name", exact: true });
+  await sectionName.fill(sectionMarker);
+  await sectionName.press("Enter");
+  await sectionTools
+    .getByRole("combobox", { name: "Selected slide section", exact: true })
     .selectOption({ label: sectionMarker });
   await expect
-    .poll(async () => (await readE01Record(page, record.id)).draft.sections?.[0]?.blockIds)
+    .poll(
+      async () =>
+        (await readE01Record(page, record.id)).draft.sections?.find(
+          (section) => section.title === sectionMarker,
+        )?.blockIds,
+    )
     .toContain(closing.id);
   if (narrow) await page.getByRole("button", { name: "Collapse map", exact: true }).click();
   const publishing = page.waitForResponse(

@@ -5,6 +5,48 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Editor delivery dialogs and Arrange space — November 14, 2026
+
+Private review, reading assignment, practice assignment and export dialogs share a scoped visual
+system: compact icon headers, an aligned Close action, bounded scrolling, grouped setup controls
+and a distinct primary action. Publication and privacy context stays near the top. Longer reading,
+practice and export guidance is available in disclosures. Created links, status badges, dates,
+management actions and compact empty states follow the same layout. Export explains the selected
+format before download. Existing request intents, retries, authorization fences, API calls and
+download handling retain their behavior; the readers and standalone insights pages keep their
+existing styles.
+
+Arrange space uses grouped icon controls, a smaller organized inspector and a single-row numbered
+thumbnail filmstrip. Selecting a slide keeps its filmstrip card reachable. The initial view focuses
+the selection when a whole-deck view would make frames unreadably small; Fit all remains available.
+These view changes preserve stored positions and playback order. Filmstrip thumbnails disable media
+fetches and remain separate from selection buttons. Numeric drafts still apply on Enter or blur,
+cancel on Escape, and flow through the existing save and Undo behavior. Help and layout settings
+are collapsible; the three added spatial labels cover the existing ten locales. The canvas can
+shrink in short desktop windows while the inspector scrolls and the filmstrip remains reachable.
+Phone layouts retain the filmstrip while the inspector scrolls internally. Arrange uses the same
+native modal behavior as the delivery dialogs, keeping the background inactive and restoring its
+launcher on close. Native selectors have explicit 40px heights, including in WebKit.
+
+Initial verification: 5,146 web tests across 427 files and 24 production browser cases pass. The browser
+matrix runs Chromium/Firefox desktop and Chromium/WebKit phones in fresh API phases, covering all
+five dialogs, default and populated lists, creation/revocation, HTML download, native focus and
+Escape, 320px layouts, short desktop windows, Axe checks, numeric edits, immutable reading/practice
+and frozen spatial delivery. The spatial fixture now uses the current section navigator and closes
+the restored More menu before Undo. Web and browser-fixture type checks, web lint, formatting,
+production compilation and the Docker web build pass. Captures and source-bound build evidence are under
+`artifacts/presentation-editor-dialogs/`.
+
+The review follow-up keeps Layout settings right-aligned when translated controls wrap on phones,
+so its popup stays inside the viewport. Both production Chromium and WebKit Arrange journeys pass
+at 320px in French, German and Portuguese. They open the full popup, click Disable spatial layout
+and verify Undo restores the exact saved draft, including frame geometry and playback order.
+Fixture type checks, formatting and fresh production/Docker web builds pass after this correction.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,175 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
 ## Compact canvas controls — November 14, 2026
 
 The canvas insert toolbar and object-selection area now use tighter spacing. A compact,

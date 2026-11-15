@@ -151,6 +151,12 @@ function harness(overrides: Partial<Props> = {}) {
       elements(render()).find((element) => element.type === "g" && element.props.style)?.props
         .style,
     diagram: () => elements(render()).find((element) => element.props["data-spatial-view"])!,
+    disclosure: () => elements(render()).find((element) => element.type === "details")!,
+    toggleDisclosure(open: boolean) {
+      (result.disclosure().props.onToggle as (event: unknown) => void)({
+        currentTarget: { open },
+      });
+    },
     button: (label: string) =>
       elements(render()).find(
         (element) => element.type === "button" && element.props.children === label,
@@ -192,6 +198,104 @@ afterEach(() => {
 });
 
 describe("geometry-only live presentation spatial delivery", () => {
+  it("keeps the existing live markup unless compact preview is explicitly requested", () => {
+    const props: Props = {
+      spatial,
+      currentBlockIndex: 0,
+      phase: "content",
+      sourceKey: "live",
+    };
+    const live = renderToStaticMarkup(<PresentationSpatialDelivery {...props} />);
+    expect(live).toBe(
+      renderToStaticMarkup(<PresentationSpatialDelivery {...props} compact={false} />),
+    );
+    expect(live).not.toContain("<details");
+    expect(live).not.toContain("data-spatial-compact");
+  });
+
+  it.each(supportedLocales)(
+    "starts compact preview collapsed with localized geometry-only content in %s",
+    (locale) => {
+      fixture.locale = locale;
+      const before = structuredClone(spatial);
+      const markup = renderToStaticMarkup(
+        <PresentationSpatialDelivery
+          compact
+          spatial={spatial}
+          navigation={navigation}
+          currentBlockIndex={0}
+          phase="content"
+          sourceKey="preview"
+        />,
+      );
+      const label = sectionsSpatialCopy(locale)("Presentation spatial path");
+      expect(markup).toContain('data-spatial-compact="true"');
+      expect(markup).toContain(`<summary aria-label="${label}">`);
+      expect(markup).toMatch(/<details[^>]*>/);
+      expect(markup).not.toMatch(/<details[^>]*\sopen(?:\s|=|>)/);
+      expect(markup.match(/data-spatial-page=/g)).toHaveLength(3);
+      expect(markup).not.toContain("Current private title");
+      expect(markup).not.toContain("Guarded activity");
+      expect(markup).not.toContain("00000000-");
+      expect(markup).not.toContain(sectionsSpatialCopy(locale)("Jump to page"));
+      expect(spatial).toEqual(before);
+    },
+  );
+
+  it("remeasures a compact diagram on expansion without ResizeObserver and preserves local view state", () => {
+    vi.stubGlobal("ResizeObserver", undefined);
+    const addEventListener = vi.fn(),
+      removeEventListener = vi.fn();
+    vi.stubGlobal("window", { addEventListener, removeEventListener });
+    const panel = harness({ compact: true });
+    panel.click("Show overview");
+    const initialCamera = panel.camera();
+    panel.dom.getBoundingClientRect = () => ({ width: 320, height: 120 });
+    panel.toggleDisclosure(true);
+    expect(panel.camera()).not.toEqual(initialCamera);
+    const expandedCamera = panel.camera();
+    panel.click("Use linear view");
+    expect(panel.diagram().props.hidden).toBe(true);
+    panel.dom.getBoundingClientRect = () => ({ width: 0, height: 0 });
+    panel.toggleDisclosure(false);
+    panel.toggleDisclosure(true);
+    expect(panel.diagram().props.hidden).toBe(true);
+    expect(panel.button("Use spatial view").props["aria-pressed"]).toBe(true);
+    expect(panel.camera()).toEqual(expandedCamera);
+    panel.dom.getBoundingClientRect = () => ({ width: 480, height: 160 });
+    panel.click("Use spatial view");
+    expect(panel.diagram().props.hidden).toBe(false);
+    expect(panel.diagram().props["data-spatial-view"]).toBe("overview");
+    expect(panel.camera()).not.toEqual(expandedCamera);
+    expect(addEventListener).toHaveBeenCalledExactlyOnceWith("resize", expect.any(Function));
+    panel.unmount();
+    expect(removeEventListener).toHaveBeenCalledExactlyOnceWith(
+      "resize",
+      addEventListener.mock.calls[0]![1],
+    );
+  });
+
+  it("retains guarded staff selection across compact disclosure changes without optimistic navigation", () => {
+    setupObserver();
+    const onJump = vi.fn();
+    const panel = harness({ compact: true, navigation, onJump });
+    const initialCamera = panel.camera();
+    panel.select(navigation.entries[1]!.blockId);
+    panel.toggleDisclosure(false);
+    panel.toggleDisclosure(true);
+    expect(panel.button("Jump to selected page").props.disabled).toBe(true);
+    (panel.button("Jump to selected page").props.onClick as () => void)();
+    expect(onJump).not.toHaveBeenCalled();
+    panel.select(navigation.entries[2]!.blockId);
+    panel.click("Jump to selected page");
+    expect(onJump).toHaveBeenCalledExactlyOnceWith(navigation.entries[2]!.blockId);
+    expect(panel.camera()).toEqual(initialCamera);
+    panel.render({ disabled: true });
+    (panel.button("Jump to selected page").props.onClick as () => void)();
+    expect(onJump).toHaveBeenCalledTimes(1);
+    panel.unmount();
+  });
+
   it.each(supportedLocales)(
     "localizes audience spatial controls in %s without exposing private navigation metadata",
     (locale) => {

@@ -330,13 +330,30 @@ function PresentationPreview({
       ),
     ),
   );
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const block = publication.blocks[index];
-  useEffect(() => focusModal(dialogRef.current), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.showModal();
+    const restoreFocus = focusModal(dialog);
+    return () => {
+      restoreFocus();
+      dialog.close();
+      previous?.focus({ preventScroll: true });
+    };
+  }, []);
+  useEffect(() => {
+    workspaceRef.current?.scrollTo({ top: 0, left: 0 });
+    canvasRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [block?.id, mode]);
   return (
-    <div
+    <dialog
       ref={dialogRef}
-      className={styles.previewBackdrop}
+      className={styles.previewModal}
       role="dialog"
       aria-modal="true"
       aria-label={authoring.preview}
@@ -344,6 +361,10 @@ function PresentationPreview({
       data-preview-origin={origin ?? (initialBlockId ? "interaction" : undefined)}
       data-preview-mode={mode}
       lang={locale}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
         handleModalKeyDown(event, onClose);
@@ -351,11 +372,14 @@ function PresentationPreview({
       tabIndex={-1}
     >
       <div className={styles.previewStage}>
-        <div className={styles.previewBar}>
-          <strong lang={draft.title ? "" : locale}>
+        <div className={styles.previewBar} data-preview-header>
+          <strong
+            lang={draft.title ? "" : locale}
+            title={draft.title || t("delivery.presentationBuilder.untitled")}
+          >
             {draft.title || t("delivery.presentationBuilder.untitled")}
           </strong>
-          <span>
+          <span role="status" aria-atomic="true">
             {publication.blocks.length
               ? `${index + 1} / ${publication.blocks.length}`
               : authoring.noSlides}
@@ -381,6 +405,7 @@ function PresentationPreview({
           </button>
         </div>
         <PresentationSpatialDelivery
+          compact
           spatial={
             publication.spatial
               ? {
@@ -399,93 +424,102 @@ function PresentationPreview({
           sourceKey={`builder-preview:${JSON.stringify(publication.spatial)}:${publication.blocks.map((block) => block.id).join(":")}`}
         />
         <div
+          ref={workspaceRef}
+          data-preview-body
           className={
             mode === "presenter" ? styles.previewWorkspacePresenter : styles.previewWorkspace
           }
         >
           <div
+            ref={canvasRef}
             className={styles.previewCanvas}
             role="region"
             aria-label="Slide preview"
             tabIndex={0}
+            data-preview-slide-viewport
           >
-            {!block ? (
-              <p>{authoring.emptyPreview}</p>
-            ) : block.kind === "content" ? (
-              <ContentSlideView
-                block={block}
-                media={
-                  block.mediaId ? (
-                    <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
-                  ) : undefined
-                }
-                renderSceneImage={(mediaId, altText) => (
-                  <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
-                )}
-                variant="preview"
-                designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
-                interactionRuntime={{
-                  mode: "review",
-                  navigationTargets: presentationInteractionTargets(publication, block.id).map(
-                    (target) => ({ blockId: target.id, available: true, blockedReason: null }),
-                  ),
-                  onNavigate: (_nodeId, targetId) => {
-                    const target = publication.blocks.findIndex(
-                      (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
-                    );
-                    if (target >= 0) {
-                      // The link is about to unmount. The surviving region remains in
-                      // the dialog's Tab order, including reverse keyboard navigation.
-                      dialogRef.current
-                        ?.querySelector<HTMLElement>('[role="region"][aria-label="Slide preview"]')
-                        ?.focus({ preventScroll: true });
-                      setIndex(target);
-                    }
-                  },
-                }}
-              />
-            ) : (
-              <PresentationActivitySlide
-                accessibilityContext="preview"
-                question={block.question}
-                design={resolvePresentationActivityDesign(publication.blocks, block.id)}
-                media={
-                  block.question.mediaId ? (
-                    <AuthenticatedMedia
-                      mediaId={block.question.mediaId}
-                      altText={block.question.mediaAlt}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
+            <div className={styles.previewSlide} key={block?.id ?? "empty"} data-preview-slide>
+              {!block ? (
+                <p>{authoring.emptyPreview}</p>
+              ) : block.kind === "content" ? (
+                <ContentSlideView
+                  block={block}
+                  media={
+                    block.mediaId ? (
+                      <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
+                    ) : undefined
+                  }
+                  renderSceneImage={(mediaId, altText) => (
+                    <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                  )}
+                  variant="preview"
+                  designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
+                  interactionRuntime={{
+                    mode: "review",
+                    navigationTargets: presentationInteractionTargets(publication, block.id).map(
+                      (target) => ({ blockId: target.id, available: true, blockedReason: null }),
+                    ),
+                    onNavigate: (_nodeId, targetId) => {
+                      const target = publication.blocks.findIndex(
+                        (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
+                      );
+                      if (target >= 0) {
+                        // The link is about to unmount. The surviving region remains in
+                        // the dialog's Tab order, including reverse keyboard navigation.
+                        dialogRef.current
+                          ?.querySelector<HTMLElement>(
+                            '[role="region"][aria-label="Slide preview"]',
+                          )
+                          ?.focus({ preventScroll: true });
+                        setIndex(target);
+                      }
+                    },
+                  }}
+                />
+              ) : (
+                <PresentationActivitySlide
+                  accessibilityContext="preview"
+                  question={block.question}
+                  design={resolvePresentationActivityDesign(publication.blocks, block.id)}
+                  media={
+                    block.question.mediaId ? (
+                      <AuthenticatedMedia
+                        mediaId={block.question.mediaId}
+                        altText={block.question.mediaAlt}
+                      />
+                    ) : undefined
+                  }
+                />
+              )}
+            </div>
           </div>
           {mode === "presenter" ? (
             <PresenterNotesPanel
+              key={block?.id ?? "empty"}
               notes={block?.kind === "content" ? block.speakerNotes : ""}
               slideNumber={block ? index + 1 : undefined}
               totalSlides={publication.blocks.length}
             />
           ) : null}
         </div>
-        <div className={styles.previewControls}>
+        <div className={styles.previewControls} data-preview-footer>
           <button
             disabled={index === 0}
             onClick={() => setIndex((value) => value - 1)}
             type="button"
           >
-            {authoring.previous}
+            <EditorIcon name="back" /> {authoring.previous}
           </button>
           <button
             disabled={index >= publication.blocks.length - 1}
             onClick={() => setIndex((value) => value + 1)}
             type="button"
           >
-            {authoring.next}
+            {authoring.next} <EditorIcon name="back" />
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

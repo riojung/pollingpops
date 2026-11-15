@@ -14,6 +14,7 @@ import {
   updatePresentationSpatialFrame,
 } from "../../lib/presentation-spatial-authoring";
 import { PresentationSpatialEditor } from "./presentation-spatial-editor";
+import { presentationSpatialEditorCopy } from "./presentation-spatial-editor-copy";
 const mocked = vi.hoisted(() => ({
   hooks: null as null | { cursor: number; slots: unknown[]; effects: (() => void)[] },
   locale: "en-CA" as SupportedLocale,
@@ -78,16 +79,34 @@ function elements(node: ReactNode): ReactElement<Record<string, any>>[] {
   if (!isValidElement<Record<string, any>>(node)) return [];
   return [node, ...elements(node.props.children)];
 }
-function harness(enabled = true) {
+function harness(enabled = true, initialDraft = fixture(enabled)) {
   const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as (() => void)[] },
     capture = new Set<number>();
   let narrow = false,
-    draft = fixture(enabled),
+    draft = initialDraft,
     selectedBlockId = draft.blocks[0]!.id,
     tree: ReactElement;
   const root = {
+    open: false,
+    showModal: vi.fn(() => {
+      root.open = true;
+    }),
+    close: vi.fn(() => {
+      root.open = false;
+    }),
     focus: vi.fn(),
-    getBoundingClientRect: () => ({ width: 900, height: 480 }),
+    getBoundingClientRect: () => ({
+      width: 900,
+      height: 480,
+      left: 0,
+      right: 900,
+      top: 0,
+      bottom: 480,
+    }),
+    querySelector: vi.fn(
+      () => null as null | { getBoundingClientRect: () => { left: number; right: number } },
+    ),
+    scrollBy: vi.fn(),
     setPointerCapture: vi.fn((id: number) => capture.add(id)),
     hasPointerCapture: (id: number) => capture.has(id),
     releasePointerCapture: vi.fn((id: number) => capture.delete(id)),
@@ -123,7 +142,11 @@ function harness(enabled = true) {
   }
   function find(label: string) {
     const result = elements(tree).find(
-      (element) => element.props["aria-label"] === label || element.props.children === label,
+      (element) =>
+        element.props["aria-label"] === label ||
+        (element.type === "button" &&
+          elements(element).some((child) => child.props.children === label)) ||
+        element.props.children === label,
     );
     if (!result) throw new Error(`Missing ${label}`);
     return result;
@@ -184,12 +207,28 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("Presentation spatial editor", () => {
+  it("opens a native modal once and handles native cancellation through the close action", () => {
+    const editor = harness();
+    expect(editor.tree().type).toBe("dialog");
+    expect(editor.root.showModal).toHaveBeenCalledOnce();
+    expect(editor.root.open).toBe(true);
+    editor.render();
+    expect(editor.root.showModal).toHaveBeenCalledOnce();
+    const event = editor.event();
+    elements(editor.tree())[0]!.props.onCancel(event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(editor.onClose).toHaveBeenCalledOnce();
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.unmount();
+    expect(editor.root.close).toHaveBeenCalledOnce();
+    expect(editor.root.open).toBe(false);
+  });
   it("renders the real Korean dialog close control with its translated accessible name", () => {
     mocked.locale = "ko-KR";
     const editor = harness();
     const html = renderToStaticMarkup(editor.tree());
     expect(html).toContain('aria-label="공간 배치"');
-    expect(html).toMatch(/<button[^>]*>공간 배치 닫기<\/button>/);
+    expect(html).toMatch(/<button[^>]*aria-label="공간 배치 닫기"[^>]*><svg/);
     expect(html).not.toContain("Close arrange space");
     editor.find("공간 배치 닫기").props.onClick();
     expect(editor.onClose).toHaveBeenCalledOnce();
@@ -206,6 +245,13 @@ describe("Presentation spatial editor", () => {
       const copy = sectionsSpatialCopy(locale);
       expect(html).toContain(`aria-label="${copy("Arrange space")}"`);
       expect(html).toContain(copy("Frame width"));
+      const workspaceCopy = presentationSpatialEditorCopy(locale);
+      for (const label of Object.values(workspaceCopy)) {
+        expect(label).toBeTruthy();
+        expect(html).toContain(label);
+        if (locale !== "en-CA")
+          expect(Object.values(presentationSpatialEditorCopy("en-CA"))).not.toContain(label);
+      }
       expect(html).toContain(copy("Spatial frames in playback order"));
       expect(html).toContain(copy("Hidden · excluded from publication"));
       expect(html).toContain('lang="">First public title');
@@ -265,6 +311,55 @@ describe("Presentation spatial editor", () => {
     expect(enabled).toContain("Hidden · excluded from publication");
     expect(enabled).toContain('aria-label="Spatial frames in playback order"');
     expect(enabled).not.toContain("PRIVATE_EDITOR_NOTES");
+  });
+  it("uses media-free sibling thumbnails and a numbered filmstrip without duplicating list markers", () => {
+    const editor = harness();
+    const list = editor.find("Spatial frames in playback order");
+    const items = elements(list).filter((element) => element.type === "li");
+    expect(items).toHaveLength(2);
+    for (const item of items) {
+      const children = item.props.children as ReactElement<Record<string, any>>[];
+      const thumbnail = children.find((child) => child.props.mediaEnabled === false);
+      const button = children.find((child) => child.type === "button");
+      expect(thumbnail?.props.block).toBeTruthy();
+      expect(button).toBeTruthy();
+      expect(elements(button).some((element) => element.props.mediaEnabled === false)).toBe(false);
+    }
+    const buttons = elements(list).filter((element) => element.type === "button");
+    expect(buttons[0]!.props["aria-current"]).toBe("step");
+    expect(renderToStaticMarkup(buttons[1]!)).toContain("Hidden");
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.unmount();
+  });
+  it("keeps the selected filmstrip item reachable and focuses long layouts without rewriting authored geometry", () => {
+    const draft = fixture(false);
+    draft.blocks = Array.from({ length: 11 }, () => createContentBlock());
+    const enabled = enablePresentationSpatial(draft);
+    const editor = harness(true, enabled);
+    const before = structuredClone(enabled);
+    const cameraTransform = () =>
+      elements(editor.find("Spatial frame overview")).find(
+        (element) => typeof element.props.style?.transform === "string",
+      )!.props.style.transform as string;
+    const initialCamera = cameraTransform();
+    editor.find("Fit all").props.onClick();
+    editor.render();
+    expect(cameraTransform()).not.toBe(initialCamera);
+    editor.root.querySelector.mockReturnValue({
+      getBoundingClientRect: () => ({ left: 940, right: 1088 }),
+    });
+    editor.render(enabled, enabled.blocks.at(-1)!.id);
+    expect(editor.root.scrollBy).toHaveBeenLastCalledWith({ left: 188 });
+    editor.render();
+    expect(cameraTransform()).not.toBe(initialCamera);
+    editor.root.querySelector.mockReturnValue({
+      getBoundingClientRect: () => ({ left: -148, right: 0 }),
+    });
+    editor.render(enabled, enabled.blocks[0]!.id);
+    expect(editor.root.scrollBy).toHaveBeenLastCalledWith({ left: -148 });
+    expect(enabled).toEqual(before);
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.unmount();
   });
   it("previews a drag locally and commits one snapshot on release", () => {
     const editor = harness();

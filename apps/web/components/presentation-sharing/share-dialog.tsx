@@ -12,7 +12,9 @@ import {
   isExpiredPresentationShareRequest,
 } from "../../lib/presentation-sharing-client";
 import { humanError } from "../../lib/api";
-import styles from "./sharing.module.css";
+import sharingStyles from "./sharing.module.css";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
+import styles from "../presentation/presentation-delivery-dialog.module.css";
 import { PresentationFeedbackPanel } from "./feedback-panel";
 export function PresentationShareButton({
   presentationId,
@@ -35,8 +37,8 @@ export function PresentationShareButton({
         disabled={disabled || !versionId}
         onClick={() => setOpen(true)}
       >
-        <span className={styles.shareLongLabel}>Share review link</span>
-        <span className={styles.shareShortLabel}>Share</span>
+        <span className={sharingStyles.shareLongLabel}>Share review link</span>
+        <span className={sharingStyles.shareShortLabel}>Share</span>
       </button>
       {open && versionId ? (
         <PresentationShareDialog
@@ -136,115 +138,177 @@ export function PresentationShareDialog({
       }}
       lang="en-CA"
     >
-      <div className={styles.controls}>
+      <header className={styles.header}>
+        <span className={styles.headerIcon}>
+          <EditorIcon name="link" />
+        </span>
         <h2 id="presentation-share-title">Share a private review link</h2>
-        <button type="button" onClick={onClose}>
-          Close
+        <button className={styles.closeButton} type="button" onClick={onClose}>
+          <EditorIcon name="close" />
+          <span className={styles.srOnly}>Close</span>
         </button>
-      </div>
-      <p>
-        Shares the published version. Draft changes and speaker notes stay private. Anyone with the
-        link can review it until it expires or you revoke it.
-      </p>
-      <p>Questions are for reading. Responses are not collected.</p>
-      <label>
-        Link expires in
-        <select
-          disabled={busy || pending}
-          value={days}
-          onChange={(event) => setDays(Number(event.target.value))}
-        >
-          <option value={1}>1 day</option>
-          <option value={7}>7 days</option>
-          <option value={30}>30 days</option>
-        </select>
-      </label>
-      {pending ? (
-        <p role="status">A link request is pending. Retry to recover the same link.</p>
-      ) : null}
-      <button type="button" disabled={busy} onClick={() => void create()}>
-        {busy ? "Working…" : pending ? "Retry link creation" : "Create link"}
-      </button>
-      {error ? <p role="alert">{error}</p> : null}
-      {url ? (
-        <div className={styles.created}>
-          <p>
-            Copy or save this link before closing the dialog. To share again later, create a new
-            link.
-          </p>
-          <label>
-            Your private link
-            <textarea
-              readOnly
-              value={url}
-              rows={3}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              if (!navigator.clipboard?.writeText) {
-                setError("Select and copy the link above.");
-                return;
-              }
-              void navigator.clipboard
-                .writeText(url)
-                .catch(() => setError("Select and copy the link above."));
-            }}
-          >
-            Copy link
-          </button>
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            Open review
-          </a>
+      </header>
+      <div className={styles.body}>
+        <div className={styles.publication}>
+          <span className={styles.publicationLabel}>
+            <EditorIcon name="slides" />
+            Published version only
+          </span>
+          <p>Draft changes and speaker notes stay private.</p>
         </div>
-      ) : null}
-      <h3>Review links</h3>
-      {shares.length ? (
-        <ul className={styles.shareList}>
-          {shares.map((share) => {
-            const expired = Date.parse(share.expiresAt) <= Date.now();
-            return (
-              <li key={share.id}>
-                <span>
-                  Created {new Date(share.createdAt).toLocaleString("en-CA")}
-                  <br />
-                  {share.revokedAt
-                    ? "Revoked"
-                    : expired
-                      ? "Expired"
-                      : `Expires ${new Date(share.expiresAt).toLocaleString("en-CA")}`}
-                </span>
-                <button
-                  type="button"
-                  disabled={busy || !!share.revokedAt || expired}
-                  onClick={() => void revoke(share.id)}
-                >
-                  Revoke link
-                </button>
-                <button
-                  type="button"
-                  aria-expanded={feedbackShare === share.id}
-                  onClick={() => setFeedbackShare(feedbackShare === share.id ? null : share.id)}
-                >
-                  Review feedback
-                </button>
-                {feedbackShare === share.id ? (
-                  <PresentationFeedbackPanel
-                    mode="author"
-                    presentationId={presentationId}
-                    shareId={share.id}
-                    versionId={share.versionId}
-                  />
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p>No review links yet.</p>
-      )}
+        <section className={styles.setup} aria-label="Create a review link">
+          <div className={styles.sectionIntro}>
+            <h3>Create a review link</h3>
+            <p>Anyone with the link can review it until it expires or you revoke it.</p>
+          </div>
+          <div className={styles.setupControls}>
+            <label>
+              Link expires in
+              <select
+                disabled={busy || pending}
+                value={days}
+                onChange={(event) => setDays(Number(event.target.value))}
+              >
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+              </select>
+            </label>
+            <button
+              className={styles.primaryButton}
+              type="button"
+              disabled={busy}
+              onClick={() => void create()}
+            >
+              {busy ? "Working…" : pending ? "Retry link creation" : "Create link"}
+            </button>
+          </div>
+          <p className={styles.hint}>Questions are for reading. Responses are not collected.</p>
+          {pending ? (
+            <p className={styles.notice} role="status">
+              A link request is pending. Retry to recover the same link.
+            </p>
+          ) : null}
+        </section>
+        {error ? <p role="alert">{error}</p> : null}
+        {url ? (
+          <section className={styles.created} aria-label="Created review link">
+            <div className={styles.sectionIntro}>
+              <h3>Your link is ready</h3>
+              <p>
+                Copy or save this link before closing the dialog. To share again later, create a new
+                link.
+              </p>
+            </div>
+            <label>
+              Your private link
+              <textarea
+                readOnly
+                value={url}
+                rows={2}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navigator.clipboard?.writeText) {
+                    setError("Select and copy the link above.");
+                    return;
+                  }
+                  void navigator.clipboard
+                    .writeText(url)
+                    .catch(() => setError("Select and copy the link above."));
+                }}
+              >
+                Copy link
+              </button>
+              <a className={styles.actionLink} href={url} target="_blank" rel="noopener noreferrer">
+                Open review
+              </a>
+            </div>
+          </section>
+        ) : null}
+        <section className={styles.management} aria-label="Review links">
+          <div className={styles.sectionHeading}>
+            <h3>Review links</h3>
+            <span className={styles.count}>{shares.length}</span>
+          </div>
+          {shares.length ? (
+            <ul className={styles.shareList}>
+              {shares.map((share, index) => {
+                const expired = Date.parse(share.expiresAt) <= Date.now();
+                return (
+                  <li key={share.id}>
+                    <div className={styles.listRow}>
+                      <div className={styles.itemDetails}>
+                        <div className={styles.itemHeading}>
+                          <strong>Review link {index + 1}</strong>
+                          <span
+                            className={styles.badge}
+                            data-inactive={!!share.revokedAt || expired}
+                          >
+                            {share.revokedAt ? "Revoked" : expired ? "Expired" : "Active"}
+                          </span>
+                        </div>
+                        <span className={styles.itemMeta}>
+                          Created{" "}
+                          <time dateTime={share.createdAt}>
+                            {new Date(share.createdAt).toLocaleString("en-CA")}
+                          </time>
+                        </span>
+                        <span className={styles.itemMeta}>
+                          Expires{" "}
+                          <time dateTime={share.expiresAt}>
+                            {new Date(share.expiresAt).toLocaleString("en-CA")}
+                          </time>
+                        </span>
+                      </div>
+                      <div className={styles.actions}>
+                        <button
+                          type="button"
+                          aria-expanded={feedbackShare === share.id}
+                          onClick={() =>
+                            setFeedbackShare(feedbackShare === share.id ? null : share.id)
+                          }
+                        >
+                          Review feedback
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy || !!share.revokedAt || expired}
+                          onClick={() => void revoke(share.id)}
+                        >
+                          Revoke link
+                        </button>
+                      </div>
+                    </div>
+                    {feedbackShare === share.id ? (
+                      <PresentationFeedbackPanel
+                        mode="author"
+                        presentationId={presentationId}
+                        shareId={share.id}
+                        versionId={share.versionId}
+                      />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className={styles.empty}>
+              <span className={styles.emptyIcon}>
+                <EditorIcon name="link" />
+              </span>
+              <p className={styles.emptyTitle}>No review links yet.</p>
+              <p className={styles.emptyDescription}>
+                Create a link to invite reviewers to this presentation.
+              </p>
+            </div>
+          )}
+        </section>
+      </div>
     </dialog>
   );
 }

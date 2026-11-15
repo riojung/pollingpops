@@ -19,6 +19,7 @@ interface SpatialDeliveryProps {
   currentBlockIndex: number;
   phase: string;
   sourceKey: string;
+  compact?: boolean;
   navigation?: PresentationNavigationSnapshot;
   disabled?: boolean;
   onJump?: (blockId: string) => void;
@@ -37,6 +38,7 @@ function SpatialPath({
   phase,
   navigation,
   disabled = false,
+  compact = false,
   onJump,
 }: SpatialDeliveryProps & { spatial: PresentationSpatialSnapshot }) {
   const { locale } = useLocale();
@@ -46,6 +48,7 @@ function SpatialPath({
   const [size, setSize] = useState({ width: 800, height: 240 });
   const [selected, setSelected] = useState("");
   const diagram = useRef<HTMLDivElement>(null);
+  const measureDiagram = useRef<(() => void) | null>(null);
   const selectId = useId();
   const reasonId = useId();
   const current = spatial.frames.find((frame) => frame.blockIndex === currentBlockIndex);
@@ -85,18 +88,23 @@ function SpatialPath({
             : { width: rect.width, height: rect.height },
         );
     };
+    measureDiagram.current = measure;
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element);
     if (!observer) window.addEventListener("resize", measure);
     return () => {
+      measureDiagram.current = null;
       observer?.disconnect();
       if (!observer) window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [compact]);
+  useEffect(() => {
+    if (compact && !linear) measureDiagram.current?.();
+  }, [compact, linear]);
 
-  return (
-    <section className={styles.panel} aria-label={copy("Presentation spatial path")} lang={locale}>
+  const content = (
+    <>
       <div className={styles.toolbar}>
         <p className={styles.status} role="status">
           {status}
@@ -218,6 +226,43 @@ function SpatialPath({
           ) : null}
         </div>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      className={`${styles.panel}${compact ? ` ${styles.compact}` : ""}`}
+      aria-label={copy("Presentation spatial path")}
+      data-spatial-compact={compact ? "true" : undefined}
+      data-spatial-linear={compact ? String(linear) : undefined}
+      lang={locale}
+    >
+      {compact ? (
+        <details
+          className={styles.disclosure}
+          onToggle={(event) => {
+            if (event.currentTarget.open) measureDiagram.current?.();
+          }}
+        >
+          <summary aria-label={copy("Presentation spatial path")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" />
+            </svg>
+            <span>{copy("Presentation spatial path")}</span>
+            <svg
+              className={styles.chevron}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+          <div className={styles.compactBody}>{content}</div>
+        </details>
+      ) : (
+        content
+      )}
     </section>
   );
 }

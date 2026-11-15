@@ -5,6 +5,34 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Presenter preview layout — November 14, 2026
+
+The editor preview now reserves space explicitly for its header, optional spatial path, slide
+workspace and navigation footer. The path starts collapsed; expanding it reveals a bounded,
+scrollable map and controls. Linear mode removes the map without reserving an empty main row.
+These preferences stay local to preview; live spatial delivery keeps its existing default UI.
+
+Wide previews fit the slide within the available width and height, including short windows.
+Presenter notes have an independent scroll area, with privacy and publication guidance in a
+disclosure. Phones retain readable slide flow and a bounded notes panel. Changing pages resets
+the reading position and notes, and Audience view removes private notes from the DOM. Preview
+uses native modal isolation, keyboard navigation and focus restoration. Source and Round import
+dialogs retain their separate backdrop styles.
+
+Verification: 68 focused tests across four suites pass, along with web type checks, lint,
+formatting and a fresh production build. Twelve selected production browser journeys pass
+across Chromium/Firefox desktop and Chromium/WebKit phones, covering combined spatial preview
+and private notes, 1280×800/1280×500/320px layouts, linear-mode space reclamation, scroll reset,
+native focus/Escape handling, Axe checks and unchanged saved records. Existing notes-authoring
+and live spatial-delivery cases retain their publication, privacy and response checks. Visual
+inspection added actual-slide containment and notes-heading reachability checks; all six phone
+journeys were rerun after the final phone-only reading-flow correction. The Docker web build passes. Local
+captures and source-bound build evidence are under `artifacts/presenter-preview/`.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,188 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
 ## Editor delivery dialogs and Arrange space — November 14, 2026
 
 Private review, reading assignment, practice assignment and export dialogs share a scoped visual

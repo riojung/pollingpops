@@ -894,12 +894,42 @@
   backdrop-filter: blur(8px);
 }
 
-.previewStage {
+.previewModal {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 18px;
+  overflow: hidden;
+  border: 0;
+  place-items: center;
+  color: var(--ui-text);
+  font: inherit;
+  background: transparent;
+}
+
+.previewModal[open] {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(1200px, 100%);
+}
+
+.previewModal::backdrop {
+  background: var(--ui-overlay);
+  backdrop-filter: blur(8px);
+}
+
+.previewStage {
+  display: flex;
+  flex-direction: column;
+  width: min(1440px, 100%);
   min-width: 0;
-  height: min(820px, 94vh);
+  min-height: 0;
+  height: min(900px, calc(100dvh - 36px));
   overflow: hidden;
   border-radius: 20px;
   box-shadow: var(--ui-shadow-lg);
@@ -995,9 +1025,32 @@
 
 .previewBar,
 .previewControls {
+  flex-shrink: 0;
   justify-content: space-between;
   padding: 12px 18px;
   background: var(--ui-surface-raised);
+}
+
+.previewBar {
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.previewControls {
+  border-top: 1px solid var(--ui-border);
+}
+
+.previewControls button:last-child svg {
+  transform: rotate(180deg);
+}
+
+.previewBar button,
+.previewControls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  font-size: 13px;
 }
 
 .sourceImportDialog {
@@ -1037,12 +1090,37 @@
 }
 
 .previewCanvas {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(min-content, 1fr);
-  padding: clamp(22px, 4vw, 60px);
-  place-items: stretch;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  min-width: 0;
+  min-height: 0;
+  padding: 2px;
   overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.previewCanvas:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: -3px;
+}
+
+.previewSlide {
+  --preview-motion-space: 0px;
+  flex: 0 0 auto;
+  width: min(100%, max(160px, calc((100cqh - var(--preview-motion-space)) * 16 / 9)));
+  min-width: 0;
+  max-width: 100%;
+}
+
+.previewSlide:has([data-motion-controls]) {
+  --preview-motion-space: 64px;
+}
+
+.previewSlide > article {
+  box-sizing: border-box;
 }
 
 .previewContent,
@@ -2071,24 +2149,21 @@
 .previewWorkspace,
 .previewWorkspacePresenter {
   display: grid;
+  flex: 1 1 0;
   grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   min-height: 0;
   min-width: 0;
+  padding: 14px;
   overflow: hidden;
 }
 .previewWorkspacePresenter {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 31%);
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 29%, 380px);
 }
 .previewWorkspacePresenter > section {
   min-height: 0;
-  overflow: auto;
-  margin: 14px 14px 14px 0;
-}
-.previewWorkspace .previewCanvas,
-.previewWorkspacePresenter .previewCanvas {
-  align-content: start;
-  padding: 16px;
-  min-height: 0;
+  overflow: hidden;
+  margin: 0;
 }
 .previewModes {
   display: flex;
@@ -2128,21 +2203,69 @@
   flex: 1 1 200px;
   min-width: 0;
   font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 @media (max-width: 700px) {
+  .previewModal {
+    padding: 0;
+  }
+  .previewStage {
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .previewBar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title title" "count close" "modes modes";
+    gap: 8px;
+    padding: 12px;
+  }
+  .previewBar > strong {
+    grid-area: title;
+  }
+  .previewBar > span {
+    grid-area: count;
+    font-size: 13px;
+  }
+  .previewBar > button {
+    grid-area: close;
+  }
+  .previewModes {
+    grid-area: modes;
+  }
+  .previewModes button {
+    flex: 1;
+  }
+  .previewWorkspace,
   .previewWorkspacePresenter {
     grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
     align-content: start;
     overflow: auto;
+    padding: 12px;
   }
+  .previewWorkspace .previewCanvas,
   .previewWorkspacePresenter .previewCanvas {
+    container-type: normal;
+    display: block;
+    min-height: min-content;
     overflow: visible;
-    padding-bottom: 0;
+    padding: 0;
+  }
+  .previewSlide {
+    width: 100%;
   }
   .previewWorkspacePresenter > section {
-    margin: 14px;
-    overflow: visible;
+    height: clamp(300px, 50dvh, 480px);
+    margin: 0;
+  }
+  .previewControls {
+    padding: 10px 12px;
   }
   .previewModes button,
   .activityHeading > button {

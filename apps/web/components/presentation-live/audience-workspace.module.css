@@ -1,11 +1,19 @@
 .participantPage {
-  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   color: var(--ui-text);
   background: var(--ui-canvas);
 }
 
 .topbar {
+  position: relative;
+  z-index: 40;
   display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   min-height: 60px;
   align-items: center;
   justify-content: space-between;
@@ -13,6 +21,68 @@
   border-bottom: 1px solid var(--ui-border);
   padding: 6px clamp(12px, 2.5vw, 28px);
   background: var(--ui-surface);
+}
+
+.viewControls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+  order: 2;
+}
+
+.progress {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-text-muted);
+}
+
+.questionsToggle,
+.questionsHeading button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  padding: 8px 11px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.questionsToggle[aria-expanded="true"] {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+}
+
+.questionsToggle svg,
+.questionsHeading svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.questionsToggle:focus-visible,
+.questionsHeading button:focus-visible,
+.canvas:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: -3px;
 }
 
 .topbar :global(.brand-pop),
@@ -29,6 +99,7 @@
   gap: 6px 16px;
   font-size: 0.8125rem;
   color: var(--ui-text-muted);
+  order: 1;
 }
 
 .connectionStatus {
@@ -55,11 +126,89 @@
 
 .stage {
   display: grid;
-  width: min(1440px, 100%);
-  align-content: start;
-  gap: 12px;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 28%, 360px);
+  gap: 14px;
   margin: 0 auto;
-  padding: 18px 20px 28px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.stage[data-questions-open="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.contentPane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.contentPane > :global(.error) {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.questions[hidden] {
+  display: none;
+}
+
+.questionsHeading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.questionsHeading h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.questionsHeading button {
+  width: 36px;
+  min-height: 36px;
+  padding: 8px;
+  border-color: transparent;
+}
+
+.questionsBody {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.questionsBody :global(.qna-heading) > div {
+  display: none;
+}
+
+.questionsBody :global(.qna-heading) {
+  justify-content: flex-end;
+  margin-bottom: 0;
 }
 
 .stage > :global(.error) {
@@ -67,14 +216,17 @@
 }
 
 .canvas {
-  width: min(920px, 100%);
+  flex: 1 1 0;
+  width: 100%;
   min-width: 0;
-  min-height: 280px;
-  margin: 0 auto;
+  min-height: 0;
+  margin: 0;
   border: 1px solid var(--ui-border);
   border-radius: 16px;
   padding: clamp(18px, 2.5vw, 32px);
   background: var(--ui-surface);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .canvasContent {
@@ -96,6 +248,11 @@
 }
 
 .canvas[data-kind="content"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  container-type: size;
   width: 100%;
   min-height: 0;
   border: 0;
@@ -123,7 +280,7 @@
 }
 
 .slideFrame {
-  width: min(100%, calc((100dvh - 160px) * 16 / 9));
+  width: min(100%, max(160px, calc((100cqh - 96px) * 16 / 9)));
   min-width: 0;
   margin: 0 auto;
   overflow: hidden;
@@ -131,6 +288,10 @@
   border-radius: 10px;
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-sm);
+}
+
+.slideFrame > article {
+  box-sizing: border-box;
 }
 
 .statusPill {
@@ -359,6 +520,32 @@
   padding: 12px;
 }
 
+@media (max-width: 980px) {
+  .stage {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+  }
+  .contentPane {
+    flex: 1 1 0;
+  }
+  .questions {
+    position: fixed;
+    z-index: 60;
+    inset-block: 10px;
+    inset-inline-end: 10px;
+    width: min(380px, calc(100% - 20px));
+    max-height: calc(100dvh - 20px);
+    box-shadow: var(--ui-shadow-lg);
+  }
+  .questionsScrim {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--ui-overlay);
+  }
+}
+
 @media (max-width: 700px) {
   .topbar {
     gap: 10px;
@@ -372,9 +559,24 @@
     font-size: 0.75rem;
   }
 
+  .viewControls {
+    flex-basis: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .questionsToggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .questionsToggle > span {
+    display: none;
+  }
+
   .stage {
     gap: 10px;
-    padding: 12px 10px 24px;
+    padding: 10px;
   }
 
   .canvas {
@@ -390,6 +592,11 @@
   .slideFrame {
     width: 100%;
     overflow: visible;
+  }
+
+  .canvas[data-kind="content"] {
+    display: block;
+    container-type: normal;
   }
 
   .choiceGrid {

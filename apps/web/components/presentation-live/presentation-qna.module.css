@@ -122,12 +122,100 @@
   border-radius: 12px;
 }
 
+.container.sidebar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+}
+
+.sidebar :global(.qna-panel) {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-top: 0;
+  border-radius: 0;
+}
+
+.sidebar :global(.qna-heading) {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.sidebar :global(.qna-heading) h2 {
+  font-size: 16px;
+}
+
+.sidebar :global(.qna-compose) {
+  margin-block: 16px;
+  padding-bottom: 16px;
+}
+
+.sidebar :global(.qna-compose) :global(.field) {
+  margin: 0 0 10px;
+}
+
+.sidebar :global(.textarea) {
+  min-height: 104px;
+  font-size: 14px;
+}
+
+.sidebar :global(.button-row) {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sidebar :global(.qna-compose) small {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sidebar :global(.qna-list) {
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.sidebar :global(.qna-question) {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.sidebar :global(.qna-question-meta) {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.sidebar :global(.qna-question-body) {
+  margin-block: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.sidebar :global(.qna-replies) {
+  margin-top: 12px;
+  padding-left: 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 620px) {
   .container {
     width: calc(100% - 20px);
   }
 
-  .compact {
+  .compact,
+  .container.sidebar {
     width: 100%;
   }
 
@@ -135,5 +223,9 @@
   .container :global(.button-quiet),
   .container :global(.button-danger) {
     min-height: 44px;
+  }
+
+  .sidebar :global(.textarea) {
+    font-size: 16px;
   }
 }

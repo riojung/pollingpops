@@ -66,6 +66,25 @@ function slideFixture() {
 }
 
 describe("ContentSlideView", () => {
+  it("opts legacy display artwork into fixed geometry without making its text or media inert", () => {
+    const block = slideFixture();
+    block.mediaId = "11111111-1111-4111-8111-111111111111";
+    const media = <img src="/authorized-image" alt="Audience evidence" />;
+    const fixed = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="live" media={media} fixedLayout />,
+    );
+    const ordinary = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="live" media={media} />,
+    );
+    expect(fixed).toContain('data-content-fixed-layout="true"');
+    expect(fixed).toContain('tabindex="0"');
+    expect(fixed).toContain('src="/authorized-image"');
+    expect(fixed).not.toContain('inert=""');
+    expect(fixed).not.toContain("data-static-thumbnail");
+    expect(ordinary).not.toContain("data-content-fixed-layout");
+    expect(fixed.replace(' data-content-fixed-layout="true"', "")).toBe(ordinary);
+  });
+
   it("opts legacy slides into inert thumbnail artwork without editor controls", () => {
     const block = slideFixture();
     const markup = renderToStaticMarkup(

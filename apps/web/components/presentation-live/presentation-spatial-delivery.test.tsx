@@ -242,6 +242,28 @@ describe("geometry-only live presentation spatial delivery", () => {
     },
   );
 
+  it.each(["en-CA", "ko-KR"] as const)("keeps header navigation geometry-only in %s", (locale) => {
+    fixture.locale = locale;
+    const markup = renderToStaticMarkup(
+      <PresentationSpatialDelivery
+        placement="header"
+        spatial={spatial}
+        navigation={navigation}
+        currentBlockIndex={1}
+        phase="content"
+        sourceKey="public-header"
+      />,
+    );
+    expect(markup).toContain('data-spatial-header="true"');
+    expect(markup).toContain(sectionsSpatialCopy(locale)("Presentation spatial path"));
+    expect(markup).not.toMatch(/<details[^>]*\sopen(?:\s|=|>)/);
+    expect(markup.match(/data-spatial-page=/g)).toHaveLength(3);
+    expect(markup).not.toContain("Current private title");
+    expect(markup).not.toContain("Guarded activity");
+    expect(markup).not.toContain("00000000-");
+    expect(markup).not.toContain(sectionsSpatialCopy(locale)("Jump to page"));
+  });
+
   it("remeasures a compact diagram on expansion without ResizeObserver and preserves local view state", () => {
     vi.stubGlobal("ResizeObserver", undefined);
     const addEventListener = vi.fn(),

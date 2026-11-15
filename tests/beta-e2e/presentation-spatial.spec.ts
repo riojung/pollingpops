@@ -318,7 +318,7 @@ async function createFixture(page: Page, info: TestInfo) {
   const companion = await companionPopup;
   await expect(spatialPanel(companion)).toBeVisible();
   const stagePopup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await stagePopup;
   await stage.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
   return {
@@ -597,6 +597,7 @@ for (const suffix of ["", " @mobile"]) {
       if (!originalResponseControl) throw new Error("Unsent response control must be mounted");
       const beforeLocal = windowState(await hostSnapshot(page, fixture.sessionId));
       const panel = spatialPanel(guest.page);
+      await panel.locator("summary").click();
       const overviewButton = panel.getByRole("button", { name: "Show overview", exact: true });
       await overviewButton.focus();
       await overviewButton.press("Enter");
@@ -606,6 +607,7 @@ for (const suffix of ["", " @mobile"]) {
       await expect(selected).toHaveAttribute("aria-pressed", "true");
       await panel.getByRole("button", { name: "Use spatial view", exact: true }).click();
       await panel.getByRole("button", { name: "Focus current page", exact: true }).click();
+      await guest.page.keyboard.press("Escape");
       await expect(selected).toHaveAttribute("aria-pressed", "true");
       expect(
         await selected.evaluate(

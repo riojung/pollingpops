@@ -3,6 +3,14 @@
   min-width: 0;
 }
 
+.summary {
+  min-height: 44px;
+  padding: 10px 0;
+  color: var(--ui-accent-ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .container > .editor {
   grid-template-columns: minmax(0, 1fr);
 }

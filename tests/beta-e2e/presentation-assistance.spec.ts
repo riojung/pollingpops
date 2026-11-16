@@ -9,6 +9,7 @@ import {
   type InsertPresentationAssistanceProposals,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickNavigatorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -127,10 +128,7 @@ async function openAssistance(page: Page) {
     const hideInspector = page.getByRole("button", { name: "Hide inspector", exact: true });
     if ((page.viewportSize()?.width ?? 1280) <= 700 && (await hideInspector.isVisible()))
       await hideInspector.click();
-    const open = page.getByRole("button", { name: "Outline to slides", exact: true });
-    const map = page.getByRole("button", { name: "Open map", exact: true });
-    if (!(await open.isVisible()) && (await map.isVisible())) await map.click();
-    await open.click();
+    await clickNavigatorAction(page, "Outline to slides");
   }
   await expect(dialog).toBeVisible();
   return dialog;
@@ -307,6 +305,10 @@ for (const suffix of ["", " @mobile"]) {
     expect((await readE01Record(page, record.id)).draft).toEqual(recovered.draft);
     expect((await readE01Record(page, record.id)).draftRevision).toBe(recovered.draftRevision);
     await failed.dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(
+      page.locator('summary[aria-label="Insert & import"]').locator("xpath=ancestor::details[1]"),
+    ).not.toHaveAttribute("open");
+    await expect(page.locator('summary[aria-label="Insert & import"]')).toBeFocused();
 
     // Pin a known insertion anchor, then have a separate editor delete it while
     // this proposal remains open. One reload must refresh both revision and anchor.
@@ -471,7 +473,8 @@ for (const suffix of ["", " @mobile"]) {
     });
 
     await page.goto("/create/presentation");
-    await page.locator('a[href="/create/presentation?start=outline"]').click();
+    await page.getByText("Other starting points", { exact: true }).click();
+    await page.getByRole("link", { name: "From outline", exact: true }).click();
     const input = page.getByRole("textbox", { name: "Presentation title", exact: true });
     await input.fill(title);
     await page.setViewportSize({ width: 320, height: 760 });

@@ -165,12 +165,21 @@ export async function fetchPresentationReviewImage(
   mediaId: string,
   signal: AbortSignal,
 ) {
+  return fetchPresentationPrivateImage(sharePath(shareId), token, mediaId, signal);
+}
+/** Shared bounded image transport for credential-protected published presentations. */
+export async function fetchPresentationPrivateImage(
+  path: string,
+  token: string,
+  mediaId: string,
+  signal: AbortSignal,
+) {
   if (!uuid.test(mediaId)) throw new PresentationReviewImageError(false);
   await acquireImageRead(signal);
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
       signal.throwIfAborted();
-      const response = await fetch(`${API_URL}${sharePath(shareId)}/media/${mediaId}`, {
+      const response = await fetch(`${API_URL}${path}/media/${mediaId}`, {
         headers: { authorization: `Bearer ${token}` },
         credentials: "omit",
         cache: "no-store",

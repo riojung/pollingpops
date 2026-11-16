@@ -2,7 +2,27 @@
 
 import { useEffect, useState } from "react";
 
-export function Countdown({ deadline }: { deadline: string | null }) {
+export interface CountdownLabels {
+  seconds: (seconds: number) => string;
+  remaining: (seconds: number) => string;
+  paused: string;
+  timeUp: string;
+}
+
+const englishLabels: CountdownLabels = {
+  seconds: (seconds) => `${seconds}s`,
+  remaining: (seconds) => `${seconds} seconds remaining`,
+  paused: "Paused",
+  timeUp: "Time is up",
+};
+
+export function Countdown({
+  deadline,
+  labels = englishLabels,
+}: {
+  deadline: string | null;
+  labels?: CountdownLabels;
+}) {
   const [remaining, setRemaining] = useState(() =>
     deadline ? Math.max(0, new Date(deadline).getTime() - Date.now()) : 0,
   );
@@ -18,14 +38,14 @@ export function Countdown({ deadline }: { deadline: string | null }) {
   const seconds = Math.ceil(remaining / 1_000);
   const announcement =
     seconds === 10 || seconds === 5
-      ? `${seconds} seconds remaining`
+      ? labels.remaining(seconds)
       : seconds === 0 && deadline
-        ? "Time is up"
+        ? labels.timeUp
         : "";
   return (
     <>
       <span aria-live="off" className="countdown" role="timer">
-        {deadline ? `${seconds}s` : "Paused"}
+        {deadline ? labels.seconds(seconds) : labels.paused}
       </span>
       <span aria-atomic="true" aria-live="polite" className="sr-only">
         {announcement}

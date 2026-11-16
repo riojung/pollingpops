@@ -13,6 +13,7 @@ import { useLocale } from "../locale-provider";
 import { textResponseCharacterLimit } from "@openround/contracts";
 import { isTextQuestion } from "../../lib/text-response";
 import styles from "./response-editor.module.css";
+import { authoringWorkflowCopy } from "./authoring-workflow-copy";
 
 function ChoiceResponseEditor({
   question,
@@ -30,6 +31,7 @@ function ChoiceResponseEditor({
   onUpdateChoiceQuestion: ChoiceQuestionUpdater;
 }) {
   const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
   return (
     <>
       {question.type === "ranking" ? (
@@ -107,7 +109,10 @@ function ChoiceResponseEditor({
             {question.type !== "poll" && question.type !== "ranking" ? (
               <label className={styles.correctControl}>
                 <input
-                  aria-label={`Mark choice ${index + 1} correct`}
+                  aria-label={authoring.markCorrect.replace(
+                    "{number}",
+                    new Intl.NumberFormat(locale).format(index + 1),
+                  )}
                   checked={choice.isCorrect}
                   className="choice-correct"
                   name={
@@ -129,7 +134,7 @@ function ChoiceResponseEditor({
                       })),
                     }))
                   }
-                  lang="en-CA"
+                  lang={locale}
                   type={question.type === "multi_select" ? "checkbox" : "radio"}
                 />
               </label>
@@ -159,24 +164,27 @@ function ChoiceResponseEditor({
                 value={choice.label}
               />
               {question.type !== "poll" && question.type !== "ranking" ? (
-                <div lang="en-CA">
+                <div lang={locale}>
                   <BetaDisclosure
                     className="choice-diagnostics"
                     enabled={uxBeta}
-                    summary="Diagnostic rationale and feedback"
+                    summary={authoring.diagnosticFeedback}
                   >
                     <div className="toolbar" style={{ marginTop: 8 }}>
                       <span
                         className="sr-only"
                         id={`misconception-label-${choice.id}`}
-                        lang="en-CA"
+                        lang={locale}
                       >
-                        Misconception tag for choice {index + 1}
+                        {authoring.misconceptionLabel.replace(
+                          "{number}",
+                          new Intl.NumberFormat(locale).format(index + 1),
+                        )}
                       </span>
                       <input
                         aria-labelledby={`misconception-label-${choice.id}`}
                         className="input"
-                        lang={choice.misconceptionKey ? "" : "en-CA"}
+                        lang={choice.misconceptionKey ? "" : locale}
                         maxLength={64}
                         onChange={(event) =>
                           onUpdateChoiceQuestion((item) => ({
@@ -191,16 +199,19 @@ function ChoiceResponseEditor({
                             ),
                           }))
                         }
-                        placeholder="Misconception tag, such as unit-confusion"
+                        placeholder={authoring.misconceptionPlaceholder}
                         value={choice.misconceptionKey ?? ""}
                       />
-                      <span className="sr-only" id={`feedback-label-${choice.id}`} lang="en-CA">
-                        Why someone might choose choice {index + 1}
+                      <span className="sr-only" id={`feedback-label-${choice.id}`} lang={locale}>
+                        {authoring.choiceReasonLabel.replace(
+                          "{number}",
+                          new Intl.NumberFormat(locale).format(index + 1),
+                        )}
                       </span>
                       <input
                         aria-labelledby={`feedback-label-${choice.id}`}
                         className="input"
-                        lang={choice.feedback ? "" : "en-CA"}
+                        lang={choice.feedback ? "" : locale}
                         maxLength={500}
                         onChange={(event) =>
                           onUpdateChoiceQuestion((item) => ({
@@ -212,7 +223,7 @@ function ChoiceResponseEditor({
                             ),
                           }))
                         }
-                        placeholder="Why might someone choose this?"
+                        placeholder={authoring.choiceReasonPlaceholder}
                         value={choice.feedback ?? ""}
                       />
                     </div>
@@ -283,7 +294,8 @@ export function ResponseEditor({
   onUpdateChoiceQuestion: ChoiceQuestionUpdater;
   onUpdateQuestion: QuestionUpdater;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
   if (isTextQuestion(question.type))
     return (
       <p className="muted">
@@ -323,7 +335,7 @@ export function ResponseEditor({
           />
         </label>
         <label className="field" style={{ flex: "1 1 180px" }}>
-          <span lang="en-CA">Absolute tolerance</span>
+          <span lang={locale}>{authoring.absoluteTolerance}</span>
           <input
             className="input"
             inputMode="decimal"
@@ -337,7 +349,7 @@ export function ResponseEditor({
           />
         </label>
         <label className="field" style={{ flex: "1 1 180px" }}>
-          <span lang="en-CA">Optional unit</span>
+          <span lang={locale}>{authoring.optionalUnit}</span>
           <input
             className="input"
             lang=""
@@ -359,7 +371,7 @@ export function ResponseEditor({
   return (
     <div className="toolbar">
       <label className="field" style={{ flex: "1 1 120px" }}>
-        <span lang="en-CA">Minimum</span>
+        <span lang={locale}>{authoring.minimum}</span>
         <select
           className="select"
           onChange={(event) =>
@@ -375,7 +387,7 @@ export function ResponseEditor({
         </select>
       </label>
       <label className="field" style={{ flex: "1 1 120px" }}>
-        <span lang="en-CA">Maximum</span>
+        <span lang={locale}>{authoring.maximum}</span>
         <select
           className="select"
           onChange={(event) =>
@@ -391,7 +403,7 @@ export function ResponseEditor({
         </select>
       </label>
       <label className="field" style={{ flex: "1 1 180px" }}>
-        <span lang="en-CA">Minimum label</span>
+        <span lang={locale}>{authoring.minimumLabel}</span>
         <input
           className="input"
           lang=""
@@ -404,7 +416,7 @@ export function ResponseEditor({
         />
       </label>
       <label className="field" style={{ flex: "1 1 180px" }}>
-        <span lang="en-CA">Maximum label</span>
+        <span lang={locale}>{authoring.maximumLabel}</span>
         <input
           className="input"
           lang=""

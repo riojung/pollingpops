@@ -821,32 +821,32 @@
 .libraryGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 16px;
+  gap: var(--workspace-card-gap, 10px);
   list-style: none;
   padding: 0;
-  margin: 20px 0;
+  margin: 12px 0;
 }
 .libraryCard {
   min-width: 0;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--ui-surface-raised);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 .thumbnail {
   display: grid;
   place-items: center;
-  min-height: 145px;
-  padding: 16px;
+  min-height: 80px;
+  padding: 8px;
+  border-radius: 11px 11px 0 0;
   background: var(--ui-accent-soft);
   color: var(--ui-accent-ink);
   border-bottom: 1px solid var(--ui-border);
 }
 .thumbnail svg {
-  width: 120px;
-  height: 80px;
+  width: 96px;
+  height: 56px;
 }
 .libraryCard > div:last-child {
   padding: 18px;
@@ -859,12 +859,13 @@
 .libraryCard p {
   font-size: 12px;
   color: var(--ui-text-muted);
-  line-height: 1.5;
-  margin: 6px 18px 12px;
+  line-height: 1.4;
+  margin: 4px 14px 8px;
 }
 .libraryCard > a {
-  padding: 18px 18px 0;
-  font-size: 17px;
+  padding: 10px 14px 4px;
+  min-height: var(--workspace-control-height, 44px);
+  font-size: 16px;
   overflow-wrap: anywhere;
 }
 .typeChoices {

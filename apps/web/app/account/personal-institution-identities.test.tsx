@@ -4,7 +4,7 @@ import type { FederatedIdentity, OidcStatus } from "@openround/contracts";
 import { LocaleProvider } from "../../components/locale-provider";
 import { englishMessages } from "../../lib/i18n/catalog";
 import { accountEnglishMessages } from "../../lib/i18n/domains/account";
-import { visibleSettingsSections } from "./account-settings-model";
+import { accountPermissions, visibleSettingsSections } from "./account-settings-model";
 import { PersonalInstitutionIdentities } from "./personal-institution-identities";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/account" }));
@@ -48,7 +48,9 @@ describe("personal institution sign-in settings", () => {
     "keeps own identity management in Privacy for a %s without workspace integration permission",
     (role) => {
       expect(visibleSettingsSections(null, role)).toContain("data");
-      expect(visibleSettingsSections(null, role)).not.toContain("security");
+      // Security exposes the shared idle policy read-only; it grants no integration access.
+      expect(visibleSettingsSections(null, role)).toContain("security");
+      expect(accountPermissions(null, role).manageIntegrations).toBe(false);
       const linked = render(status, [identity]);
       expect(linked).toContain("viewer@example.org");
       expect(linked).toContain(">Unlink</button>");

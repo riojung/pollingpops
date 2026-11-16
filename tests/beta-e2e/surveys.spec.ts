@@ -53,7 +53,7 @@ for (const surface of ["", "@mobile "]) {
           response.request().method() === "POST" &&
           new URL(response.url()).pathname === "/v1/survey-rooms/join",
       );
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       const admitted = (await (await admission).json()).attempt;
       expect(admitted.schemaVersion).toBe(2);
       expect(admitted.content.items[0].question.maxSelections).toBe(2);
@@ -146,9 +146,19 @@ for (const surface of ["", "@mobile "]) {
   }) => {
     await signInBeta(page);
     await page.goto("/create");
-    await expect(page.getByRole("link", { name: /^Survey Share/ })).toBeVisible();
-    await page.getByRole("link", { name: /^Live poll/ }).click();
-    await page.getByRole("link", { name: /Start blank/ }).click();
+    await expect(page.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^More formats$/ })
+      .click();
+    const survey = page
+      .getByRole("navigation", { name: "More formats", exact: true })
+      .getByRole("link")
+      .filter({ has: page.getByRole("heading", { name: "Survey", exact: true }) });
+    await expect(survey).toBeVisible();
+    await expect(survey).toHaveAttribute("href", "/surveys/new");
+    // Survey remains a separate format; the poll route keeps unscored response defaults.
+    await page.goto("/create?type=poll&start=blank");
     await expect(page.getByRole("radio", { name: /^Poll/ })).toBeChecked();
     await expect(page.getByRole("radio", { name: /^Number/ })).toHaveCount(0);
     await page.goto("/templates");
@@ -170,7 +180,15 @@ for (const surface of ["", "@mobile "]) {
     test.setTimeout(60000);
     await signInBeta(page);
     await page.goto("/create");
-    await page.getByRole("link", { name: /^Survey Share/ }).click();
+    await page
+      .locator("summary")
+      .filter({ hasText: /^More formats$/ })
+      .click();
+    await page
+      .getByRole("navigation", { name: "More formats", exact: true })
+      .getByRole("link")
+      .filter({ has: page.getByRole("heading", { name: "Survey", exact: true }) })
+      .click();
     await page.getByLabel("Search templates").fill("Training feedback");
     await page.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
@@ -199,10 +217,12 @@ for (const surface of ["", "@mobile "]) {
       const participant = await context.newPage();
       await participant.goto(`/join?code=${room.code}`);
       await expect(
-        participant.getByText("No nickname or learning identity is collected.", { exact: false }),
-      ).toBeVisible();
+        participant.getByRole("region", { name: "Survey", exact: true }).getByRole("status"),
+      ).toHaveText(
+        "No nickname is collected. Organizers see question-level totals, not linked respondent answers.",
+      );
       await expect(participant.getByLabel("Nickname")).toHaveCount(0);
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       await expect(participant).toHaveURL(new RegExp(`/survey/${room.id}$`));
       await participant.getByRole("button", { name: "Submit Survey", exact: true }).click();
       await expect(participant.getByRole("main").getByRole("alert")).toContainText("Question 1");

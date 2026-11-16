@@ -1,0 +1,227 @@
+.map {
+  min-width: 0;
+  container-type: inline-size;
+  color: var(--ui-text, #303640);
+  background: var(--ui-surface, #fff);
+  border-bottom: 1px solid var(--ui-border, #cbd5e1);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 12px;
+}
+.toggle,
+.edit {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.toggle svg,
+.edit svg,
+.action svg,
+.association svg {
+  flex: 0 0 18px;
+}
+.toggle[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+.toggle:focus-visible,
+.action:focus-visible,
+.edit:focus-visible,
+.connection:focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+.count,
+.kind,
+.help {
+  color: var(--ui-text-muted, #52616f);
+}
+.count {
+  font-size: 12px;
+}
+.content {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 12px 12px;
+}
+.help {
+  margin: 0;
+  font-size: 12px;
+}
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.35fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+.actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  max-height: 244px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 3px;
+  padding: 3px;
+  margin: 0;
+  list-style: none;
+}
+.actions li {
+  min-width: 0;
+}
+.action {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  height: 100%;
+  padding: 10px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.action[aria-pressed="true"] {
+  border-color: var(--ui-focus, #1769aa);
+  box-shadow: inset 0 0 0 1px var(--ui-focus, #1769aa);
+  background: var(--ui-accent-soft, #e6f2ec);
+}
+.ordinal {
+  color: var(--ui-accent-ink, #146552);
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  height: 24px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+.actionText {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.kind {
+  font-size: 11px;
+}
+.connection {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #cbd5e1);
+  border-radius: 10px;
+  background: var(--ui-surface-soft, #f1f3f5);
+  max-height: 244px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
+.route > dl {
+  min-width: 0;
+  margin: 0;
+}
+.route dt {
+  margin-bottom: 4px;
+  color: var(--ui-text-muted, #52616f);
+  font-size: 12px;
+}
+.route dd {
+  min-width: 0;
+  margin: 0;
+}
+.route p,
+.audience,
+.association {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+.arrow {
+  padding-top: 22px;
+  font-size: 22px;
+}
+.association {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+}
+.association span {
+  min-width: 0;
+}
+.audience {
+  color: var(--ui-text-muted, #52616f);
+}
+.guidance {
+  font-size: 12px;
+}
+.guidance ul {
+  padding-inline-start: 20px;
+  margin: 4px 0 0;
+}
+.edit {
+  justify-self: start;
+}
+@media (max-width: 700px) {
+  .body,
+  .route {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .arrow {
+    padding: 0;
+    line-height: 1;
+    transform: rotate(90deg);
+    justify-self: start;
+  }
+}
+@container (max-width: 640px) {
+  .body,
+  .route {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .arrow {
+    padding: 0;
+    line-height: 1;
+    transform: rotate(90deg);
+    justify-self: start;
+  }
+}

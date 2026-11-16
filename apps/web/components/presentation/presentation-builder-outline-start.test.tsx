@@ -2,7 +2,11 @@ import { isValidElement, type ComponentProps, type ReactElement, type ReactNode 
 import type * as ReactModule from "react";
 import {
   presentationTextAssistanceSourceDigest,
+  presentationQuestionSuggestionSource,
+  presentationQuestionSuggestionsSourceDigest,
   PresentationDraftSchema,
+  RecoveryPackContentSchema,
+  recoveryPackContentHash,
   PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
   type PresentationDraft,
 } from "@openround/contracts";
@@ -120,10 +124,16 @@ vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => fixture.
 
 import { ApiClientError, AUTH_CHANGE_EVENT } from "../../lib/api";
 import { PresentationBuilder } from "./presentation-builder";
+import { PresentationRecoveryPackUpdateReview } from "./recovery-pack-update-review";
+import { RecoveryPackUpdatePanel } from "../editor/recovery-pack-update-panel";
 import { PresentationAssistance } from "./presentation-assistance";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationTextAssistance } from "./presentation-text-assistance";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
+import { createQuestionBlock } from "../../lib/presentation-builder";
+import { createPresentationQuestionStarters } from "../../lib/presentation-question-starters";
 
 const presentationId = "10000000-0000-4000-8000-000000000001";
 const jobId = "20000000-0000-4000-8000-000000000001";
@@ -154,13 +164,15 @@ function render<T>(hooks: Hooks, component: () => T): T {
 function effects(hooks: Hooks) {
   for (const effect of hooks.effects.splice(0)) effect();
 }
-function editor(startOutline = true, mountText = false) {
+function editor(startOutline = true, mountText = false, mountPack = false) {
   const wrapper = render(host(), () => PresentationBuilder({ presentationId, startOutline }));
   const Editor = wrapper.type as (props: ComponentProps<typeof PresentationBuilder>) => ReactNode;
   const parent = host();
   const child = host();
   const visual = host();
   const text = host();
+  const pack = host();
+  let packPanel: ReactNode;
   let textModal: ReactNode;
   let visualModal: ReactNode;
   let tree: ReactNode;
@@ -196,6 +208,18 @@ function editor(startOutline = true, mountText = false) {
         effects(text);
       }
     }
+    if (mountPack) {
+      const packNode = elements(tree).find(
+        (element) => element.type === PresentationRecoveryPackUpdateReview,
+      );
+      if (packNode) {
+        const panel = PresentationRecoveryPackUpdateReview(
+          packNode.props as unknown as ComponentProps<typeof PresentationRecoveryPackUpdateReview>,
+        );
+        packPanel = render(pack, () => RecoveryPackUpdatePanel(panel.props));
+        effects(pack);
+      }
+    }
     effects(parent);
   };
   return {
@@ -206,7 +230,14 @@ function editor(startOutline = true, mountText = false) {
     },
     async settle() {
       for (let turn = 0; turn < 40; turn++) {
-        if (parent.dirty || child.dirty || visual.dirty || (mountText && text.dirty)) update();
+        if (
+          parent.dirty ||
+          child.dirty ||
+          visual.dirty ||
+          (mountText && text.dirty) ||
+          (mountPack && pack.dirty)
+        )
+          update();
         await Promise.resolve();
       }
     },
@@ -220,6 +251,9 @@ function editor(startOutline = true, mountText = false) {
     get nativeEditor() {
       return elements(tree).find((element) => element.type === NativeSceneEditor)!
         .props as unknown as ComponentProps<typeof NativeSceneEditor>;
+    },
+    get packNodes() {
+      return elements(packPanel);
     },
     get nodes() {
       return elements(tree);
@@ -287,10 +321,684 @@ beforeEach(() => {
   });
   vi.stubGlobal("HTMLElement", class {});
   vi.stubGlobal("document", { activeElement: null, querySelector: vi.fn().mockReturnValue(null) });
+  // The hook runner has no browser paint loop. Flush scheduled focus/scroll work
+  // with each effect so navigation effects remain observable in this harness.
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("Question insertion workflows", () => {
+  it.each(["cancel", "insert"] as const)(
+    "returns from a Round import %s to an unobstructed navigator",
+    async (completion) => {
+      const imported = createQuestionBlock();
+      const previous = fixture.request.getMockImplementation()!;
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path === "/v1/quizzes")
+          return {
+            quizzes: [{ id: "source", title: "Published source", currentVersionId: "version" }],
+          };
+        if (path === "/v1/quizzes/source")
+          return { currentVersion: { id: "version", content: { questions: [imported.question] } } };
+        if (path.endsWith("/blocks/import"))
+          return {
+            presentation: {
+              id: presentationId,
+              draft: { ...savedDraft, blocks: [imported] },
+              draftRevision: 5,
+            },
+            insertedBlockIds: [imported.id],
+          };
+        return previous(path, init);
+      });
+      const view = editor(false);
+      await view.settle();
+      const source = view.nodes.find(
+        (node) =>
+          node.type === "button" &&
+          elements(node).some(
+            (child) => child.props.children === "delivery.presentationBuilder.fromPublishedRound",
+          ),
+      );
+      expect(source).toBeDefined();
+      const summary = { focus: vi.fn() };
+      const popup = { hasAttribute: () => true, hidePopover: vi.fn() };
+      const menu = {
+        open: true,
+        querySelector: (selector: string) => (selector === "summary" ? summary : popup),
+      };
+      (source!.props.onClick as (event: { currentTarget: HTMLButtonElement }) => void)({
+        currentTarget: { closest: () => menu } as unknown as HTMLButtonElement,
+      });
+      await view.settle();
+      expect(
+        view.nodes.some((node) => node.props["aria-labelledby"] === "round-import-title"),
+      ).toBe(true);
+      expect(summary.focus).not.toHaveBeenCalled();
+      if (completion === "insert") {
+        const checkbox = view.nodes.find(
+          (node) => node.type === "input" && node.props.type === "checkbox",
+        );
+        expect(checkbox).toBeDefined();
+        (checkbox!.props.onChange as () => void)();
+        await view.settle();
+      }
+      const button = view.nodes.find(
+        (node) =>
+          node.type === "button" &&
+          node.props.children === (completion === "cancel" ? "Cancel" : "Insert 1"),
+      );
+      expect(button).toBeDefined();
+      (button!.props.onClick as () => void)();
+      await view.settle();
+      expect(
+        view.nodes.some((node) => node.props["aria-labelledby"] === "round-import-title"),
+      ).toBe(false);
+      expect(menu.open).toBe(false);
+      expect(popup.hidePopover).toHaveBeenCalledOnce();
+      expect(summary.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
+      const imports = fixture.request.mock.calls.filter(([path]) =>
+        path.endsWith("/blocks/import"),
+      );
+      expect(imports).toHaveLength(completion === "cancel" ? 0 : 1);
+    },
+  );
+
+  function sourceFixture(full = false) {
+    const block = createNativeContentBlock();
+    const title = block.scene!.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Plan the next step";
+    block.scene!.nodes.push({
+      id: "Body:Starter",
+      type: "text",
+      role: "body",
+      text: "Review the scope\nAssign an owner\nSet a date",
+      frame: { x: 8, y: 35, width: 84, height: 55 },
+    });
+    block.scene!.readingOrder.push("Body:Starter");
+    const draft = PresentationDraftSchema.parse({
+      ...savedDraft,
+      schemaVersion: 16,
+      blocks: [
+        block,
+        ...(full ? Array.from({ length: 199 }, () => createNativeContentBlock()) : []),
+      ],
+      sections: [{ id: slideId, title: "Decision", blockIds: [block.id] }],
+      spatial: {
+        schemaVersion: 1,
+        frames: [{ blockId: block.id, x: 0, y: 0, width: 1280, height: 720 }],
+      },
+    });
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft, draftRevision: 4, status: "draft" } }
+        : previous(path, init),
+    );
+    return { block, draft };
+  }
+  function controls(view: ReturnType<typeof editor>) {
+    return view.nodes.find((node) => node.type === PresentationQuestionStarters)!
+      .props as unknown as ComponentProps<typeof PresentationQuestionStarters>;
+  }
+  function lastDraft() {
+    return deckRecoveryWrites().at(-1)![2] as PresentationDraft;
+  }
+  function suggestions(view: ReturnType<typeof editor>) {
+    return view.nodes.find((node) => node.type === PresentationQuestionSuggestions)!
+      .props as unknown as ComponentProps<typeof PresentationQuestionSuggestions>;
+  }
+  function openSuggestions(view: ReturnType<typeof editor>) {
+    const trigger = view.nodes.find(
+      (node) =>
+        node.type === "button" && node.props["data-question-suggestions-trigger"] !== undefined,
+    )!;
+    (trigger.props.onClick as () => void)();
+  }
+  function acceptedDiscussion(source: ReturnType<typeof sourceFixture>) {
+    const block = createQuestionBlock("open_text");
+    block.question.prompt = "Which action would help the team most, and why?";
+    const accepted = PresentationDraftSchema.parse({
+      ...source.draft,
+      blocks: [source.block, block],
+      sections: [{ ...source.draft.sections![0]!, blockIds: [source.block.id, block.id] }],
+      spatial: {
+        schemaVersion: 1,
+        frames: [
+          ...source.draft.spatial!.frames,
+          { blockId: block.id, x: 1600, y: 0, width: 1280, height: 720 },
+        ],
+      },
+    });
+    return { block, accepted };
+  }
+  it("uses one ordinary Undo step, preserving source, section and spatial data", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    // These siblings must have distinct identities so replacing the slide canvas
+    // unmounts the starter panel and closes its native dialog.
+    const starterPanel = view.nodes.find((node) => node.type === PresentationQuestionStarters)!;
+    const nativeEditor = view.nodes.find((node) => node.type === NativeSceneEditor)!;
+    expect(starterPanel.key).not.toBe(nativeEditor.key);
+    const starter = createPresentationQuestionStarters(source.block).find(
+      (item) => item.type === "poll",
+    )!;
+    expect(controls(view).onInsert(starter)).toBe(true);
+    await view.settle();
+    expect(deckRecoveryWrites()).toHaveLength(1);
+    const inserted = lastDraft();
+    expect(inserted.blocks[0]).toEqual(source.block);
+    expect(inserted.blocks[1]).toMatchObject({
+      kind: "question",
+      question: { type: "poll", purpose: "opinion", confidence: "off", basePoints: 0 },
+    });
+    expect(inserted.sections![0]!.blockIds).toEqual([source.block.id, inserted.blocks[1]!.id]);
+    expect(inserted.spatial!.frames[0]).toEqual(source.draft.spatial!.frames[0]);
+    expect(inserted.spatial!.frames).toHaveLength(2);
+    const undo = view.nodes.find(
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
+    )!;
+    expect(undo.props.disabled).toBe(false);
+    (undo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(source.draft);
+    const redo = view.nodes.find(
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.redo",
+    )!;
+    (redo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(inserted);
+    expect(fixture.request.mock.calls.some(([path]) => path.includes("/jobs"))).toBe(false);
+  });
+  it("rejects an over-capacity insertion before touching history or local recovery", async () => {
+    const source = sourceFixture(true);
+    const view = editor(false);
+    await view.settle();
+    expect(controls(view).onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(
+      false,
+    );
+    await view.settle();
+    expect(deckRecoveryWrites()).toEqual([]);
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
+      )?.props.disabled,
+    ).toBe(true);
+  });
+  it("rejects queued old callbacks after edit permission is lost", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const originalControls = controls(view);
+    fixture.workspace.canEdit = false;
+    view.update();
+    await view.settle();
+    expect(originalControls.onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(
+      false,
+    );
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("keeps the last committed callback usable after an unchanged parent render", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const committed = controls(view);
+    view.update();
+    await view.settle();
+    expect(committed.onInsert(createPresentationQuestionStarters(source.block)[0]!)).toBe(true);
+    await view.settle();
+    expect(lastDraft().blocks).toHaveLength(2);
+  });
+  it("allows frame-only edits without replacing the current geometry", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const starter = createPresentationQuestionStarters(source.block)[0]!;
+    const moved = structuredClone(source.block.scene!);
+    const title = moved.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.frame.x += 1;
+    view.nativeEditor.onChange(moved);
+    await view.settle();
+    expect(controls(view).onInsert(starter)).toBe(true);
+    await view.settle();
+    const inserted = lastDraft();
+    expect(inserted.blocks[0]).toMatchObject({ scene: moved });
+  });
+  it("refuses changed source text without adding another history or recovery entry", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    const starter = createPresentationQuestionStarters(source.block)[0]!;
+    const changed = structuredClone(source.block.scene!);
+    const title = changed.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "A revised decision";
+    view.nativeEditor.onChange(changed);
+    await view.settle();
+    const before = deckRecoveryWrites().length;
+    expect(controls(view).onInsert(starter)).toBe(false);
+    await view.settle();
+    expect(deckRecoveryWrites()).toHaveLength(before);
+    expect(lastDraft().blocks).toHaveLength(1);
+    expect(view.nativeEditor.scene).toEqual(changed);
+  });
+  it("opens AI discussion review from the exact saved source without admitting a job", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    expect(suggestions(view).open).toBe(false);
+    openSuggestions(view);
+    await view.settle();
+    const projected = presentationQuestionSuggestionSource(source.block);
+    if (!projected.supported) throw new Error(projected.reason);
+    expect(suggestions(view)).toMatchObject({
+      open: true,
+      target: {
+        blockId: source.block.id.toLowerCase(),
+        expectedRevision: 4,
+        source: projected.source,
+        sourceDigest: presentationQuestionSuggestionsSourceDigest(projected.source),
+      },
+    });
+    expect(fixture.request.mock.calls.some(([path]) => path.includes("/jobs"))).toBe(false);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("saves edited source wording before capturing the discussion review", async () => {
+    const source = sourceFixture();
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT") {
+        const input = JSON.parse(init.body as string);
+        return {
+          presentation: {
+            id: presentationId,
+            draft: input.draft,
+            draftRevision: input.expectedRevision + 1,
+            status: "draft",
+          },
+        };
+      }
+      return previous(path, init);
+    });
+    const view = editor(false);
+    await view.settle();
+    const edited = structuredClone(source.block.scene!);
+    const title = edited.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Choose the next action";
+    view.nativeEditor.onChange(edited);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    expect(suggestions(view).target).toMatchObject({
+      expectedRevision: 5,
+      source: { title: { text: title.text } },
+    });
+    expect(
+      fixture.request.mock.calls.filter(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toHaveLength(1);
+  });
+  it("saves manual edits made while a discussion proposal was closed before resuming it", async () => {
+    const source = sourceFixture();
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.endsWith("/draft") && init?.method === "PUT") {
+        const input = JSON.parse(init.body as string);
+        return {
+          presentation: {
+            id: presentationId,
+            draft: input.draft,
+            draftRevision: input.expectedRevision + 1,
+            status: "draft",
+          },
+        };
+      }
+      return previous(path, init);
+    });
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const originalDigest = suggestions(view).target!.sourceDigest;
+    suggestions(view).onRecoveryChange(true);
+    suggestions(view).onClose();
+    await view.settle();
+    const edited = structuredClone(source.block.scene!);
+    const title = edited.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "Manual wording after closing review";
+    view.nativeEditor.onChange(edited);
+    await view.settle();
+    const resume = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+    )!;
+    (resume.props.onClick as () => void)();
+    await view.settle();
+    expect(
+      fixture.request.mock.calls.filter(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toHaveLength(1);
+    expect(suggestions(view).target).toMatchObject({
+      expectedRevision: 5,
+      source: { title: { text: title.text } },
+    });
+    expect(suggestions(view).target?.sourceDigest).not.toBe(originalDigest);
+  });
+  it("does not open discussion suggestions after permission changes during save preparation", async () => {
+    sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    let release!: () => void;
+    const drain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(RecoverableOperationQueue.prototype, "enqueue").mockImplementationOnce(() => drain);
+    openSuggestions(view);
+    fixture.workspace.canEdit = false;
+    view.update();
+    release();
+    await view.settle();
+    expect(suggestions(view).open).toBe(false);
+    expect(suggestions(view).target).toBeNull();
+  });
+  it("makes a freshly accepted discussion insertion one normal Undo step", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const focus = vi.fn();
+    vi.mocked(document.querySelector).mockReturnValue({ focus } as unknown as Element);
+    suggestions(view).onPendingChange(true);
+    suggestions(view).onClose();
+    await view.settle();
+    const { block, accepted } = acceptedDiscussion(source);
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? {
+            presentation: {
+              id: presentationId,
+              draft: accepted,
+              draftRevision: 5,
+              status: "draft",
+            },
+          }
+        : previous(path, init),
+    );
+    await suggestions(view).onInserted({
+      jobId,
+      proposalHash: "a".repeat(64),
+      suggestionId: slideId,
+      sourceBlockId: target.blockId,
+      sourceDigest: target.sourceDigest,
+      insertedBlockId: block.id,
+      insertedQuestionId: block.question.id,
+      acceptedRevision: 5,
+      acceptedDraft: accepted,
+    });
+    await view.settle();
+    expect(focus).not.toHaveBeenCalled();
+    suggestions(view).onPendingChange(false);
+    await view.settle();
+    expect(focus).toHaveBeenCalledOnce();
+    const undo = view.nodes.find(
+      (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
+    )!;
+    expect(undo.props.disabled).toBe(false);
+    (undo.props.onClick as () => void)();
+    await view.settle();
+    expect(lastDraft()).toEqual(source.draft);
+  });
+  it("allows source-preserving revision reloads and refuses a language-only source change", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    let remote = structuredClone(source.draft);
+    remote.spatial!.frames[0]!.x = 300;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: remote, draftRevision: 5, status: "draft" } }
+        : previous(path, init),
+    );
+    expect(await suggestions(view).onReloadTarget(target)).toMatchObject({
+      expectedRevision: 5,
+      sourceDigest: target.sourceDigest,
+    });
+    await view.settle();
+    remote = structuredClone(remote);
+    const block = remote.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    block.scene!.schemaVersion = 7;
+    const title = block.scene!.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.lang = "fr";
+    await expect(suggestions(view).onReloadTarget(target)).rejects.toThrow("language changed");
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+  });
+  it("does not invent an Undo checkpoint when a recovered insertion precedes newer saved work", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const { block, accepted } = acceptedDiscussion(source);
+    const newer = structuredClone(accepted);
+    newer.description = "Later saved work from another editor";
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: newer, draftRevision: 6, status: "draft" } }
+        : previous(path, init),
+    );
+    await suggestions(view).onInserted({
+      jobId,
+      proposalHash: "a".repeat(64),
+      suggestionId: slideId,
+      sourceBlockId: target.blockId,
+      sourceDigest: target.sourceDigest,
+      insertedBlockId: block.id,
+      insertedQuestionId: block.question.id,
+      acceptedRevision: 5,
+      acceptedDraft: accepted,
+    });
+    suggestions(view).onClose();
+    await view.settle();
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
+      )?.props.disabled,
+    ).toBe(true);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("fences source reload immediately when sign-in changes before the parent rerenders", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    let finish!: (value: unknown) => void;
+    fixture.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const reload = suggestions(view).onReloadTarget(target);
+    const rejected = expect(reload).rejects.toThrow("could not be loaded");
+    const handlers = (window.addEventListener as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([name]) => name === AUTH_CHANGE_EVENT)
+      .map(([, handler]) => handler as () => void);
+    for (const handler of handlers) handler();
+    const later = structuredClone(source.draft);
+    const block = later.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    const heading = block.scene!.nodes[0]!;
+    if (heading.type !== "text") throw new Error("Expected title");
+    heading.frame.x += 10;
+    finish({
+      presentation: { id: presentationId, draft: later, draftRevision: 5, status: "draft" },
+    });
+    await rejected;
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(suggestions(view).target?.expectedRevision).toBe(4);
+  });
+  it.each(["older", "wrong-deck", "invalid-draft", "different-accepted-content"])(
+    "preserves the editor and receipt when insertion reload returns %s data",
+    async (scenario) => {
+      const source = sourceFixture();
+      const view = editor(false);
+      await view.settle();
+      openSuggestions(view);
+      await view.settle();
+      const target = suggestions(view).target!;
+      const { block, accepted } = acceptedDiscussion(source);
+      const response = {
+        id: scenario === "wrong-deck" ? slideId : presentationId,
+        draft:
+          scenario === "invalid-draft"
+            ? { ...accepted, schemaVersion: 17 }
+            : scenario === "different-accepted-content"
+              ? source.draft
+              : accepted,
+        draftRevision: scenario === "older" ? 4 : 5,
+        status: "draft",
+      };
+      const previous = fixture.request.getMockImplementation()!;
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+        path === `/v1/presentations/${presentationId}`
+          ? { presentation: response }
+          : previous(path, init),
+      );
+      await expect(
+        suggestions(view).onInserted({
+          jobId,
+          proposalHash: "a".repeat(64),
+          suggestionId: slideId,
+          sourceBlockId: target.blockId,
+          sourceDigest: target.sourceDigest,
+          insertedBlockId: block.id,
+          insertedQuestionId: block.question.id,
+          acceptedRevision: 5,
+          acceptedDraft: accepted,
+        }),
+      ).rejects.toThrow("Recover the discussion question insertion acknowledgement");
+      await view.settle();
+      expect(view.nativeEditor.scene).toEqual(source.block.scene);
+      expect(deckRecoveryWrites()).toEqual([]);
+    },
+  );
+  it("does not rebase the source onto a revision older than its reviewed floor", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    openSuggestions(view);
+    await view.settle();
+    const target = suggestions(view).target!;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? {
+            presentation: {
+              id: presentationId,
+              draft: source.draft,
+              draftRevision: 4,
+              status: "draft",
+            },
+          }
+        : previous(path, init),
+    );
+    await expect(
+      suggestions(view).onReloadTarget({ ...target, expectedRevision: 5 }),
+    ).rejects.toThrow("older than the reviewed request");
+    await view.settle();
+    expect(suggestions(view).target?.expectedRevision).toBe(4);
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
+  it("retains invalid discussion recovery when its checked read is older than the saved editor", async () => {
+    const source = sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    suggestions(view).onRecoveryChange(true);
+    await view.settle();
+    const older = structuredClone(source.draft);
+    const block = older.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    const heading = block.scene!.nodes[0]!;
+    if (heading.type !== "text") throw new Error("Expected title");
+    heading.frame.x += 12;
+    const previous = fixture.request.getMockImplementation()!;
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) =>
+      path === `/v1/presentations/${presentationId}`
+        ? { presentation: { id: presentationId, draft: older, draftRevision: 3, status: "draft" } }
+        : previous(path, init),
+    );
+    await expect(suggestions(view).onReloadForInvalidRecovery(() => true)).rejects.toThrow(
+      "could not be checked",
+    );
+    await view.settle();
+    expect(view.nativeEditor.scene).toEqual(source.block.scene);
+    expect(
+      view.nodes.some(
+        (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+      ),
+    ).toBe(true);
+  });
+  it("keeps pending discussion insertion resumable while blocking other mutations", async () => {
+    sourceFixture();
+    const view = editor(false);
+    await view.settle();
+    suggestions(view).onRecoveryChange(true);
+    suggestions(view).onPendingChange(true);
+    await view.settle();
+    expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(true);
+    expect(
+      view.nodes.find(
+        (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+      )?.props.disabled,
+    ).not.toBe(true);
+    const resume = view.nodes.find(
+      (node) => node.type === "button" && node.props.children === "Resume discussion suggestions",
+    )!;
+    (resume.props.onClick as () => void)();
+    await view.settle();
+    expect(suggestions(view).open).toBe(true);
+    expect(
+      fixture.request.mock.calls.some(
+        ([path, init]) => path.endsWith("/draft") && init?.method === "PUT",
+      ),
+    ).toBe(false);
+    const changed = structuredClone(view.nativeEditor.scene);
+    const title = changed.nodes[0]!;
+    if (title.type !== "text") throw new Error("Expected title");
+    title.text = "A competing edit";
+    view.nativeEditor.onChange(changed);
+    await view.settle();
+    expect(deckRecoveryWrites()).toEqual([]);
+  });
 });
 
 function deckRecoveryWrites() {
@@ -384,7 +1092,7 @@ describe("Saved-deck outline handoff", () => {
       expect(view.assistance.open).toBe(false);
       expect(
         view.nodes.some(
-          (node) => node.type === "button" && node.props.children === "Outline to slides",
+          (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
         ),
       ).toBe(true);
       expect(fixture.router.replace).not.toHaveBeenCalled();
@@ -424,14 +1132,29 @@ describe("Saved-deck outline handoff", () => {
     expect(drain).toHaveBeenCalledTimes(1);
     expect(fixture.router.replace).not.toHaveBeenCalled();
     const manual = view.nodes.find(
-      (node) => node.type === "button" && node.props.children === "Outline to slides",
+      (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
     )!;
-    (manual.props.onClick as () => void)();
+    const summary = { focus: vi.fn() };
+    const popup = { hasAttribute: () => true, hidePopover: vi.fn() };
+    const menu = {
+      open: true,
+      querySelector: (selector: string) => (selector === "summary" ? summary : popup),
+    };
+    const source = { closest: () => menu } as unknown as HTMLButtonElement;
+    (manual.props.onClick as (event: { currentTarget: HTMLButtonElement }) => void)({
+      currentTarget: source,
+    });
     await view.settle();
     expect(view.assistance.open).toBe(true);
+    expect(summary.focus).not.toHaveBeenCalled();
     expect(fixture.router.replace).toHaveBeenCalledExactlyOnceWith(
       `/presentation/${presentationId}`,
     );
+    view.assistance.onClose();
+    await view.settle();
+    expect(menu.open).toBe(false);
+    expect(popup.hidePopover).toHaveBeenCalledOnce();
+    expect(summary.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
   });
 
   it.each(["local-copy", "pending-save", "conflict"])(
@@ -466,7 +1189,7 @@ describe("Saved-deck outline handoff", () => {
       expect(fixture.clear).not.toHaveBeenCalled();
       expect(
         view.nodes.some(
-          (node) => node.type === "button" && node.props.children === "Outline to slides",
+          (node) => node.type === "button" && node.props["aria-label"] === "Outline to slides",
         ),
       ).toBe(true);
       expect(fixture.request.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
@@ -740,7 +1463,7 @@ describe("Saved native text assistance", () => {
     await view.settle();
     expect(
       view.nodes.find(
-        (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+        (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
       )?.props.disabled,
     ).toBe(false);
     view.nativeEditor.onUndo!();
@@ -770,7 +1493,7 @@ describe("Saved native text assistance", () => {
       await view.settle();
       expect(
         view.nodes.find(
-          (node) => node.type === "button" && node.props.children === "delivery.builder.undo",
+          (node) => node.type === "button" && node.props["aria-label"] === "delivery.builder.undo",
         )?.props.disabled,
       ).toBe(true);
       view.nativeEditor.onUndo!();
@@ -1164,4 +1887,265 @@ describe("Saved native text assistance", () => {
     ).toBe(body);
     expect(view.nativeEditor.scene.nodes[0]).toMatchObject({ text: "Reviewed title" });
   });
+});
+
+describe("Recovery Pack acknowledgement recovery", () => {
+  function savedPack() {
+    const diagnosticId = "60000000-0000-4000-8000-000000000001";
+    const recheckId = "60000000-0000-4000-8000-000000000002";
+    const diagnostic = {
+      id: diagnosticId,
+      type: "numeric",
+      prompt: "What is half of 8?",
+      correctValue: "4",
+      tolerance: "0",
+      unit: null,
+      purpose: "diagnostic",
+      delivery: "main",
+      confidence: "off",
+      conceptKeys: ["halves"],
+      linkedRecheckQuestionId: recheckId,
+      timeLimitSeconds: 30,
+      basePoints: 100,
+      explanation: "Divide by two.",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const originalContent = RecoveryPackContentSchema.parse({
+      schemaVersion: 1,
+      title: "Halves",
+      diagnostic,
+      recheck: {
+        ...diagnostic,
+        id: recheckId,
+        prompt: "What is half of 12?",
+        correctValue: "6",
+        delivery: "recheck",
+        linkedRecheckQuestionId: null,
+      },
+      interventions: [
+        {
+          id: "60000000-0000-4000-8000-000000000003",
+          title: "Equal groups",
+          body: "Split the total into two equal groups.",
+        },
+      ],
+      conceptKeys: ["halves"],
+    });
+    const insertion = {
+      id: "60000000-0000-4000-8000-000000000004",
+      packId: "60000000-0000-4000-8000-000000000005",
+      packVersionId: "60000000-0000-4000-8000-000000000006",
+      packVersion: 1,
+      contentHash: recoveryPackContentHash(originalContent),
+      diagnosticQuestionId: diagnosticId,
+      recheckQuestionId: recheckId,
+      originalContent,
+    };
+    const draft = PresentationDraftSchema.parse({
+      ...savedDraft,
+      blocks: [
+        createNativeContentBlock(),
+        {
+          id: "60000000-0000-4000-8000-000000000007",
+          kind: "question",
+          question: originalContent.diagnostic,
+        },
+        {
+          id: "60000000-0000-4000-8000-000000000008",
+          kind: "question",
+          question: originalContent.recheck,
+        },
+      ],
+      recoveryPackInsertions: [insertion],
+    });
+    const latestContent = RecoveryPackContentSchema.parse({
+      ...originalContent,
+      diagnostic: {
+        ...originalContent.diagnostic,
+        prompt: "What is half of 16?",
+        correctValue: "8",
+      },
+    });
+    const latestVersionId = "60000000-0000-4000-8000-000000000009";
+    const appliedDraft = PresentationDraftSchema.parse({
+      ...draft,
+      blocks: draft.blocks.map((block) =>
+        block.kind === "question" && block.question.id === diagnosticId
+          ? { ...block, question: latestContent.diagnostic }
+          : block,
+      ),
+      recoveryPackInsertions: [
+        {
+          ...insertion,
+          updateBaseline: {
+            packVersionId: latestVersionId,
+            packVersion: 2,
+            contentHash: recoveryPackContentHash(latestContent),
+            content: latestContent,
+          },
+        },
+      ],
+    });
+    return {
+      draft,
+      appliedDraft,
+      review: {
+        presentationId,
+        insertionId: insertion.id,
+        draftRevision: 4,
+        baselineVersionId: insertion.packVersionId,
+        baselineVersion: 1,
+        latestVersionId,
+        latestVersion: 2,
+        baselineContent: originalContent,
+        latestContent,
+        contextChanged: false,
+        items: [
+          {
+            role: "diagnostic",
+            questionId: diagnosticId,
+            baseline: originalContent.diagnostic,
+            local: originalContent.diagnostic,
+            latest: latestContent.diagnostic,
+            status: "source_changed",
+          },
+          {
+            role: "recheck",
+            questionId: recheckId,
+            baseline: originalContent.recheck,
+            local: originalContent.recheck,
+            latest: latestContent.recheck,
+            status: "unchanged",
+          },
+        ],
+      },
+    };
+  }
+
+  it.each(["apply", "undo"] as const)(
+    "keeps the exact %s retry reachable while normal editing stays paused",
+    async (operation) => {
+      const pack = savedPack();
+      Object.assign(fixture.workspace.productFeatures, { recoveryPacks: true });
+      const defaultRequest = fixture.request.getMockImplementation()!;
+      const updateBodies: string[] = [];
+      const undoBodies: string[] = [];
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path === `/v1/presentations/${presentationId}`)
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.draft,
+              draftRevision: 4,
+              status: "draft",
+            },
+          };
+        if (path.endsWith("/recovery-packs/update-review")) return { review: pack.review };
+        if (path.endsWith("/recovery-packs/update")) {
+          updateBodies.push(String(init?.body));
+          if (operation === "apply" && updateBodies.length === 1)
+            throw new Error("Accepted update; acknowledgement lost");
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.appliedDraft,
+              draftRevision: 5,
+              status: "draft",
+            },
+            undo: { sourceRevision: 4, appliedRevision: 5 },
+          };
+        }
+        if (path.endsWith("/history/4/restore")) {
+          undoBodies.push(String(init?.body));
+          if (undoBodies.length === 1) throw new Error("Accepted undo; acknowledgement lost");
+          return {
+            presentation: {
+              id: presentationId,
+              draft: pack.draft,
+              draftRevision: 6,
+              status: "draft",
+            },
+            undo: { sourceRevision: 5, appliedRevision: 6 },
+          };
+        }
+        return defaultRequest(path, init);
+      });
+      const view = editor(false, false, true);
+      await view.settle();
+      const nodeText = (node: ReactNode): string =>
+        Array.isArray(node)
+          ? node.map(nodeText).join("")
+          : isValidElement<{ children?: ReactNode }>(node)
+            ? nodeText(node.props.children)
+            : typeof node === "string"
+              ? node
+              : "";
+      const button = (name: string) => {
+        const found = view.packNodes.find(
+          (node) => node.type === "button" && nodeText(node.props.children as ReactNode) === name,
+        );
+        expect(found, name).toBeDefined();
+        return found!;
+      };
+      const click = async (name: string) => {
+        expect(button(name).props.disabled).toBe(false);
+        (button(name).props.onClick as () => void)();
+        await view.settle();
+      };
+      const reviewSection = () =>
+        view.nodes.find(
+          (node) => node.props["aria-label"] === "Presentation Recovery Pack updates",
+        )!;
+      const paused = () => {
+        expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(true);
+        expect(
+          view.nodes.find((node) => node.props.className?.toString().includes("workspace"))?.props
+            .inert,
+        ).toBe(true);
+      };
+      await click("Review latest Pack version");
+      await click("Apply reviewed Pack update");
+      if (operation === "undo") await click("Undo this Pack update");
+      const retryLabel =
+        operation === "apply" ? "Retry Pack update acknowledgement" : "Retry undo acknowledgement";
+      expect(button(retryLabel).props.disabled).toBe(false);
+      expect(reviewSection().props.inert).toBe(false);
+      paused();
+      const scene = view.nativeEditor.scene;
+      expect(
+        view.nativeEditor.onChange({
+          ...scene,
+          nodes: scene.nodes.map((node) =>
+            node.type === "text" ? { ...node, text: "Blocked ordinary edit" } : node,
+          ),
+        }),
+      ).toBe(false);
+      expect(deckRecoveryWrites()).toEqual([]);
+      // Another operation still owns its fence, including against a stale programmatic retry.
+      view.textAssistance.onPendingChange(true);
+      await view.settle();
+      expect(reviewSection().props.inert).toBe(true);
+      paused();
+      const before = updateBodies.length + undoBodies.length;
+      await click(retryLabel);
+      expect(updateBodies.length + undoBodies.length).toBe(before);
+      view.textAssistance.onPendingChange(false);
+      await view.settle();
+      expect(reviewSection().props.inert).toBe(false);
+      await click(retryLabel);
+      const bodies = operation === "apply" ? updateBodies : undoBodies;
+      expect(bodies).toHaveLength(2);
+      expect(bodies[1]).toBe(bodies[0]);
+      expect(view.nodes.find((node) => node.type === "header")?.props.inert).toBe(false);
+      expect(reviewSection().props.inert).toBe(false);
+      expect(
+        view.packNodes.some(
+          (node) =>
+            node.type === "button" && nodeText(node.props.children as ReactNode) === retryLabel,
+        ),
+      ).toBe(false);
+      expect(fixture.request.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+    },
+  );
 });

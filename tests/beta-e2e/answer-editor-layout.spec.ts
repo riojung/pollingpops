@@ -91,6 +91,7 @@ for (const suffix of ["desktop", "@mobile"]) {
         );
         const first = page.getByRole("textbox", { name: "Answer 1", exact: true });
         await expect(first).toHaveValue(question.choices[0]!.label);
+        await page.getByText("Add image", { exact: true }).click();
         expect((await page.locator("#media-alt").boundingBox())!.width).toBeGreaterThan(150);
         await expectNoOverflow(page);
         if (type === "true_false") {
@@ -256,7 +257,7 @@ for (const suffix of ["desktop", "@mobile"]) {
     try {
       const participant = await context.newPage();
       await participant.goto(`/join?code=${room.code}`);
-      await participant.getByRole("button", { name: "Survey", exact: true }).click();
+      await participant.getByRole("button", { name: "Open survey", exact: true }).click();
       const choice = participant.getByRole("checkbox", { name: longOption, exact: true });
       await expect(choice).toBeVisible();
       await expectNoOverflow(participant);

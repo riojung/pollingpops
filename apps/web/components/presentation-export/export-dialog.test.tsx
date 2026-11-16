@@ -251,7 +251,7 @@ describe("published Presentation export dialog", () => {
     expect(view.text()).toContain("Download started");
   });
 
-  it.each(["pdf", "html"] as const)(
+  it.each(["pdf", "html", "offline_html"] as const)(
     "exports the whole published deck as %s without a page field",
     async (format) => {
       setup();
@@ -268,28 +268,97 @@ describe("published Presentation export dialog", () => {
     },
   );
 
-  it("cancels a pending request, ignores its late result and permits an explicit retry", async () => {
+  it("shows exact offline capabilities only for the offline format and exports one whole-deck file", async () => {
     setup();
-    const pending =
-      deferred<Awaited<ReturnType<typeof ExportClient.fetchPresentationStaticExport>>>();
-    mocked.artifact.mockReturnValueOnce(pending.promise);
     const view = mountDialog();
     await settle();
-    const click = view.button("Download export").props.onClick as () => void;
-    click();
-    click();
-    expect(mocked.artifact).toHaveBeenCalledTimes(1);
-    expect(view.select("Format").props.disabled).toBe(true);
-    const signal = mocked.artifact.mock.calls[0]![2] as AbortSignal;
-    view.click("Cancel export");
-    expect(signal.aborted).toBe(true);
-    expect(view.text()).toContain("Export canceled");
-    pending.resolve({ blob: new Blob(["late"]), format: "pdf" });
-    await settle();
-    expect(mocked.download).not.toHaveBeenCalled();
+    const offlineDetails = () =>
+      view
+        .render()
+        .find(
+          (node) =>
+            node.type === "section" &&
+            node.props["aria-label"] === "Offline interactive HTML details",
+        );
+    const options = elements(view.select("Format")).filter((node) => node.type === "option");
+    expect(options.map(text)).toContain("Offline interactive HTML — whole presentation");
+    for (const format of ["pdf", "html", "png"]) {
+      view.choose("Format", format);
+      expect(offlineDetails()).toBeUndefined();
+    }
+    view.choose("Published page", secondBlockId);
+    view.choose("Format", "offline_html");
+    const details = text(offlineDetails());
+    expect(details).toContain("One downloadable .html file");
+    expect(details).toContain("published slides, readable content and images");
+    expect(details).toContain("All public details are included, even when a panel is closed");
+    expect(details).toContain("Viewing progress is not saved");
+    expect(details).toContain("Open and close detail panels");
+    expect(details).toContain("page, section, previous and next links");
+    expect(details).toContain("External links leave the offline file and may require internet");
+    expect(details).toContain("No submissions, scoring, completion tracking or live results");
+    expect(view.text()).toContain("Downloaded copies cannot be revoked");
+    expect(
+      view
+        .render()
+        .some((node) => node.type === "label" && text(node).startsWith("Published page")),
+    ).toBe(false);
     view.click("Download export");
     await settle();
-    expect(mocked.artifact).toHaveBeenCalledTimes(2);
+    expect(mocked.artifact).toHaveBeenCalledExactlyOnceWith(
+      presentationId,
+      { versionId, format: "offline_html" },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it.each(["pdf", "offline_html"] as const)(
+    "cancels a pending %s request, ignores its late result and permits an explicit retry",
+    async (format) => {
+      setup();
+      const pending =
+        deferred<Awaited<ReturnType<typeof ExportClient.fetchPresentationStaticExport>>>();
+      mocked.artifact.mockReturnValueOnce(pending.promise);
+      const view = mountDialog();
+      await settle();
+      view.choose("Format", format);
+      const click = view.button("Download export").props.onClick as () => void;
+      click();
+      click();
+      expect(mocked.artifact).toHaveBeenCalledTimes(1);
+      expect(view.select("Format").props.disabled).toBe(true);
+      const signal = mocked.artifact.mock.calls[0]![2] as AbortSignal;
+      view.click("Cancel export");
+      expect(signal.aborted).toBe(true);
+      expect(view.text()).toContain("Export canceled");
+      pending.resolve({ blob: new Blob(["late"]), format });
+      await settle();
+      expect(mocked.download).not.toHaveBeenCalled();
+      view.click("Download export");
+      await settle();
+      expect(mocked.artifact).toHaveBeenCalledTimes(2);
+      expect(mocked.download).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("retains offline selection after an authoritative failure and waits for explicit retry", async () => {
+    setup();
+    mocked.artifact.mockRejectedValueOnce(new Error("Export access was denied. Sign in again."));
+    const view = mountDialog();
+    await settle();
+    view.choose("Format", "offline_html");
+    view.click("Download export");
+    await settle();
+    expect(view.text()).toContain("Export access was denied");
+    expect(view.select("Format").props.value).toBe("offline_html");
+    expect(mocked.download).not.toHaveBeenCalled();
+    expect(mocked.artifact).toHaveBeenCalledOnce();
+    view.click("Download export");
+    await settle();
+    expect(mocked.artifact.mock.calls.map((call) => call[1])).toEqual([
+      { versionId, format: "offline_html" },
+      { versionId, format: "offline_html" },
+    ]);
     expect(mocked.download).toHaveBeenCalledOnce();
   });
 

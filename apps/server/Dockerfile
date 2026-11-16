@@ -9,11 +9,16 @@ COPY packages/db/package.json packages/db/package.json
 COPY packages/experience/package.json packages/experience/package.json
 COPY packages/game-engine/package.json packages/game-engine/package.json
 COPY packages/insights/package.json packages/insights/package.json
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=polling-pops-server-pnpm,target=/pnpm/store,sharing=locked pnpm install --frozen-lockfile --store-dir /pnpm/store
 COPY apps/server apps/server
-COPY packages packages
+COPY packages/contracts packages/contracts
+COPY packages/control-plane packages/control-plane
+COPY packages/db packages/db
+COPY packages/experience packages/experience
+COPY packages/game-engine packages/game-engine
+COPY packages/insights packages/insights
 RUN pnpm --filter @openround/server build
-RUN pnpm --filter @openround/server deploy --prod --legacy /prod/server
+RUN --mount=type=cache,id=polling-pops-server-pnpm,target=/pnpm/store,sharing=locked pnpm --store-dir /pnpm/store --filter @openround/server deploy --prod --legacy /prod/server
 ARG OPENROUND_BUILD_ID=unversioned
 RUN printf '%s\n' "$OPENROUND_BUILD_ID" > /app/BUILD_ID
 

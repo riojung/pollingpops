@@ -1,8 +1,18 @@
 "use client";
 
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import type { PresentationHostSnapshot, PresentationControlCommand } from "@openround/contracts";
-import { presentationNavigationRetryLabel } from "../../lib/presentation-navigation";
+import type {
+  PresentationHostSnapshot,
+  PresentationControlCommand,
+  SupportedLocale,
+} from "@openround/contracts";
+import {
+  branchNavigationCopy,
+  branchNavigationRetryLabel,
+  localizeBranchNavigationFeedback,
+} from "../presentation/branch-navigation-copy";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
+import { formatNumber } from "../../lib/i18n/format";
 import styles from "./presentation-navigation.module.css";
 
 type Navigation = NonNullable<PresentationHostSnapshot["navigation"]>;
@@ -18,6 +28,7 @@ export function PresentationNavigationDialog({
   busy = false,
   onRetry,
   retryDisabled = false,
+  locale = "en-CA",
 }: {
   navigation: Navigation;
   disabled: boolean;
@@ -29,7 +40,9 @@ export function PresentationNavigationDialog({
   busy?: boolean;
   onRetry?: () => void;
   retryDisabled?: boolean;
+  locale?: SupportedLocale;
 }) {
+  const copy = branchNavigationCopy(locale);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
@@ -53,47 +66,63 @@ export function PresentationNavigationDialog({
     <dialog
       ref={dialogRef}
       className={styles.dialog}
-      aria-label="Presentation navigation"
+      aria-label={copy("Presentation navigation")}
       aria-modal="true"
-      lang="en-CA"
+      lang={locale}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
       }}
     >
-      <h2>Presentation navigation</h2>
-      <button type="button" className="button-quiet full-width" ref={closeRef} onClick={onClose}>
-        Close navigation
-      </button>
-      <p>
-        Jump to a slide or activity. Reviewed activities keep their saved results and remain closed.
+      <div className={styles.header}>
+        <h2>{copy("Presentation navigation")}</h2>
+        <button type="button" className={styles.close} ref={closeRef} onClick={onClose}>
+          <EditorIcon name="close" />
+          <span className="sr-only">{copy("Close navigation")}</span>
+        </button>
+      </div>
+      <p className={styles.description}>
+        {copy(
+          "Jump to a slide or activity. Reviewed activities keep their saved results and remain closed.",
+        )}
       </p>
       {pendingCommand ? (
         <div>
           <p role="status" aria-live="polite">
             {busy
-              ? "Waiting for server confirmation…"
-              : "Action not yet confirmed. Retry to confirm the original action."}
+              ? copy("Waiting for server confirmation…")
+              : copy("Action not yet confirmed. Retry to confirm the original action.")}
           </p>
           {!busy && onRetry ? (
             <button
               className="button-quiet"
               type="button"
               disabled={retryDisabled}
-              onClick={onRetry}
+              onClick={() => {
+                if (!retryDisabled) onRetry();
+              }}
             >
-              {presentationNavigationRetryLabel(pendingCommand)}
+              {branchNavigationRetryLabel(locale, pendingCommand)}
             </button>
           ) : null}
         </div>
       ) : null}
-      {navigation.blockedReason ? <p role="status">{navigation.blockedReason}</p> : null}
+      {navigation.blockedReason ? (
+        <p
+          role="status"
+          lang={localizeBranchNavigationFeedback(locale, navigation.blockedReason).lang}
+        >
+          {localizeBranchNavigationFeedback(locale, navigation.blockedReason).text}
+        </p>
+      ) : null}
       <ol className={styles.entries} role="list">
         {navigation.entries.map((entry, index) => (
           <li key={entry.blockId} className={styles.entry}>
             {entry.sectionTitle &&
             (index === 0 || navigation.entries[index - 1]?.sectionId !== entry.sectionId) ? (
-              <p className={styles.section}>{entry.sectionTitle}</p>
+              <p className={styles.section} lang="">
+                {entry.sectionTitle}
+              </p>
             ) : null}
             <button
               type="button"
@@ -103,24 +132,40 @@ export function PresentationNavigationDialog({
               aria-describedby={
                 entry.blockedReason ? `navigation-reason-${entry.blockId}` : undefined
               }
-              onClick={() => onJump(entry.blockId)}
+              onClick={() => {
+                if (!disabled && entry.status !== "current" && entry.canJump) onJump(entry.blockId);
+              }}
             >
-              <span lang="">{entry.title}</span>
-              <span className={styles.detail}>
-                {entry.kind === "content" ? "Slide" : "Activity"} ·{" "}
-                {entry.status === "current"
-                  ? "Current"
-                  : entry.status === "visited"
-                    ? "Visited"
-                    : "Not visited"}
-                {entry.kind === "question" && entry.phase && entry.phase !== "question_open"
-                  ? " · Review"
-                  : ""}
+              <span className={styles.ordinal} aria-hidden="true">
+                {formatNumber(locale, index + 1)}
+              </span>
+              <span className={styles.entryContent}>
+                <span className={styles.entryTitle} lang="">
+                  {entry.title}
+                </span>
+                <span className={styles.detail}>
+                  {entry.kind === "content" ? copy("Slide") : copy("Activity")} ·{" "}
+                  {entry.status === "current"
+                    ? copy("Current")
+                    : entry.status === "visited"
+                      ? copy("Visited")
+                      : copy("Not visited")}
+                  {entry.kind === "question" && entry.phase && entry.phase !== "question_open"
+                    ? ` · ${copy("Review")}`
+                    : ""}
+                </span>
+              </span>
+              <span className={styles.kindIcon} aria-hidden="true">
+                <EditorIcon name={entry.kind === "content" ? "content" : "round"} />
               </span>
             </button>
             {entry.blockedReason ? (
-              <p className={styles.reason} id={`navigation-reason-${entry.blockId}`}>
-                {entry.blockedReason}
+              <p
+                className={styles.reason}
+                id={`navigation-reason-${entry.blockId}`}
+                lang={localizeBranchNavigationFeedback(locale, entry.blockedReason).lang}
+              >
+                {localizeBranchNavigationFeedback(locale, entry.blockedReason).text}
               </p>
             ) : null}
           </li>
@@ -129,15 +174,17 @@ export function PresentationNavigationDialog({
       {navigation.returnTarget ? (
         <div className={styles.return}>
           <p>
-            Return target: <span lang="">{navigation.returnTarget.title}</span>
+            {copy("Return target:")} <span lang="">{navigation.returnTarget.title}</span>
           </p>
           <button
             type="button"
             className="button"
             disabled={disabled || !navigation.canReturn}
-            onClick={onReturn}
+            onClick={() => {
+              if (!disabled && navigation.canReturn) onReturn();
+            }}
           >
-            Return to path: <span lang="">{navigation.returnTarget.title}</span>
+            {copy("Return to path:")} <span lang="">{navigation.returnTarget.title}</span>
           </button>
         </div>
       ) : null}

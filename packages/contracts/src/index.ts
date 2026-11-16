@@ -5,6 +5,8 @@ import {
 } from "./presentation-spatial";
 export * from "./presentation-spatial";
 import { z } from "zod";
+import { DEFAULT_SESSION_POLICY, SessionPolicySchema } from "./auth-session";
+export * from "./auth-session";
 export * from "./feature-policy";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -17,7 +19,7 @@ export * from "./presentation-text";
 export * from "./presentation-visual-import";
 export * from "./presentation-assistance";
 export * from "./presentation-text-assistance";
-import { PresentationTextAssistanceProvenanceSchema } from "./presentation-text-assistance";
+export * from "./presentation-languages";
 import { PresentationTextResponseMetadataSchema } from "./presentation-text";
 export * from "./session-summaries";
 export * from "./canvas-boards";
@@ -33,11 +35,22 @@ export * from "./presentation-scene";
 export * from "./presentation-rich-text";
 export * from "./presentation-scene-adapter";
 import {
-  PresentationSceneDraftSchema,
-  PresentationSceneSchema,
-  PresentationDeliveredSceneSchema,
+  PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION,
+  PRESENTATION_STYLED_SCENE_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION,
+  PresentationSceneDesignSchema,
   type PresentationSceneNode,
 } from "./presentation-scene";
+import {
+  ContentSlideLayoutSchema,
+  ContentSlideDraftSchema,
+  ContentSlideSchema,
+  PresentationCitationSchema,
+  PresentationSourceDisclosureSchema,
+  PresentationLiveContentBlockSchema,
+} from "./presentation-content";
+export * from "./presentation-content";
 import {
   hasTextOpinionQuestions,
   isTextOpinionQuestion,
@@ -85,6 +98,8 @@ import {
 } from "./round-protocol";
 export * from "./round-protocol";
 export * from "./management-navigation";
+export * from "./presentation-source-digest";
+export * from "./presentation-question-suggestions";
 
 function isHttpOrHttpsUrl(value: string) {
   try {
@@ -106,6 +121,7 @@ export const errorCodes = [
   "ANSWER_INVALID",
   "ENTITLEMENT_LIMIT",
   "UNAUTHORIZED",
+  "SESSION_EXPIRED",
   "EMAIL_DELIVERY_FAILED",
   "ARTIFACT_NOT_ARCHIVED",
   "ARTIFACT_IN_USE",
@@ -2637,6 +2653,7 @@ export const WorkspaceAccountContextSchema = z.object({
   accountType: z.enum(["personal", "organization"]),
   licenseUnit: z.enum(["workspace", "user"]),
   planSource: z.enum(["community", "subscription", "free"]),
+  sessionPolicy: SessionPolicySchema.default(DEFAULT_SESSION_POLICY),
   organization: z
     .object({
       id: z.string().uuid(),
@@ -2654,8 +2671,14 @@ export const WorkspaceAccountContextSchema = z.object({
 export type WorkspaceAccountContext = z.infer<typeof WorkspaceAccountContextSchema>;
 
 export const UpdateWorkspaceSettingsSchema = z
-  .object({ name: z.string().trim().min(1).max(120) })
-  .strict();
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    sessionPolicy: SessionPolicySchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.sessionPolicy !== undefined, {
+    message: "At least one workspace setting is required",
+  });
 
 export const CustomerOrganizationSetupSchema = z
   .object({
@@ -3219,6 +3242,16 @@ export const StarterIdSchema = z.enum([
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
+export const StarterGuideSchema = z.object({
+  audience: z.string().trim().min(1).max(300),
+  minutes: z.number().int().positive().max(180),
+  preparation: z.string().trim().min(1).max(1000),
+  facilitation: z.string().trim().min(1).max(1000),
+  interpretation: z.string().trim().min(1).max(1000),
+  followUp: z.string().trim().min(1).max(1000),
+});
+export type StarterGuide = z.infer<typeof StarterGuideSchema>;
+
 export const StarterSummarySchema = z.object({
   id: StarterIdSchema,
   title: z.string().min(1).max(160),
@@ -3231,6 +3264,7 @@ export const StarterSummarySchema = z.object({
   responseTypes: z.array(QuestionTypeSchema).min(1),
   version: z.literal(1),
   roundType: z.enum(["quiz", "poll", "custom"]).default("custom"),
+  guide: StarterGuideSchema.optional(),
 });
 export type StarterSummary = z.infer<typeof StarterSummarySchema>;
 
@@ -4198,78 +4232,6 @@ export type FollowupSnapshot = z.infer<typeof FollowupSnapshotSchema>;
 export const AuthoringSourceTypeSchema = z.enum(["pasted_text", "pdf", "docx", "pptx"]);
 export type AuthoringSourceType = z.infer<typeof AuthoringSourceTypeSchema>;
 
-export const ContentSlideLayoutSchema = z.enum([
-  "title",
-  "title_body",
-  "media",
-  "quote",
-  "section",
-  "callout",
-]);
-export type ContentSlideLayout = z.infer<typeof ContentSlideLayoutSchema>;
-
-export const ContentSlideRegionSchema = z.enum([
-  "top_left",
-  "top_center",
-  "top_right",
-  "middle_left",
-  "middle_center",
-  "middle_right",
-  "bottom_left",
-  "bottom_center",
-  "bottom_right",
-]);
-export type ContentSlideRegion = z.infer<typeof ContentSlideRegionSchema>;
-
-export const ContentSlideFrameSchema = z
-  .object({
-    x: z.number().finite().min(0).max(100),
-    y: z.number().finite().min(0).max(100),
-    width: z.number().finite().min(12).max(100),
-    height: z.number().finite().min(6).max(100),
-  })
-  .superRefine((frame, context) => {
-    if (frame.x + frame.width > 100) {
-      context.addIssue({
-        code: "custom",
-        path: ["width"],
-        message: "Text elements must fit within the slide width",
-      });
-    }
-    if (frame.y + frame.height > 100) {
-      context.addIssue({
-        code: "custom",
-        path: ["height"],
-        message: "Text elements must fit within the slide height",
-      });
-    }
-  });
-export type ContentSlideFrame = z.infer<typeof ContentSlideFrameSchema>;
-
-const ContentSlideTitleElementSchema = z.object({
-  id: z.string().trim().min(1).max(200),
-  role: z.literal("title"),
-  text: z.string().trim().max(160),
-  region: ContentSlideRegionSchema,
-  order: z.number().int().min(0).max(7),
-  frame: ContentSlideFrameSchema.optional(),
-});
-
-const ContentSlideBodyElementSchema = z.object({
-  id: z.string().trim().min(1).max(200),
-  role: z.literal("body"),
-  text: z.string().trim().max(4_000),
-  region: ContentSlideRegionSchema,
-  order: z.number().int().min(0).max(7),
-  frame: ContentSlideFrameSchema.optional(),
-});
-
-export const ContentSlideTextElementSchema = z.discriminatedUnion("role", [
-  ContentSlideTitleElementSchema,
-  ContentSlideBodyElementSchema,
-]);
-export type ContentSlideTextElement = z.infer<typeof ContentSlideTextElementSchema>;
-
 const PastedAuthoringSourceSchema = z.object({
   sourceType: z.literal("pasted_text"),
   sourceName: z.string().trim().min(1).max(200).default("Pasted source"),
@@ -4485,118 +4447,6 @@ export type ApplyPresentationAuthoringJob = z.infer<typeof ApplyPresentationAuth
 /** Presentation blocks retain their publication and live-session contract across scene versions. */
 export const ArtifactTypeSchema = z.enum(["round", "presentation"]);
 export type ArtifactType = z.infer<typeof ArtifactTypeSchema>;
-
-export const PresentationCitationSchema = z.object({
-  locator: z.string().trim().min(1).max(120),
-  excerpt: z.string().trim().min(1).max(500),
-});
-
-export const PresentationSourceDisclosureSchema = z.object({
-  sourceName: z.string().trim().min(1).max(200),
-  sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  provider: z.string().trim().min(1).max(120),
-  model: z.string().trim().min(1).max(120),
-  conversionNotes: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
-});
-
-const ContentSlideDraftFields = {
-  id: z.string().uuid(),
-  kind: z.literal("content"),
-  layout: ContentSlideLayoutSchema,
-  textElements: z.array(ContentSlideTextElementSchema).max(8),
-  mediaId: z.string().uuid().nullable(),
-  mediaAlt: z.string().trim().max(300).nullable(),
-  speakerNotes: z.string().trim().max(2_000),
-  citations: z.array(PresentationCitationSchema).max(20).optional(),
-  sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
-  textAssistance: PresentationTextAssistanceProvenanceSchema.optional(),
-  scene: PresentationSceneDraftSchema.optional(),
-  hidden: z.literal(true).optional(),
-};
-
-/** Draft slides retain bounded storage shape while allowing incomplete accessibility metadata. */
-export const ContentSlideDraftSchema = z
-  .object(ContentSlideDraftFields)
-  .superRefine((slide, ctx) => {
-    if (slide.scene) {
-      if (slide.textElements.length || slide.mediaId !== null || slide.mediaAlt !== null) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Native slides keep text and images in the scene only",
-          path: ["scene"],
-        });
-      }
-      return;
-    }
-    const titles = slide.textElements.filter((element) => element.role === "title");
-    if (titles.length !== 1) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Every content slide must have exactly one title element",
-        path: ["textElements"],
-      });
-    }
-    const ids = new Set<string>();
-    const locations = new Set<string>();
-    for (const [index, element] of slide.textElements.entries()) {
-      if (ids.has(element.id)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Every text element needs a unique ID",
-          path: ["textElements", index, "id"],
-        });
-      }
-      ids.add(element.id);
-      const location = `${element.region}:${element.order}`;
-      if (locations.has(location)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Text elements in the same region need a unique order",
-          path: ["textElements", index, "order"],
-        });
-      }
-      locations.add(location);
-    }
-  });
-export type ContentSlideDraft = z.infer<typeof ContentSlideDraftSchema>;
-
-export const ContentSlideSchema = z.object(ContentSlideDraftFields).superRefine((slide, ctx) => {
-  if (slide.scene) {
-    const draft = ContentSlideDraftSchema.safeParse(slide);
-    if (!draft.success) {
-      for (const issue of draft.error.issues) ctx.addIssue({ ...issue });
-    }
-    const scene = PresentationSceneSchema.safeParse(slide.scene);
-    if (!scene.success) {
-      for (const issue of scene.error.issues) {
-        ctx.addIssue({ ...issue, path: ["scene", ...issue.path] });
-      }
-    }
-    return;
-  }
-  if (!slide.textElements.some((element) => element.text.trim()) && !slide.mediaId) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Add a title, body, or image to this slide",
-      path: ["textElements"],
-    });
-  }
-  if (!ContentSlideDraftSchema.safeParse(slide).success) {
-    ctx.addIssue({
-      code: "custom",
-      message: "This slide has invalid text elements",
-      path: ["textElements"],
-    });
-  }
-  if (slide.mediaId && !slide.mediaAlt?.trim()) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Describe the slide image for participants who cannot see it",
-      path: ["mediaAlt"],
-    });
-  }
-});
-export type ContentSlide = z.infer<typeof ContentSlideSchema>;
 
 const QuestionProvenanceSchema = z.object({
   sourceQuizVersionId: z.string().uuid(),
@@ -4956,7 +4806,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4995,10 +4845,10 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
     blocks: Array<{
       kind: string;
-      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 };
+      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 };
       hidden?: true;
     }>;
   },
@@ -5029,6 +4879,36 @@ function applyPresentationSceneRules(
         message: "Native scenes require Presentation schema version 4 or later",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === PRESENTATION_STYLED_SCENE_SCHEMA_VERSION &&
+      presentation.schemaVersion < PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Styled scenes require Presentation schema version 18",
+      });
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION &&
+      presentation.schemaVersion < PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Motion background scenes require Presentation schema version 17",
+      });
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === 7 &&
+      presentation.schemaVersion < 16
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Text language scenes require Presentation schema version 16",
+      });
     if (
       block.kind === "content" &&
       block.scene?.schemaVersion === 2 &&
@@ -5220,7 +5100,7 @@ function applyPresentationAdvancedInteractions(
   const branchIds = new Set<string>();
   let broadcastCount = 0;
   presentation.blocks.forEach((block, index) => {
-    const advanced = block.scene?.schemaVersion === 6 || block.branches !== undefined;
+    const advanced = (block.scene?.schemaVersion ?? 0) >= 6 || block.branches !== undefined;
     if (advanced && presentation.schemaVersion < 13)
       issue(["blocks", index], "Advanced interactions require Presentation schema version 13");
     block.scene?.nodes.forEach((node, nodeIndex) => {
@@ -5290,17 +5170,24 @@ function applyPresentationSpatialRules(
 function applyPresentationTextAssistanceRules(
   presentation: {
     schemaVersion: number;
-    blocks: Array<{ kind: string; textAssistance?: unknown }>;
+    blocks: Array<{ kind: string; textAssistance?: { operation: string } }>;
   },
   context: z.RefinementCtx,
 ) {
-  for (const [index, block] of presentation.blocks.entries())
+  for (const [index, block] of presentation.blocks.entries()) {
+    if (block.textAssistance?.operation === "translate" && presentation.schemaVersion < 16)
+      context.addIssue({
+        code: "custom",
+        path: ["blocks", index, "textAssistance"],
+        message: "Translation provenance requires Presentation schema version 16",
+      });
     if (block.textAssistance !== undefined && presentation.schemaVersion < 15)
       context.addIssue({
         code: "custom",
         path: ["blocks", index, "textAssistance"],
         message: "AI text edit provenance requires Presentation schema version 15",
       });
+  }
 }
 
 export const PresentationDraftSchema = z
@@ -5324,6 +5211,9 @@ export const PresentationDraftSchema = z
         z.literal(13),
         z.literal(14),
         z.literal(15),
+        z.literal(16),
+        z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
+        z.literal(PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5398,6 +5288,9 @@ export const PresentationContentSchema = z
       z.literal(13),
       z.literal(14),
       z.literal(15),
+      z.literal(16),
+      z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
+      z.literal(PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),
@@ -5831,30 +5724,6 @@ export type ResolvedPresentationSessionSettings = z.output<
   typeof PresentationSessionSettingsSchema
 >;
 
-/** Content that is safe for every live Presentation role. */
-export const PresentationLiveContentBlockSchema = z
-  .object({
-    id: z.string().uuid(),
-    kind: z.literal("content"),
-    layout: ContentSlideLayoutSchema,
-    textElements: z.array(ContentSlideTextElementSchema).max(8),
-    mediaId: z.string().uuid().nullable(),
-    mediaAlt: z.string().max(300).nullable(),
-    scene: PresentationDeliveredSceneSchema.optional(),
-  })
-  .superRefine((block, ctx) => {
-    const parsed = ContentSlideDraftSchema.safeParse({ ...block, speakerNotes: "" });
-    if (!parsed.success) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Live content slides must contain valid text element positions",
-        path: ["textElements"],
-      });
-    }
-  })
-  .strict();
-export type PresentationLiveContentBlock = z.infer<typeof PresentationLiveContentBlockSchema>;
-
 function validatePresentationLiveQuestion(
   question: {
     type: QuestionType;
@@ -5897,6 +5766,7 @@ export const PresentationParticipantQuestionBlockSchema = z
     id: z.string().uuid(),
     kind: z.literal("question"),
     question: PresentationParticipantQuestionSchema,
+    design: PresentationSceneDesignSchema.optional(),
   })
   .strict();
 export type PresentationParticipantQuestionBlock = z.infer<
@@ -5935,6 +5805,7 @@ export const PresentationHostQuestionBlockSchema = z
     id: z.string().uuid(),
     kind: z.literal("question"),
     question: PresentationFacilitatorQuestionSchema,
+    design: PresentationSceneDesignSchema.optional(),
     revealedAnswer: PresentationRevealedAnswerSchema.nullable().default(null),
   })
   .strict();
@@ -6435,6 +6306,7 @@ export const PresentationRestV1ParticipantCurrentBlockSchema = z.discriminatedUn
       id: z.string().uuid(),
       kind: z.literal("question"),
       question: PresentationRestV1ParticipantQuestionSchema,
+      design: PresentationSceneDesignSchema.optional(),
     })
     .strict(),
 ]);
@@ -6446,6 +6318,7 @@ export const PresentationRestV1HostCurrentBlockSchema = z.discriminatedUnion("ki
       id: z.string().uuid(),
       kind: z.literal("question"),
       question: PresentationRestV1HostQuestionSchema,
+      design: PresentationSceneDesignSchema.optional(),
       revealedAnswer: PresentationRevealedAnswerSchema.nullable(),
     })
     .strict(),
@@ -7806,3 +7679,6 @@ export * from "./presentation-sharing";
 export * from "./presentation-static-export";
 export * from "./presentation-session-insights";
 export * from "./presentation-review-feedback";
+export * from "./presentation-assignments";
+export * from "./presentation-reading-reports";
+export * from "./presentation-practice";

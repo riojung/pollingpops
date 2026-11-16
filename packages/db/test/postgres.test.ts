@@ -22,6 +22,7 @@ import {
 } from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectReportHistoryEvidenceConformance } from "./support/report-history-evidence-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
@@ -1305,6 +1306,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   const database = `postgres_conformance_${randomUUID().replaceAll("-", "")}`;
   let adminUrl = clusterAdminUrl;
   let runtimeUrl = clusterRuntimeUrl;
+  let migrationRepository: PostgresRepository | undefined;
   let repository: PostgresRepository;
   let runtimePool: Pool;
 
@@ -1326,7 +1328,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     runtime.pathname = `/${database}`;
     runtimeUrl = runtime.toString();
 
-    const migrationRepository = new PostgresRepository(adminUrl!);
+    migrationRepository = new PostgresRepository(adminUrl!);
     await migrationRepository.migrate();
     await migrationRepository.migrate();
     const migrations = await migrationRepository.pool.query<{
@@ -1436,6 +1438,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 100, name: "presentation_assistance" },
       { version: 101, name: "presentation_creation_receipts" },
       { version: 102, name: "presentation_text_assistance" },
+      { version: 103, name: "presentation_text_translation" },
+      { version: 104, name: "presentation_question_suggestions" },
+      { version: 105, name: "presentation_reading_assignments" },
+      { version: 106, name: "presentation_practice_assignments" },
+      { version: 107, name: "presentation_motion_backgrounds" },
+      { version: 108, name: "presentation_styled_scenes" },
+      { version: 109, name: "presentation_frame_arithmetic" },
+      { version: 110, name: "workspace_idle_timeout" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -1461,6 +1471,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       await rm(alteredDirectory, { recursive: true, force: true });
     }
     await migrationRepository.close();
+    migrationRepository = undefined;
 
     repository = new PostgresRepository(runtimeUrl!);
     runtimePool = new Pool({ connectionString: runtimeUrl });
@@ -1469,6 +1480,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
 
   afterAll(async () => {
     try {
+      // beforeAll can fail before it closes the migration pool.
+      await migrationRepository?.close();
       await repository?.close();
       await runtimePool?.end();
     } finally {
@@ -1950,6 +1963,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("results-history-owner"),
       await creator("results-history-outsider"),
+    );
+  });
+
+  it("distinguishes missing assessed evidence from measured zero in retained PostgreSQL report history", async () => {
+    await expectReportHistoryEvidenceConformance(
+      repository,
+      await creator("report-history-evidence-owner"),
     );
   });
 
@@ -5920,7 +5940,10 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid({ ...document, schemaVersion: 13 }, 13)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 14 }, 14)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 15 }, 15)).toBe(true);
-    expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 19 }, 19)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {

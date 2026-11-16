@@ -24,6 +24,7 @@ const {
   authoringWorker,
   presentationAssistanceWorker,
   presentationTextAssistanceWorker,
+  presentationQuestionSuggestionsWorker,
   presentationVisualImportWorker,
   metrics,
   cache,
@@ -108,6 +109,11 @@ const jobs =
             run: () => presentationTextAssistanceWorker.runUntilIdle(1),
           },
           {
+            name: "presentation-question-suggestions",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationQuestionSuggestionsWorker.runUntilIdle(1),
+          },
+          {
             name: "billing",
             intervalMs: config.BUSINESS_BILLING_WORKER_INTERVAL_MS,
             run: () => platformBillingWorker.runUntilIdle(),
@@ -157,7 +163,8 @@ const jobs =
           const controlId =
             name === "visual-imports" ||
             name === "presentation-assistance" ||
-            name === "presentation-text-assistance"
+            name === "presentation-text-assistance" ||
+            name === "presentation-question-suggestions"
               ? "authoring"
               : name === "integrations"
                 ? "business-integrations"

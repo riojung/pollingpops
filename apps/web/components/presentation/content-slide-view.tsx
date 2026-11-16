@@ -18,15 +18,24 @@ import {
   fitContentSlideFrameAroundMedia,
   regionForContentSlideFrame,
   resolveContentSlideFrames,
+  presentationDesignPalette,
   type ContentSlideFrame,
   type ContentSlideLayout,
   type ContentSlideRegion,
   type ContentSlideTextElement,
   type PresentationScene,
+  type PresentationSceneDesign,
+  type SupportedLocale,
 } from "@openround/contracts";
+import { useLocale } from "../locale-provider";
 import styles from "./content-slide-view.module.css";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import type { NativeSceneInteractionRuntime } from "./native-scene-interaction-view";
+import {
+  PresentationMotionBackground,
+  PresentationMotionControls,
+} from "./presentation-motion-background";
 
 export const contentSlideRegions: ContentSlideRegion[] = [
   "top_left",
@@ -58,14 +67,24 @@ type ContentSlideViewBlock = {
   textElements: ContentSlideTextElement[];
   mediaId?: string | null;
   scene?: PresentationScene;
+  design?: PresentationSceneDesign;
 };
 
 interface ContentSlideViewProps {
   block: ContentSlideViewBlock;
+  locale?: SupportedLocale;
+  /** Display-only language for known, otherwise unmarked authored content. */
+  contentLocale?: SupportedLocale;
+  /** Contextual rendering only; imported source records are never rewritten. */
+  designOverride?: PresentationSceneDesign;
   media?: ReactNode;
   renderSceneImage?: SceneImageRenderer;
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
+  /** Inert fixed-layout artwork; ordinary preview/live retain readable phone flow. */
+  staticThumbnail?: boolean;
+  /** Keep the authored slide plane on a dedicated display without disabling its interactions. */
+  fixedLayout?: boolean;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -265,23 +284,45 @@ function frameBlockSignature(block: ContentSlideViewBlock, hasMedia: boolean) {
 }
 
 export function ContentSlideView(props: ContentSlideViewProps) {
+  const { locale } = useLocale();
+  const design = props.designOverride ?? props.block.design;
   return props.block.scene ? (
     <NativeSceneView
-      scene={props.block.scene}
+      locale={props.locale ?? locale}
+      contentLocale={props.contentLocale}
+      scene={
+        props.block.scene.design || !design
+          ? props.block.scene
+          : {
+              ...props.block.scene,
+              schemaVersion: Math.max(
+                props.block.scene.schemaVersion,
+                design.motionBackground ? 8 : 3,
+              ) as PresentationScene["schemaVersion"],
+              design,
+            }
+      }
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
+      staticThumbnail={props.staticThumbnail}
+      fixedLayout={props.fixedLayout}
       interactionRuntime={props.interactionRuntime}
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
   ) : (
-    <LegacyContentSlideView {...props} />
+    <LegacyContentSlideView {...props} locale={props.locale ?? locale} designOverride={design} />
   );
 }
 
 function LegacyContentSlideView({
   block,
+  locale = "en-CA",
+  contentLocale,
+  designOverride,
   media,
   variant,
+  staticThumbnail = false,
+  fixedLayout = false,
   selectedElementId = null,
   titlePlaceholder = "Give this moment a clear title",
   bodyPlaceholder = "Add the context your audience needs",
@@ -291,7 +332,7 @@ function LegacyContentSlideView({
   onMoveElement,
   onChangeFrame,
 }: ContentSlideViewProps) {
-  const editing = variant === "editor";
+  const editing = !staticThumbnail && variant === "editor";
   const showGuides = editing && showGuidesProp;
   const hasMedia = block.mediaId === undefined ? Boolean(media) : Boolean(block.mediaId);
   const pendingMoveFocusId = useRef<string | null>(null);
@@ -561,167 +602,191 @@ function LegacyContentSlideView({
   }
 
   return (
-    <article
-      className={`${styles.slide} ${styles[`layout_${block.layout}`]} ${styles[`variant_${variant}`]}`}
-      data-layout={block.layout}
-      lang="en-CA"
-    >
-      <div className={styles.regions} ref={regionsRef}>
-        {showGuides ? (
-          <div aria-hidden="true" className={styles.guides}>
-            <svg preserveAspectRatio="none" viewBox="0 0 100 100">
-              <path className={styles.gridLines} d={gridGuidePath} />
-              <rect className={styles.safeMargin} height="80" width="80" x="10" y="10" />
-            </svg>
-            {alignmentGuides.x !== null ? (
-              <span
-                className={styles.alignmentGuideVertical}
-                style={{ left: `${alignmentGuides.x}%` }}
-              />
-            ) : null}
-            {alignmentGuides.y !== null ? (
-              <span
-                className={styles.alignmentGuideHorizontal}
-                style={{ top: `${alignmentGuides.y}%` }}
-              />
-            ) : null}
+    <>
+      <article
+        className={`${styles.slide} ${styles[`layout_${block.layout}`]} ${styles[`variant_${variant}`]}${staticThumbnail ? ` ${styles.staticThumbnail}` : ""}`}
+        data-design-theme={designOverride?.theme}
+        style={
+          designOverride
+            ? ({
+                "--content-slide-background": presentationDesignPalette(designOverride).background,
+                "--content-slide-text": presentationDesignPalette(designOverride).text,
+                fontFamily: NATIVE_DESIGN_FONTS[designOverride.font],
+              } as CSSProperties)
+            : undefined
+        }
+        data-layout={block.layout}
+        data-static-thumbnail={staticThumbnail || undefined}
+        data-content-fixed-layout={fixedLayout || undefined}
+        inert={staticThumbnail || undefined}
+        aria-hidden={staticThumbnail || undefined}
+        lang={contentLocale ?? "en-CA"}
+      >
+        <PresentationMotionBackground
+          preset={designOverride?.motionBackground}
+          theme={designOverride?.theme ?? "paper"}
+          static={staticThumbnail}
+        />
+        <div className={styles.regions} ref={regionsRef}>
+          {showGuides ? (
+            <div aria-hidden="true" className={styles.guides}>
+              <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                <path className={styles.gridLines} d={gridGuidePath} />
+                <rect className={styles.safeMargin} height="80" width="80" x="10" y="10" />
+              </svg>
+              {alignmentGuides.x !== null ? (
+                <span
+                  className={styles.alignmentGuideVertical}
+                  style={{ left: `${alignmentGuides.x}%` }}
+                />
+              ) : null}
+              {alignmentGuides.y !== null ? (
+                <span
+                  className={styles.alignmentGuideHorizontal}
+                  style={{ top: `${alignmentGuides.y}%` }}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          {contentSlideRegions.map((region) => (
+            <div
+              aria-label={`${contentSlideRegionLabels[region]} region`}
+              className={`${styles.region} ${styles[`region_${region}`]}`}
+              data-region={region}
+              key={region}
+              role="group"
+            >
+              {orderedTextElements(elementsByRegion.get(region) ?? []).map((element) => {
+                const frame = currentFrame(element.id);
+                const selected = editing && selectedElementId === element.id;
+                const label = textElementLabel(block, element);
+                const frameRegion = regionForContentSlideFrame(frame);
+                return (
+                  <div
+                    aria-label={`${label}, ${contentSlideRegionLabels[frameRegion]}`}
+                    className={`${styles.textElement} ${
+                      element.role === "title" ? styles.titleElement : styles.bodyElement
+                    } ${selected ? styles.selectedElement : ""}`}
+                    data-frame={JSON.stringify(frame)}
+                    key={element.id}
+                    onClick={editing ? () => onSelectElement?.(element.id) : undefined}
+                    role="group"
+                    style={elementFrameStyle(frame)}
+                  >
+                    {editing ? (
+                      <button
+                        aria-label={`Move ${label}. Drag to position or use arrow keys to nudge.`}
+                        className={styles.moveHandle}
+                        onFocus={() => onSelectElement?.(element.id)}
+                        onKeyDown={(event) => handleFrameKeyDown(event, element, "move")}
+                        onMouseDown={() => onSelectElement?.(element.id)}
+                        onPointerCancel={(event) => finishGesture(event, false)}
+                        onPointerDown={(event) => startGesture(event, element, "move")}
+                        onPointerMove={updateGestureFrame}
+                        onPointerUp={(event) => finishGesture(event, true)}
+                        onLostPointerCapture={() => cancelGesture(element.id)}
+                        ref={(handle) => {
+                          if (handle) moveHandleRefs.current.set(element.id, handle);
+                          else moveHandleRefs.current.delete(element.id);
+                        }}
+                        type="button"
+                      >
+                        ⠿
+                      </button>
+                    ) : null}
+                    {editing ? (
+                      element.role === "title" ? (
+                        <AutosizingTextarea
+                          aria-label="Slide title"
+                          className={styles.titleInput}
+                          lang={element.text.trim() ? (contentLocale ?? "") : "en-CA"}
+                          maxLength={160}
+                          onChange={(event) => onChangeElement?.(element.id, event.target.value)}
+                          onFocus={() => onSelectElement?.(element.id)}
+                          placeholder={titlePlaceholder}
+                          rows={2}
+                          value={element.text}
+                        />
+                      ) : (
+                        <AutosizingTextarea
+                          aria-label={label}
+                          className={styles.bodyInput}
+                          lang={element.text.trim() ? (contentLocale ?? "") : "en-CA"}
+                          maxLength={4_000}
+                          onChange={(event) => onChangeElement?.(element.id, event.target.value)}
+                          onFocus={() => onSelectElement?.(element.id)}
+                          placeholder={bodyPlaceholder}
+                          rows={3}
+                          value={element.text}
+                        />
+                      )
+                    ) : element.role === "title" ? (
+                      <h1 lang={element.text ? (contentLocale ?? "") : "en-CA"} tabIndex={0}>
+                        {element.text || (variant === "preview" ? "Untitled slide" : "")}
+                      </h1>
+                    ) : element.text ? (
+                      <p lang={contentLocale ?? ""} tabIndex={0}>
+                        {element.text}
+                      </p>
+                    ) : null}
+                    {editing && overlapIds.has(element.id) ? (
+                      <span
+                        className={styles.overlapWarning}
+                        role="status"
+                        aria-label="Frame overlaps another text box"
+                        title="This frame overlaps another text box. Move or resize it to separate the text."
+                      >
+                        Overlap
+                      </span>
+                    ) : null}
+                    {editing && selected && onChangeFrame ? (
+                      <button
+                        aria-label={`Resize ${label}. Use arrow keys to change width and height.`}
+                        className={styles.resizeHandle}
+                        onKeyDown={(event) => handleFrameKeyDown(event, element, "resize")}
+                        onPointerCancel={(event) => finishGesture(event, false)}
+                        onPointerDown={(event) => startGesture(event, element, "resize")}
+                        onPointerMove={updateGestureFrame}
+                        onPointerUp={(event) => finishGesture(event, true)}
+                        onLostPointerCapture={() => cancelGesture(element.id)}
+                        ref={(handle) => {
+                          if (handle) resizeHandleRefs.current.set(element.id, handle);
+                          else resizeHandleRefs.current.delete(element.id);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {hasMedia && media ? (
+          <div
+            className={styles.media}
+            data-media-frame={JSON.stringify(contentSlideMediaFrame)}
+            style={elementFrameStyle(contentSlideMediaFrame)}
+          >
+            {media}
           </div>
         ) : null}
-        {contentSlideRegions.map((region) => (
+        {editing && showGuides && hasMedia ? (
           <div
-            aria-label={`${contentSlideRegionLabels[region]} region`}
-            className={`${styles.region} ${styles[`region_${region}`]}`}
-            data-region={region}
-            key={region}
-            role="group"
+            aria-hidden="true"
+            className={styles.mediaBayGuide}
+            data-media-bay="true"
+            style={elementFrameStyle(contentSlideMediaFrame)}
           >
-            {orderedTextElements(elementsByRegion.get(region) ?? []).map((element) => {
-              const frame = currentFrame(element.id);
-              const selected = editing && selectedElementId === element.id;
-              const label = textElementLabel(block, element);
-              const frameRegion = regionForContentSlideFrame(frame);
-              return (
-                <div
-                  aria-label={`${label}, ${contentSlideRegionLabels[frameRegion]}`}
-                  className={`${styles.textElement} ${
-                    element.role === "title" ? styles.titleElement : styles.bodyElement
-                  } ${selected ? styles.selectedElement : ""}`}
-                  data-frame={JSON.stringify(frame)}
-                  key={element.id}
-                  onClick={editing ? () => onSelectElement?.(element.id) : undefined}
-                  role="group"
-                  style={elementFrameStyle(frame)}
-                >
-                  {editing ? (
-                    <button
-                      aria-label={`Move ${label}. Drag to position or use arrow keys to nudge.`}
-                      className={styles.moveHandle}
-                      onFocus={() => onSelectElement?.(element.id)}
-                      onKeyDown={(event) => handleFrameKeyDown(event, element, "move")}
-                      onMouseDown={() => onSelectElement?.(element.id)}
-                      onPointerCancel={(event) => finishGesture(event, false)}
-                      onPointerDown={(event) => startGesture(event, element, "move")}
-                      onPointerMove={updateGestureFrame}
-                      onPointerUp={(event) => finishGesture(event, true)}
-                      onLostPointerCapture={() => cancelGesture(element.id)}
-                      ref={(handle) => {
-                        if (handle) moveHandleRefs.current.set(element.id, handle);
-                        else moveHandleRefs.current.delete(element.id);
-                      }}
-                      type="button"
-                    >
-                      ⠿
-                    </button>
-                  ) : null}
-                  {editing ? (
-                    element.role === "title" ? (
-                      <AutosizingTextarea
-                        aria-label="Slide title"
-                        className={styles.titleInput}
-                        lang={element.text.trim() ? "" : "en-CA"}
-                        maxLength={160}
-                        onChange={(event) => onChangeElement?.(element.id, event.target.value)}
-                        onFocus={() => onSelectElement?.(element.id)}
-                        placeholder={titlePlaceholder}
-                        rows={2}
-                        value={element.text}
-                      />
-                    ) : (
-                      <AutosizingTextarea
-                        aria-label={label}
-                        className={styles.bodyInput}
-                        lang={element.text.trim() ? "" : "en-CA"}
-                        maxLength={4_000}
-                        onChange={(event) => onChangeElement?.(element.id, event.target.value)}
-                        onFocus={() => onSelectElement?.(element.id)}
-                        placeholder={bodyPlaceholder}
-                        rows={3}
-                        value={element.text}
-                      />
-                    )
-                  ) : element.role === "title" ? (
-                    <h1 lang={element.text ? "" : "en-CA"} tabIndex={0}>
-                      {element.text || (variant === "preview" ? "Untitled slide" : "")}
-                    </h1>
-                  ) : element.text ? (
-                    <p lang="" tabIndex={0}>
-                      {element.text}
-                    </p>
-                  ) : null}
-                  {editing && overlapIds.has(element.id) ? (
-                    <span
-                      className={styles.overlapWarning}
-                      role="status"
-                      aria-label="Frame overlaps another text box"
-                      title="This frame overlaps another text box. Move or resize it to separate the text."
-                    >
-                      Overlap
-                    </span>
-                  ) : null}
-                  {editing && selected && onChangeFrame ? (
-                    <button
-                      aria-label={`Resize ${label}. Use arrow keys to change width and height.`}
-                      className={styles.resizeHandle}
-                      onKeyDown={(event) => handleFrameKeyDown(event, element, "resize")}
-                      onPointerCancel={(event) => finishGesture(event, false)}
-                      onPointerDown={(event) => startGesture(event, element, "resize")}
-                      onPointerMove={updateGestureFrame}
-                      onPointerUp={(event) => finishGesture(event, true)}
-                      onLostPointerCapture={() => cancelGesture(element.id)}
-                      ref={(handle) => {
-                        if (handle) resizeHandleRefs.current.set(element.id, handle);
-                        else resizeHandleRefs.current.delete(element.id);
-                      }}
-                      type="button"
-                    >
-                      <span aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
+            <span>Image area</span>
           </div>
-        ))}
-      </div>
-      {hasMedia && media ? (
-        <div
-          className={styles.media}
-          data-media-frame={JSON.stringify(contentSlideMediaFrame)}
-          style={elementFrameStyle(contentSlideMediaFrame)}
-        >
-          {media}
-        </div>
+        ) : null}
+      </article>
+      {!staticThumbnail ? (
+        <PresentationMotionControls preset={designOverride?.motionBackground} locale={locale} />
       ) : null}
-      {editing && showGuides && hasMedia ? (
-        <div
-          aria-hidden="true"
-          className={styles.mediaBayGuide}
-          data-media-bay="true"
-          style={elementFrameStyle(contentSlideMediaFrame)}
-        >
-          <span>Image area</span>
-        </div>
-      ) : null}
-    </article>
+    </>
   );
 }

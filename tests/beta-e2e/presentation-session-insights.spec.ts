@@ -206,7 +206,7 @@ for (const suffix of ["", " @mobile"]) {
     try {
       await guest.goto(`/join?code=${code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("PRIVATE E09 browser alias");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
       const guestToken = await guest.evaluate(
         (id) => sessionStorage.getItem(`openround:presentation-participant:${id}`),

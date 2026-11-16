@@ -18,7 +18,7 @@
   "dependencies": {
     "@openround/db": "workspace:*",
     "@openround/contracts": "workspace:*",
-    "openid-client": "6.8.8",
+    "openid-client": "6.8.9",
     "zod": "4.6.7"
   }
 }

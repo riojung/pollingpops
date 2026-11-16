@@ -9,7 +9,8 @@ import {
   fetchPresentationStaticExportSource,
   type PresentationStaticExportFormat,
 } from "../../lib/presentation-static-export-client";
-import styles from "./export.module.css";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
+import styles from "../presentation/presentation-delivery-dialog.module.css";
 
 export function PresentationExportButton({
   presentationId,
@@ -149,6 +150,30 @@ export function PresentationExportDialog({
     }
   }
 
+  const formatSummary = {
+    pdf: {
+      title: "PDF",
+      description: "A fixed-layout copy of the whole presentation.",
+      scope: "All published pages · .pdf file",
+    },
+    png: {
+      title: "PNG image",
+      description: "One published page, ready to use as an image.",
+      scope: "Selected published page · .png file",
+    },
+    html: {
+      title: "Accessible HTML",
+      description: "Full readable text and panel details in a browser.",
+      scope: "Whole presentation · .html file",
+    },
+    offline_html: {
+      title: "Offline interactive HTML",
+      description:
+        "Published slides, readable content and images in one file. Open it offline in a browser.",
+      scope: "Whole presentation · .html file",
+    },
+  }[format];
+
   return (
     <dialog
       ref={dialog}
@@ -161,81 +186,141 @@ export function PresentationExportDialog({
         onClose();
       }}
     >
-      <div className={styles.controls}>
+      <header className={styles.header}>
+        <span className={styles.headerIcon}>
+          <EditorIcon name="import" />
+        </span>
         <h2 id={titleId}>Export presentation</h2>
-        <button ref={closeButton} type="button" onClick={onClose}>
-          Close
+        <button className={styles.closeButton} ref={closeButton} type="button" onClick={onClose}>
+          <EditorIcon name="close" />
+          <span className={styles.srOnly}>Close</span>
         </button>
-      </div>
-      <p>
-        {source
-          ? `Exports published version ${source.version}. `
-          : "Exports the published version. "}
-        Draft changes are excluded.
-      </p>
-      <p>
-        PDF and PNG flatten interactive controls and motion, and may clip overflowing text. Choose
-        accessible HTML for full readable text and panel details. Live answers and results are
-        excluded from every format.
-      </p>
-      <p>Downloaded copies cannot be revoked. PDF is not tagged for screen readers.</p>
-      <label>
-        Format
-        <select
-          value={format}
-          disabled={busy}
-          onChange={(event) => {
-            setFormat(event.target.value as PresentationStaticExportFormat);
-            setError("");
-            setStatus("");
-          }}
-        >
-          <option value="pdf">PDF — whole presentation</option>
-          <option value="png">PNG — one published page</option>
-          <option value="html">Accessible HTML — whole presentation</option>
-        </select>
-      </label>
-      {loading ? <p role="status">Loading published pages…</p> : null}
-      {loadError ? (
-        <div role="alert">
-          <p>{loadError}</p>
-          <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>
-            Retry published pages
-          </button>
+      </header>
+      <div className={styles.body}>
+        <div className={styles.publication}>
+          <span className={styles.publicationLabel}>
+            <EditorIcon name="slides" />
+            {source
+              ? `Exports published version ${source.version}.`
+              : "Exports the published version."}
+          </span>
+          <p>Draft changes are excluded.</p>
         </div>
-      ) : null}
-      {format === "png" && source ? (
-        <label>
-          Published page
-          <select
-            value={blockId}
-            disabled={busy}
-            onChange={(event) => setBlockId(event.target.value)}
-          >
-            {source.pages.map((page, index) => (
-              <option key={page.blockId} value={page.blockId}>
-                {index + 1}. {page.title}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      <div className={styles.controls}>
-        <button
-          type="button"
-          disabled={loading || !source || busy || (format === "png" && !blockId)}
-          onClick={() => void download()}
-        >
-          Download export
-        </button>
-        {busy ? (
-          <button type="button" onClick={cancelExport}>
-            Cancel export
-          </button>
+        <section className={styles.setup} aria-label="Export options">
+          <div className={styles.sectionIntro}>
+            <h3>Choose your format</h3>
+            <p>Download a copy of the published presentation.</p>
+          </div>
+          <label>
+            Format
+            <select
+              value={format}
+              disabled={busy}
+              onChange={(event) => {
+                setFormat(event.target.value as PresentationStaticExportFormat);
+                setError("");
+                setStatus("");
+              }}
+            >
+              <option value="pdf">PDF — whole presentation</option>
+              <option value="png">PNG — one published page</option>
+              <option value="html">Accessible HTML — whole presentation</option>
+              <option value="offline_html">Offline interactive HTML — whole presentation</option>
+            </select>
+          </label>
+          {format === "png" && source ? (
+            <label>
+              Published page
+              <select
+                value={blockId}
+                disabled={busy}
+                onChange={(event) => setBlockId(event.target.value)}
+              >
+                {source.pages.map((page, index) => (
+                  <option key={page.blockId} value={page.blockId}>
+                    {index + 1}. {page.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className={styles.formatSummary} aria-label="Selected export format">
+            <h3>{formatSummary.title}</h3>
+            <p>{formatSummary.description}</p>
+            <p>{formatSummary.scope}</p>
+          </div>
+          {format === "offline_html" ? (
+            <section aria-label="Offline interactive HTML details">
+              <details className={styles.guidance}>
+                <summary>What works offline</summary>
+                <div className={styles.guidanceBody}>
+                  <p>
+                    One downloadable .html file contains the published slides, readable content and
+                    images. Open it offline in a browser. All public details are included, even when
+                    a panel is closed.
+                  </p>
+                  <p>
+                    Open and close detail panels and use page, section, previous and next links
+                    inside the file. External links leave the offline file and may require internet.
+                  </p>
+                  <p>
+                    Questions are for reading only. No submissions, scoring, completion tracking or
+                    live results are available. Viewing progress is not saved.
+                  </p>
+                </div>
+              </details>
+            </section>
+          ) : null}
+          <details className={styles.guidance}>
+            <summary>Export limitations and accessibility</summary>
+            <div className={styles.guidanceBody}>
+              <p>
+                PDF and PNG flatten interactive controls and motion, and may clip overflowing text.
+                Choose accessible HTML for full readable text and panel details. Live answers and
+                results are excluded from every format.
+              </p>
+              <p>PDF is not tagged for screen readers.</p>
+            </div>
+          </details>
+        </section>
+        {loading ? (
+          <p className={styles.notice} role="status">
+            Loading published pages…
+          </p>
         ) : null}
+        {loadError ? (
+          <div role="alert">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>
+              Retry published pages
+            </button>
+          </div>
+        ) : null}
+        <div className={styles.downloadArea}>
+          <p className={styles.hint}>Downloaded copies cannot be revoked.</p>
+          <div className={styles.actions}>
+            <button
+              className={styles.primaryButton}
+              type="button"
+              disabled={loading || !source || busy || (format === "png" && !blockId)}
+              onClick={() => void download()}
+            >
+              Download export
+            </button>
+            {busy ? (
+              <button type="button" onClick={cancelExport}>
+                Cancel export
+              </button>
+            ) : null}
+          </div>
+          {status ? (
+            <p className={styles.notice} role="status">
+              {status}
+            </p>
+          ) : null}
+          {error ? <p role="alert">{error}</p> : null}
+        </div>
       </div>
-      {status ? <p role="status">{status}</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
     </dialog>
   );
 }

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { deriveRoundProtocol, type Report } from "@openround/contracts";
+import { deriveRoundProtocol, type QuestionDraft, type Report } from "@openround/contracts";
 import type { SessionEvidence } from "@openround/db";
-import { addParticipant, createGameState, type EngineAnswer } from "@openround/game-engine";
+import {
+  acceptAnswer,
+  addParticipant,
+  applyHostCommand,
+  createGameState,
+  type EngineAnswer,
+} from "@openround/game-engine";
 import { createPendingReport, generateReport, reportCsv } from "../src/reporting.js";
 
 describe("report CSV", () => {
@@ -672,5 +678,187 @@ describe("report CSV", () => {
     const csv = reportCsv(report);
     expect(csv).toContain(`revote,${numeric.id},${numeric.id},2,3,66.7,true`);
     expect(csv).not.toContain(`revote,${ranking.id},${ranking.id},`);
+  });
+});
+
+describe("unscored and measured-zero report evidence", () => {
+  function fixture(includePoll: boolean, includeAssessed: boolean) {
+    const questions: QuestionDraft[] = [];
+    if (includePoll)
+      questions.push({
+        id: randomUUID(),
+        type: "poll",
+        prompt: "Pick a priority",
+        // A default single-choice poll predates extended live response formats.
+        // Its type supplies the opinion purpose even when purpose is omitted.
+        choices: [
+          { id: randomUUID(), label: "Clarity", isCorrect: false },
+          { id: randomUUID(), label: "Speed", isCorrect: false },
+        ],
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+      });
+    if (includeAssessed)
+      questions.push({
+        id: randomUUID(),
+        type: "single_select",
+        prompt: "Select the correct answer",
+        purpose: "diagnostic",
+        choices: [
+          { id: randomUUID(), label: "Correct", isCorrect: true },
+          { id: randomUUID(), label: "Incorrect", isCorrect: false },
+        ],
+        timeLimitSeconds: 30,
+        basePoints: 100,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+      });
+    let state = createGameState({
+      sessionId: randomUUID(),
+      code: "1234567",
+      quiz: { title: "Report evidence", description: "", questions },
+      settings: {
+        audienceLimit: 20,
+        scoringMode: "accuracy",
+        resultVisibility: "private",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+      },
+    });
+    const participantId = randomUUID();
+    state = addParticipant(state, {
+      id: participantId,
+      nickname: "Guest",
+      score: 0,
+      correctCount: 0,
+      acceptedResponseMs: 0,
+      connected: true,
+      kicked: false,
+    }).state;
+    const initialState = state;
+    let nowMs = 1_000;
+    const command = (action: Parameters<typeof applyHostCommand>[1]["action"]) => {
+      state = applyHostCommand(state, {
+        action,
+        commandId: randomUUID(),
+        expectedVersion: state.version,
+        nowMs: (nowMs += 1_000),
+        newRoundId: randomUUID,
+      }).state;
+    };
+    const answers: EngineAnswer[] = [];
+    for (const [index, question] of questions.entries()) {
+      if (question.type !== "poll" && question.type !== "single_select")
+        throw new Error("Expected choice fixture");
+      command(index === 0 ? "start" : "next");
+      const accepted = acceptAnswer(state, {
+        answerId: randomUUID(),
+        participantId,
+        roundId: state.roundId!,
+        response: {
+          kind: question.type === "poll" ? "poll" : "choice",
+          choiceIds: [question.choices[1]!.id],
+        },
+        idempotencyKey: randomUUID(),
+        nowMs: (nowMs += 1_000),
+      });
+      state = accepted.state;
+      answers.push(accepted.answer);
+      command("lock");
+      command("reveal");
+    }
+    command("end");
+    const evidence: SessionEvidence = {
+      decisionReplayEnabled: false,
+      decisionEvents: [],
+      decisionEventsComplete: false,
+      answers,
+      rounds: Object.entries(state.rounds).map(([id, round]) => ({ id, ...round })),
+      interventions: [],
+      qna: { questions: 0, answered: 0, unresolved: 0 },
+    };
+    return { initialState, state, evidence, questions };
+  }
+
+  it.each([false, true])(
+    "uses nullable report evidence for a default single poll with replay %s",
+    (decisionReplayEnabled) => {
+      const { initialState, state, evidence, questions } = fixture(true, false);
+      expect(state.roundProtocol).toBeUndefined();
+      expect(deriveRoundProtocol(state.quiz)).toEqual({
+        schemaVersion: 1,
+        minimumClientVersion: 2,
+        requiredCapabilities: [],
+      });
+      const expiresAt = new Date("2099-11-01T00:00:00.000Z");
+      const pending = createPendingReport(initialState, expiresAt, decisionReplayEnabled);
+      expect(pending).toMatchObject({
+        schemaVersion: 5,
+        status: "pending",
+        generatedAt: null,
+        expiresAt: expiresAt.toISOString(),
+        metrics: { accuracyPercent: null },
+        initialAccuracy: { correct: 0, responses: 0, percent: null },
+      });
+      const finishedEvent = {
+        seq: 1,
+        occurredAt: "2026-11-10T00:00:00.000Z",
+        type: "session_finished" as const,
+        reason: "completed" as const,
+      };
+      const report = generateReport(state, expiresAt, {
+        id: pending.id,
+        evidence: {
+          ...evidence,
+          decisionReplayEnabled,
+          decisionEvents: decisionReplayEnabled ? [finishedEvent] : [],
+          decisionEventsComplete: decisionReplayEnabled,
+        },
+      });
+      expect(report).toMatchObject({
+        id: pending.id,
+        schemaVersion: 5,
+        status: "ready",
+        metrics: { participantCount: 1, completedCount: 1, answerCount: 1, accuracyPercent: null },
+        initialAccuracy: { correct: 0, responses: 0, percent: null },
+        questions: [{ responses: 1, correct: null, accuracyPercent: null, difficult: false }],
+        decisionReplayAvailable: decisionReplayEnabled,
+        decisionReplayComplete: decisionReplayEnabled,
+        decisionTimeline: decisionReplayEnabled ? [finishedEvent] : [],
+      });
+      expect(reportCsv(report)).toContain(`${questions[0]!.id},Pick a priority,1,,`);
+    },
+  );
+
+  it("retains measured zero for an incorrect assessed answer beside an unscored poll", () => {
+    const { state, evidence, questions } = fixture(true, true);
+    const report = generateReport(state, new Date("2099-11-01T00:00:00.000Z"), { evidence });
+    expect(report).toMatchObject({
+      schemaVersion: 5,
+      metrics: { answerCount: 2, accuracyPercent: 0 },
+      initialAccuracy: { correct: 0, responses: 1, percent: 0 },
+      questions: [
+        { responses: 1, correct: null, accuracyPercent: null, difficult: false },
+        { responses: 1, correct: 0, accuracyPercent: 0, difficult: true },
+      ],
+    });
+    const csv = reportCsv(report);
+    expect(csv).toContain(`${questions[0]!.id},Pick a priority,1,,`);
+    expect(csv).toContain(`${questions[1]!.id},Select the correct answer,1,0,0`);
+  });
+
+  it("keeps the existing version and genuine zero for assessed-only reports", () => {
+    const { state, evidence } = fixture(false, true);
+    const report = generateReport(state, new Date("2099-11-01T00:00:00.000Z"), { evidence });
+    expect(report).toMatchObject({
+      schemaVersion: 3,
+      metrics: { accuracyPercent: 0 },
+      initialAccuracy: { correct: 0, responses: 1, percent: 0 },
+      questions: [{ responses: 1, correct: 0, accuracyPercent: 0, difficult: true }],
+    });
   });
 });

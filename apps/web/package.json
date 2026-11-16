@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node ../../scripts/build/next.mjs web",
     "dev": "next dev",
     "lint": "eslint app components lib next.config.ts proxy.ts",
     "start": "next start",
@@ -15,7 +15,7 @@
     "@openround/contracts": "workspace:*",
     "@openround/experience": "workspace:*",
     "@openround/rehearsal": "workspace:*",
-    "next": "16.4.2",
+    "next": "16.4.6",
     "qrcode.react": "4.2.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

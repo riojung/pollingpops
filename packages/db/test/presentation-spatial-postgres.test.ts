@@ -204,7 +204,10 @@ describe.skipIf(!(adminUrl && runtimeUrl))("spatial Presentation PostgreSQL", ()
     expect(await valid(f.content, 13)).toBe(false);
     expect(await valid({ ...f.content, schemaVersion: 13 }, 13)).toBe(false);
     expect(await valid({ ...f.content, schemaVersion: 15 }, 15)).toBe(true);
-    expect(await valid({ ...f.content, schemaVersion: 16 }, 16)).toBe(false);
+    expect(await valid({ ...f.content, schemaVersion: 16 }, 16)).toBe(true);
+    expect(await valid({ ...f.content, schemaVersion: 17 }, 17)).toBe(true);
+    expect(await valid({ ...f.content, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...f.content, schemaVersion: 19 }, 19)).toBe(false);
     const original = f.content.spatial!.frames[0]!;
     const invalidLayouts = [
       null,

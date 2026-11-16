@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { PresentationLiveContentBlockSchema } from "./index";
+import { PresentationLiveContentBlockSchema } from "./presentation-content";
+import { PresentationSceneDesignSchema } from "./presentation-scene";
 
 export const CreatePresentationShareSchema = z
   .object({
@@ -39,6 +40,7 @@ const reviewQuestion = z
   .object({
     id: z.string().uuid(),
     kind: z.literal("question"),
+    design: PresentationSceneDesignSchema.optional(),
     question: z
       .object({
         type: z.enum([
@@ -73,7 +75,7 @@ const reviewQuestion = z
       .strict(),
   })
   .strict();
-/** Lazy reference avoids the index module's initialization cycle; every delivered object is strict. */
+/** Every delivered object is strict, including content shared with live Presentations. */
 export const PresentationReviewBlockSchema = z.union([
   z.lazy(() => PresentationLiveContentBlockSchema),
   reviewQuestion,

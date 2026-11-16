@@ -5,6 +5,7 @@ import {
   presentationTextAssistanceProposalHash,
   type PresentationTextAssistanceJob,
   type PresentationTextAssistanceProposal,
+  type PresentationTextLanguage,
 } from "@openround/contracts";
 import { ApiClientError } from "./api";
 import { createNativeContentBlock } from "./presentation-native-scene";
@@ -26,31 +27,38 @@ const target: TextAssistanceTarget = {
   expectedRevision: 4,
 };
 const time = "2026-11-06T12:00:00.000Z";
-function ready(jobId: string): PresentationTextAssistanceJob {
+function ready(
+  jobId: string,
+  input: TextAssistanceTarget = target,
+  output = "Short title",
+): PresentationTextAssistanceJob {
   const proposal: PresentationTextAssistanceProposal = {
     schemaVersion: 1,
-    blockId: target.blockId,
-    nodeId: target.nodeId,
-    role: target.role,
-    operation: target.operation,
-    originalText: target.text,
-    text: "Short title",
-    sourceDigest: presentationTextAssistanceSourceDigest(target.text),
-    outputDigest: presentationTextAssistanceSourceDigest("Short title"),
+    blockId: input.blockId,
+    nodeId: input.nodeId,
+    role: input.role,
+    operation: input.operation,
+    originalText: input.text,
+    text: output,
+    sourceDigest: presentationTextAssistanceSourceDigest(input.text),
+    outputDigest: presentationTextAssistanceSourceDigest(output),
     provider: "fixture",
     model: "fixture-model",
     generatedAt: time,
     reviewWarning: PRESENTATION_TEXT_ASSISTANCE_REVIEW_WARNING,
+    ...(input.operation === "translate"
+      ? { targetLanguage: input.targetLanguage, sourceLanguage: input.sourceLanguage }
+      : {}),
   };
   return {
     schemaVersion: 1,
     id: jobId,
     requestId: jobId,
     presentationId,
-    blockId: target.blockId,
-    nodeId: target.nodeId,
-    role: target.role,
-    operation: target.operation,
+    blockId: input.blockId,
+    nodeId: input.nodeId,
+    role: input.role,
+    operation: input.operation,
     sourceDigest: proposal.sourceDigest,
     sourceRevision: 4,
     status: "ready",
@@ -61,14 +69,19 @@ function ready(jobId: string): PresentationTextAssistanceJob {
     createdAt: time,
     updatedAt: time,
     expiresAt: "2026-11-07T12:00:00.000Z",
+    ...(input.operation === "translate"
+      ? { targetLanguage: input.targetLanguage, sourceLanguage: input.sourceLanguage }
+      : {}),
   };
 }
-function fixture() {
+function fixture(input: TextAssistanceTarget = target, output = "Short title") {
   let saved: TextAssistanceRecovery | null = null;
   let created = false;
   let lostCreate = false;
   let lostApply = false;
   let badReceipt = false;
+  let badNodeLanguage = false;
+  let wrongJobLanguage: PresentationTextLanguage | null = null;
   let edited = true;
   let persistError = false;
   let jobVisible = true;
@@ -82,6 +95,16 @@ function fixture() {
     active: 0,
     maxActiveJobs: 2,
   };
+  function readyJob() {
+    const targetLanguage = wrongJobLanguage ?? saved?.targetLanguage ?? input.targetLanguage;
+    const source = {
+      ...input,
+      ...(input.operation === "translate"
+        ? { targetLanguage, sourceLanguage: saved?.sourceLanguage ?? input.sourceLanguage }
+        : {}),
+    };
+    return ready(saved!.jobId, source, output);
+  }
   const stateChanged = vi.fn();
   const applied = vi.fn();
   const calls: Array<{ path: string; init: RequestInit }> = [];
@@ -93,7 +116,7 @@ function fixture() {
     }
     if (path.includes("/jobs/") && !init.method) {
       if (!created || !jobVisible) throw new ApiClientError("Not found", "NOT_FOUND", 404);
-      return { job: ready(saved!.jobId) } as T;
+      return { job: readyJob() } as T;
     }
     if (path.endsWith("/jobs") && init.method === "POST") {
       expect(saved?.createBody).toBe(init.body);
@@ -102,12 +125,12 @@ function fixture() {
       if (admissionError) throw admissionError;
       created = true;
       if (lostCreate) throw new Error("Connection lost");
-      return { job: ready(saved!.jobId) } as T;
+      return { job: readyJob() } as T;
     }
     if (path.endsWith("/text-assistance/apply")) {
       expect(saved?.applyBody).toBe(init.body);
       if (lostApply) throw new Error("Connection lost");
-      const job = ready(saved!.jobId);
+      const job = readyJob();
       const {
         blockId: omittedBlock,
         originalText: omittedOriginal,
@@ -117,19 +140,23 @@ function fixture() {
       void omittedBlock;
       void omittedOriginal;
       const block = createNativeContentBlock();
-      block.id = target.blockId.toUpperCase();
+      block.id = input.blockId.toUpperCase();
+      if (input.operation === "translate") block.scene!.schemaVersion = 7;
       block.scene!.nodes = [
         {
-          id: target.nodeId,
+          id: input.nodeId,
           type: "text",
-          role: target.role,
+          role: input.role,
           text,
           frame: { x: 5, y: 5, width: 80, height: 20 },
+          ...(input.operation === "translate"
+            ? { lang: badNodeLanguage ? ("en" as const) : saved!.targetLanguage }
+            : {}),
         },
       ];
-      block.scene!.readingOrder = [target.nodeId];
+      block.scene!.readingOrder = [input.nodeId];
       const draft = {
-        schemaVersion: 15,
+        schemaVersion: input.operation === "translate" ? 16 : 15,
         title: "Deck",
         description: "",
         experiencePreset: { id: "focus", version: 1 },
@@ -142,10 +169,10 @@ function fixture() {
         ],
       };
       return {
-        presentation: { id: presentationId, draftRevision: target.expectedRevision + 1, draft },
+        presentation: { id: presentationId, draftRevision: input.expectedRevision + 1, draft },
         jobId: job.id,
-        blockId: target.blockId,
-        nodeId: target.nodeId,
+        blockId: input.blockId,
+        nodeId: input.nodeId,
         sourceDigest: job.sourceDigest,
         outputDigest: job.proposal!.outputDigest,
         proposalHash: job.proposalHash,
@@ -195,6 +222,12 @@ function fixture() {
     },
     loseApply(value = true) {
       lostApply = value;
+    },
+    wrongJobLanguage(value: PresentationTextLanguage | null) {
+      wrongJobLanguage = value;
+    },
+    wrongNodeLanguage(value = true) {
+      badNodeLanguage = value;
     },
     badReceipt(value = true) {
       badReceipt = value;
@@ -589,6 +622,211 @@ describe("selected text assistance controller", () => {
     expect(() =>
       parseTextAssistanceRecovery(
         { ...f.saved, applyBody: JSON.stringify(body) },
+        "actor:workspace",
+        presentationId,
+      ),
+    ).toThrow();
+  });
+  const translationTarget: TextAssistanceTarget = {
+    ...target,
+    operation: "translate",
+    sourceLanguage: "en",
+    targetLanguage: "fr",
+  };
+  it("binds both canonical languages without persisting either text in translation recovery", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    await f.controller.generate(
+      { ...translationTarget, targetLanguage: undefined },
+      { targetLanguage: "fr" },
+    );
+    const body = JSON.parse(f.saved!.createBody);
+    expect(body).toMatchObject({
+      schemaVersion: 1,
+      operation: "translate",
+      targetLanguage: "fr",
+      sourceLanguage: "en",
+    });
+    expect(Object.keys(body).slice(-2)).toEqual(["targetLanguage", "sourceLanguage"]);
+    expect(f.saved).toMatchObject({ targetLanguage: "fr", sourceLanguage: "en" });
+    expect(JSON.stringify(f.saved)).not.toContain(target.text);
+    expect(JSON.stringify(f.saved)).not.toContain("Titre traduit");
+    expect(f.controller.state().job?.proposal).toMatchObject({
+      targetLanguage: "fr",
+      sourceLanguage: "en",
+    });
+    expect(f.applied).not.toHaveBeenCalled();
+  });
+  it("retains the exact target language across lost translation creation and application receipts", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    f.loseCreate();
+    await f.controller.generate(translationTarget);
+    expect(f.controller.reset()).toBe(false);
+    const recovered = f.make();
+    recovered.restore(f.saved);
+    await recovered.retry();
+    expect(recovered.state().job?.targetLanguage).toBe("fr");
+    expect(f.calls.filter((call) => call.init.method === "POST")).toHaveLength(1);
+    recovered.review(true);
+    f.loseApply();
+    await recovered.apply(translationTarget);
+    const applyBody = f.saved!.applyBody;
+    expect(JSON.parse(applyBody!)).toMatchObject({ targetLanguage: "fr", sourceLanguage: "en" });
+    expect(JSON.stringify(f.saved)).not.toContain("Titre traduit");
+    const remounted = f.make();
+    remounted.restore(f.saved);
+    f.loseApply(false);
+    await remounted.apply(null);
+    expect(
+      f.calls
+        .filter((call) => call.path.endsWith("/text-assistance/apply"))
+        .map((call) => call.init.body),
+    ).toEqual([applyBody, applyBody]);
+    expect(f.applied).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "translate",
+        targetLanguage: "fr",
+        sourceLanguage: "en",
+        acceptedDraft: expect.objectContaining({ schemaVersion: 16 }),
+      }),
+    );
+    expect(f.saved).toBeNull();
+  });
+  it("allows unchanged proper-noun wording when the reviewed object language changes", async () => {
+    const source: TextAssistanceTarget = {
+      ...translationTarget,
+      text: "OpenAI",
+      sourceLanguage: null,
+      targetLanguage: "ja",
+    };
+    const f = fixture(source, "OpenAI");
+    await f.controller.generate(source);
+    f.controller.review(true);
+    await f.controller.apply(source);
+    expect(f.applied).toHaveBeenCalledOnce();
+    expect(f.applied.mock.calls[0]![0].acceptedDraft.blocks[0].scene.nodes[0]).toMatchObject({
+      text: "OpenAI",
+      lang: "ja",
+    });
+  });
+  it("rejects a proposal for a different target language even when its hash is otherwise valid", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    f.wrongJobLanguage("de");
+    await f.controller.generate(translationTarget);
+    expect(f.controller.state().job).toBeNull();
+    expect(f.controller.state().pending).toBe(true);
+    expect(f.controller.state().error).toContain("saved target");
+    expect(f.controller.reset()).toBe(false);
+  });
+  it("refuses same-text source-language corrections and destination changes during reload review", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    await f.controller.generate(translationTarget);
+    expect(() =>
+      f.controller.rebase({ ...translationTarget, sourceLanguage: null, expectedRevision: 6 }),
+    ).toThrow("changed or deleted");
+    expect(() =>
+      f.controller.rebase({ ...translationTarget, sourceLanguage: "de", expectedRevision: 6 }),
+    ).toThrow();
+    expect(() =>
+      f.controller.rebase({ ...translationTarget, targetLanguage: "es", expectedRevision: 6 }),
+    ).toThrow();
+    expect(f.controller.rebase({ ...translationTarget, expectedRevision: 6 })).toBe(true);
+    expect(f.saved?.expectedRevision).toBe(6);
+  });
+  it("keeps an Apply uncertain if its returned node is missing the reviewed language annotation", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    await f.controller.generate(translationTarget);
+    f.controller.review(true);
+    f.wrongNodeLanguage();
+    await f.controller.apply(translationTarget);
+    expect(f.applied).not.toHaveBeenCalled();
+    expect(f.controller.state().pending).toBe(true);
+    expect(f.controller.reset()).toBe(false);
+    f.wrongNodeLanguage(false);
+    await f.controller.apply(null);
+    expect(f.applied).toHaveBeenCalledOnce();
+  });
+  it("rejects malformed, alias, missing and same-source translation languages before any request", async () => {
+    for (const fields of [
+      { targetLanguage: undefined },
+      { targetLanguage: "FR" },
+      { targetLanguage: "zh-CN" },
+      { sourceLanguage: undefined },
+      { sourceLanguage: "EN" },
+      { targetLanguage: "en" },
+    ]) {
+      const f = fixture(translationTarget, "Titre traduit");
+      await expect(
+        f.controller.generate({ ...translationTarget, ...fields } as TextAssistanceTarget),
+      ).rejects.toThrow();
+      expect(f.calls).toHaveLength(0);
+      expect(f.saved).toBeNull();
+    }
+  });
+  it("rejects translation recovery when either bound language or exact Apply language is changed", async () => {
+    const f = fixture(translationTarget, "Titre traduit");
+    await f.controller.generate(translationTarget);
+    for (const update of [
+      { targetLanguage: "de" },
+      { sourceLanguage: null },
+      { sourceLanguage: undefined },
+    ])
+      expect(() =>
+        parseTextAssistanceRecovery({ ...f.saved, ...update }, "actor:workspace", presentationId),
+      ).toThrow();
+    f.controller.review(true);
+    f.loseApply();
+    await f.controller.apply(translationTarget);
+    const apply = JSON.parse(f.saved!.applyBody!);
+    apply.targetLanguage = "es";
+    expect(() =>
+      parseTextAssistanceRecovery(
+        { ...f.saved, applyBody: JSON.stringify(apply) },
+        "actor:workspace",
+        presentationId,
+      ),
+    ).toThrow();
+  });
+  it("preserves the exact legacy rewrite/shorten request, Apply and recovery shape", async () => {
+    const f = fixture();
+    await f.controller.generate(target);
+    expect(f.saved!.createBody).toBe(
+      JSON.stringify({
+        schemaVersion: 1,
+        requestId: f.saved!.jobId,
+        presentationId,
+        blockId: target.blockId,
+        nodeId: target.nodeId,
+        operation: "shorten",
+        expectedRevision: 4,
+        sourceDigest: presentationTextAssistanceSourceDigest(target.text),
+      }),
+    );
+    expect(Object.keys(f.saved!)).not.toContain("targetLanguage");
+    expect(Object.keys(f.saved!)).not.toContain("sourceLanguage");
+    f.controller.review(true);
+    f.loseApply();
+    await f.controller.apply(target);
+    expect(f.saved!.provenanceDigest).toBe(
+      "9c26bbcedc7064cb69e89a94e8f527c81342d6671bbdecdeb5437302e8ebfa44",
+    );
+    const apply = JSON.parse(f.saved!.applyBody!);
+    expect(Object.keys(apply)).toEqual([
+      "schemaVersion",
+      "jobId",
+      "proposalHash",
+      "blockId",
+      "nodeId",
+      "sourceDigest",
+      "reviewed",
+      "expectedRevision",
+      "mutationId",
+    ]);
+    const remounted = f.make();
+    remounted.restore(JSON.parse(JSON.stringify(f.saved)));
+    expect(remounted.state().pending).toBe(true);
+    expect(() =>
+      parseTextAssistanceRecovery(
+        { ...f.saved, targetLanguage: "fr", sourceLanguage: "en" },
         "actor:workspace",
         presentationId,
       ),

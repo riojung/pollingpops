@@ -149,7 +149,7 @@ describe("native Presentation scenes API", () => {
     }
   });
 
-  it.each([4, 5, 6, 7, 8, 11] as const)(
+  it.each([4, 5, 6, 7, 8, 11, 17] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -186,15 +186,27 @@ describe("native Presentation scenes API", () => {
       const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
       if (hiddenImage.type === "image") hiddenImage.altText = "";
       const sceneBlock =
-        schemaVersion === 11
-          ? interactionSceneBlock
-          : schemaVersion === 8
-            ? compositionSceneBlock
-            : schemaVersion === 7
-              ? designSceneBlock
-              : schemaVersion >= 5
-                ? richTextSceneBlock
-                : nativeSceneBlock;
+        schemaVersion === 17
+          ? (ids: string[], title?: string) => {
+              const motion = interactionSceneBlock(ids, title);
+              return {
+                ...motion,
+                scene: {
+                  ...motion.scene,
+                  schemaVersion: 8 as const,
+                  design: { ...motion.scene.design, motionBackground: "aurora" as const },
+                },
+              };
+            }
+          : schemaVersion === 11
+            ? interactionSceneBlock
+            : schemaVersion === 8
+              ? compositionSceneBlock
+              : schemaVersion === 7
+                ? designSceneBlock
+                : schemaVersion >= 5
+                  ? richTextSceneBlock
+                  : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
@@ -324,6 +336,8 @@ describe("native Presentation scenes API", () => {
         headers: { authorization: `Bearer ${participantToken}` },
       });
       expectPublicScene(participant.json().snapshot, originalScene);
+      if (schemaVersion === 17)
+        expect(participant.json().snapshot.currentBlock.design).toEqual(originalScene.design);
       const pass = await built.presentationService.createCompanionPass({
         workspaceId,
         userId: built.creator.userId,
@@ -394,7 +408,7 @@ describe("native Presentation scenes API", () => {
       await built.presentationReportWorker.runUntilIdle();
       const report = await target.inject({
         method: "GET",
-        url: `/v1/presentation-sessions/${sessionId}/report`,
+        url: `/v1/presentation-sessions/${sessionId}/report${schemaVersion >= 13 ? "?includeInteractions=true&includeNavigation=true" : ""}`,
         headers: { cookie },
       });
       expect(report.json()).toMatchObject({

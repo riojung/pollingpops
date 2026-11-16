@@ -5,6 +5,7 @@ import type {
   PresentationDraft,
   PresentationRecoveryPackUpdatePreview,
   RecoveryPackContent,
+  SupportedLocale,
 } from "@openround/contracts";
 import {
   RecoveryPackUpdatePanel,
@@ -27,6 +28,7 @@ export function PresentationRecoveryPackUpdateReview({
   ...props
 }: {
   presentationId: string;
+  locale?: SupportedLocale;
   insertionId: string;
   title: string;
   referenceContent?: RecoveryPackContent;

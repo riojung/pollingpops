@@ -205,3 +205,73 @@ cases are software checks. They do not establish actual video-conferencing scree
 managed-browser policy acceptance, manual assistive-technology behavior, physical device support,
 native browser zoom, production capacity/cost or hosted rollout success. Those gates remain open.
 The richer phone remote remains optional follow-up work; the existing scoped Companion is retained.
+
+## Live workspace visual refresh
+
+Source: `codex/presentation-live-workspace`, based on `953a4f4`.
+
+Presentation setup, the private presenter workspace, companion, participant view, audience stage,
+navigation, Q&A, reports, insights and the summary dialog now share compact Polling Pops working
+surfaces and typography. Setup and report titles are bounded; the host's primary phase action and
+navigation sit in a sticky command bar. Join details have an explicit disclosure, with a QR card
+that wraps to its available container width. Private notes, the next-slide preview and the local
+timer keep their distinct roles.
+
+The participant view passes through the published block's authored design and fits wide content
+slides to the available viewport. The audience stage uses a minimal neutral theater frame with
+compact branding, full-screen controls and persistent QR/link access. Narrow screens retain the
+existing reading flow and response controls. Reports use a compact overview, evidence rows and
+expandable detail tables; the summary dialog keeps its header visible and provides independently
+scrollable desktop preview and control panes.
+
+Existing command handlers, credential roles, immutable session projections, response submission,
+moderation, exports and share permissions retain their contracts. The refresh uses scoped CSS,
+existing components and original icon glyphs, with no added asset, dependency or service.
+
+Verification of the frozen refresh artifact:
+
+- Full web suite: **4,933 tests passed across 420 files**.
+- **34 production browser cases passed** across Chromium desktop, Firefox desktop, Chromium phone
+  and WebKit phone profiles. These cover setup typography, visible primary controls, expanded QR
+  card geometry, private host cues, frozen session content, audience joining, stage pass isolation,
+  popup/full-screen recovery, companion controls, Q&A, report exports and the summary dialog.
+- Web and browser-fixture type checks, lint, formatting, production web build and source/artifact
+  provenance validation passed. Desktop and phone screenshots were visually inspected.
+- An independent read-only review cleared the changes after the QR card was made responsive to
+  its container width. Navigation tests identify the new icon button's nested accessible text;
+  their localization and focus lifecycle assertions remain in place.
+
+Browser profiles use emulation. Local screenshots and the source/artifact qualification receipt
+are under `artifacts/presentation-live-workspace/`.
+
+## Report action contrast and background playback correction
+
+The live header's inherited link color overrode the primary report action's foreground, leaving
+dark text on its dark button. The header rule now excludes primary buttons so their foreground
+continues to follow the light/dark theme's paired accent tokens.
+
+The six motion presets previously started together at the slow end of 28–44 second ease-in-out
+cycles. Their first two seconds produced less than one pixel of travel at a 640px slide width.
+Linear 20–32 second cycles with staggered offsets now make movement apparent promptly while
+retaining bounded decorative artwork, local pause, and offscreen/hidden-page suspension.
+
+Playback and its controls now also honor the app's saved Reduce motion preference and live HTML
+preference changes. This fixes a mismatch where the global accessibility rule had already ended
+the animation but the control still offered Pause. Device reduced motion remains authoritative.
+
+The regression fixture measures actual rendered transform displacement and pause stability for
+every preset, plus participant and audience-stage playback. It also checks app/device reduced
+motion and the report action's light/dark contrast and navigation. It uses original synthetic
+slides and isolated local test sessions; it does not alter customer content.
+
+Verification: **4,939 web tests across 420 files** and **4 production browser cases** passed.
+The browser matrix covers Chromium/Firefox desktop and Chromium/WebKit phone emulation. Web and
+fixture type checks, focused lint, formatting and the production beta build also passed.
+Screenshots and the qualified source/artifact receipt are preserved under
+`artifacts/presentation-playback-fixes/`. These are software checks, not physical-device or
+manual assistive-technology qualification.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed: **8,967 tests passed**, with
+**526 standard opt-in skips**. Formatting, Docker workspace-dependency checks, lint, type checks,
+all four build tasks and compiled-server startup/configuration smoke passed. The independent
+read-only review found no actionable issues.

@@ -7,6 +7,7 @@ import {
   presentationTextAssistanceSourceDigest,
   type PresentationTextAssistanceJob,
   type PresentationDraft,
+  type PresentationTextLanguage,
 } from "@openround/contracts";
 import { ApiClientError, apiFetch, humanError } from "./api";
 import { clientUuid } from "./uuid";
@@ -15,9 +16,11 @@ export interface TextAssistanceTarget {
   blockId: string;
   nodeId: string;
   role: "title" | "body";
-  operation: "rewrite" | "shorten";
+  operation: "rewrite" | "shorten" | "translate";
   text: string;
   expectedRevision: number;
+  targetLanguage?: PresentationTextLanguage;
+  sourceLanguage?: PresentationTextLanguage | null;
 }
 export interface TextAssistanceAppliedReceipt {
   blockId: string;
@@ -26,6 +29,9 @@ export interface TextAssistanceAppliedReceipt {
   sourceDigest: string;
   acceptedRevision: number;
   acceptedDraft: PresentationDraft;
+  operation?: "translate";
+  targetLanguage?: PresentationTextLanguage;
+  sourceLanguage?: PresentationTextLanguage | null;
 }
 
 export interface TextAssistanceStatus {
@@ -43,7 +49,7 @@ export interface TextAssistanceRecovery {
   blockId: string;
   nodeId: string;
   role: "title" | "body";
-  operation: "rewrite" | "shorten";
+  operation: "rewrite" | "shorten" | "translate";
   sourceDigest: string;
   sourceRevision: number;
   expectedRevision: number;
@@ -53,6 +59,8 @@ export interface TextAssistanceRecovery {
   applyBody: string | null;
   outputDigest: string | null;
   provenanceDigest: string | null;
+  targetLanguage?: PresentationTextLanguage;
+  sourceLanguage?: PresentationTextLanguage | null;
 }
 export interface TextAssistanceState {
   job: PresentationTextAssistanceJob | null;
@@ -102,14 +110,15 @@ export function parseTextAssistanceRecovery(
   presentationId: string,
 ): TextAssistanceRecovery {
   try {
+    if (!value || typeof value !== "object") throw new Error();
+    const recovery = value as TextAssistanceRecovery;
+    const allowedKeys =
+      recovery.operation === "translate" ? [...keys, "targetLanguage", "sourceLanguage"] : keys;
     if (
-      !value ||
-      typeof value !== "object" ||
-      Object.keys(value).length !== keys.length ||
-      Object.keys(value).some((key) => !keys.includes(key))
+      Object.keys(value).length !== allowedKeys.length ||
+      Object.keys(value).some((key) => !allowedKeys.includes(key))
     )
       throw new Error();
-    const recovery = value as TextAssistanceRecovery;
     const create = CreatePresentationTextAssistanceJobSchema.parse(JSON.parse(recovery.createBody));
     if (
       recovery.schemaVersion !== 1 ||
@@ -120,6 +129,9 @@ export function parseTextAssistanceRecovery(
       create.blockId !== recovery.blockId ||
       create.nodeId !== recovery.nodeId ||
       create.operation !== recovery.operation ||
+      (recovery.operation === "translate" &&
+        (create.targetLanguage !== recovery.targetLanguage ||
+          create.sourceLanguage !== recovery.sourceLanguage)) ||
       create.sourceDigest !== recovery.sourceDigest ||
       create.expectedRevision !== recovery.sourceRevision ||
       !["title", "body"].includes(recovery.role) ||
@@ -141,6 +153,10 @@ export function parseTextAssistanceRecovery(
         apply.nodeId !== recovery.nodeId ||
         apply.sourceDigest !== recovery.sourceDigest ||
         apply.expectedRevision !== recovery.expectedRevision ||
+        (recovery.operation === "translate"
+          ? apply.targetLanguage !== recovery.targetLanguage ||
+            apply.sourceLanguage !== recovery.sourceLanguage
+          : apply.targetLanguage !== undefined || apply.sourceLanguage !== undefined) ||
         recovery.createUncertain
       )
         throw new Error();
@@ -183,13 +199,15 @@ function provenanceDigest(value: {
   schemaVersion: 1;
   nodeId: string;
   role: "title" | "body";
-  operation: "rewrite" | "shorten";
+  operation: "rewrite" | "shorten" | "translate";
   sourceDigest: string;
   outputDigest: string;
   provider: string;
   model: string;
   generatedAt: string;
   reviewWarning: string;
+  targetLanguage?: PresentationTextLanguage;
+  sourceLanguage?: PresentationTextLanguage | null;
 }) {
   return presentationTextAssistanceSourceDigest(
     JSON.stringify({
@@ -203,6 +221,9 @@ function provenanceDigest(value: {
       model: value.model,
       generatedAt: value.generatedAt,
       reviewWarning: value.reviewWarning,
+      ...(value.operation === "translate"
+        ? { targetLanguage: value.targetLanguage, sourceLanguage: value.sourceLanguage }
+        : {}),
     }),
   );
 }
@@ -213,12 +234,26 @@ export const sameTextAssistanceBlockId = (left: string, right: string) =>
 
 export function textAssistanceTargetMatches(
   target: TextAssistanceTarget,
-  recovery: Pick<TextAssistanceRecovery, "blockId" | "nodeId" | "role" | "sourceDigest">,
+  recovery: Pick<
+    TextAssistanceRecovery,
+    | "blockId"
+    | "nodeId"
+    | "role"
+    | "sourceDigest"
+    | "operation"
+    | "targetLanguage"
+    | "sourceLanguage"
+  >,
 ) {
   return (
     sameTextAssistanceBlockId(target.blockId, recovery.blockId) &&
     target.nodeId === recovery.nodeId &&
     target.role === recovery.role &&
+    (recovery.operation !== "translate" ||
+      (target.operation === "translate" &&
+        target.sourceLanguage === recovery.sourceLanguage &&
+        (target.targetLanguage === undefined ||
+          target.targetLanguage === recovery.targetLanguage))) &&
     presentationTextAssistanceSourceDigest(target.text) === recovery.sourceDigest
   );
 }
@@ -270,6 +305,9 @@ export function createPresentationTextAssistance({
       !sameTextAssistanceBlockId(job.blockId, saved.blockId) ||
       job.nodeId !== saved.nodeId ||
       job.operation !== saved.operation ||
+      (saved.operation === "translate" &&
+        (job.targetLanguage !== saved.targetLanguage ||
+          job.sourceLanguage !== saved.sourceLanguage)) ||
       job.role !== saved.role ||
       job.sourceRevision !== saved.sourceRevision ||
       job.sourceDigest !== saved.sourceDigest
@@ -291,11 +329,14 @@ export function createPresentationTextAssistance({
         proposal.nodeId !== saved.nodeId ||
         proposal.role !== saved.role ||
         proposal.operation !== saved.operation ||
+        (saved.operation === "translate" &&
+          (proposal.targetLanguage !== saved.targetLanguage ||
+            proposal.sourceLanguage !== saved.sourceLanguage)) ||
         proposal.sourceDigest !== saved.sourceDigest ||
         presentationTextAssistanceSourceDigest(proposal.originalText) !== saved.sourceDigest ||
         presentationTextAssistanceSourceDigest(proposal.text) !== proposal.outputDigest ||
         presentationTextAssistanceProposalHash(proposal) !== job.proposalHash ||
-        proposal.text === proposal.originalText ||
+        (saved.operation !== "translate" && proposal.text === proposal.originalText) ||
         (saved.operation === "shorten" && proposal.text.length >= proposal.originalText.length))
     )
       throw new Error("The text proposal receipt could not be verified. Retry the saved request.");
@@ -404,7 +445,10 @@ export function createPresentationTextAssistance({
       generation++;
       abort?.abort();
     },
-    async generate(target: TextAssistanceTarget) {
+    async generate(
+      target: TextAssistanceTarget,
+      options?: { targetLanguage: PresentationTextLanguage },
+    ) {
       if (cancelled || !canEdit() || state.busy || state.recovery) return;
       if (!target.text.trim() || target.text.length > (target.role === "title" ? 160 : 4000))
         throw new Error("Select non-empty plain text within the title or body limit.");
@@ -417,6 +461,12 @@ export function createPresentationTextAssistance({
         operation: target.operation,
         expectedRevision: target.expectedRevision,
         sourceDigest: presentationTextAssistanceSourceDigest(target.text),
+        ...(target.operation === "translate"
+          ? {
+              targetLanguage: options?.targetLanguage ?? target.targetLanguage,
+              sourceLanguage: target.sourceLanguage,
+            }
+          : {}),
       });
       const recovery: TextAssistanceRecovery = {
         schemaVersion: 1,
@@ -435,6 +485,9 @@ export function createPresentationTextAssistance({
         applyBody: null,
         outputDigest: null,
         provenanceDigest: null,
+        ...(candidate.operation === "translate"
+          ? { targetLanguage: candidate.targetLanguage, sourceLanguage: candidate.sourceLanguage }
+          : {}),
       };
       write(recovery);
       publish({ ...state, pending: true, reviewed: false });
@@ -482,6 +535,9 @@ export function createPresentationTextAssistance({
             reviewed: true,
             expectedRevision: saved.expectedRevision,
             mutationId: clientUuid(),
+            ...(saved.operation === "translate"
+              ? { targetLanguage: saved.targetLanguage, sourceLanguage: saved.sourceLanguage }
+              : {}),
           });
       const outputDigest = saved.outputDigest ?? state.job!.proposal!.outputDigest;
       write({
@@ -535,11 +591,15 @@ export function createPresentationTextAssistance({
           node?.type !== "text" ||
           node.richText ||
           node.role !== saved.role ||
+          (saved.operation === "translate" && node.lang !== saved.targetLanguage) ||
           presentationTextAssistanceSourceDigest(node.text) !== outputDigest ||
           !metadata ||
           metadata.nodeId !== saved.nodeId ||
           metadata.role !== saved.role ||
           metadata.operation !== saved.operation ||
+          (saved.operation === "translate" &&
+            (metadata.targetLanguage !== saved.targetLanguage ||
+              metadata.sourceLanguage !== saved.sourceLanguage)) ||
           metadata.sourceDigest !== saved.sourceDigest ||
           metadata.outputDigest !== outputDigest ||
           provenanceDigest(metadata) !== state.recovery!.provenanceDigest ||
@@ -559,6 +619,13 @@ export function createPresentationTextAssistance({
           sourceDigest: saved.sourceDigest,
           acceptedRevision: result.presentation.draftRevision,
           acceptedDraft: draft,
+          ...(saved.operation === "translate"
+            ? {
+                operation: "translate" as const,
+                targetLanguage: saved.targetLanguage,
+                sourceLanguage: saved.sourceLanguage,
+              }
+            : {}),
         });
         if (!current(captured)) return;
         write(null);

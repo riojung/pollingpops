@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe("native scene detail focus", () => {
   it.each(["Escape", "Close details"])(
-    "returns focus to the actual trigger after %s when a touch click left the body focused",
+    "returns focus to the actual trigger after %s with localized close controls when a touch click left the body focused",
     (action) => {
       const documentState = { activeElement: null as unknown };
       class FocusTarget {
@@ -48,10 +48,13 @@ describe("native scene detail focus", () => {
         body: "Audience evidence",
         returnFocusRef: { current: trigger as unknown as HTMLButtonElement },
         onClose,
+        locale: "ko-KR",
       });
       const nodes = elements(tree);
       const dialogElement = nodes.find((element) => element.type === "dialog")!;
       const closeElement = nodes.find((element) => element.type === "button")!;
+      expect(closeElement.props.lang).toBe("ko-KR");
+      expect(closeElement.props.children).toBe("상세 내용 닫기");
       (dialogElement.props.ref as ReactModule.RefObject<unknown>).current = dialog;
       (closeElement.props.ref as ReactModule.RefObject<unknown>).current = closeButton;
       const cleanup = mocked.effects[0]!();

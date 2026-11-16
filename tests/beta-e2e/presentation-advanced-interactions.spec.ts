@@ -9,6 +9,9 @@ import type {
   PresentationHostSnapshot,
 } from "../../packages/contracts/src/index.ts";
 import {
+  openE01Inspector,
+  selectE01Object,
+  clickNativeInsert,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -102,6 +105,7 @@ async function saveGeometry(
   page: Page,
   fields: Partial<Record<"x" | "y" | "width" | "height", number>>,
 ) {
+  await openE01Inspector(page, "Layout");
   for (const [field, value] of Object.entries(fields))
     await page
       .getByRole("spinbutton", { name: `Object ${field} (%)`, exact: true })
@@ -124,6 +128,7 @@ async function createFixture(page: Page, info: TestInfo) {
   const record = await createE01Deck(page, [opening, question, skipped, target, closing]);
   const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
   await enterE01Editor(page, record.id, narrow);
+  await openE01Inspector(page, "Media");
   await page.getByLabel("New image description", { exact: true }).fill("Two workflow steps");
   await page
     .getByLabel("Add native image", { exact: true })
@@ -134,7 +139,7 @@ async function createFixture(page: Page, info: TestInfo) {
       return block?.kind === "content" && block.scene?.nodes.some((node) => node.type === "image");
     })
     .toBe(true);
-  await page.getByRole("button", { name: "Add image hotspot", exact: true }).click();
+  await clickNativeInsert(page, "Add image hotspot");
   await page.getByRole("textbox", { name: "Detail button label", exact: true }).fill("Inspect");
   await page.getByRole("textbox", { name: "Detail title", exact: true }).fill("Workflow detail");
   await page.getByRole("textbox", { name: "Detail audience content", exact: true }).fill(localBody);
@@ -147,10 +152,7 @@ async function createFixture(page: Page, info: TestInfo) {
     })
     .toBe(localBody);
   const beforeMove = (await readE01Record(page, record.id)).draft.blocks[0]!;
-  await page
-    .getByRole("group", { name: "Slide objects · reading order", exact: true })
-    .getByRole("button", { name: /Two workflow steps/ })
-    .click();
+  await selectE01Object(page, /Two workflow steps/, "Layout");
   await saveGeometry(page, { x: 56, width: 34 });
   await expect
     .poll(async () => {
@@ -169,14 +171,14 @@ async function createFixture(page: Page, info: TestInfo) {
     throw new Error("Hotspot fixture required");
   expect(newHotspot.frame.width).toBeCloseTo((oldHotspot.frame.width * 34) / 35);
   expect(newHotspot.body).toBe(localBody);
-  await page.getByRole("button", { name: "Add detail dialog", exact: true }).click();
+  await clickNativeInsert(page, "Add detail dialog");
   await page
     .getByRole("textbox", { name: "Detail button label", exact: true })
     .fill("Open evidence");
   await page.getByRole("textbox", { name: "Detail title", exact: true }).fill("Evidence details");
   await page.getByRole("textbox", { name: "Detail audience content", exact: true }).fill(localBody);
   await saveGeometry(page, { height: 16, y: 70 });
-  await page.getByRole("button", { name: "Add reveal panel", exact: true }).click();
+  await clickNativeInsert(page, "Add reveal panel");
   await page
     .getByRole("textbox", { name: "Reveal panel label", exact: true })
     .fill("Reveal evidence");
@@ -187,7 +189,7 @@ async function createFixture(page: Page, info: TestInfo) {
     .getByRole("combobox", { name: "Reveal audience", exact: true })
     .selectOption("broadcast");
   await saveGeometry(page, { width: 40 });
-  await page.getByRole("button", { name: "Add slide link", exact: true }).click();
+  await clickNativeInsert(page, "Add slide link");
   await page
     .getByRole("textbox", { name: "Slide link label", exact: true })
     .fill("Follow checkpoint");
@@ -294,7 +296,7 @@ async function createFixture(page: Page, info: TestInfo) {
     companion.getByRole("button", { name: "Start Presentation", exact: true }),
   ).toBeEnabled();
   const audienceStage = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await audienceStage;
   return {
     sessionId,
@@ -404,7 +406,7 @@ for (const suffix of ["", " @mobile"])
     try {
       await guest.goto(`/join?code=${f.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill("E06 genuine browser response");
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${f.sessionId}/play`);
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       for (const surface of [page, guest, f.companion, f.stage]) {

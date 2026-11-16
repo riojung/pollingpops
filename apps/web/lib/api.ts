@@ -5,6 +5,10 @@ export const LOGOUT_WARNING_STORAGE_KEY = "pollingpops:logout-revocation-warning
 export const LOGOUT_REVOCATION_WARNING =
   "Product sign-out completed, but admin session revocation could not be confirmed. Check the management service before leaving this device.";
 
+function notifySessionEvent(name: string) {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(name));
+}
+
 function persistLogoutWarning(warning: string | null) {
   if (typeof window === "undefined") return;
   try {
@@ -80,6 +84,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         details?: { retryAfterSeconds?: unknown };
       };
     } | null;
+    if (
+      response.status === 401 &&
+      body?.error?.code === "SESSION_EXPIRED" &&
+      init.credentials !== "omit"
+    ) {
+      notifySessionEvent(SESSION_EXPIRED_EVENT);
+    }
     throw new ApiClientError(
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.code,
@@ -91,7 +102,22 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     );
   }
   const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";
-  if (loggedOut) clearAllCanvasCreationSetups();
+  let guardedLogout = false;
+  if (loggedOut && typeof init.body === "string") {
+    try {
+      guardedLogout =
+        typeof (JSON.parse(init.body) as { expectedSessionId?: unknown })?.expectedSessionId ===
+        "string";
+    } catch {
+      /* Legacy logout handling remains unchanged. */
+    }
+  }
+  if (loggedOut && !guardedLogout) {
+    clearAllCanvasCreationSetups();
+    clearCreatorSessionAuthority();
+    notifySessionEvent(SESSION_LOGOUT_EVENT);
+    publishSessionSignal("logout");
+  }
   if (response.status === 204) {
     return undefined as T;
   }
@@ -99,11 +125,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   try {
     body = await response.json();
   } catch (error) {
-    if (loggedOut) notifyAuthChange();
+    if (loggedOut && !guardedLogout) notifyAuthChange();
     throw error;
   }
   const uncertainRevocation =
     loggedOut &&
+    !guardedLogout &&
     typeof body === "object" &&
     body !== null &&
     "operatorSessionRevoked" in body &&
@@ -133,3 +160,9 @@ export function isRetryableReadError(error: unknown): boolean {
     : error instanceof TypeError;
 }
 import { clearAllCanvasCreationSetups } from "./canvas-creation-storage";
+import {
+  clearCreatorSessionAuthority,
+  publishSessionSignal,
+  SESSION_EXPIRED_EVENT,
+  SESSION_LOGOUT_EVENT,
+} from "./idle-session";

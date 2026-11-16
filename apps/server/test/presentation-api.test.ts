@@ -38,6 +38,114 @@ afterEach(async () => {
 });
 
 describe("presentation authoring API", () => {
+  it("returns only authenticated immutable publication metadata after later draft edits", async () => {
+    const built = await buildApp(
+      ConfigSchema.parse({
+        NODE_ENV: "test",
+        ALLOW_IN_MEMORY: "true",
+        COMMUNITY_MODE: "false",
+        WEB_ORIGIN: "http://localhost:3000",
+        PUBLIC_API_URL: "http://localhost:4000",
+        FEATURE_UX_BETA: "true",
+        UX_BETA_WORKSPACE_ALLOWLIST: BETA_WORKSPACE_ID,
+        FEATURE_PRESENTATIONS: "true",
+        LOG_LEVEL: "silent",
+      }),
+      {
+        repository: new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID }),
+        cache: new MemorySessionCache(),
+      },
+    );
+    app = built.app;
+    const cookie = await signIn(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/presentations",
+      headers: { cookie },
+      payload: { title: "Publication metadata" },
+    });
+    expect(created.statusCode).toBe(201);
+    const presentation = created.json().presentation;
+    const path = `/v1/presentations/${presentation.id}/publication`;
+    expect((await app.inject({ method: "GET", url: path })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: path, headers: { cookie } })).json()).toEqual({
+      publication: null,
+    });
+    const draft = {
+      ...presentation.draft,
+      blocks: [
+        {
+          id: randomUUID(),
+          kind: "content",
+          layout: "title_body",
+          textElements: [
+            {
+              id: "heading",
+              role: "title",
+              text: "Published opening",
+              region: "top_left",
+              order: 0,
+            },
+          ],
+          mediaId: null,
+          mediaAlt: null,
+          speakerNotes: "PRIVATE author note",
+        },
+      ],
+    };
+    const saved = await app.inject({
+      method: "PUT",
+      url: `/v1/presentations/${presentation.id}/draft`,
+      headers: { cookie },
+      payload: {
+        draft,
+        expectedRevision: presentation.draftRevision,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const published = await app.inject({
+      method: "POST",
+      url: `/v1/presentations/${presentation.id}/publish`,
+      headers: { cookie },
+      payload: { expectedDraftRevision: saved.json().presentation.draftRevision },
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    const { version } = published.json();
+    const metadata = await app.inject({ method: "GET", url: path, headers: { cookie } });
+    expect(metadata.headers["cache-control"]).toBe("private, no-store");
+    expect(metadata.json()).toEqual({
+      publication: { id: version.id, version: version.version, publishedAt: version.publishedAt },
+    });
+    expect(metadata.body).not.toContain("PRIVATE");
+    expect(metadata.body).not.toContain("Published opening");
+    const changed = await app.inject({
+      method: "PUT",
+      url: `/v1/presentations/${presentation.id}/draft`,
+      headers: { cookie },
+      payload: {
+        draft: { ...draft, title: "New unpublished title" },
+        expectedRevision: published.json().presentation.draftRevision,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((await app.inject({ method: "GET", url: path, headers: { cookie } })).json()).toEqual(
+      metadata.json(),
+    );
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/presentations/${randomUUID()}/publication`,
+          headers: { cookie },
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
   it.each([false, true])(
     "imports opinion formats with stable copy receipts and version floors (interactions: %s)",
     async (interactions) => {

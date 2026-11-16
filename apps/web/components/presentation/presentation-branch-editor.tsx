@@ -1,8 +1,14 @@
 "use client";
 
-import { questionTypeDefinition, type InteractiveQuestionBlockDraft } from "@openround/contracts";
+import {
+  questionTypeDefinition,
+  type InteractiveQuestionBlockDraft,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { clientUuid } from "../../lib/uuid";
+import { branchNavigationCopy } from "./branch-navigation-copy";
 import styles from "./native-scene.module.css";
+import branchStyles from "./presentation-branch-editor.module.css";
 
 type Branch = NonNullable<InteractiveQuestionBlockDraft["branches"]>[number];
 
@@ -10,24 +16,35 @@ export function PresentationBranchEditor({
   block,
   targets,
   onChange,
+  locale = "en-CA",
+  disabled = false,
 }: {
   block: InteractiveQuestionBlockDraft;
   targets: readonly { id: string; title: string }[];
   onChange: (branches: Branch[], historyField?: string) => void;
+  locale?: SupportedLocale;
+  disabled?: boolean;
 }) {
+  const copy = branchNavigationCopy(locale);
   const branches = block.branches ?? [];
   const question = block.question;
   const supported = (question.delivery ?? "main") === "main" && !question.linkedRecheckQuestionId;
   const choiceQuestion = "choices" in question && question.type !== "ranking" ? question : null;
   const correct = questionTypeDefinition(question.type).scored;
   function update(id: string, updater: (branch: Branch) => Branch, field?: string) {
+    if (disabled) return;
     onChange(
       branches.map((branch) => (branch.id === id ? updater(branch) : branch)),
       field ? `branch:${id}:${field}` : undefined,
     );
   }
   function add() {
-    if (!supported || (!correct && !choiceQuestion?.choices.length) || branches.length >= 10)
+    if (
+      disabled ||
+      !supported ||
+      (!correct && !choiceQuestion?.choices.length) ||
+      branches.length >= 10
+    )
       return;
     const condition: Branch["condition"] = correct
       ? { kind: "correct_share", minPercent: 50, minResponses: 1 }
@@ -40,25 +57,32 @@ export function PresentationBranchEditor({
     onChange([...branches, { id: clientUuid(), label: "", targetBlockId: null, condition }]);
   }
   return (
-    <fieldset className={styles.designControls} lang="en-CA">
-      <legend>Answer branches</legend>
+    <fieldset
+      className={`${styles.designControls} ${branchStyles.editor}`}
+      lang={locale}
+      disabled={disabled}
+    >
+      <legend>{copy("Answer branches")}</legend>
       <p className={styles.help}>
-        After revealing this activity, the facilitator can choose an eligible branch. Next block
-        keeps the numbered path. Branches never submit answers or change scores.
+        {copy(
+          "After revealing this activity, the facilitator can choose an eligible branch. Next block keeps the numbered path. Branches never submit answers or change scores.",
+        )}
       </p>
       {!supported ? (
         <p>
-          Branches require an unlinked main activity. Remove branches before linking a recheck or
-          changing the delivery role.
+          {copy(
+            "Branches require an unlinked main activity. Remove branches before linking a recheck or changing the delivery role.",
+          )}
         </p>
       ) : null}
       {branches.map((branch, index) => (
         <fieldset key={branch.id} className={styles.designControls}>
-          <legend>Branch {index + 1}</legend>
+          <legend>{copy("Branch {number}", { number: index + 1 })}</legend>
           <label>
-            Branch label
+            {copy("Branch label")}
             <input
-              aria-label={`Branch ${index + 1} label`}
+              aria-label={copy("Branch {number} label", { number: index + 1 })}
+              lang=""
               maxLength={120}
               value={branch.label}
               onChange={(event) =>
@@ -67,9 +91,9 @@ export function PresentationBranchEditor({
             />
           </label>
           <label>
-            Condition
+            {copy("Condition")}
             <select
-              aria-label={`Branch ${index + 1} condition`}
+              aria-label={copy("Branch {number} condition", { number: index + 1 })}
               value={branch.condition.kind}
               onChange={(event) =>
                 update(branch.id, (current) => ({
@@ -90,15 +114,17 @@ export function PresentationBranchEditor({
                 }))
               }
             >
-              {correct ? <option value="correct_share">Correct responses</option> : null}
-              {choiceQuestion ? <option value="choice_share">Selected answer choice</option> : null}
+              {correct ? <option value="correct_share">{copy("Correct responses")}</option> : null}
+              {choiceQuestion ? (
+                <option value="choice_share">{copy("Selected answer choice")}</option>
+              ) : null}
             </select>
           </label>
           {branch.condition.kind === "choice_share" ? (
             <label>
-              Answer choice
+              {copy("Answer choice")}
               <select
-                aria-label={`Branch ${index + 1} answer choice`}
+                aria-label={copy("Branch {number} answer choice", { number: index + 1 })}
                 value={
                   choiceQuestion?.choices.find(
                     (choice) =>
@@ -127,21 +153,21 @@ export function PresentationBranchEditor({
                       : ""),
                 ) ? (
                   <option value={branch.condition.choiceId}>
-                    Unavailable choice — select another
+                    {copy("Unavailable choice — select another")}
                   </option>
                 ) : null}
                 {choiceQuestion?.choices.map((choice, choiceIndex) => (
-                  <option key={choice.id} value={choice.id}>
-                    {choice.label || `Choice ${choiceIndex + 1}`}
+                  <option key={choice.id} value={choice.id} lang={choice.label ? "" : locale}>
+                    {choice.label || copy("Choice {number}", { number: choiceIndex + 1 })}
                   </option>
                 ))}
               </select>
             </label>
           ) : null}
           <label>
-            Minimum percent
+            {copy("Minimum percent")}
             <input
-              aria-label={`Branch ${index + 1} minimum percent`}
+              aria-label={copy("Branch {number} minimum percent", { number: index + 1 })}
               type="number"
               min={0}
               max={100}
@@ -164,9 +190,9 @@ export function PresentationBranchEditor({
             />
           </label>
           <label>
-            Minimum responses
+            {copy("Minimum responses")}
             <input
-              aria-label={`Branch ${index + 1} minimum responses`}
+              aria-label={copy("Branch {number} minimum responses", { number: index + 1 })}
               type="number"
               min={1}
               max={10000}
@@ -190,9 +216,9 @@ export function PresentationBranchEditor({
             />
           </label>
           <label>
-            Forward target
+            {copy("Forward target")}
             <select
-              aria-label={`Branch ${index + 1} target`}
+              aria-label={copy("Branch {number} target", { number: index + 1 })}
               value={
                 targets.find(
                   (target) => target.id.toLowerCase() === branch.targetBlockId?.toLowerCase(),
@@ -207,15 +233,17 @@ export function PresentationBranchEditor({
                 }))
               }
             >
-              <option value="">Choose target</option>
+              <option value="">{copy("Choose target")}</option>
               {branch.targetBlockId &&
               !targets.some(
                 (target) => target.id.toLowerCase() === branch.targetBlockId?.toLowerCase(),
               ) ? (
-                <option value={branch.targetBlockId}>Unavailable target — select another</option>
+                <option value={branch.targetBlockId}>
+                  {copy("Unavailable target — select another")}
+                </option>
               ) : null}
               {targets.map((target) => (
-                <option key={target.id} value={target.id}>
+                <option key={target.id} value={target.id} lang="">
                   {target.title}
                 </option>
               ))}
@@ -223,20 +251,25 @@ export function PresentationBranchEditor({
           </label>
           <button
             type="button"
-            onClick={() => onChange(branches.filter((current) => current.id !== branch.id))}
+            onClick={() => {
+              if (!disabled) onChange(branches.filter((current) => current.id !== branch.id));
+            }}
           >
-            Remove branch {index + 1}
+            {copy("Remove branch {number}", { number: index + 1 })}
           </button>
         </fieldset>
       ))}
       <button
         type="button"
         disabled={
-          !supported || (!correct && !choiceQuestion?.choices.length) || branches.length >= 10
+          disabled ||
+          !supported ||
+          (!correct && !choiceQuestion?.choices.length) ||
+          branches.length >= 10
         }
         onClick={add}
       >
-        Add answer branch
+        {copy("Add answer branch")}
       </button>
     </fieldset>
   );

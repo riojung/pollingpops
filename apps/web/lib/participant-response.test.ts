@@ -8,10 +8,34 @@ import {
   togglePollSelection,
   legacyResponseRequiresSubmit,
   usesAutomaticChoiceSubmission,
+  usesImmediateChoiceSubmission,
 } from "./participant-response";
 import type { SessionSnapshot } from "@openround/contracts";
 
 describe("automatic competitive answers", () => {
+  it("describes tap-to-submit accurately in retained legacy rooms", () => {
+    const legacy = {
+      uxBeta: false,
+      settings: { resultVisibility: "private" },
+      roundKind: "main",
+      question: { type: "poll", confidence: "off", maxSelections: 1 },
+    } as SessionSnapshot;
+    expect(usesImmediateChoiceSubmission(legacy)).toBe(true);
+    expect(
+      usesImmediateChoiceSubmission({
+        ...legacy,
+        question: { ...legacy.question!, maxSelections: 2 },
+      }),
+    ).toBe(false);
+    expect(
+      usesImmediateChoiceSubmission({
+        ...legacy,
+        question: { ...legacy.question!, confidence: "optional" },
+      }),
+    ).toBe(false);
+    expect(usesImmediateChoiceSubmission({ ...legacy, uxBeta: true })).toBe(false);
+    expect(usesImmediateChoiceSubmission(null)).toBe(false);
+  });
   const snapshot = {
     uxBeta: true,
     settings: { resultVisibility: "leaderboard" },

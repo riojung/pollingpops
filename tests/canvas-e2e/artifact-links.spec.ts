@@ -72,6 +72,8 @@ async function target(page: Page, kind: "round" | "presentation") {
   };
 }
 async function choose(page: Page, data: Awaited<ReturnType<typeof source>>) {
+  if (new URL(page.url()).pathname.startsWith("/quiz/"))
+    await page.getByText("References", { exact: true }).click();
   const panel = page.getByRole("region", { name: "Canvas snapshots", exact: true });
   await panel.getByRole("button", { name: "Link saved canvas", exact: true }).click();
   await panel

@@ -19,6 +19,9 @@ import type {
   PresentationTextResponseResults,
 } from "../../packages/contracts/src/index.ts";
 import {
+  openE01Inspector,
+  clickNavigatorAction,
+  closeE01Overlays,
   createE01Deck,
   e01ApiUrl,
   enterE01Editor,
@@ -149,7 +152,7 @@ async function surfaces(browser: Browser, page: Page, info: TestInfo, host: Host
       const guest = await context.newPage();
       await guest.goto(`/join?code=${host.code}`);
       await guest.getByLabel("Nickname", { exact: true }).fill(`Text attendee ${index + 1}`);
-      await guest.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+      await guest.getByRole("button", { name: "Join presentation", exact: true }).click();
       await expect(guest).toHaveURL(`/presentation-session/${host.sessionId}/play`);
       guests.push(guest);
     }
@@ -1155,8 +1158,7 @@ for (const suffix of ["", " @mobile"]) {
           ).question.type,
       )
       .toBe("open_text");
-    if (narrow) await page.getByRole("button", { name: "Open map", exact: true }).click();
-    await page.getByRole("button", { name: /From published Round/ }).click();
+    await clickNavigatorAction(page, /From published Round/);
     const picker = page.getByRole("dialog", { name: "Insert from a published Round", exact: true });
     await picker
       .getByRole("combobox", { name: "Source Round", exact: true })
@@ -1240,11 +1242,12 @@ for (const suffix of ["", " @mobile"]) {
     await expect
       .poll(async () => (await readE01Record(page, destination.id)).draft.blocks.length)
       .toBe(3);
-    await page.getByRole("button", { name: "New slide", exact: true }).click();
-    await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
+    await clickNavigatorAction(page, "New slide");
+    await openE01Inspector(page, "Layout");
     await page
-      .getByRole("button", { name: "Apply design to all native slides", exact: true })
-      .click();
+      .getByRole("combobox", { name: "Base color theme", exact: true })
+      .selectOption("midnight");
+    await page.getByRole("button", { name: "Apply style to native slides", exact: true }).click();
     await expect
       .poll(async () => {
         const saved = (await readE01Record(page, destination.id)).draft;
@@ -1260,8 +1263,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.reload();
     expect((await readE01Record(page, destination.id)).draft.schemaVersion).toBe(10);
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const preview = page.getByRole("dialog", { name: "Presentation preview", exact: true });

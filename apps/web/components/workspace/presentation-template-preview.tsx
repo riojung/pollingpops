@@ -1,21 +1,61 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PresentationDraft } from "@openround/contracts";
+import type { ContentSlideDraft, PresentationDraft, SupportedLocale } from "@openround/contracts";
 import {
+  isNativePresentationTemplateId,
   nativePresentationTemplateThumbnail,
-  type NativePresentationTemplateId,
 } from "../../lib/presentation-native-templates";
+import {
+  allPresentationTemplates,
+  presentationTemplateForLocale,
+  type PresentationTemplateId,
+} from "../../lib/presentation-templates";
+import { useLocale } from "../locale-provider";
+import { presentationTemplateCopy } from "../../lib/i18n/presentation-template-copy";
+import { formatNumber } from "../../lib/i18n/format";
+import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
 import { ContentSlideView } from "../presentation/content-slide-view";
+import { handleModalKeyDown } from "../presentation/presentation-modal-focus";
 import styles from "./presentation-template-preview.module.css";
 
+function templateThumbnail(
+  templateId: PresentationTemplateId,
+  locale: SupportedLocale,
+): ContentSlideDraft | undefined {
+  if (isNativePresentationTemplateId(templateId))
+    return nativePresentationTemplateThumbnail(templateId, locale);
+  const template = presentationTemplateForLocale(templateId, locale);
+  const templateIndex = allPresentationTemplates.findIndex((entry) => entry.id === templateId);
+  const opening = template.blocks.find((block) => block.kind === "content");
+  if (!opening || opening.kind !== "content") return undefined;
+  // Thumbnail IDs are stable across server rendering and hydration. The first
+  // content slide uses the same title/body layout as the instantiated template.
+  const id = (offset: number) =>
+    `00000000-0000-4000-8000-${((templateIndex + 1) * 100 + offset).toString(16).padStart(12, "0")}`;
+  return {
+    id: id(0),
+    kind: "content",
+    layout: "title_body",
+    textElements: [
+      { id: id(1), role: "title", text: opening.title, region: "middle_center", order: 0 },
+      { id: id(2), role: "body", text: opening.body, region: "middle_center", order: 1 },
+    ],
+    mediaId: null,
+    mediaAlt: null,
+    speakerNotes: opening.notes,
+  };
+}
+
 /** A real shared-renderer first slide, scaled to a stable thumbnail size. */
-export function NativePresentationTemplateThumbnail({
+export function PresentationTemplateThumbnail({
   templateId,
+  locale = "en-CA",
 }: {
-  templateId: NativePresentationTemplateId;
+  templateId: PresentationTemplateId;
+  locale?: SupportedLocale;
 }) {
-  const block = useMemo(() => nativePresentationTemplateThumbnail(templateId), [templateId]);
+  const block = useMemo(() => templateThumbnail(templateId, locale), [templateId, locale]);
   const container = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   useEffect(() => {
@@ -33,10 +73,21 @@ export function NativePresentationTemplateThumbnail({
       ref={container}
       className={styles.thumbnail}
       aria-hidden="true"
-      data-native-template-thumbnail={templateId}
+      inert
+      data-template-thumbnail={templateId}
+      data-native-template-thumbnail={
+        isNativePresentationTemplateId(templateId) ? templateId : undefined
+      }
     >
       <div className={styles.thumbnailScene} style={{ transform: `scale(${width / 960})` }}>
-        <ContentSlideView block={block} variant="preview" />
+        {block ? (
+          <ContentSlideView
+            block={block}
+            contentLocale={locale}
+            variant="preview"
+            staticThumbnail
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -44,13 +95,18 @@ export function NativePresentationTemplateThumbnail({
 
 export function PresentationTemplateSlide({
   block,
+  contentLocale = "en-CA",
 }: {
   block: PresentationDraft["blocks"][number];
+  contentLocale?: SupportedLocale;
 }) {
-  if (block.kind === "content") return <ContentSlideView block={block} variant="preview" />;
+  const { locale } = useLocale();
+  const copy = presentationTemplateCopy(locale);
+  if (block.kind === "content")
+    return <ContentSlideView block={block} contentLocale={contentLocale} variant="preview" />;
   return (
-    <article className={styles.activity}>
-      <p>Audience activity</p>
+    <article className={styles.activity} lang={contentLocale}>
+      <p lang={locale}>{copy("Audience activity")}</p>
       <h1>{block.question.prompt}</h1>
       {"choices" in block.question ? (
         <ul>
@@ -70,11 +126,16 @@ export function PresentationTemplateSlide({
 
 export function PresentationTemplatePreview({
   draft,
+  contentLocale = "en-CA",
   onClose,
 }: {
   draft: PresentationDraft;
+  contentLocale?: SupportedLocale;
   onClose: () => void;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationTemplateCopy(locale);
+  const guideCopy = templateGuideCopy(locale);
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(0);
   const block = draft.blocks[index];
@@ -91,14 +152,23 @@ export function PresentationTemplatePreview({
     <dialog
       ref={dialog}
       className={styles.dialog}
-      aria-label="Presentation template preview"
-      lang="en-CA"
+      aria-label={copy("Presentation template preview")}
+      lang={locale}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
       }}
       onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+        if (
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        handleModalKeyDown(event, onClose);
+        if (event.defaultPrevented) return;
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("a,input,textarea,select,summary,[contenteditable='true']")) return;
         const next =
@@ -118,11 +188,11 @@ export function PresentationTemplatePreview({
     >
       <header className={styles.header}>
         <div>
-          <h2>{draft.title}</h2>
-          <p>Read-only template preview. Example information is illustrative.</p>
+          <h2 lang={contentLocale}>{draft.title}</h2>
+          <p>{copy("Read-only template preview. Example information is illustrative.")}</p>
         </div>
         <button type="button" className="button-quiet" onClick={onClose}>
-          Close preview
+          {copy("Close preview")}
         </button>
       </header>
       <div className={styles.controls}>
@@ -132,10 +202,13 @@ export function PresentationTemplatePreview({
           disabled={index === 0}
           onClick={() => setIndex(index - 1)}
         >
-          Previous slide
+          {copy("Previous slide")}
         </button>
         <p role="status">
-          Slide {index + 1} of {draft.blocks.length}
+          {copy("Slide {number} of {count}", {
+            number: formatNumber(locale, index + 1),
+            count: formatNumber(locale, draft.blocks.length),
+          })}
         </p>
         <button
           type="button"
@@ -143,15 +216,23 @@ export function PresentationTemplatePreview({
           disabled={index >= draft.blocks.length - 1}
           onClick={() => setIndex(index + 1)}
         >
-          Next slide
+          {copy("Next slide")}
         </button>
       </div>
-      <div className={styles.stage} data-template-preview-slide={index + 1}>
-        {block ? <PresentationTemplateSlide block={block} /> : null}
+      <div className={styles.stage} data-template-preview-slide={index + 1} lang={contentLocale}>
+        {block ? <PresentationTemplateSlide block={block} contentLocale={contentLocale} /> : null}
       </div>
+      {block?.kind === "content" && block.speakerNotes ? (
+        <details className={styles.notes} data-template-notes>
+          <summary>{guideCopy("Presenter guide")}</summary>
+          <p>{guideCopy("Template notes explain how to adapt and present this example.")}</p>
+          <div lang={contentLocale}>{block.speakerNotes}</div>
+        </details>
+      ) : null}
       <p className={styles.keyboard}>
-        Use Left and Right arrow keys, Home or End to navigate. Escape closes the preview. When a
-        table or chart has focus, these keys scroll its data; use the slide buttons to navigate.
+        {copy(
+          "Use Left and Right arrow keys, Home or End to navigate. Escape closes the preview. When a table or chart has focus, these keys scroll its data; use the slide buttons to navigate.",
+        )}
       </p>
     </dialog>
   );

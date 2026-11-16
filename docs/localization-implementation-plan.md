@@ -101,6 +101,13 @@ localized. English-only surfaces remain tracked work in Phases 2 and 3.
 
 ### Phase 3 — translation operations and expansion
 
+Implemented preparation: `pnpm localization:review` exports deterministic bilingual
+editorial packets and checks separately recorded decisions against current HEAD, bound
+source files and canonical content. The bounded inventory covers creation/practice copy,
+all Presentation/Round starter content, Survey projections and default/scaffold examples.
+See the [native-language review workflow](evidence/native-language-review.md). This does
+not implement catalog import, professional review or locale production approval.
+
 - Export/import catalogs in a translator-friendly format and enrich the existing glossary with
   per-message context notes.
 - Add pseudo-locales for expansion and bidirectional layout testing before introducing Arabic or

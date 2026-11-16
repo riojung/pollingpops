@@ -2,9 +2,11 @@ import {
   PRESENTATION_SCENE_MAX_BYTES,
   PresentationSceneDraftSchema,
   type PresentationScene,
+  type SupportedLocale,
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { creationContent } from "./i18n/creation-content";
 
 export type NativeTableNode = Extract<PresentationSceneNode, { type: "table" }>;
 export type NativeChartNode = Extract<PresentationSceneNode, { type: "chart" }>;
@@ -20,15 +22,16 @@ export type NativeDataDraft =
     };
 type Result<T> = { success: true; data: T } | { success: false; error: string };
 
-export function createNativeTableNode(): NativeTableNode {
+export function createNativeTableNode(locale: SupportedLocale = "en-CA"): NativeTableNode {
+  const copy = creationContent(locale);
   return {
     id: clientUuid(),
     type: "table",
-    caption: "Illustrative sample table",
-    headers: ["Category", "Value"],
+    caption: copy("tableCaption"),
+    headers: [copy("category"), copy("value")],
     rows: [
-      ["Alpha", "10"],
-      ["Beta", "20"],
+      [copy("alpha"), "10"],
+      [copy("beta"), "20"],
     ],
     frame: { x: 8, y: 35, width: 84, height: 55 },
   };
@@ -36,16 +39,17 @@ export function createNativeTableNode(): NativeTableNode {
 
 export function createNativeChartNode(
   chartType: NativeChartNode["chartType"] = "bar",
+  locale: SupportedLocale = "en-CA",
 ): NativeChartNode {
+  const copy = creationContent(locale);
   return {
     id: clientUuid(),
     type: "chart",
     chartType,
-    title: "Illustrative sample chart",
-    summary:
-      "Illustrative values: Alpha 10, Beta 20 and Gamma 15. Replace this sample with your own data and description.",
-    categories: ["Alpha", "Beta", "Gamma"],
-    series: [{ name: "Illustrative value", values: [10, 20, 15] }],
+    title: copy("chartTitle"),
+    summary: copy("chartSummary"),
+    categories: [copy("alpha"), copy("beta"), copy("gamma")],
+    series: [{ name: copy("seriesValue"), values: [10, 20, 15] }],
     frame: { x: 8, y: 35, width: 84, height: 55 },
   };
 }

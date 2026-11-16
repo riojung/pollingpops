@@ -1,8 +1,13 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { plainTextToPresentationRichText, type PresentationSceneNode } from "@openround/contracts";
+import {
+  plainTextToPresentationRichText,
+  type PresentationSceneNode,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
 import { toggleNativeRichTextMark } from "../../lib/presentation-rich-text";
 
 const mocked = vi.hoisted(() => ({
@@ -93,6 +98,7 @@ function harness(
   const onChange = vi.fn((next) => {
     node = next;
   });
+  let locale: SupportedLocale = "en-CA";
   let tree: ReactNode;
   const scheduled: (() => void)[] = [];
   const frames = new Map<number, () => void>();
@@ -110,7 +116,7 @@ function harness(
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      tree = NativeRichTextEditor({ node, onChange, ...history });
+      tree = NativeRichTextEditor({ node, onChange, ...history, locale });
     } finally {
       mocked.hooks = null;
     }
@@ -126,6 +132,10 @@ function harness(
     node: () => node,
     render,
     find,
+    setLocale(next: SupportedLocale) {
+      locale = next;
+      render();
+    },
     element,
     activeElement: () => documentState.activeElement,
     focusOther(target: unknown) {
@@ -149,7 +159,7 @@ function harness(
     },
     click(label: string) {
       find(
-        (element) => element.type === "button" && element.props.children === label,
+        (element) => element.type === "button" && element.props["aria-label"] === label,
       ).props.onClick();
     },
     beforeInput(inputType: string, cancelable = true) {
@@ -163,6 +173,213 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("native formatting controls", () => {
+  it("retains the selected range and rich content when object typography changes before inline formatting", () => {
+    const editor = harness();
+    editor.select(5, 8);
+    const original = structuredClone(editor.node());
+    const typography = editor.find((element) => element.type === NativeSceneTypographyControls);
+    typography.props.onChange(
+      { ...editor.node(), typography: { font: "serif", size: 48 } },
+      "typography:font",
+    );
+    editor.render();
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().richText).toEqual(original.richText);
+    editor.click("Bold");
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toEqual(
+      toggleNativeRichTextMark(original.richText!, 5, 8, "bold"),
+    );
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([5, 8]);
+    editor.click("Remove formatting");
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toBeUndefined();
+  });
+  it("keeps the compact controls named and associates the writing area with its label and localized count", () => {
+    const editor = harness();
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props.maxLength).toBe(4000);
+    expect(textarea.props["data-text-role"]).toBe("body");
+    expect(
+      editor.find(
+        (element) => element.type === "label" && element.props.htmlFor === textarea.props.id,
+      ).props.children,
+    ).toBe("Node text");
+    for (const label of ["Bold", "Italic", "Remove formatting", "Apply link", "Remove link"]) {
+      const button = editor.find(
+        (element) => element.type === "button" && element.props["aria-label"] === label,
+      );
+      expect(button.props.title).toBe(label);
+      expect(button.props.type).toBe("button");
+      expect(button.props.tabIndex).toBeUndefined();
+    }
+    editor.node().text = "X".repeat(1234);
+    editor.node().richText = plainTextToPresentationRichText(editor.node().text);
+    editor.setLocale("de-DE");
+    const count = editor.find((element) => element.props.id === textarea.props["aria-describedby"]);
+    expect(count.props.children.join("")).toBe("1.234 / 4.000");
+    editor.node().role = "title";
+    editor.node().text = "Short title";
+    editor.node().richText = plainTextToPresentationRichText(editor.node().text);
+    editor.render();
+    const title = editor.find((element) => element.type === "textarea");
+    expect(title.props.maxLength).toBe(160);
+    expect(title.props["data-text-role"]).toBe("title");
+  });
+
+  it("shows the current paragraph style and applies a shared style to selected mixed paragraphs", () => {
+    const editor = harness();
+    editor.node().text = "Read the plan\nNext step";
+    editor.node().richText = {
+      paragraphs: [
+        { kind: "paragraph", runs: [{ text: "Read the plan", bold: true }] },
+        { kind: "bullet", runs: [{ text: "Next step", href: "https://example.com/next" }] },
+      ],
+    };
+    editor.render();
+    expect(editor.find((element) => element.type === "select").props.value).toBe("paragraph");
+    editor.select(14, 14);
+    expect(editor.find((element) => element.type === "select").props.value).toBe("bullet");
+    editor.select(0, editor.node().text.length);
+    const selector = editor.find((element) => element.type === "select");
+    expect(selector.props.value).toBe("");
+    editor.focusOther(selector);
+    selector.props.onChange({ target: { value: "numbered" } });
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().richText!.paragraphs).toEqual([
+      { kind: "numbered", runs: [{ text: "Read the plan", bold: true }] },
+      { kind: "numbered", runs: [{ text: "Next step", href: "https://example.com/next" }] },
+    ]);
+    expect(editor.node().text).toBe("Read the plan\nNext step");
+    expect(editor.find((element) => element.type === "select").props.value).toBe("numbered");
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([0, 23]);
+    expect(editor.activeElement()).toBe(editor.element);
+  });
+
+  it("removes a link using the retained text range without removing emphasis", () => {
+    const editor = harness();
+    editor.node().richText!.paragraphs[0]!.runs = [
+      { text: "Read the " },
+      { text: "plan", bold: true, href: "https://example.com/plan" },
+    ];
+    editor.render();
+    editor.select(9, 13);
+    editor.focusOther({});
+    editor.click("Remove link");
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
+      { text: "Read the " },
+      { text: "plan", bold: true },
+    ]);
+    expect(editor.node().text).toBe("Read the plan");
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([9, 13]);
+  });
+
+  it("retranslates active feedback without changing a typed link, authored language or selection", () => {
+    const editor = harness();
+    editor.node().lang = "fr";
+    editor.node().richText!.paragraphs[0]!.runs = [
+      { text: "Read the ", italic: true },
+      { text: "plan", href: "https://example.com/original?lang=fr" },
+    ];
+    editor.render();
+    editor.select(9, 13);
+    const before = structuredClone(editor.node());
+    const linkField = {};
+    editor.focusOther(linkField);
+    editor
+      .find((element) => element.type === "input")
+      .props.onChange({
+        target: { value: "javascript:alert(1)" },
+      });
+    editor.render();
+    editor.click("Apply link");
+    editor.setLocale("ko-KR");
+    const alert = editor.find((element) => element.props.role === "alert");
+    expect(alert.props.children).toBe(
+      "사용자 이름이나 비밀번호가 없는 완전한 http:// 또는 https:// 링크를 입력하세요.",
+    );
+    expect(alert.props.lang).toBe("ko-KR");
+    expect(editor.find((element) => element.type === "div").props.lang).toBe("ko-KR");
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props["aria-label"]).toBe("개체 텍스트");
+    expect(textarea.props.lang).toBe("fr");
+    expect(textarea.props.value).toBe(before.text);
+    const input = editor.find((element) => element.type === "input");
+    expect(input.props["aria-label"]).toBe("링크 주소");
+    expect(input.props.lang).toBe("");
+    expect(input.props.value).toBe("javascript:alert(1)");
+    expect(editor.node()).toEqual(before);
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.activeElement()).toBe(linkField);
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([9, 13]);
+    input.props.onChange({ target: { value: "https://example.com/plan?lang=fr" } });
+    editor.render();
+    editor.click("링크 적용");
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(editor.node().lang).toBe("fr");
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
+      { text: "Read the ", italic: true },
+      { text: "plan", href: "https://example.com/plan?lang=fr" },
+    ]);
+    editor.render();
+    editor.click("기울임꼴");
+    expect(editor.node().richText!.paragraphs[0]!.runs[1]).toEqual({
+      text: "plan",
+      italic: true,
+      href: "https://example.com/plan?lang=fr",
+    });
+  });
+
+  it("translates existing history and formatting-limit feedback and keeps the text history field stable", () => {
+    const editor = harness();
+    editor.beforeInput("historyUndo", false);
+    editor.setLocale("ja-JP");
+    expect(editor.find((element) => element.props.role === "alert").props.children).toBe(
+      "この画面では元に戻す操作とやり直しは使用できません。",
+    );
+    expect(editor.onChange).not.toHaveBeenCalled();
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props.lang).toBe("");
+    textarea.props.onPaste({
+      preventDefault: vi.fn(),
+      currentTarget: { selectionStart: 0, selectionEnd: 0 },
+      clipboardData: { types: ["text/plain"], getData: () => "X".repeat(4001) },
+    });
+    editor.setLocale("ko-KR");
+    expect(editor.find((element) => element.props.role === "alert").props.children).toBe(
+      "이 텍스트 변경은 서식 제한을 초과하거나 지원하지 않는 문자를 포함합니다. 텍스트를 줄이거나 일부 서식을 제거한 후 다시 시도하세요.",
+    );
+    expect(editor.node().text).toBe("Read the plan");
+    editor
+      .find((element) => element.type === "textarea")
+      .props.onChange({
+        nativeEvent: { inputType: "insertText", data: "!" },
+        currentTarget: { selectionStart: 14, selectionEnd: 14 },
+        target: { value: "Read the plan!" },
+      });
+    expect(editor.onChange).toHaveBeenCalledExactlyOnceWith(editor.node(), "text");
+  });
+
+  it("retains unknown diagnostics verbatim with English language through a locale change", () => {
+    const editor = harness();
+    editor.select(9, 13);
+    editor.onChange.mockImplementationOnce(() => {
+      throw new Error("Unknown formatting diagnostic {link}");
+    });
+    editor.click("Bold");
+    editor.setLocale("ko-KR");
+    const alert = editor.find((element) => element.props.role === "alert");
+    expect(alert.props.children).toBe("Unknown formatting diagnostic {link}");
+    expect(alert.props.lang).toBe("en-CA");
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([{ text: "Read the plan" }]);
+  });
+
   it("does not let an older paragraph restore overwrite a newer selection or blurred toolbar range", () => {
     const editor = harness();
     editor.select(5, 8);
@@ -213,8 +430,8 @@ describe("native formatting controls", () => {
     // The mount effect observes the existing DOM range without a select or keyboard event.
     editor.render();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(false);
     editor.click("Bold");
     expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
@@ -227,14 +444,14 @@ describe("native formatting controls", () => {
   it("synchronizes a DOM-restored selection before applying emphasis and links without another key", () => {
     const editor = harness();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(true);
     editor.restoreSelection(5, 8);
     editor.render();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(false);
     editor.click("Bold");
     editor.render();
@@ -373,8 +590,8 @@ describe("native formatting controls", () => {
   it("uses the remembered textarea selection for emphasis and keeps the canonical fallback", () => {
     const editor = harness();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(true);
     editor.select(9, 13);
     editor.click("Bold");
@@ -462,7 +679,7 @@ describe("native formatting controls", () => {
     expect(editor.node()).toEqual(before);
     expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual(selection);
     const bold = editor.find(
-      (element) => element.type === "button" && element.props.children === "Bold",
+      (element) => element.type === "button" && element.props["aria-label"] === "Bold",
     );
     expect(bold.props.disabled).toBe(false);
     expect(bold.props["aria-pressed"]).toBe(true);

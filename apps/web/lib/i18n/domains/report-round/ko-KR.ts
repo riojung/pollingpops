@@ -420,6 +420,25 @@ const messages = {
   "reportRound.editor.history.questionMoved": "질문을 이동했습니다.",
   "reportRound.editor.recoveredCopy": "{title} — 복구된 사본",
   "reportRound.editor.describeImage": "업로드하기 전에 교육용 이미지를 설명하세요.",
+  "reportRound.clarity.noConceptEvidence": "개념별 학습 회복 데이터가 기록되지 않았습니다.",
+  "reportRound.clarity.trackedConcepts": "학습 회복 데이터가 기록된 개념: {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept}: 미해결 응답 {count}개.",
+  "reportRound.clarity.initialSmallSample":
+    "평가된 응답이 5개 미만입니다. 응답 수를 신중하게 해석하세요.",
+  "reportRound.clarity.nextPractice": "미해결 개념에 집중하는 연습을 만드세요.",
+  "reportRound.clarity.nextReview": "이번 세션의 데이터를 검토하고 나중에 다시 확인하세요.",
+  "reportRound.clarity.nextRecheck":
+    "다음에는 연결된 재확인 문항을 추가하여 학습 회복을 측정하세요.",
+  "reportRound.clarity.targetPractice": "집중 연습",
+  "reportRound.clarity.reviewEvidence": "데이터 검토",
+  "reportRound.clarity.linkedRecheck": "연결된 재확인",
+  "reportRound.clarity.revote": "재투표",
+  "reportRound.clarity.noRecheckEvidence": "재확인 데이터 없음",
+  "reportRound.clarity.sessionReport": "세션 보고서",
+  "reportRound.clarity.backToResults": "결과로 돌아가기",
+  "reportRound.clarity.noPairedResponses": "대응하는 재확인 응답 없음",
+  "reportRound.clarity.unresolvedConcepts": "미해결 개념",
+  "reportRound.clarity.participation": "참여율",
 } satisfies ReportRoundMessages;
 
 export default messages;

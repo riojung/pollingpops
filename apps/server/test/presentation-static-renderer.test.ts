@@ -126,87 +126,270 @@ describe("isolated static Presentation renderer", () => {
       /<script\b|<form\b|src=["']https?:|<link\b|correctValue|isCorrect|speakerNotes|idempotencyKey|controlToken/i,
     );
   }, 20_000);
-  it("cancels only after its owned render worker terminates and leaves later renders usable", async () => {
-    const base = review(),
-      controller = new AbortController();
-    const deck = {
-      ...base,
-      blocks: Array.from({ length: 100 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
-    };
-    let heartbeat = false;
-    const active = renderPresentationStatic({
+  it("exports a whole-deck offline interactive readable companion through the same worker", async () => {
+    const deck = review();
+    const result = await renderPresentationStatic({
       review: deck,
       images: new Map(),
-      format: "pdf",
-      signal: controller.signal,
+      format: "offline_html",
     });
-    const timer = setTimeout(() => {
-      heartbeat = true;
-      controller.abort();
-    }, 25);
-    try {
-      await expect(active).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
-      expect(heartbeat).toBe(true);
-    } finally {
-      clearTimeout(timer);
-      controller.abort();
-    }
-    const next = await renderPresentationStatic({
-      review: base,
-      images: new Map(),
-      format: "png",
-      blockId: base.blocks[1]!.id,
-    });
-    expect(next.bytes.byteLength).toBeGreaterThan(100);
+    const html = result.bytes.toString("utf8");
+    expect(result).toMatchObject({ contentType: "text/html", extension: "html" });
+    expect(html.match(/class="snapshot"/g)).toHaveLength(3);
+    expect(html).toContain("<details><summary>Read detail</summary>");
+    expect(html).toContain("Public &lt;dialog&gt; &amp; complete detail");
+    expect(html).toContain("Français 한국어 🧠");
+    expect(html).toContain(
+      "No responses, submissions, answer keys, scoring, live results or completion tracking",
+    );
+    expect(html).not.toMatch(
+      /<details[^>]+\bopen\b|<(?:script|form|input|iframe|object)\b|src=["']https?:|versionId|expiresAt|2020-01-01|correctValue|isCorrect|speakerNotes|idempotencyKey|controlToken/i,
+    );
+    for (const block of deck.blocks) expect(html).toContain(`id="page-${block.id.toLowerCase()}"`);
   }, 20_000);
-  it("rejects malformed selection, private input fields, page and byte limits before rendering", async () => {
-    const base = review();
-    await expect(
-      renderPresentationStatic({ review: base, images: new Map(), format: "png" }),
-    ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
-    await expect(
-      renderPresentationStatic({
+  it.each(["pdf", "offline_html"] as const)(
+    "cancels %s only after its owned render worker terminates and leaves later renders usable",
+    async (format) => {
+      const base = review(),
+        controller = new AbortController();
+      const deck = {
+        ...base,
+        blocks: Array.from({ length: 100 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
+      };
+      let heartbeat = false;
+      const active = renderPresentationStatic({
+        review: deck,
+        images: new Map(),
+        format,
+        signal: controller.signal,
+      });
+      const timer = setTimeout(() => {
+        heartbeat = true;
+        controller.abort();
+      }, 25);
+      try {
+        await expect(active).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
+        expect(heartbeat).toBe(true);
+      } finally {
+        clearTimeout(timer);
+        controller.abort();
+      }
+      const next = await renderPresentationStatic({
         review: base,
         images: new Map(),
         format: "png",
-        blockId: randomUUID(),
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
-    await expect(
-      renderPresentationStatic({
-        review: { ...base, privateNotes: "NEVER EXPORT" } as typeof base,
-        images: new Map(),
-        format: "html",
-      }),
-    ).rejects.toBeInstanceOf(PresentationStaticExportError);
-    await expect(
-      renderPresentationStatic({
-        review: {
-          ...base,
-          blocks: Array.from({ length: 101 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
+        blockId: base.blocks[1]!.id,
+      });
+      expect(next.bytes.byteLength).toBeGreaterThan(100);
+    },
+    20_000,
+  );
+  it.each(["pdf", "offline_html"] as const)(
+    "rejects malformed selection, private input fields, page and byte limits before rendering %s",
+    async (format) => {
+      const base = review();
+      await expect(
+        renderPresentationStatic({ review: base, images: new Map(), format: "png" }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format: "offline_html",
+          blockId: base.blocks[0]!.id,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format: "png",
+          blockId: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_INVALID" });
+      await expect(
+        renderPresentationStatic({
+          review: { ...base, privateNotes: "NEVER EXPORT" } as typeof base,
+          images: new Map(),
+          format,
+        }),
+      ).rejects.toBeInstanceOf(PresentationStaticExportError);
+      await expect(
+        renderPresentationStatic({
+          review: {
+            ...base,
+            blocks: Array.from({ length: 101 }, () => ({ ...base.blocks[0]!, id: randomUUID() })),
+          },
+          images: new Map(),
+          format,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map([
+            [
+              randomUUID(),
+              { bytes: Buffer.alloc(limits.imageBytes + 1), contentType: "image/png" },
+            ],
+          ]),
+          format,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        renderPresentationStatic({
+          review: base,
+          images: new Map(),
+          format,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
+    },
+  );
+});
+
+describe("styled collection snapshots", () => {
+  it("paints named colors, large right-aligned type and decorative shape geometry across export formats", async () => {
+    const deck = review();
+    const block = deck.blocks[0]!;
+    if (block.kind !== "content") throw new Error("Expected content");
+    block.scene = {
+      schemaVersion: 9,
+      aspectRatio: "16:9",
+      design: { theme: "paper", palette: "cobalt", font: "sans", spacing: "compact" },
+      nodes: [
+        {
+          id: "title",
+          type: "text",
+          role: "title",
+          text: "TITLE",
+          typography: {
+            size: 96,
+            weight: 800,
+            font: "serif",
+            align: "right",
+            color: "accent",
+            leading: 0.95,
+          },
+          frame: { x: 10, y: 10, width: 80, height: 25 },
         },
+        {
+          id: "decoration",
+          type: "shape",
+          shape: "rectangle",
+          color: "blue",
+          label: "Decorative marker",
+          decorative: true,
+          appearance: { fill: "accent", stroke: "none", strokeWidth: 0 },
+          frame: { x: 10, y: 50, width: 30, height: 30 },
+        },
+      ],
+      readingOrder: ["title", "decoration"],
+    };
+    const before = structuredClone(deck);
+    const png = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "png",
+      blockId: block.id,
+    });
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const canvas = createCanvas(1280, 720),
+      ctx = canvas.getContext("2d");
+    ctx.drawImage(await loadImage(png.bytes), 0, 0);
+    expect([...ctx.getImageData(2, 2, 1, 1).data]).toEqual([24, 71, 197, 255]);
+    expect([...ctx.getImageData(250, 450, 1, 1).data]).toEqual([245, 239, 131, 255]);
+    const title = ctx.getImageData(128, 72, 1024, 180).data;
+    let left = 1024,
+      right = 0;
+    for (let y = 0; y < 180; y++)
+      for (let x = 0; x < 1024; x++) {
+        const index = (y * 1024 + x) * 4;
+        if (title[index]! > 200 && title[index + 1]! > 200) {
+          left = Math.min(left, x);
+          right = Math.max(right, x);
+        }
+      }
+    expect(left).toBeGreaterThan(600);
+    expect(right).toBeGreaterThan(1000);
+    expect(right - left).toBeGreaterThan(200);
+    const html = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "html",
+      blockId: block.id,
+    });
+    expect(html.bytes.toString()).toContain(png.bytes.toString("base64"));
+    expect(html.bytes.toString()).not.toContain("Shape (rectangle): Decorative marker");
+    const pdf = await renderPresentationStatic({
+      review: deck,
+      images: new Map(),
+      format: "pdf",
+      blockId: block.id,
+    });
+    expect(pdf.bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(deck).toEqual(before);
+  }, 20_000);
+});
+
+describe("legacy shape label contrast with retained appearance metadata", () => {
+  it.each([{ strokeWidth: 1 }, { stroke: "none" as const }])(
+    "keeps white labels on recolored black fills with %j",
+    async (appearance) => {
+      const deck = review(),
+        block = deck.blocks[0]!;
+      if (block.kind !== "content") throw new Error("Expected content");
+      block.scene = {
+        schemaVersion: 9,
+        aspectRatio: "16:9",
+        design: { theme: "paper", palette: "default", font: "sans", spacing: "compact" },
+        nodes: [
+          {
+            id: "title",
+            type: "text",
+            role: "title",
+            text: "Shape contrast",
+            frame: { x: 5, y: 5, width: 90, height: 20 },
+          },
+          {
+            id: "shape",
+            type: "shape",
+            shape: "rectangle",
+            color: "black",
+            label: "LABEL",
+            appearance,
+            frame: { x: 20, y: 40, width: 60, height: 40 },
+          },
+        ],
+        readingOrder: ["title", "shape"],
+      };
+      const before = structuredClone(deck);
+      const png = await renderPresentationStatic({
+        review: deck,
         images: new Map(),
-        format: "pdf",
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
-    await expect(
-      renderPresentationStatic({
-        review: base,
-        images: new Map([
-          [randomUUID(), { bytes: Buffer.alloc(limits.imageBytes + 1), contentType: "image/png" }],
-        ]),
-        format: "pdf",
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_LIMIT" });
-    const controller = new AbortController();
-    controller.abort();
-    await expect(
-      renderPresentationStatic({
-        review: base,
-        images: new Map(),
-        format: "pdf",
-        signal: controller.signal,
-      }),
-    ).rejects.toMatchObject({ code: "EXPORT_CANCELLED" });
-  });
+        format: "png",
+        blockId: block.id,
+      });
+      const { createCanvas } = await import("@napi-rs/canvas");
+      const canvas = createCanvas(1280, 720),
+        ctx = canvas.getContext("2d");
+      ctx.drawImage(await loadImage(png.bytes), 0, 0);
+      expect([...ctx.getImageData(320, 400, 1, 1).data]).toEqual([59, 67, 81, 255]);
+      const label = ctx.getImageData(300, 330, 650, 200).data;
+      let whitePixels = 0;
+      for (let index = 0; index < label.length; index += 4)
+        if (
+          label[index] === 255 &&
+          label[index + 1] === 255 &&
+          label[index + 2] === 255 &&
+          label[index + 3] === 255
+        )
+          whitePixels++;
+      expect(whitePixels).toBeGreaterThan(30);
+      expect(deck).toEqual(before);
+    },
+    20_000,
+  );
 });

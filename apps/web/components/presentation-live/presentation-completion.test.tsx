@@ -69,6 +69,60 @@ const finished = {
 };
 
 describe("Presentation completion", () => {
+  it("gives current and next host activity slides distinct landmarks while retaining private answer boundaries", () => {
+    const activity = (id: string, prompt: string) => ({
+      id,
+      kind: "question",
+      question: {
+        id,
+        type: "single_select",
+        prompt,
+        choices: [
+          { id: "77777777-7777-4777-8777-777777777777", label: "Authored option A" },
+          { id: "88888888-8888-4888-8888-888888888888", label: "Authored option B" },
+        ],
+        timeLimitSeconds: 30,
+        basePoints: 100,
+        mediaId: null,
+        mediaAlt: null,
+      },
+    });
+    fixtures.nextSnapshot = PresentationHostSnapshotSchema.parse({
+      ...finished,
+      projection: "host",
+      status: "active",
+      phase: "question_open",
+      finishedAt: null,
+      blockCount: 2,
+      acceptingResponses: true,
+      currentBlock: {
+        ...activity("55555555-5555-4555-8555-555555555555", "Authored current prompt"),
+        revealedAnswer: null,
+      },
+      presenter: {
+        speakerNotes: "PRIVATE presenter note",
+        nextBlock: activity("66666666-6666-4666-8666-666666666666", "Authored next prompt"),
+      },
+      responseCount: 0,
+      participants: [],
+      roomStatus: {
+        sessionId: finished.sessionId,
+        joinedCount: 2,
+        connectedCount: 2,
+        notCurrentlyConnectedCount: 0,
+        responseCount: 0,
+        sampledAt: finished.serverTime,
+      },
+    });
+    const markup = renderToStaticMarkup(<PresentationHostPage />);
+    expect(markup.match(/aria-label="Audience activity slide"/g)).toHaveLength(1);
+    expect(markup.match(/aria-label="Activity slide preview"/g)).toHaveLength(1);
+    expect(markup).toContain("Authored current prompt");
+    expect(markup).toContain("Authored next prompt");
+    expect(markup).not.toContain("Correct answer");
+    expect(markup).not.toContain("data-revealed-correct");
+  });
+
   it("gives the host participation and report access without assessment or poll claims", () => {
     fixtures.nextSnapshot = PresentationHostSnapshotSchema.parse({
       ...finished,

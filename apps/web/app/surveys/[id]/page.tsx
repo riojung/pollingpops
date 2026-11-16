@@ -388,7 +388,7 @@ function Editor({ id }: { id: string }) {
                       ...draft,
                       items: [
                         ...draft.items,
-                        { required: true, question: newSurveyQuestion(type) },
+                        { required: true, question: newSurveyQuestion(type, locale) },
                       ],
                     })
                   }

@@ -23,6 +23,8 @@ import {
   createLibraryMetadataRepository,
   createPresentationRepository,
   createPresentationShareRepository,
+  createPresentationAssignmentRepository,
+  createPresentationPracticeAssignmentRepository,
   createPresentationReviewFeedbackRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
@@ -58,6 +60,14 @@ import {
 } from "./presentation-text-assistance-provider.js";
 import { PresentationTextAssistanceService } from "./presentation-text-assistance-service.js";
 import { PresentationTextAssistanceWorker } from "./presentation-text-assistance-worker.js";
+import {
+  OpenAiCompatiblePresentationQuestionSuggestionsProvider,
+  presentationQuestionSuggestionsProviderAvailable,
+  type PresentationQuestionSuggestionsProvider,
+} from "./presentation-question-suggestions-provider.js";
+import { PresentationQuestionSuggestionsService } from "./presentation-question-suggestions-service.js";
+import { PresentationQuestionSuggestionsWorker } from "./presentation-question-suggestions-worker.js";
+import { registerPresentationQuestionSuggestionsRoutes } from "./presentation-question-suggestions-routes.js";
 import { registerPresentationTextAssistanceRoutes } from "./presentation-text-assistance-routes.js";
 import { PresentationVisualImportService } from "./presentation-visual-import-service.js";
 import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
@@ -84,6 +94,8 @@ import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
 import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
+import { registerPresentationAssignmentRoutes } from "./presentation-assignment-routes.js";
+import { registerPresentationPracticeRoutes } from "./presentation-practice-routes.js";
 import { registerPresentationReviewFeedbackRoutes } from "./presentation-review-feedback-routes.js";
 import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
@@ -119,6 +131,7 @@ export async function buildApp(
     authoringAssistant?: AuthoringAssistant | null;
     presentationAssistanceProvider?: PresentationAssistanceProvider | null;
     presentationTextAssistanceProvider?: PresentationTextAssistanceProvider | null;
+    presentationQuestionSuggestionsProvider?: PresentationQuestionSuggestionsProvider | null;
     oidcProvider?: OidcProvider | null;
     ltiJwtAdapter?: LtiJwtAdapter | null;
     summaryExports?: ReturnType<typeof createSessionSummaryExportService>;
@@ -235,6 +248,8 @@ export async function buildApp(
   }
   const presentations = createPresentationRepository(repository);
   const presentationShares = createPresentationShareRepository(repository);
+  const presentationAssignments = createPresentationAssignmentRepository(repository);
+  const presentationPractice = createPresentationPracticeAssignmentRepository(repository);
   const presentationReviewFeedback = createPresentationReviewFeedbackRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
@@ -466,6 +481,34 @@ export async function buildApp(
     repository,
     presentationTextAssistanceProvider,
     presentationTextAssistance,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
+  const configuredPresentationQuestionSuggestionsProvider =
+    overrides.presentationQuestionSuggestionsProvider !== undefined
+      ? overrides.presentationQuestionSuggestionsProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationQuestionSuggestionsProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationQuestionSuggestionsProvider = presentationQuestionSuggestionsProviderAvailable(
+    configuredPresentationQuestionSuggestionsProvider,
+  )
+    ? configuredPresentationQuestionSuggestionsProvider
+    : null;
+  const presentationQuestionSuggestions = new PresentationQuestionSuggestionsService(
+    repository,
+    presentations,
+    Boolean(presentationQuestionSuggestionsProvider),
+    presentationsEnabled,
+  );
+  const presentationQuestionSuggestionsWorker = new PresentationQuestionSuggestionsWorker(
+    repository,
+    presentationQuestionSuggestionsProvider,
+    presentationQuestionSuggestions,
     config.AUTHORING_WORKER_LEASE_MS,
   );
   const storage = new StorageService(config, scanner);
@@ -701,6 +744,13 @@ export async function buildApp(
     service: presentationTextAssistance,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
   });
+  await registerPresentationQuestionSuggestionsRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationQuestionSuggestions,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
   await registerPresentationVisualImportRoutes(app, {
     repository,
     presentations,
@@ -722,6 +772,24 @@ export async function buildApp(
     auth,
     repository,
     feedback: presentationReviewFeedback,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationAssignmentRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationAssignments,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationPracticeRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationPractice,
+    storage,
     config,
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     featureEnabled: presentationsEnabled,
@@ -822,6 +890,8 @@ export async function buildApp(
     presentationAssistanceWorker,
     presentationTextAssistance,
     presentationTextAssistanceWorker,
+    presentationQuestionSuggestions,
+    presentationQuestionSuggestionsWorker,
     presentationVisualImportWorker,
     presentationVisualImports,
     storage,
@@ -835,6 +905,7 @@ export async function buildApp(
     presentationSessions,
     presentationService,
     presentationShares,
+    presentationAssignments,
     presentationReviewFeedback,
     groups,
     libraryMetadata,

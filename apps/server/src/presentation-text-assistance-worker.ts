@@ -52,7 +52,9 @@ export class PresentationTextAssistanceWorker {
         this.provider.generate({
           text: job.originalText,
           role: job.role,
-          operation: job.operation,
+          ...(job.operation === "translate"
+            ? { operation: "translate" as const, targetLanguage: job.targetLanguage! }
+            : { operation: job.operation }),
         }),
         new Promise<never>((_, reject) => {
           deadline = setTimeout(() => reject(new Error("Provider deadline exceeded")), 45_000);
@@ -86,6 +88,9 @@ export class PresentationTextAssistanceWorker {
         provider: this.provider.providerName,
         model: this.provider.modelName,
         generatedAt: currentTime(),
+        ...(job.operation === "translate"
+          ? { targetLanguage: job.targetLanguage, sourceLanguage: job.sourceLanguage }
+          : {}),
       });
     } catch {
       return (await this.jobs.fail({

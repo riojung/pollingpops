@@ -20,6 +20,7 @@ import {
   type RecoveryPackSourceTarget,
 } from "./recovery-pack-source";
 import { recoveryPackSourceGeneration } from "../lib/recovery-pack-source";
+import { packSourceCopy } from "../lib/i18n/pack-source-copy";
 
 interface AuthoringStatus {
   enabled: boolean;
@@ -89,7 +90,8 @@ export function AuthoringAssistant({
   recoveryPackTarget,
 }: AuthoringAssistantProps) {
   const router = useRouter();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const packSourceUi = packSourceCopy(locale);
   const [status, setStatus] = useState<AuthoringStatus | null>(null);
   const [jobs, setJobs] = useState<AuthoringJob[]>([]);
   const [sourceMode, setSourceMode] = useState<"pasted_text" | "file">("pasted_text");
@@ -336,7 +338,7 @@ export function AuthoringAssistant({
         {insertionTarget
           ? t("delivery.assistant.insertTrustedSource")
           : artifactType === "recovery_pack"
-            ? "Draft a Recovery Pack from a trusted source"
+            ? packSourceUi("Draft a Recovery Pack from a trusted source")
             : artifactType === "presentation"
               ? t("delivery.assistant.draftPresentation")
               : t(
@@ -347,7 +349,9 @@ export function AuthoringAssistant({
       </summary>
       <p className="muted">
         {artifactType === "recovery_pack"
-          ? "Upload a private source or paste trusted text to propose a diagnostic, a different linked recheck, and a cited facilitator card for your review."
+          ? packSourceUi(
+              "Upload a private source or paste trusted text to propose a diagnostic, a different linked recheck, and a cited facilitator card for your review.",
+            )
           : artifactType === "presentation"
             ? t("delivery.assistant.presentationDescription")
             : t(
@@ -407,6 +411,7 @@ export function AuthoringAssistant({
                   <span>{t("delivery.assistant.sourceName")}</span>
                   <input
                     className="input"
+                    lang=""
                     maxLength={200}
                     onChange={(event) => {
                       sourceChanged();
@@ -420,6 +425,7 @@ export function AuthoringAssistant({
                   <span>{t("delivery.assistant.trustedText")}</span>
                   <textarea
                     className="textarea"
+                    lang=""
                     maxLength={100_000}
                     minLength={50}
                     onChange={(event) => {
@@ -439,6 +445,7 @@ export function AuthoringAssistant({
                 <input
                   accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                   className="input"
+                  lang=""
                   onChange={(event) => {
                     sourceChanged();
                     setFile(event.target.files?.[0] ?? null);
@@ -470,7 +477,7 @@ export function AuthoringAssistant({
               <article className="card" key={job.id}>
                 <div className="button-row authoring-job-heading">
                   <div>
-                    <strong>{job.sourceName}</strong>
+                    <strong lang="">{job.sourceName}</strong>
                     <p className="muted">
                       {localizedStatusLabel(job.status)} ·{" "}
                       {t("delivery.assistant.attempt", { count: job.attempts })}
@@ -488,6 +495,7 @@ export function AuthoringAssistant({
                 job.output &&
                 recoveryPackTarget ? (
                   <RecoveryPackSourceProposalPanel
+                    locale={locale}
                     key={`${recoveryPackSourceGeneration(job)}:${sourceGeneration}`}
                     job={job}
                     canEdit={canEdit}
@@ -495,7 +503,7 @@ export function AuthoringAssistant({
                   />
                 ) : artifactType !== "recovery_pack" && job.output ? (
                   <div className="authoring-proposal">
-                    <h4>{job.output.checkpointSet.title}</h4>
+                    <h4 lang="">{job.output.checkpointSet.title}</h4>
                     {artifactType === "presentation" && job.output.contentSlideProposals?.length ? (
                       <fieldset className="authoring-proposal-options">
                         <legend>{t("delivery.assistant.proposedSlides")}</legend>
@@ -507,11 +515,11 @@ export function AuthoringAssistant({
                               type="checkbox"
                             />
                             <span>
-                              <strong>{proposal.title}</strong>
-                              {proposal.body ? <small>{proposal.body}</small> : null}
+                              <strong lang="">{proposal.title}</strong>
+                              {proposal.body ? <small lang="">{proposal.body}</small> : null}
                               <small>
-                                {proposal.layout.replace("_", " ")} ·{" "}
-                                {proposal.citations[0]?.locator}
+                                <span lang="en-CA">{proposal.layout.replace("_", " ")}</span> ·{" "}
+                                <span lang="">{proposal.citations[0]?.locator}</span>
                               </small>
                             </span>
                           </label>
@@ -543,13 +551,13 @@ export function AuthoringAssistant({
                                   : t("delivery.assistant.mainCheckpoint")}
                               :
                             </strong>{" "}
-                            {question.prompt}
+                            <span lang="">{question.prompt}</span>
                           </p>
                           <ul>
                             {job.output?.citations
                               .filter((citation) => citation.checkpointId === question.id)
                               .map((citation) => (
-                                <li key={`${citation.locator}-${citation.excerpt}`}>
+                                <li key={`${citation.locator}-${citation.excerpt}`} lang="">
                                   <strong>{citation.locator}:</strong> “{citation.excerpt}”
                                 </li>
                               ))}
@@ -568,7 +576,9 @@ export function AuthoringAssistant({
                         <strong>{t("delivery.assistant.conversionReview")}</strong>
                         <ul>
                           {job.output.conversionNotes.map((note) => (
-                            <li key={note}>{note}</li>
+                            <li key={note} lang="">
+                              {note}
+                            </li>
                           ))}
                         </ul>
                       </div>

@@ -1,5 +1,6 @@
 .slide {
   position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -333,13 +334,13 @@
 }
 
 @media (max-width: 700px) {
-  .slide {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) {
     aspect-ratio: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .regions {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .regions {
     position: relative;
     inset: auto;
     display: flex;
@@ -348,7 +349,7 @@
     gap: 12px;
   }
 
-  .region {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .region {
     position: static;
     inset: auto;
     display: flex;
@@ -358,7 +359,7 @@
     pointer-events: auto;
   }
 
-  .textElement {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .textElement {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -367,40 +368,40 @@
     min-height: 0;
   }
 
-  .titleElement > h1,
-  .bodyElement > p {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleElement > h1,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyElement > p {
     height: auto;
     min-height: 0;
     overflow: visible;
   }
 
-  .titleElement > h1,
-  .titleInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleElement > h1,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleInput {
     font-size: clamp(28px, 8vw, 42px);
   }
 
-  .bodyElement > p,
-  .bodyInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyElement > p,
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyInput {
     font-size: clamp(17px, 4.5vw, 22px);
   }
 
-  .titleInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .titleInput {
     height: auto;
     min-height: 2.5em;
     overflow-y: hidden;
   }
 
-  .bodyInput {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .bodyInput {
     height: auto;
     min-height: 6em;
     overflow-y: hidden;
   }
 
-  .fitWarning {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .fitWarning {
     display: none;
   }
 
-  .media {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .media {
     position: relative;
     inset: auto !important;
     width: 100% !important;
@@ -408,11 +409,11 @@
     margin-top: 12px;
   }
 
-  .mediaBayGuide {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .mediaBayGuide {
     display: none;
   }
 
-  .media > img {
+  .slide:not(.staticThumbnail):not([data-content-fixed-layout="true"]) .media > img {
     width: auto;
     height: auto;
     max-width: 100%;
@@ -424,4 +425,20 @@
   .textElement {
     scroll-behavior: auto;
   }
+}
+
+.staticThumbnail {
+  pointer-events: none;
+}
+
+/* Contextual deck appearance does not alter imported stored content or frames. */
+.slide[data-design-theme] {
+  color: var(--content-slide-text);
+  background: var(--content-slide-background);
+}
+.slide[data-design-theme] .titleElement > h1,
+.slide[data-design-theme] .titleInput,
+.slide[data-design-theme] .bodyElement > p,
+.slide[data-design-theme] .bodyInput {
+  color: inherit;
 }

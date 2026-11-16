@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-01",
+  "updatedAt": "2026-11-09",
   "releaseTarget": "single-vm-beta",
   "gates": [
     {
@@ -108,7 +108,7 @@
       "status": "pending",
       "criterion": "Qualified counsel for the selected launch markets approves the privacy notice, terms, consent, retention, deletion, data residency, subprocessors, and paid-beta posture.",
       "evidence": [],
-      "nextAction": "Select the launch markets, provide the data map and launch documents to qualified counsel, and link written approval."
+      "nextAction": "At official release preparation, replace development Terms and Privacy content, confirm signup consent and monitored customer privacy/security/support contacts, select the launch markets, and provide the data map and launch documents to qualified counsel. Link written approval and complete docs/option-b-ux-implementation.md's launch-facing checklist."
     },
     {
       "id": "live-billing",
@@ -118,7 +118,7 @@
       "status": "pending",
       "criterion": "Stripe test mode proves checkout, portal, signed webhook delivery, retry idempotency, cancellation, and entitlement reconciliation in single-VM staging.",
       "evidence": [],
-      "nextAction": "Run the signed replay workflow, then complete a provider-originated Stripe test-mode purchase and cancellation."
+      "nextAction": "At official release preparation, publish approved hosted pricing or explicit beta availability with accurate limits and matching customer actions. Run the signed replay workflow, then complete a provider-originated Stripe test-mode purchase and cancellation. Final launch-facing content is deferred per docs/option-b-ux-implementation.md; this gate remains pending."
     },
     {
       "id": "repository-governance",

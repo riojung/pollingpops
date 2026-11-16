@@ -449,6 +449,25 @@ const messages = {
   "reportRound.editor.history.questionMoved": "Frage verschoben.",
   "reportRound.editor.recoveredCopy": "{title} — wiederhergestellte Kopie",
   "reportRound.editor.describeImage": "Beschreiben Sie das Lehrbild, bevor Sie es hochladen.",
+  "reportRound.clarity.noConceptEvidence": "Keine Aufarbeitungsdaten auf Konzeptebene erfasst.",
+  "reportRound.clarity.trackedConcepts": "Konzepte mit erfassten Aufarbeitungsdaten: {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept}: {count} ungelöste Antwort(en).",
+  "reportRound.clarity.initialSmallSample":
+    "Weniger als fünf bewertete Antworten. Die Anzahl vorsichtig interpretieren.",
+  "reportRound.clarity.nextPractice": "Gezielte Übungen für ungelöste Konzepte erstellen.",
+  "reportRound.clarity.nextReview": "Sitzungsdaten prüfen und später eine erneute Prüfung planen.",
+  "reportRound.clarity.nextRecheck":
+    "Nächstes Mal eine verknüpfte Nachprüfung zur Erfassung von Aufarbeitung hinzufügen.",
+  "reportRound.clarity.targetPractice": "Gezielt üben",
+  "reportRound.clarity.reviewEvidence": "Daten prüfen",
+  "reportRound.clarity.linkedRecheck": "verknüpfte Nachprüfung",
+  "reportRound.clarity.revote": "erneute Abstimmung",
+  "reportRound.clarity.noRecheckEvidence": "Keine Nachprüfungsdaten",
+  "reportRound.clarity.sessionReport": "Sitzungsbericht",
+  "reportRound.clarity.backToResults": "Zurück zu Ergebnissen",
+  "reportRound.clarity.noPairedResponses": "Keine gepaarten Nachprüfungsantworten",
+  "reportRound.clarity.unresolvedConcepts": "ungelöste Konzepte",
+  "reportRound.clarity.participation": "Teilnahme",
 } satisfies ReportRoundMessages;
 
 export default messages;

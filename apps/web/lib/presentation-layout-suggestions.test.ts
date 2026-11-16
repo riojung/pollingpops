@@ -36,6 +36,7 @@ function fixture(version: PresentationScene["schemaVersion"] = 3): PresentationS
         type: "text",
         role: "body",
         text: "Evidence stays editable.",
+        ...(version >= 7 ? { lang: "fr" as const } : {}),
         ...(version >= 2
           ? {
               richText: {
@@ -63,6 +64,7 @@ function fixture(version: PresentationScene["schemaVersion"] = 3): PresentationS
         type: "text",
         role: "title",
         text: "Review the evidence",
+        ...(version >= 7 ? { lang: "fr" as const } : {}),
         frame: { x: 7, y: 6, width: 86, height: 20 },
       },
     ],
@@ -173,7 +175,7 @@ function changeText(scene: PresentationScene, id: string, text: string): Present
 }
 
 describe("reviewed deterministic native layout alternatives", () => {
-  it.each([1, 2, 3, 4, 5, 6] as const)(
+  it.each([1, 2, 3, 4, 5, 6, 7] as const)(
     "changes only frames in scene%s, retaining text, links, marks, style, IDs and semantic order",
     (version) => {
       const scene = fixture(version),
@@ -365,7 +367,7 @@ describe("reviewed deterministic native layout alternatives", () => {
     const invalid = [
       null,
       {},
-      { ...source, schemaVersion: 7 },
+      { ...source, schemaVersion: 10 },
       { ...source, readingOrder: [titleId, titleId] },
       {
         ...source,
@@ -390,6 +392,23 @@ describe("reviewed deterministic native layout alternatives", () => {
       });
     }
   });
+  it("retains motion and language metadata in every reviewed layout alternative", () => {
+    const source = fixture(8);
+    source.design = { ...source.design!, motionBackground: "aurora" };
+    const snapshot = structuredClone(source);
+    const candidates = suggestNativeLayouts(source);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate.scene.schemaVersion).toBe(8);
+      expect(candidate.scene.design).toEqual(source.design);
+      expect(
+        candidate.scene.nodes.map((node) => (node.type === "text" ? node.lang : undefined)),
+      ).toEqual(source.nodes.map((node) => (node.type === "text" ? node.lang : undefined)));
+      expect(PresentationSceneDraftSchema.safeParse(candidate.scene).success).toBe(true);
+    }
+    expect(source).toEqual(snapshot);
+  });
+
   it("refuses valid near-budget sources when frame changes would exceed the unchanged scene limit", () => {
     const runs = Array.from({ length: 65 }, () => ({ text: "x", href: "https://example.test/" }));
     const scene: PresentationScene = {

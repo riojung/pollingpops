@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { signInBeta } from "./sign-in";
+import {
+  closeHostControls,
+  expectControlLabelCentered,
+  expectHostActionRow,
+  openHostControls,
+} from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const confidenceName = "Ask for confidence (optional)";
@@ -103,6 +109,9 @@ async function openCrowdedRecoveryBar(page: Page) {
   await host.getByRole("button", { name: "Reveal answer", exact: true }).click();
   await expect(host.getByTestId("host-session")).toHaveAttribute("data-phase", "question_reveal");
   const bar = host.getByTestId("host-command-bar");
+  await expect(bar.getByRole("button", { name: "Finish round", exact: true })).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Audience", exact: true })).toBeVisible();
+  await openHostControls(host);
   for (const name of [
     "Audience",
     "Explain or reinforce",
@@ -117,82 +126,125 @@ async function openCrowdedRecoveryBar(page: Page) {
   return { session, bar };
 }
 
-async function expectContainedAndReadable(host: Page, bar: Locator, width: number) {
-  await host.setViewportSize({ width, height: 900 });
-  await bar.scrollIntoViewIfNeeded();
-  const geometry = await bar.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    const confidenceLabel = element.querySelector<HTMLLabelElement>(
-      ".host-confidence-control label",
-    )!;
-    const label = confidenceLabel.getBoundingClientRect();
-    const text = confidenceLabel.querySelector<HTMLElement>("span:not(.sr-only)")!;
-    const textBounds = text.getBoundingClientRect();
+async function expectContainedAndReadable(host: Page, bar: Locator, width: number, height = 900) {
+  await host.setViewportSize({ width, height });
+  await closeHostControls(bar);
+  await host.evaluate(() =>
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }),
+  );
+  const primary = bar.getByRole("button", { name: "Finish round", exact: true });
+  await expect(primary).toBeInViewport();
+  await expect(primary).toBeEnabled();
+  const compact = await bar.evaluate((element) => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    height: element.getBoundingClientRect().height,
+    bottom: element.getBoundingClientRect().bottom,
+    viewportHeight: window.innerHeight,
+    position: getComputedStyle(element).position,
+  }));
+  expect(compact.overflow, `${width}px document overflow`).toBeLessThanOrEqual(1);
+  expect(compact.height, `${width}px compact primary controls`).toBeLessThanOrEqual(150);
+  expect(compact.bottom).toBeLessThanOrEqual(compact.viewportHeight + 1);
+  expect(compact.position).toBe("sticky");
+  await expect(bar.getByRole("button", { name: "Audience", exact: true })).toBeVisible();
+  await expectHostActionRow(bar, "Finish round", width >= 1024, true);
+  await host.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expect.poll(() => host.evaluate(() => window.scrollY)).toBe(0);
+  await expectControlLabelCentered(host.locator(".experience-preferences > summary"));
+  const before = await host.evaluate(() => {
+    const top = (testId: string) =>
+      document.querySelector(`[data-testid="${testId}"]`)!.getBoundingClientRect().top +
+      window.scrollY;
+    return { stageTop: top("host-stage"), railTop: top("recovery-rail") };
+  });
+  await openHostControls(host);
+  await expect(bar).toHaveCSS("position", "static");
+  const panel = bar.getByTestId("host-command-tools");
+  await expect(panel).toBeVisible();
+  await expectHostActionRow(bar, "Finish round", width >= 1024, true);
+  const geometry = await panel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const bar = element.closest('[data-testid="host-command-bar"]')!;
+    const barRect = bar.getBoundingClientRect();
+    const stage = document.querySelector('[data-testid="host-stage"]')!.getBoundingClientRect();
+    const rail = document.querySelector('[data-testid="recovery-rail"]')!.getBoundingClientRect();
+    const label = element
+      .querySelector<HTMLLabelElement>(".host-confidence-control label")!
+      .getBoundingClientRect();
     const controls = [...element.querySelectorAll<HTMLElement>("button, input[type=checkbox]")]
       .filter((control) => control.getClientRects().length > 0)
       .map((control) => {
-        const rect = control.getBoundingClientRect();
-        return {
-          name: control.getAttribute("aria-label") ?? control.textContent?.trim() ?? control.id,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
+        const r = control.getBoundingClientRect();
+        return { left: r.left, right: r.right };
       });
     return {
+      left: rect.left,
+      right: rect.right,
+      height: rect.height,
+      bottom: rect.bottom + window.scrollY,
+      barLeft: barRect.left,
+      barRight: barRect.right,
+      barBottom: barRect.bottom + window.scrollY,
+      stageTop: stage.top + window.scrollY,
+      railTop: rail.top + window.scrollY,
+      position: getComputedStyle(element).position,
       viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
-      barOverflow: element.scrollWidth - element.clientWidth,
-      bar: {
-        left: bounds.left,
-        right: bounds.right,
-        top: bounds.top,
-        bottom: bounds.bottom,
-        height: bounds.height,
-      },
-      label: { width: label.width, height: label.height },
-      text: { value: text.textContent?.trim(), width: textBounds.width, height: textBounds.height },
+      labelWidth: label.width,
+      labelHeight: label.height,
       controls,
     };
   });
-  expect(geometry.pageOverflow, `${width}px document overflow`).toBeLessThanOrEqual(1);
-  expect(geometry.barOverflow, `${width}px command bar overflow`).toBeLessThanOrEqual(1);
-  expect(geometry.bar.left).toBeGreaterThanOrEqual(-1);
-  expect(geometry.bar.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
-  expect(geometry.bar.top).toBeGreaterThanOrEqual(-1);
-  expect(geometry.bar.bottom).toBeLessThanOrEqual(geometry.viewportHeight + 1);
-  expect(geometry.label.width, `${width}px readable confidence label`).toBeGreaterThanOrEqual(100);
-  expect(geometry.label.height, `${width}px confidence label height`).toBeLessThanOrEqual(80);
-  expect(geometry.text.value, `${width}px translated compact confidence label`).toBe("Confidence");
-  expect(geometry.text.width, `${width}px confidence text width`).toBeGreaterThanOrEqual(60);
-  expect(geometry.text.height, `${width}px confidence text height`).toBeLessThanOrEqual(56);
-  if (width >= 1024)
-    expect(geometry.bar.height, `${width}px compact desktop bar`).toBeLessThanOrEqual(140);
-  else if (width >= 821)
-    expect(geometry.bar.height, `${width}px wrapped desktop bar`).toBeLessThanOrEqual(190);
-  expect(geometry.controls.length).toBe(7);
+  expect(geometry.left).toBeGreaterThanOrEqual(-1);
+  expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  expect(geometry.position).not.toBe("absolute");
+  expect(geometry.position).not.toBe("fixed");
+  expect(geometry.left - geometry.barLeft).toBeLessThanOrEqual(28);
+  expect(geometry.barRight - geometry.right).toBeLessThanOrEqual(28);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.barBottom + 1);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.stageTop);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.railTop);
+  expect(geometry.stageTop - before.stageTop).toBeGreaterThanOrEqual(geometry.height - 1);
+  expect(geometry.railTop - before.railTop).toBeGreaterThanOrEqual(geometry.height - 1);
+  expect(geometry.labelWidth).toBeGreaterThanOrEqual(100);
+  expect(geometry.labelHeight).toBeLessThanOrEqual(80);
+  expect(geometry.controls.length).toBe(5);
   for (const control of geometry.controls) {
-    expect(control.left, `${width}px ${control.name} left`).toBeGreaterThanOrEqual(
-      geometry.bar.left - 1,
-    );
-    expect(control.right, `${width}px ${control.name} right`).toBeLessThanOrEqual(
-      geometry.bar.right + 1,
-    );
-    expect(control.top, `${width}px ${control.name} top`).toBeGreaterThanOrEqual(
-      geometry.bar.top - 1,
-    );
-    expect(control.bottom, `${width}px ${control.name} bottom`).toBeLessThanOrEqual(
-      geometry.bar.bottom + 1,
-    );
+    expect(control.left).toBeGreaterThanOrEqual(geometry.left - 1);
+    expect(control.right).toBeLessThanOrEqual(geometry.right + 1);
   }
-  for (const control of await bar.locator("button, input[type=checkbox]").all()) {
-    if (await control.isVisible()) {
-      await expect(control).toBeEnabled();
-      await control.click({ trial: true });
-    }
+  for (const control of await panel.locator("button, input[type=checkbox]").all()) {
+    await expect(control).toBeEnabled();
+    await control.click({ trial: true });
   }
+  for (const control of await panel.locator("button, .host-confidence-control label").all()) {
+    await expectControlLabelCentered(control);
+  }
+}
+
+async function expectExpandedToolsFromBottom(host: Page, bar: Locator) {
+  await closeHostControls(bar);
+  await host.evaluate(() =>
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }),
+  );
+  const toggle = bar.getByTestId("host-command-tools-toggle");
+  await expect(toggle).toBeInViewport();
+  await openHostControls(host);
+  const tools = bar.getByTestId("host-command-tools");
+  await expect(bar).toHaveCSS("position", "static");
+  await expect(toggle).toBeInViewport();
+  await expect(tools).toBeInViewport({ ratio: 1 });
+  const geometry = await tools.evaluate((element) => ({
+    bottom: element.getBoundingClientRect().bottom + window.scrollY,
+    stageTop:
+      document.querySelector('[data-testid="host-stage"]')!.getBoundingClientRect().top +
+      window.scrollY,
+    railTop:
+      document.querySelector('[data-testid="recovery-rail"]')!.getBoundingClientRect().top +
+      window.scrollY,
+  }));
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.stageTop);
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.railTop);
+  await expectHostActionRow(bar, "Finish round", true, true);
 }
 
 async function toggleConfidence(
@@ -224,11 +276,61 @@ async function captureBar(host: Page, bar: Locator, width: number, testInfo: Tes
     path,
     contentType: "image/png",
   });
-  if (width === 1214)
+  if (width === 1214) {
     await host.screenshot({
       path: testInfo.outputPath("host-question-reveal-1214.png"),
       fullPage: true,
     });
+    await closeHostControls(bar);
+    await host.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await host.screenshot({
+      path: testInfo.outputPath("host-question-reveal-closed-1214.png"),
+      fullPage: true,
+    });
+    await openHostControls(host);
+  }
+}
+
+async function expectLongLocaleOnPhone(host: Page, bar: Locator, testInfo: TestInfo) {
+  const locale = async (value: "de-DE" | "en-CA") => {
+    const response = await host.request.put(`${apiUrl}/v1/account/locale`, {
+      data: { locale: value },
+    });
+    expect(response.status()).toBe(200);
+    await host
+      .context()
+      .addCookies([
+        { name: "openround-locale", value, url: new URL(host.url()).origin, sameSite: "Lax" },
+      ]);
+  };
+  try {
+    await locale("de-DE");
+    await host.setViewportSize({ width: 320, height: 900 });
+    await host.reload();
+    await expect(host.locator("html")).toHaveAttribute("lang", "de-DE");
+    await closeHostControls(bar);
+    const primaryName = await bar.locator(".host-command-primary button").innerText();
+    await expectHostActionRow(bar, primaryName, false);
+    await expectControlLabelCentered(host.locator(".experience-preferences > summary"));
+    expect(
+      await bar.evaluate((element) => element.getBoundingClientRect().height),
+    ).toBeLessThanOrEqual(150);
+    await openHostControls(host);
+    for (const control of await bar
+      .getByTestId("host-command-tools")
+      .locator("button, label")
+      .all()) {
+      await expectControlLabelCentered(control);
+    }
+    expect(
+      await host.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(1);
+    const path = testInfo.outputPath("host-command-german-320.png");
+    await bar.screenshot({ path });
+    await testInfo.attach("German host controls at 320px", { path, contentType: "image/png" });
+  } finally {
+    await locale("en-CA");
+  }
 }
 
 for (const suffix of ["desktop", "@mobile"]) {
@@ -249,5 +351,9 @@ for (const suffix of ["desktop", "@mobile"]) {
         await toggleConfidence(host, bar, session, false);
       }
     }
+    if (suffix === "desktop") {
+      await expectContainedAndReadable(host, bar, 1214, 640);
+      await expectExpandedToolsFromBottom(host, bar);
+    } else await expectLongLocaleOnPhone(host, bar, testInfo);
   });
 }

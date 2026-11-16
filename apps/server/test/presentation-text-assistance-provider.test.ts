@@ -21,6 +21,49 @@ const input = {
 };
 afterEach(() => vi.unstubAllGlobals());
 describe("Presentation text assistance provider", () => {
+  it("adds only a canonical translation target to the provider prompt and keeps the source annotation private", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ text: "Objectif commun" }) } }],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const provider = new OpenAiCompatiblePresentationTextAssistanceProvider(
+      "https://approved.example",
+      undefined,
+      input.model,
+      input.provider,
+    );
+    await provider.generate({
+      text: input.originalText,
+      role: input.role,
+      operation: "translate",
+      targetLanguage: "fr",
+    });
+    const body = JSON.parse(fetcher.mock.calls[0]![1].body);
+    expect(JSON.parse(body.messages[1].content)).toEqual({
+      text: input.originalText,
+      role: input.role,
+      operation: "translate",
+      targetLanguage: "fr",
+    });
+    expect(body.max_tokens).toBe(2_048);
+    const proposal = validatePresentationTextAssistanceOutput({
+      ...input,
+      operation: "translate",
+      targetLanguage: "fr",
+      sourceLanguage: null,
+      raw: { text: input.originalText },
+    });
+    expect(proposal).toMatchObject({
+      targetLanguage: "fr",
+      sourceLanguage: null,
+      originalText: input.originalText,
+      text: input.originalText,
+    });
+  });
   it("preserves exact original and proposed whitespace, binding unverified wording and both digests", () => {
     const text = "  Agree on a shared purpose.  ";
     const proposal = validatePresentationTextAssistanceOutput({ ...input, raw: { text } });

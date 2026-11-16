@@ -15,7 +15,7 @@ export function CompanionOverlay({
   returnFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
@@ -39,6 +39,7 @@ export function CompanionOverlay({
     <dialog
       aria-label={title}
       aria-modal="true"
+      lang={locale}
       className={styles.overlay}
       onCancel={(event) => {
         event.preventDefault();

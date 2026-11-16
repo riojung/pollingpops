@@ -1,3 +1,4 @@
+import { openE01Inspector, selectE01Object, closeE01Overlays } from "./presentation-e01-support";
 import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type {
@@ -130,14 +131,10 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   const stage = page.locator("[data-native-scene]");
   const body = stage.locator('[data-node-id="body"]');
   const shape = stage.locator('[data-node-id="shape"]');
-  const move = page.getByRole("button", {
-    name: "Move Evidence. Use arrow keys to nudge.",
-    exact: true,
-  });
-  const resize = page.getByRole("button", {
-    name: "Resize Decision. Use arrow keys to change size.",
-    exact: true,
-  });
+  const controls = page.getByRole("group", { name: "Selected object controls", exact: true });
+  const selection = controls.getByRole("combobox", { name: "Canvas object", exact: true });
+  const move = body;
+  const resize = stage.locator('[data-native-resize-handle="se"]');
   const stageBounds = await stage.boundingBox();
   if (!stageBounds) throw new Error("Missing native stage");
   let saves = 0;
@@ -161,6 +158,7 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect.poll(() => savedScene(page, id)).toEqual(moved);
 
+  await selection.selectOption("shape");
   await startDrag(page, resize, stageBounds.width * 0.1, stageBounds.height * 0.1);
   expect((await renderedFrame(shape)).width).toBeCloseTo(35, 0);
   expect((await renderedFrame(shape)).height).toBeCloseTo(30, 0);
@@ -175,6 +173,7 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect.poll(() => savedScene(page, id)).toEqual(resized);
 
+  await selection.selectOption("body");
   await startDrag(page, move, stageBounds.width * 0.05, 0);
   await page.keyboard.press("Escape");
   await page.mouse.up();
@@ -187,10 +186,18 @@ test("native pointer gestures preview, cancel, save and undo as single edits", a
   expect(await renderedFrame(body)).toEqual(frame(resized, "body"));
   expect(await savedScene(page, id)).toEqual(resized);
 
-  await page.getByRole("button", { name: "2. Evidence", exact: true }).click();
+  await selectE01Object(page, "2. Evidence", "Access");
   await page.getByRole("checkbox", { name: "Include Decision in selection", exact: true }).check();
-  await expect(page.getByText("2 objects selected", { exact: true })).toBeVisible();
-  await startDrag(page, move, stageBounds.width, 0);
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: /^2 objects selected$/ })
+      .first(),
+  ).toBeVisible();
+  await openE01Inspector(page, "Content");
+  const groupMove = shape;
+  // Drag a selected member beyond the group’s remaining travel; bounds clamp the whole group.
+  await startDrag(page, groupMove, stageBounds.width * 0.5, 0);
   await page.mouse.up();
   const expectedDx = Math.min(
     ...["body", "shape"].map((nodeId) => {
@@ -228,23 +235,25 @@ for (const suffix of ["", " @mobile"]) {
     test.setTimeout(90_000);
     const { id, scene: original } = await createDeck(page);
     if ((testInfo.project.use.viewport?.width ?? 1280) <= 700) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
-    await page.getByRole("button", { name: "2. Evidence", exact: true }).click();
+    await selectE01Object(page, "2. Evidence", "Access");
     await page
       .getByRole("checkbox", { name: "Include Decision in selection", exact: true })
       .check();
-    const move = page.getByRole("button", {
-      name: "Move Evidence. Use arrow keys to nudge.",
-      exact: true,
-    });
-    await move.press("Shift+ArrowRight");
+    await closeE01Overlays(page);
+    await page.locator('[data-native-scene-canvas="true"]').press("Shift+ArrowRight");
     await expect.poll(async () => frame(await savedScene(page, id), "body").x).toBe(15);
     const moved = await savedScene(page, id);
     expect(frame(moved, "shape").x).toBe(60);
     expect(frame(moved, "title")).toEqual(frame(original, "title"));
-    await expect(page.getByText("2 objects selected", { exact: true })).toBeVisible();
+    await openE01Inspector(page, "Layout");
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: /^2 objects selected$/ })
+        .first(),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Move selection down", exact: true }).click();
     await expect.poll(async () => frame(await savedScene(page, id), "body").y).toBe(36);
     expect(frame(await savedScene(page, id), "shape").y).toBe(36);

@@ -12,6 +12,8 @@ import {
 } from "@napi-rs/canvas";
 import {
   PresentationReviewSchema,
+  presentationDesignPalette,
+  type PresentationDesignPaletteColors,
   CANVAS_FILL_COLORS,
   CANVAS_STROKE_COLORS,
   canvasDiagramShapePath,
@@ -26,23 +28,19 @@ import {
   type PresentationRichTextRun,
 } from "@openround/contracts";
 import { inspectPresentationVisualImage } from "./presentation-visual-converter.js";
+import { paintPresentationMotionPoster } from "./presentation-motion-poster.js";
 import {
   PresentationStaticExportError,
   PRESENTATION_STATIC_RENDER_LIMITS as limits,
   PRESENTATION_STATIC_DISCLOSURE as disclosure,
+  PRESENTATION_OFFLINE_DISCLOSURE as offlineDisclosure,
   type PresentationStaticRenderInput,
   type PresentationStaticRenderResult,
 } from "./presentation-static-renderer-types.js";
 
 const W = limits.width,
   H = limits.height;
-const palettes = {
-  paper: { background: "#fffdf7", text: "#172b4d", link: "#174d8c", border: "#a6b0ba" },
-  midnight: { background: "#111b2e", text: "#f6f8ff", link: "#99d8ff", border: "#657796" },
-  ocean: { background: "#eaf8fa", text: "#113945", link: "#145678", border: "#78aab2" },
-  sunset: { background: "#fff0e5", text: "#522a20", link: "#873722", border: "#bc8f7b" },
-};
-type Palette = typeof palettes.paper;
+type Palette = PresentationDesignPaletteColors;
 type Scene = NonNullable<Extract<PresentationReviewBlock, { kind: "content" }>["scene"]>;
 type Framed = Exclude<PresentationSceneNode, { type: "connector" }>;
 type RenderImages = PresentationStaticRenderInput["images"] & {
@@ -54,6 +52,8 @@ type Style = {
   color: string;
   leading: number;
   bold?: boolean;
+  weight?: number;
+  align?: "left" | "center" | "right";
   italic?: boolean;
 };
 type Glyph = { text: string; bold?: boolean; italic?: boolean; href?: string };
@@ -94,7 +94,7 @@ function assertText(text: string) {
   checkedText.add(text);
 }
 function font(ctx: SKRSContext2D, style: Style, run?: Glyph) {
-  ctx.font = `${run?.italic || style.italic ? "italic " : ""}${run?.bold || style.bold ? "700" : "400"} ${style.size}px ${style.family}, StaticCJK, StaticEmoji`;
+  ctx.font = `${run?.italic || style.italic ? "italic " : ""}${run?.bold ? Math.max(700, style.weight ?? 700) : (style.weight ?? (style.bold ? 700 : 400))} ${style.size}px ${style.family}, StaticCJK, StaticEmoji`;
 }
 function family(token: string | undefined) {
   return token === "serif" ? "serif" : token === "mono" ? "monospace" : "sans-serif";
@@ -190,7 +190,19 @@ function paragraphs(
     }
     for (const line of lineTokens(ctx, paragraph.runs, width - indent, style)) {
       if (cursor >= y + height) break;
-      let left = x + indent;
+      const measured = line.reduce((sum, run) => {
+        font(ctx, style, run);
+        return sum + ctx.measureText(run.text).width;
+      }, 0);
+      const available = width - indent;
+      let left =
+        x +
+        indent +
+        (style.align === "center"
+          ? (available - measured) / 2
+          : style.align === "right"
+            ? available - measured
+            : 0);
       for (const run of line) {
         font(ctx, style, run);
         ctx.fillStyle = style.color;
@@ -580,18 +592,20 @@ async function drawNode(
   }
   if (node.type === "text") {
     const title = node.role === "title",
-      size = title ? 48 : 26,
-      leading = scene.design
-        ? scene.design.spacing === "compact"
-          ? title
-            ? 1.04
-            : 1.2
+      size = node.typography?.size ?? (title ? 48 : 26),
+      leading =
+        node.typography?.leading ??
+        (scene.design
+          ? scene.design.spacing === "compact"
+            ? title
+              ? 1.04
+              : 1.2
+            : title
+              ? 1.12
+              : 1.45
           : title
-            ? 1.12
-            : 1.45
-        : title
-          ? 1.08
-          : 1.35;
+            ? 1.08
+            : 1.35);
     const items =
       node.richText?.paragraphs ??
       node.text
@@ -604,7 +618,15 @@ async function drawNode(
       pad,
       r.width - pad * 2,
       r.height - pad * 2,
-      { size, family: fam, color: palette.text, leading, bold: title },
+      {
+        size,
+        family: node.typography?.font ? family(node.typography.font) : fam,
+        color: palette[node.typography?.color ?? "text"],
+        leading,
+        bold: title,
+        weight: node.typography?.weight,
+        align: node.typography?.align,
+      },
       node.richText ? size * (scene.design?.spacing === "compact" ? 0.25 : 0.55) : 0,
     );
   } else if (node.type === "image")
@@ -618,14 +640,24 @@ async function drawNode(
   else if (node.type === "shape") {
     ctx.save();
     ctx.scale(r.width / 160, r.height / 90);
-    ctx.fillStyle = CANVAS_FILL_COLORS[node.color];
-    ctx.strokeStyle = CANVAS_STROKE_COLORS[node.color];
-    ctx.lineWidth = 2;
+    const fill = node.appearance?.fill;
+    const stroke = node.appearance?.stroke;
+    ctx.fillStyle =
+      fill === "none" ? "transparent" : fill ? palette[fill] : CANVAS_FILL_COLORS[node.color];
+    ctx.strokeStyle =
+      stroke === "none"
+        ? "transparent"
+        : stroke
+          ? palette[stroke]
+          : CANVAS_STROKE_COLORS[node.color];
+    const strokeWidth = node.appearance?.strokeWidth ?? 2;
+    ctx.lineWidth = strokeWidth;
+    const paintStroke = stroke !== "none" && strokeWidth > 0;
     if (node.shape === "ellipse") {
       ctx.beginPath();
       ctx.ellipse(80, 45, 78, 43, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
+      if (paintStroke) ctx.stroke();
     } else {
       const path =
         node.shape === "diamond" || node.shape === "parallelogram"
@@ -633,13 +665,20 @@ async function drawNode(
           : canvasShapeVariantPath(node.shape, 160, 90);
       const shape = new Path2D(path);
       ctx.fill(shape);
-      ctx.stroke(shape);
+      if (paintStroke) ctx.stroke(shape);
     }
     ctx.restore();
     centeredText(ctx, node.label, r.width * 0.075, 0, r.width * 0.85, r.height, {
       size: 22,
       family: fam,
-      color: node.color === "black" ? "#fff" : "#102a43",
+      color:
+        fill === "accent"
+          ? palette.accentText
+          : fill !== undefined
+            ? palette.text
+            : node.color === "black"
+              ? "#fff"
+              : "#102a43",
       leading: 1.25,
     });
   } else if (node.type === "table") {
@@ -683,29 +722,39 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
   const canvas = createCanvas(W, H),
     ctx = canvas.getContext("2d");
   ctx.textBaseline = "top";
+  const effectiveDesign = block.design,
+    inheritedPalette = effectiveDesign ? presentationDesignPalette(effectiveDesign) : undefined;
   if (block.kind === "content" && block.scene) {
-    const scene = block.scene,
-      palette = scene.design
-        ? palettes[scene.design.theme]
-        : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
+    // Inheritance is a rendering view; do not upgrade or rewrite the published scene.
+    const scene =
+        block.scene.design || !effectiveDesign
+          ? block.scene
+          : { ...block.scene, design: effectiveDesign },
+      palette = presentationDesignPalette(scene.design);
     ctx.fillStyle = palette.background;
     ctx.fillRect(0, 0, W, H);
+    if (scene.design?.motionBackground) paintPresentationMotionPoster(ctx, scene.design, W, H);
     for (const node of scene.nodes) if (node.type === "connector") connector(ctx, scene, node);
     for (const node of scene.nodes)
       if (node.type !== "connector") await drawNode(ctx, node, scene, images, palette);
   } else if (block.kind === "content") {
-    const gradient = ctx.createLinearGradient(0, 0, W, H);
-    gradient.addColorStop(0, "#f8fbff");
-    gradient.addColorStop(1, "#fff");
-    ctx.fillStyle = gradient;
+    if (inheritedPalette) ctx.fillStyle = inheritedPalette.background;
+    else {
+      const gradient = ctx.createLinearGradient(0, 0, W, H);
+      gradient.addColorStop(0, "#f8fbff");
+      gradient.addColorStop(1, "#fff");
+      ctx.fillStyle = gradient;
+    }
     ctx.fillRect(0, 0, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     const frames = resolveContentSlideFrames(block);
     for (const element of block.textElements) {
       const r = frame(frames[element.id]!);
       text(ctx, element.text, r.x + 8, r.y + 6, r.width - 16, r.height - 12, {
         size: element.role === "title" ? 46 : 23,
-        family: "sans-serif",
-        color: element.role === "title" ? "#102a43" : "#334e68",
+        family: family(effectiveDesign?.font),
+        color: inheritedPalette?.text ?? (element.role === "title" ? "#102a43" : "#334e68"),
         leading: element.role === "title" ? 1.04 : 1.4,
         bold: element.role === "title",
       });
@@ -713,18 +762,20 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
     if (block.mediaId)
       drawImage(ctx, await imageAt(images, block.mediaId), frame(contentSlideMediaFrame));
   } else {
-    ctx.fillStyle = "#f8fbff";
+    ctx.fillStyle = inheritedPalette?.background ?? "#f8fbff";
     ctx.fillRect(0, 0, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     text(ctx, "Activity preview - no submissions or results", 64, 34, 1152, 40, {
       size: 20,
-      family: "sans-serif",
-      color: "#52616f",
+      family: family(effectiveDesign?.font),
+      color: inheritedPalette?.link ?? "#52616f",
       leading: 1.3,
     });
     const end = text(ctx, block.question.prompt, 64, 96, 1152, 220, {
       size: 42,
-      family: "sans-serif",
-      color: "#102a43",
+      family: family(effectiveDesign?.font),
+      color: inheritedPalette?.text ?? "#102a43",
       leading: 1.2,
       bold: true,
     });
@@ -737,7 +788,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         block.question.mediaId ? 700 : 1152,
         340,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.5 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.5,
+        },
       );
     else if (block.question.rating)
       text(
@@ -747,7 +803,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.4 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.4,
+        },
       );
     else
       text(
@@ -759,7 +820,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#52616f", leading: 1.4 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#52616f",
+          leading: 1.4,
+        },
       );
     if (block.question.mediaId)
       drawImage(ctx, await imageAt(images, block.question.mediaId), {
@@ -781,19 +847,20 @@ const escape = (value: string) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-function richRunsHtml(runs: readonly PresentationRichTextRun[]) {
+const externalNotice = " (leaves this file; may require internet access)";
+function richRunsHtml(runs: readonly PresentationRichTextRun[], offline = false) {
   return runs
     .map((run) => {
       let value = escape(run.text);
       if (run.bold) value = `<strong>${value}</strong>`;
       if (run.italic) value = `<em>${value}</em>`;
       if (run.href && isSafePresentationLink(run.href))
-        value = `<a href="${escape(run.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${value}</a>`;
+        value = `<a href="${escape(run.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${value}${offline ? `<span class="external-notice" lang="en">${externalNotice}</span>` : ""}</a>`;
       return value;
     })
     .join("");
 }
-function richHtml(items: readonly PresentationRichTextParagraph[]) {
+function richHtml(items: readonly PresentationRichTextParagraph[], offline = false) {
   let html = "",
     list: "bullet" | "numbered" | undefined;
   for (const item of items) {
@@ -805,7 +872,7 @@ function richHtml(items: readonly PresentationRichTextParagraph[]) {
       list = item.kind;
       html += list === "bullet" ? "<ul>" : "<ol>";
     }
-    const content = richRunsHtml(item.runs);
+    const content = richRunsHtml(item.runs, offline);
     html += item.kind === "paragraph" ? `<p>${content}</p>` : `<li>${content}</li>`;
   }
   return html + (list ? (list === "bullet" ? "</ul>" : "</ol>") : "");
@@ -825,11 +892,14 @@ function semanticBlock(
   block: PresentationReviewBlock,
   images: RenderImages,
   selected: Set<string>,
+  offline = false,
 ) {
   const image = (id: string, alt: string | null) => {
     const value = images.get(id.toLowerCase())!;
     return `<figure><img src="data:${value.contentType};base64,${value.bytes.toString("base64")}" alt="${escape(alt ?? "")}" loading="lazy"></figure>`;
   };
+  if (block.kind === "question" && offline)
+    return `<h3>Question preview: readable only</h3><p>${escape(block.question.prompt)}</p>${block.question.choices ? `<ol>${block.question.choices.map((choice) => `<li>${escape(choice.label)}</li>`).join("")}</ol>` : ""}${block.question.rating ? `<p>${escape(block.question.rating.minLabel ?? "")} ${block.question.rating.min} - ${block.question.rating.max} ${escape(block.question.rating.maxLabel ?? "")}</p>` : ""}${block.question.unit ? `<p>Unit: ${escape(block.question.unit)}</p>` : ""}${block.question.mediaId ? image(block.question.mediaId, block.question.mediaAlt) : ""}<p>No responses, submissions, answer keys, scoring, live results or completion tracking are included.</p>`;
   if (block.kind === "question")
     return `<h3>Activity preview</h3><p>${escape(block.question.prompt)}</p>${block.question.choices ? `<ol>${block.question.choices.map((choice) => `<li>${escape(choice.label)}</li>`).join("")}</ol>` : ""}${block.question.rating ? `<p>${escape(block.question.rating.minLabel ?? "")} ${block.question.rating.min} - ${block.question.rating.max} ${escape(block.question.rating.maxLabel ?? "")}</p>` : ""}${block.question.unit ? `<p>Unit: ${escape(block.question.unit)}</p>` : ""}${block.question.mediaId ? image(block.question.mediaId, block.question.mediaAlt) : ""}<p>No answer key, submissions or live results are included.</p>`;
   if (!block.scene)
@@ -848,18 +918,24 @@ function semanticBlock(
     .map((id) => {
       const node = nodes.get(id)!;
       switch (node.type) {
-        case "text":
+        case "text": {
+          const language = node.lang ? ` lang="${escape(node.lang)}"` : "";
           return node.richText
             ? node.role === "title"
-              ? `<h3>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs)).join("<br>")}</h3>`
-              : richHtml(node.richText.paragraphs)
+              ? `<h3${language}>${node.richText.paragraphs.map((item) => richRunsHtml(item.runs, offline)).join("<br>")}</h3>`
+              : language
+                ? `<div${language}>${richHtml(node.richText.paragraphs, offline)}</div>`
+                : richHtml(node.richText.paragraphs, offline)
             : node.role === "title"
-              ? `<h3>${escape(node.text)}</h3>`
-              : `<p>${escape(node.text)}</p>`;
+              ? `<h3${language}>${escape(node.text)}</h3>`
+              : `<p${language}>${escape(node.text)}</p>`;
+        }
         case "image":
           return image(node.mediaId, node.altText);
         case "shape":
-          return `<p>Shape (${escape(node.shape)}): ${escape(node.label)}</p>`;
+          return node.decorative
+            ? ""
+            : `<p>Shape (${escape(node.shape)}): ${escape(node.label)}</p>`;
         case "connector":
           return `<p>${escape(node.label || "Connection")}: ${escape(nodeLabel(nodes.get(node.from.nodeId)))} → ${escape(nodeLabel(nodes.get(node.to.nodeId)))}</p>`;
         case "table":
@@ -874,21 +950,91 @@ function semanticBlock(
             ]),
           )}`;
         case "reveal":
-          return `<section><h3>${escape(node.label)}</h3><p>${escape(node.body)}</p></section>`;
+          return offline
+            ? `<details><summary>${escape(node.label)}</summary><p class="local-disclosure">${node.scope === "broadcast" ? "Published broadcast reveal content is a local disclosure in this file; it does not broadcast or synchronize." : "Local disclosure in this file; it does not synchronize or save state."}</p><p>${escape(node.body)}</p></details>`
+            : `<section><h3>${escape(node.label)}</h3><p>${escape(node.body)}</p></section>`;
         case "hotspot":
         case "dialog":
-          return `<section><h3>${escape(node.label)}</h3><h4>${escape(node.detailTitle)}</h4><p>${escape(node.body)}</p></section>`;
+          return offline
+            ? `<details><summary>${escape(node.label)}</summary><p class="local-disclosure">Local disclosure in this file; it does not synchronize or save state.</p><h3>${escape(node.detailTitle)}</h3><p>${escape(node.body)}</p></details>`
+            : `<section><h3>${escape(node.label)}</h3><h4>${escape(node.detailTitle)}</h4><p>${escape(node.body)}</p></section>`;
         case "link":
           return isSafePresentationLink(node.href)
-            ? `<p><a href="${escape(node.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${escape(node.label)}</a></p>`
+            ? `<p><a href="${escape(node.href)}" rel="noopener noreferrer" referrerpolicy="no-referrer">${escape(node.label)}${offline ? `<span class="external-notice" lang="en">${externalNotice}</span>` : ""}</a></p>`
             : `<p>${escape(node.label)}</p>`;
         case "navigation":
           return node.targetBlockId && selected.has(node.targetBlockId.toLowerCase())
             ? `<p><a href="#page-${escape(node.targetBlockId.toLowerCase())}">${escape(node.label)}</a></p>`
-            : `<p>${escape(node.label)} (navigation control flattened)</p>`;
+            : `<p>${escape(node.label)} (${offline ? "target unavailable in this file" : "navigation control flattened"})</p>`;
       }
     })
     .join("");
+}
+function readablePageTitle(block: PresentationReviewBlock, index: number) {
+  if (block.kind === "question")
+    return { text: block.question.prompt.trim() || `Page ${index + 1}` };
+  const title = block.scene?.nodes.find((node) => node.type === "text" && node.role === "title");
+  if (title?.type === "text" && title.text.trim())
+    return { text: title.text.trim(), lang: title.lang };
+  return {
+    text:
+      block.textElements.find((element) => element.role === "title")?.text.trim() ||
+      `Page ${index + 1}`,
+  };
+}
+async function offlineHtml(
+  review: PresentationStaticRenderInput["review"],
+  blocks: PresentationReviewBlock[],
+  images: RenderImages,
+): Promise<PresentationStaticRenderResult> {
+  const selected = new Set(blocks.map((block) => block.id.toLowerCase()));
+  const pages = new Map(
+    blocks.map((block, index) => [
+      block.id.toLowerCase(),
+      { block, index, title: readablePageTitle(block, index) },
+    ]),
+  );
+  const pageLink = (id: string, label?: string) => {
+    const page = pages.get(id.toLowerCase());
+    if (!page) return "";
+    const title = page.title.lang
+      ? `<span lang="${escape(page.title.lang)}">${escape(page.title.text)}</span>`
+      : escape(page.title.text);
+    return `<a href="#page-${escape(page.block.id.toLowerCase())}">${label === undefined ? `Page ${page.index + 1}: ${title}` : escape(label)}</a>`;
+  };
+  const sections = review.sections
+    .map((section, index) => ({
+      ...section,
+      anchor: `section-${index + 1}`,
+      blockIds: section.blockIds.filter((id) => selected.has(id.toLowerCase())),
+    }))
+    .filter((section) => section.blockIds.length);
+  const parts = [
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"><title>${escape(review.title)}</title><style>body{font:18px/1.6 system-ui,sans-serif;color:#172b4d;background:#fffdf7;margin:0 auto;max-width:1100px;padding:24px}h1,h2,h3,h4{line-height:1.25;overflow-wrap:anywhere}p,li,td,th,summary,caption{overflow-wrap:anywhere;white-space:pre-wrap}a{color:#174d8c}a:focus-visible,summary:focus-visible{outline:3px solid #174d8c;outline-offset:4px}img{max-width:100%;height:auto}.snapshot{width:100%;border:1px solid #a6b0ba}article{border-top:2px solid #a6b0ba;margin-top:32px;padding-top:16px}table{border-collapse:collapse;width:100%;margin:16px 0}caption{text-align:left;font-weight:bold}th,td{text-align:left;vertical-align:top;border:1px solid #a6b0ba;padding:8px}figure{margin:16px 0}details{border:1px solid #a6b0ba;padding:12px;margin:16px 0}summary{cursor:pointer;font-weight:bold}.local-disclosure,.external-notice{font-size:.9em}nav li{margin:8px 0}@media print{article{break-before:page}.page-navigation{display:none}}</style></head><body><header><h1>${escape(review.title)}</h1><p>${escape(offlineDisclosure)}</p><p>This interactive readable companion works offline: open a labeled disclosure to read its details, or follow page, section and index links within the file. Disclosures are local to this file, including public content originally authored for broadcast reveal. They do not broadcast, synchronize or save state.</p><p>Questions are readable previews only: no responses, submissions, answer keys, scoring, live results or completion tracking. Visual snapshots preserve authored frames and may clip text; complete readable content follows each snapshot. External links leave this file and may require internet access.</p></header><nav id="presentation-index" aria-label="Presentation index"><h2>Presentation index</h2>${sections.length ? `<h3>Sections</h3><ul>${sections.map((section) => `<li><a href="#${section.anchor}">${escape(section.title)}</a></li>`).join("")}</ul>` : ""}<h3>Pages</h3><ol>${blocks.map((block) => `<li>${pageLink(block.id)}</li>`).join("")}</ol></nav>${sections.length ? `<section aria-label="Presentation sections">${sections.map((section) => `<section id="${section.anchor}"><h2>${escape(section.title)}</h2><ul>${section.blockIds.map((id) => `<li>${pageLink(id)}</li>`).join("")}</ul></section>`).join("")}</section>` : ""}<main>`,
+  ];
+  let length = Buffer.byteLength(parts[0]!);
+  if (length > limits.outputBytes) throw new PresentationStaticExportError("EXPORT_LIMIT");
+  for (const [index, block] of blocks.entries()) {
+    const png = await drawPage(block, images);
+    const navigation = `<nav class="page-navigation" aria-label="Navigation for page ${index + 1}"><ul>${index ? `<li>${pageLink(blocks[index - 1]!.id, "Previous page")}</li>` : ""}${index + 1 < blocks.length ? `<li>${pageLink(blocks[index + 1]!.id, "Next page")}</li>` : ""}<li><a href="#presentation-index">Presentation index</a></li>${sections
+      .filter((section) =>
+        section.blockIds.some((id) => id.toLowerCase() === block.id.toLowerCase()),
+      )
+      .map(
+        (section) => `<li><a href="#${section.anchor}">Section: ${escape(section.title)}</a></li>`,
+      )
+      .join("")}</ul></nav>`;
+    const part = `<article id="page-${escape(block.id.toLowerCase())}"><h2>Page ${index + 1}</h2>${navigation}<img class="snapshot" src="data:image/png;base64,${png.toString("base64")}" alt="" aria-hidden="true"><section aria-label="Readable content for page ${index + 1}">${semanticBlock(block, images, selected, true)}</section></article>`;
+    length += Buffer.byteLength(part);
+    if (length > limits.outputBytes) throw new PresentationStaticExportError("EXPORT_LIMIT");
+    parts.push(part);
+  }
+  parts.push("</main></body></html>");
+  return {
+    bytes: checkSize(Buffer.from(parts.join(""))),
+    contentType: "text/html",
+    extension: "html",
+  };
 }
 async function prepare(input: PresentationStaticRenderInput) {
   const parsed = PresentationReviewSchema.safeParse(input.review);
@@ -898,11 +1044,15 @@ async function prepare(input: PresentationStaticRenderInput) {
       ? review.blocks.filter((block) => block.id.toLowerCase() === input.blockId!.toLowerCase())
       : review.blocks;
   if (
-    !["pdf", "png", "html"].includes(input.format) ||
+    !["pdf", "png", "html", "offline_html"].includes(input.format) ||
     new Set(review.blocks.map((block) => block.id.toLowerCase())).size !== review.blocks.length
   )
     throw new PresentationStaticExportError("EXPORT_INVALID");
-  if ((input.format === "png" && !input.blockId) || !blocks.length)
+  if (
+    (input.format === "png" && !input.blockId) ||
+    (input.format === "offline_html" && input.blockId !== undefined) ||
+    !blocks.length
+  )
     throw new PresentationStaticExportError("EXPORT_INVALID");
   if (
     blocks.length > limits.pages ||
@@ -961,6 +1111,7 @@ export async function renderPresentationStaticCore(
       contentType: "image/png",
       extension: "png",
     };
+  if (input.format === "offline_html") return offlineHtml(review, blocks, images);
   if (input.format === "html") {
     const selected = new Set(blocks.map((block) => block.id.toLowerCase()));
     const parts = [

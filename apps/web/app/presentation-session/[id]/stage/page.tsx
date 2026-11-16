@@ -1,12 +1,19 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  NATIVE_DESIGN_THEMES,
+  NATIVE_DESIGN_FONTS,
+} from "../../../../lib/presentation-native-design";
 import {
   PresentationStageSnapshotSchema,
   type PresentationStageSnapshot,
 } from "@openround/contracts";
 import { apiFetch, ApiClientError } from "../../../../lib/api";
+import { useLocale } from "../../../../components/locale-provider";
+import { presentationDeliveryCopy } from "../../../../lib/i18n/presentation-delivery-copy";
+import { formatNumber } from "../../../../lib/i18n/format";
 import {
   capturePresentationStagePass,
   rejectPresentationStagePass,
@@ -24,7 +31,11 @@ import { isTextQuestion } from "../../../../lib/text-response";
 import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
-import styles from "../../../../components/presentation-live/presentation-delivery.module.css";
+import { Brand } from "../../../../components/brand";
+import { stageDisplayCopy } from "../../../../components/presentation-live/stage-display-copy";
+import { useStageSetupPopup } from "../../../../components/presentation-live/stage-setup-popup";
+import display from "../../../../components/presentation-live/stage-display.module.css";
+import styles from "../../../../components/presentation-live/audience-workspace.module.css";
 
 const storage = {
   getItem: (key: string) => window.sessionStorage.getItem(key),
@@ -43,6 +54,8 @@ function StageMedia({
   mediaId: string | null;
   altText: string | null;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [source, setSource] = useState("");
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -82,14 +95,22 @@ function StageMedia({
     />
   ) : failed ? (
     <p className={styles.mediaFallback} role="status">
-      Image unavailable.{altText ? ` ${altText}` : ""}
+      {copy("imageUnavailable")}
+      {altText ? (
+        <>
+          {" "}
+          <span lang="">{altText}</span>
+        </>
+      ) : null}
     </p>
   ) : (
-    <p role="status">Loading image…</p>
+    <p role="status">{copy("loadingImage")}</p>
   );
 }
 
 function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [snapshot, setSnapshot] = useState<PresentationStageSnapshot | null>(null);
   const latest = useRef<PresentationStageSnapshot | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -103,7 +124,19 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
   const receivedAt = useRef(Date.now());
   const [fullScreenSupported, setFullScreenSupported] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
-  const [fullScreenError, setFullScreenError] = useState("");
+  const [fullScreenError, setFullScreenError] = useState(false);
+  const [exitError, setExitError] = useState(false);
+  const [focusView, setFocusView] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [requestingFullScreen, setRequestingFullScreen] = useState(false);
+  const screen = stageDisplayCopy(locale);
+  const setup = useStageSetupPopup();
+  const displayRef = useRef<HTMLElement>(null);
+  const returnFocus = useRef<HTMLButtonElement | null>(null);
+  const controlsTimer = useRef<number | undefined>(undefined);
+  const activeFullScreen = useRef(false);
+  const fullScreenRequest = useRef(0);
+  const fullScreenBusy = useRef(false);
 
   useEffect(() => {
     setSnapshot(null);
@@ -184,90 +217,283 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
-    setFullScreenSupported(typeof document.documentElement.requestFullscreen === "function");
-    const update = () => setFullScreen(!!document.fullscreenElement);
+    setFullScreenSupported(
+      typeof displayRef.current?.requestFullscreen === "function" &&
+        document.fullscreenEnabled !== false,
+    );
+    const update = () => {
+      const active = document.fullscreenElement === displayRef.current;
+      const exited = activeFullScreen.current && !active;
+      activeFullScreen.current = active;
+      setFullScreen(active);
+      if (active) {
+        setFocusView(true);
+        setFullScreenError(false);
+      } else if (exited) {
+        setFocusView(false);
+        setExitError(false);
+        window.requestAnimationFrame(() => returnFocus.current?.focus({ preventScroll: true }));
+      }
+    };
+    update();
     document.addEventListener("fullscreenchange", update);
     return () => {
+      fullScreenRequest.current++;
       window.clearInterval(timer);
+      if (controlsTimer.current !== undefined) window.clearTimeout(controlsTimer.current);
       document.removeEventListener("fullscreenchange", update);
     };
   }, []);
 
-  async function toggleFullScreen() {
-    setFullScreenError("");
+  function revealControls() {
+    setControlsVisible(true);
+    if (controlsTimer.current !== undefined) window.clearTimeout(controlsTimer.current);
+    controlsTimer.current = window.setTimeout(() => setControlsVisible(false), 2_400);
+  }
+  useEffect(() => {
+    if (!focusView) return;
+    displayRef.current?.focus({ preventScroll: true });
+    revealControls();
+    return () => {
+      if (controlsTimer.current !== undefined) window.clearTimeout(controlsTimer.current);
+    };
+  }, [focusView]);
+
+  async function leaveFocusView() {
+    fullScreenRequest.current++;
+    setExitError(false);
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await document.documentElement.requestFullscreen();
+      if (document.fullscreenElement === displayRef.current) await document.exitFullscreen();
+      setFocusView(false);
+      setFullScreenError(false);
+      window.requestAnimationFrame(() => returnFocus.current?.focus({ preventScroll: true }));
     } catch {
-      setFullScreenError("Full screen could not open. You can continue presenting in this tab.");
+      setExitError(true);
+      revealControls();
+    }
+  }
+  async function toggleFullScreen() {
+    if (document.fullscreenElement === displayRef.current) {
+      await leaveFocusView();
+      return;
+    }
+    if (fullScreenBusy.current) return;
+    const element = displayRef.current;
+    if (!element) return;
+    setFocusView(true);
+    setFullScreenError(false);
+    setExitError(false);
+    if (typeof element.requestFullscreen !== "function" || document.fullscreenEnabled === false)
+      return;
+    const request = ++fullScreenRequest.current;
+    fullScreenBusy.current = true;
+    setRequestingFullScreen(true);
+    try {
+      // Request synchronously in this click's user activation; opening a second
+      // window never grants this stage an automatic fullscreen request.
+      await element.requestFullscreen({ navigationUI: "hide" });
+      if (request !== fullScreenRequest.current && document.fullscreenElement === element)
+        await document.exitFullscreen();
+    } catch {
+      if (request === fullScreenRequest.current) setFullScreenError(true);
+    } finally {
+      fullScreenBusy.current = false;
+      if (displayRef.current === element) setRequestingFullScreen(false);
     }
   }
 
   const remaining = presentationRemainingSeconds(snapshot, receivedAt.current, now);
   const opinionSummary = presentationOpinionSummaryFor(snapshot);
+  const questionDesign =
+    snapshot?.currentBlock?.kind === "question" ? snapshot.currentBlock.design : undefined;
+  const questionPalette = questionDesign ? NATIVE_DESIGN_THEMES[questionDesign.theme] : undefined;
+  const questionStyle: CSSProperties | undefined =
+    questionPalette && questionDesign
+      ? {
+          background: questionPalette.background,
+          color: questionPalette.text,
+          fontFamily: NATIVE_DESIGN_FONTS[questionDesign.font],
+        }
+      : undefined;
   const textResults =
     snapshot?.currentBlock?.kind === "question" &&
     isTextQuestion(snapshot.currentBlock.question.type) &&
     ["question_reveal", "intervention"].includes(snapshot.phase);
   return (
-    <main className={styles.stagePage} lang="en-CA">
-      <div className={styles.stageLayout}>
+    <main
+      ref={displayRef}
+      className={`${styles.theaterPage} ${display.screen}`}
+      data-audience-stage
+      data-stage-focus={focusView ? "true" : "false"}
+      data-stage-controls-visible={controlsVisible ? "true" : "false"}
+      tabIndex={-1}
+      lang={locale}
+      onPointerMove={() => {
+        if (focusView) revealControls();
+      }}
+      onPointerDown={() => {
+        if (focusView) revealControls();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && focusView && !document.fullscreenElement) {
+          event.preventDefault();
+          void leaveFocusView();
+        }
+      }}
+    >
+      <div
+        className={display.focusTools}
+        data-stage-focus-controls
+        data-error={fullScreenError || exitError ? "true" : undefined}
+        hidden={!focusView}
+        role="group"
+        aria-label={screen.focus}
+      >
+        <div>
+          <button type="button" onClick={() => void leaveFocusView()}>
+            {screen.exitFocus}
+          </button>
+          {!fullScreen && fullScreenSupported ? (
+            <button
+              type="button"
+              disabled={requestingFullScreen}
+              onClick={() => void toggleFullScreen()}
+            >
+              {copy("enterFullScreen")}
+            </button>
+          ) : null}
+        </div>
+        <p>{screen.focusHelp}</p>
+        {!fullScreenSupported ? <p role="status">{screen.fallback}</p> : null}
+        {fullScreenError ? (
+          <p role="alert">
+            {copy("fullScreenError")} {screen.rejected}
+          </p>
+        ) : null}
+        {exitError ? <p role="alert">{screen.exitRejected}</p> : null}
+      </div>
+      <div className={`${styles.theaterLayout} ${display.layout}`}>
+        <header
+          className={`${styles.theaterHeader} ${display.chrome}`}
+          data-stage-header
+          hidden={focusView}
+        >
+          <Brand />
+          <p className={styles.theaterTitle} lang={snapshot ? "" : locale}>
+            {snapshot?.title ?? copy("audienceSlide")}
+          </p>
+          <div className={styles.theaterMeta}>
+            {snapshot ? (
+              <>
+                <p>{copy("joinCodeHeader", { code: snapshot.code })}</p>
+                <p>
+                  {snapshot.phase === "lobby"
+                    ? copy("ready")
+                    : snapshot.phase === "finished"
+                      ? copy("complete")
+                      : copy("progress", {
+                          current: formatNumber(locale, snapshot.currentBlockIndex + 1),
+                          total: formatNumber(locale, snapshot.blockCount),
+                        })}
+                </p>
+                {remaining !== null ? (
+                  <p aria-live="off">
+                    {copy("secondsRemaining", { count: formatNumber(locale, remaining) })}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={!fullScreenSupported || requestingFullScreen}
+              onClick={(event) => {
+                returnFocus.current = event.currentTarget;
+                void toggleFullScreen();
+              }}
+            >
+              {copy(fullScreen ? "exitFullScreen" : "enterFullScreen")}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                returnFocus.current = event.currentTarget;
+                setFullScreenError(false);
+                setFocusView(true);
+              }}
+            >
+              {screen.focus}
+            </button>
+            <details ref={setup.detailsRef} className={display.setup} onToggle={setup.position}>
+              <summary>{screen.setup}</summary>
+              <div ref={setup.popupRef} data-stage-setup-popup="display">
+                <p>{screen.stageHelp}</p>
+                <p>{screen.privacy}</p>
+              </div>
+            </details>
+          </div>
+        </header>
+        {!fullScreenSupported && !focusView ? (
+          <p className={styles.theaterNotice}>{copy("fullScreenUnavailable")}</p>
+        ) : null}
+        {fullScreenError && !focusView ? (
+          <p className={styles.theaterNotice} role="alert">
+            {copy("fullScreenError")}
+          </p>
+        ) : null}
         {unavailable ? (
-          <section className={styles.stageCanvas}>
+          <section className={`${styles.theaterCanvas} ${display.canvas}`}>
             <div>
-              <h1>Audience stage unavailable</h1>
-              <p role="alert">
-                Stage access has expired, was revoked, or is missing. Ask the presenter to open a
-                new audience stage.
-              </p>
+              <h1>{copy("unavailable")}</h1>
+              <p role="alert">{copy("accessExpired")}</p>
             </div>
           </section>
         ) : !snapshot || !token ? (
-          <section className={styles.stageCanvas}>
-            <h1>Connecting to audience stage…</h1>
+          <section className={`${styles.theaterCanvas} ${display.canvas}`}>
+            <h1>{copy("connecting")}</h1>
           </section>
         ) : (
           <>
-            <header className={styles.stageHeader}>
-              <p lang="">{snapshot.title}</p>
-              <p>Join code: {snapshot.code}</p>
-              <p>
-                {snapshot.phase === "lobby"
-                  ? "Ready to begin"
-                  : snapshot.phase === "finished"
-                    ? "Presentation complete"
-                    : `Slide or activity ${snapshot.currentBlockIndex + 1} of ${snapshot.blockCount}`}
-              </p>
-            </header>
             {reconnecting ? (
-              <p role="status">Reconnecting — showing the last confirmed slide.</p>
+              <p className={styles.theaterNotice} role="status">
+                {copy("reconnecting")}
+              </p>
             ) : null}
-            <PresentationSpatialDelivery
-              spatial={snapshot.spatial}
-              currentBlockIndex={snapshot.currentBlockIndex}
-              phase={snapshot.phase}
-              sourceKey={`${id}:${snapshot.presentationVersionId}`}
-            />
+            <div className={display.chrome} data-stage-spatial hidden={focusView}>
+              <PresentationSpatialDelivery
+                compact
+                spatial={snapshot.spatial}
+                currentBlockIndex={snapshot.currentBlockIndex}
+                phase={snapshot.phase}
+                sourceKey={`${id}:${snapshot.presentationVersionId}`}
+              />
+            </div>
             <section
-              aria-label="Audience slide"
-              className={`${styles.stageCanvas}${opinionSummary || textResults ? ` ${styles.stageOpinionCanvas}` : ""}`}
+              aria-label={copy("audienceSlide")}
+              style={questionStyle}
+              className={`${styles.theaterCanvas} ${display.canvas}`}
+              data-stage-slide
+              data-kind={
+                snapshot.phase === "lobby" || snapshot.phase === "finished"
+                  ? snapshot.phase
+                  : snapshot.currentBlock?.kind
+              }
+              data-results={opinionSummary || textResults ? "true" : undefined}
               tabIndex={0}
             >
               {snapshot.phase === "lobby" ? (
-                <div className={styles.stageBody}>
+                <div className={`${styles.theaterBody} ${display.body}`}>
                   <h1 lang="">{snapshot.title}</h1>
-                  <p>Join on your device while you wait.</p>
+                  <p>{copy("joinWaiting")}</p>
                 </div>
               ) : snapshot.phase === "finished" ? (
-                <div className={styles.stageBody}>
-                  <h1>Presentation complete</h1>
-                  <p>Thank you for taking part.</p>
+                <div className={`${styles.theaterBody} ${display.body}`}>
+                  <h1>{copy("complete")}</h1>
+                  <p>{copy("thanks")}</p>
                 </div>
               ) : snapshot.currentBlock ? (
                 <div
-                  className={`${styles.stageBody}${snapshot.currentBlock.kind === "content" ? ` ${styles.stageFrame}` : ""}${opinionSummary || textResults ? ` ${styles.stageOpinionBody}` : ""}`}
+                  className={`${styles.theaterBody} ${display.body}${snapshot.currentBlock.kind === "content" ? ` ${styles.theaterFrame}` : ""}${opinionSummary || textResults ? ` ${styles.theaterResults}` : ""}`}
                 >
-                  {remaining !== null ? <p aria-live="off">{remaining}s remaining</p> : null}
                   {textResults &&
                   snapshot.currentBlock.kind === "question" &&
                   isTextQuestion(snapshot.currentBlock.question.type) ? (
@@ -313,6 +539,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : (
                     <PresentationDeliveryBlock
                       block={snapshot.currentBlock}
+                      fixedLayout={focusView}
                       interactionRuntime={presentationInteractionRuntime(snapshot, {
                         mode: "live_audience",
                       })}
@@ -334,27 +561,15 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : null}
                 </div>
               ) : (
-                <p>Waiting for the next slide.</p>
+                <p>{copy("waiting")}</p>
               )}
             </section>
-            <footer className={styles.stageFooter}>
+            <footer
+              className={`${styles.theaterFooter} ${display.chrome}`}
+              data-stage-footer
+              hidden={focusView}
+            >
               <PresentationDeliveryJoinAccess code={snapshot.code} />
-              <div>
-                <button
-                  type="button"
-                  disabled={!fullScreenSupported}
-                  onClick={() => void toggleFullScreen()}
-                >
-                  {fullScreen ? "Exit full screen" : "Enter full screen"}
-                </button>
-                {!fullScreenSupported ? (
-                  <p>
-                    Full-screen mode is unavailable in this browser. The stage remains usable in
-                    this tab.
-                  </p>
-                ) : null}
-                {fullScreenError ? <p role="alert">{fullScreenError}</p> : null}
-              </div>
             </footer>
           </>
         )}

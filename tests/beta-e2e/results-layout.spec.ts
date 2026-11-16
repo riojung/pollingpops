@@ -198,7 +198,7 @@ for (const mobile of [false, true]) {
     const overview = page.getByRole("region", { name: "At a glance", exact: true });
     await expect(overview).toContainText("75 recovered of 100 eligible");
     await expect(
-      overview.getByRole("meter", { name: "Recovery opportunities", exact: true }),
+      overview.getByRole("meter", { name: "Paired response recovery", exact: true }),
     ).toHaveAttribute("aria-valuenow", "75");
     await expect(overview).toContainText("More results are available.");
     await expect(
@@ -248,7 +248,7 @@ for (const mobile of [false, true]) {
     ]);
     await resultStatus.selectOption("pending");
     await expect(collection.getByRole("article")).toHaveCount(1);
-    await expect(overview).toContainText("No recovery opportunities recorded");
+    await expect(overview).toContainText("No paired response recovery evidence");
     await expect(overview.getByRole("meter")).toHaveCount(0);
     await expect(
       collection.getByRole("heading", { name: "Synthetic processing evidence" }),

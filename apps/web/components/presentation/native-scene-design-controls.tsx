@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "../locale-provider";
+import { nativeControlsCopy, type NativeControlsCopyKey } from "./native-controls-copy";
+import { presentationDesignApplicationCopy } from "../../lib/i18n/presentation-design-application-copy";
+import { motionBackgroundCopy, type MotionBackgroundCopyKey } from "./motion-background-copy";
+import { PresentationMotionBackground } from "./presentation-motion-background";
 import {
   PresentationSceneDraftSchema,
+  type PresentationMotionBackground as MotionBackgroundPreset,
   type PresentationScene,
   type PresentationSceneDesign,
   type PresentationSceneNode,
@@ -12,6 +18,7 @@ import {
   NATIVE_DESIGN_FONTS,
   NATIVE_DESIGN_THEMES,
   NATIVE_LAYOUT_PRESETS,
+  nativeSceneNodesForDesign,
   alignNativeSceneNodes,
   applyNativeLayout,
   canApplyNativeLayout,
@@ -20,12 +27,107 @@ import {
   canLayerNativeSceneNode,
   distributeNativeSceneNodes,
   layerNativeSceneNode,
+  type NativeLayoutPreset,
 } from "../../lib/presentation-native-design";
 import { updateNativeNode } from "../../lib/presentation-native-scene";
 import { nativeSceneSelectionUnits } from "../../lib/presentation-native-geometry";
-import styles from "./native-scene.module.css";
+import { EditorIcon, type EditorIconName } from "./presentation-editor-chrome";
+import styles from "./native-scene-design-controls.module.css";
+import { NativeInspectorSection } from "./native-inspector-section";
 
 type SceneChange = (scene: PresentationScene, historyField?: string) => void;
+
+const THEME_NAMES = {
+  paper: "Paper",
+  midnight: "Midnight",
+  ocean: "Ocean",
+  sunset: "Sunset",
+} as const;
+const FONT_NAMES = {
+  sans: "System sans",
+  serif: "Classic serif",
+  mono: "Monospace",
+} as const;
+const MOTION_BACKGROUNDS = [
+  { preset: undefined, label: "None · static" },
+  { preset: "aurora", label: "Aurora" },
+  { preset: "waves", label: "Soft waves" },
+  { preset: "orbs", label: "Floating orbs" },
+  { preset: "mesh", label: "Gradient mesh" },
+  { preset: "ribbons", label: "Flowing ribbons" },
+  { preset: "stars", label: "Star drift" },
+] as const satisfies readonly {
+  preset: MotionBackgroundPreset | undefined;
+  label: MotionBackgroundCopyKey;
+}[];
+
+/** Original schematics describe object positions, without loading any slide media. */
+function LayoutPreview({ preset }: { preset: NativeLayoutPreset }) {
+  const columns = preset === "three_columns" ? 3 : preset === "split" ? 2 : 1;
+  const image = preset === "image_left" || preset === "image_right";
+  const imageX = preset === "image_left" ? 10 : 56;
+  const bodyX = preset === "image_left" ? 56 : 10;
+  return (
+    <svg
+      className={styles.layoutPreview}
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 106 64"
+      fill="none"
+    >
+      <rect x="1" y="1" width="104" height="62" rx="5" className={styles.previewCanvas} />
+      <rect x="10" y="10" width="57" height="5" rx="2" className={styles.previewTitle} />
+      {image ? (
+        <>
+          <rect x={imageX} y="24" width="40" height="30" rx="3" className={styles.previewImage} />
+          <path d={`m${imageX + 5} 47 9-10 8 7 6-5 7 8`} className={styles.previewImageLine} />
+          <circle cx={imageX + 29} cy="32" r="3" className={styles.previewImageLine} />
+          {[25, 32, 39, 46].map((y, index) => (
+            <rect
+              key={y}
+              x={bodyX}
+              y={y}
+              width={index === 3 ? 26 : 40}
+              height="3"
+              rx="1.5"
+              className={styles.previewText}
+            />
+          ))}
+        </>
+      ) : preset === "title_data" ? (
+        <>
+          <path d="M11 25v29h84" className={styles.previewAxis} />
+          {[14, 24, 19, 30, 25].map((height, index) => (
+            <rect
+              key={index}
+              x={20 + index * 15}
+              y={53 - height}
+              width="9"
+              height={height}
+              rx="2"
+              className={styles.previewChart}
+            />
+          ))}
+        </>
+      ) : (
+        Array.from({ length: columns }, (_, column) => {
+          const width = (86 - (columns - 1) * 7) / columns;
+          return [25, 32, 39, 46].map((y, index) => (
+            <rect
+              key={`${column}-${y}`}
+              x={10 + column * (width + 7)}
+              y={y}
+              width={index === 3 ? width * 0.7 : width}
+              height="3"
+              rx="1.5"
+              className={styles.previewText}
+            />
+          ));
+        })
+      )}
+    </svg>
+  );
+}
 
 export function NativeSceneDesignControls({
   scene,
@@ -36,15 +138,30 @@ export function NativeSceneDesignControls({
   onChange: SceneChange;
   onApplyDesignToDeck?: (design: PresentationSceneDesign) => void;
 }) {
-  const [failure, setFailure] = useState<{ scene: PresentationScene; message: string } | null>(
-    null,
-  );
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
+  const applicationCopy = presentationDesignApplicationCopy(locale);
+  const motionCopy = motionBackgroundCopy(locale);
+  const [motionPreview, setMotionPreview] = useState<{
+    scene: PresentationScene;
+    preset: MotionBackgroundPreset;
+  } | null>(null);
+  const [failure, setFailure] = useState<{
+    scene: PresentationScene;
+    message: NativeControlsCopyKey;
+  } | null>(null);
   const design = scene.design;
+  const previewingMotion =
+    motionPreview?.scene === scene && motionPreview.preset === design?.motionBackground;
   function update(next: PresentationSceneDesign) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...scene,
-      schemaVersion: scene.schemaVersion >= 4 ? scene.schemaVersion : 3,
+      schemaVersion: Math.max(
+        scene.schemaVersion,
+        next.palette ? 9 : next.motionBackground ? 8 : 3,
+      ),
       design: next,
+      nodes: nativeSceneNodesForDesign(scene, next),
     });
     if (!result.success) {
       setFailure({
@@ -57,95 +174,280 @@ export function NativeSceneDesignControls({
     setFailure(null);
     onChange(result.data);
   }
+  function updateTheme(theme: PresentationSceneDesign["theme"]) {
+    if (!design) return;
+    const next = { ...design, theme };
+    delete next.palette;
+    update(next);
+  }
   return (
-    <fieldset className={styles.designControls}>
-      <legend>Design</legend>
-      {design ? (
-        <>
-          <div className={styles.designFields}>
-            <label>
-              Slide theme
-              <select
-                value={design.theme}
-                onChange={(event) =>
-                  update({
-                    ...design,
-                    theme: event.target.value as PresentationSceneDesign["theme"],
-                  })
-                }
+    <NativeInspectorSection title={copy("Design")} icon="palette" name="design">
+      <fieldset lang={locale} className={styles.section}>
+        <legend>
+          <span className={styles.sectionTitle}>
+            <EditorIcon name="palette" />
+            {copy("Design")}
+          </span>
+        </legend>
+        <div className={styles.sectionBody}>
+          {design ? (
+            <>
+              <div className={styles.themeField}>
+                <label className={styles.field}>
+                  {applicationCopy.baseColorTheme}
+                  <select
+                    value={design.palette ? "presentation-design" : design.theme}
+                    onChange={(event) =>
+                      updateTheme(event.target.value as PresentationSceneDesign["theme"])
+                    }
+                  >
+                    {design.palette ? (
+                      <option value="presentation-design" disabled>
+                        {applicationCopy.fromPresentationDesign}
+                      </option>
+                    ) : null}
+                    {(Object.keys(NATIVE_DESIGN_THEMES) as PresentationSceneDesign["theme"][]).map(
+                      (theme) => (
+                        <option key={theme} value={theme}>
+                          {copy(THEME_NAMES[theme])}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <div
+                  className={styles.themeOptions}
+                  role="group"
+                  aria-label={copy("Theme palettes")}
+                >
+                  {(
+                    Object.entries(NATIVE_DESIGN_THEMES) as [
+                      PresentationSceneDesign["theme"],
+                      (typeof NATIVE_DESIGN_THEMES)[PresentationSceneDesign["theme"]],
+                    ][]
+                  ).map(([theme, palette]) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      className={styles.themeOption}
+                      aria-label={copy("Use {theme} theme", { theme: copy(THEME_NAMES[theme]) })}
+                      aria-pressed={design.theme === theme && !design.palette}
+                      onClick={() => {
+                        if (design.theme !== theme || design.palette) updateTheme(theme);
+                      }}
+                    >
+                      <span
+                        className={styles.themePreview}
+                        aria-hidden="true"
+                        style={{
+                          background: palette.background,
+                          color: palette.text,
+                          borderColor: palette.border,
+                        }}
+                      >
+                        <span className={styles.themePreviewType}>Aa</span>
+                        <span className={styles.themePreviewLines}>
+                          <span />
+                          <span />
+                        </span>
+                        <span
+                          className={styles.themePreviewAccent}
+                          style={{ background: palette.link }}
+                        />
+                      </span>
+                      <span className={styles.themeOptionName}>
+                        {copy(THEME_NAMES[theme])}
+                        <span className={styles.themeSelected} aria-hidden="true">
+                          {design.theme === theme && !design.palette ? "✓" : ""}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className={styles.help}>{applicationCopy.baseThemeNotice}</p>
+              <div className={styles.designFields}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>
+                    <EditorIcon name="type" />
+                    {copy("Slide font")}
+                  </span>
+                  <select
+                    value={design.font}
+                    style={{ fontFamily: NATIVE_DESIGN_FONTS[design.font] }}
+                    onChange={(event) =>
+                      update({
+                        ...design,
+                        font: event.target.value as PresentationSceneDesign["font"],
+                      })
+                    }
+                  >
+                    {(Object.keys(NATIVE_DESIGN_FONTS) as PresentationSceneDesign["font"][]).map(
+                      (font) => (
+                        <option key={font} value={font}>
+                          {copy(FONT_NAMES[font])}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>
+                    <EditorIcon name="spacing" />
+                    {copy("Slide spacing")}
+                  </span>
+                  <select
+                    value={design.spacing}
+                    onChange={(event) =>
+                      update({
+                        ...design,
+                        spacing: event.target.value as PresentationSceneDesign["spacing"],
+                      })
+                    }
+                  >
+                    <option value="relaxed">{copy("Relaxed · more room")}</option>
+                    <option value="compact">{copy("Compact · closer spacing")}</option>
+                  </select>
+                </label>
+              </div>
+              <p className={styles.help}>
+                {copy(
+                  "Fixed palettes keep text readable. Fonts use those installed on your device.",
+                )}
+              </p>
+              <NativeInspectorSection
+                title={motionCopy("Motion background")}
+                icon="play"
+                name="motion"
               >
-                {Object.keys(NATIVE_DESIGN_THEMES).map((theme) => (
-                  <option key={theme} value={theme}>
-                    {theme}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Slide font
-              <select
-                value={design.font}
-                onChange={(event) =>
-                  update({
-                    ...design,
-                    font: event.target.value as PresentationSceneDesign["font"],
-                  })
-                }
-              >
-                {Object.keys(NATIVE_DESIGN_FONTS).map((font) => (
-                  <option key={font} value={font}>
-                    {font}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Slide spacing
-              <select
-                value={design.spacing}
-                onChange={(event) =>
-                  update({
-                    ...design,
-                    spacing: event.target.value as PresentationSceneDesign["spacing"],
-                  })
-                }
-              >
-                <option value="relaxed">relaxed</option>
-                <option value="compact">compact</option>
-              </select>
-            </label>
-          </div>
-          {onApplyDesignToDeck ? (
-            <div className={styles.actions}>
-              <button type="button" onClick={() => onApplyDesignToDeck(design)}>
-                Apply design to all native slides
-              </button>
-            </div>
+                <div className={styles.motionSection}>
+                  <div className={styles.subsectionHeading}>{motionCopy("Motion background")}</div>
+                  <p className={styles.help}>
+                    {motionCopy(
+                      "Choose subtle motion behind your content, or keep the slide still.",
+                    )}
+                  </p>
+                  <div
+                    className={styles.motionOptions}
+                    role="group"
+                    aria-label={motionCopy("Motion background")}
+                  >
+                    {MOTION_BACKGROUNDS.map(({ preset, label }) => {
+                      const selected = design.motionBackground === preset;
+                      const palette = NATIVE_DESIGN_THEMES[design.theme];
+                      return (
+                        <button
+                          key={preset ?? "none"}
+                          type="button"
+                          className={styles.motionOption}
+                          aria-label={motionCopy(label)}
+                          aria-pressed={selected}
+                          onClick={() => {
+                            if (selected) return;
+                            setMotionPreview(null);
+                            const next = { ...design };
+                            if (preset) next.motionBackground = preset;
+                            else delete next.motionBackground;
+                            update(next);
+                          }}
+                        >
+                          <span
+                            className={styles.motionPreview}
+                            aria-hidden="true"
+                            style={{ background: palette.background, color: palette.text }}
+                          >
+                            {preset ? (
+                              <PresentationMotionBackground
+                                preset={preset}
+                                theme={design.theme}
+                                static={!selected || !previewingMotion}
+                                paused={false}
+                              />
+                            ) : null}
+                            <span className={styles.motionPreviewContent}>
+                              <span />
+                              <span />
+                              <span />
+                            </span>
+                          </span>
+                          <span className={styles.motionOptionName}>
+                            {motionCopy(label)}
+                            <span className={styles.motionSelected} aria-hidden="true">
+                              {selected ? "✓" : ""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {design.motionBackground ? (
+                    <button
+                      type="button"
+                      className={styles.motionPreviewButton}
+                      onClick={() =>
+                        setMotionPreview(
+                          previewingMotion ? null : { scene, preset: design.motionBackground! },
+                        )
+                      }
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d={previewingMotion ? "M9 5v14M15 5v14" : "m8 5 11 7-11 7Z"}
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {motionCopy(previewingMotion ? "Pause preview" : "Play preview")}
+                    </button>
+                  ) : null}
+                </div>
+              </NativeInspectorSection>
+              {onApplyDesignToDeck ? (
+                <div className={styles.deckAction}>
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={() => onApplyDesignToDeck(design)}
+                  >
+                    <EditorIcon name="slides" />
+                    {applicationCopy.applyStyleToNativeSlides}
+                  </button>
+                  <p className={styles.help}>
+                    {copy("Ordinary slides and activities keep their own design.")}
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className={styles.help}>
+                {copy("Give this slide a coordinated palette, font and spacing.")}
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  onClick={() => update(INITIAL_NATIVE_DESIGN)}
+                >
+                  <EditorIcon name="palette" />
+                  {copy("Enable slide design")}
+                </button>
+              </div>
+              <p className={styles.help}>
+                {copy("Starts with Paper, System sans and relaxed spacing.")}
+              </p>
+            </>
+          )}
+          {failure?.scene === scene ? (
+            <p role="alert" className={styles.formatError}>
+              {copy(failure.message)}
+            </p>
           ) : null}
-          <p className={styles.help}>
-            Themes use fixed contrast palettes and fonts installed on your device. Applying a design
-            to the deck changes native slides; ordinary slides and activities keep their design.
-          </p>
-        </>
-      ) : (
-        <>
-          <div className={styles.actions}>
-            <button type="button" onClick={() => update(INITIAL_NATIVE_DESIGN)}>
-              Enable slide design
-            </button>
-          </div>
-          <p className={styles.help}>
-            Choose a theme, font and spacing for this native slide. Enable design to start with
-            paper, sans and relaxed spacing.
-          </p>
-        </>
-      )}
-      {failure?.scene === scene ? (
-        <p role="alert" className={styles.formatError}>
-          {failure.message}
-        </p>
-      ) : null}
-    </fieldset>
+        </div>
+      </fieldset>
+    </NativeInspectorSection>
   );
 }
 
@@ -156,36 +458,70 @@ export function NativeSceneLayoutControls({
   scene: PresentationScene;
   onChange: SceneChange;
 }) {
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
   return (
-    <fieldset className={styles.designControls}>
-      <legend>Native layouts</legend>
-      <div className={styles.layoutOptions}>
-        {NATIVE_LAYOUT_PRESETS.map((preset) => {
-          const enabled = canApplyNativeLayout(scene, preset.id);
-          return (
-            <div key={preset.id} className={styles.layoutOption}>
-              <div className={styles.actions}>
-                <button
-                  type="button"
-                  disabled={!enabled}
-                  onClick={() => {
-                    if (enabled) onChange(applyNativeLayout(scene, preset.id));
-                  }}
-                >
-                  {preset.label}
-                </button>
-              </div>
-              <p className={styles.help}>{enabled ? "Fits the current objects." : preset.help}</p>
-            </div>
-          );
-        })}
-      </div>
-      <p className={styles.help}>
-        Layouts reposition existing objects without removing content. Connectors follow their
-        objects. Add or remove objects to match a layout; unsupported combinations keep their
-        current positions. Check text fit after changing a layout or design.
-      </p>
-    </fieldset>
+    <NativeInspectorSection title={copy("Native layouts")} icon="layout" name="layouts">
+      <fieldset lang={locale} className={styles.section}>
+        <legend>
+          <span className={styles.sectionTitle}>
+            <EditorIcon name="layout" />
+            {copy("Native layouts")}
+          </span>
+        </legend>
+        <div className={styles.sectionBody}>
+          <p className={styles.help}>
+            {copy("Choose a structure for the objects already on this slide.")}
+          </p>
+          <div className={styles.layoutOptions}>
+            {NATIVE_LAYOUT_PRESETS.map((preset) => {
+              const enabled = canApplyNativeLayout(scene, preset.id);
+              return (
+                <div key={preset.id} className={styles.layoutOption} data-available={enabled}>
+                  <button
+                    type="button"
+                    className={styles.layoutButton}
+                    aria-label={copy(preset.label as NativeControlsCopyKey)}
+                    aria-describedby={`native-layout-help-${preset.id}`}
+                    title={copy(
+                      enabled
+                        ? "Fits the current objects."
+                        : (preset.help as NativeControlsCopyKey),
+                    )}
+                    disabled={!enabled}
+                    onClick={() => {
+                      if (enabled) onChange(applyNativeLayout(scene, preset.id));
+                    }}
+                  >
+                    <LayoutPreview preset={preset.id} />
+                    <span className={styles.layoutName}>
+                      {copy(preset.label as NativeControlsCopyKey)}
+                      {enabled ? (
+                        <span className={styles.layoutReady} aria-hidden="true">
+                          ✓
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                  <p id={`native-layout-help-${preset.id}`} className={styles.help}>
+                    {copy(
+                      enabled
+                        ? "Fits the current objects."
+                        : (preset.help as NativeControlsCopyKey),
+                    )}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          <p className={styles.help}>
+            {copy(
+              "Content stays intact and connectors follow their objects. Add or remove objects to match a layout. Check text fit after changing layout or design.",
+            )}
+          </p>
+        </div>
+      </fieldset>
+    </NativeInspectorSection>
   );
 }
 
@@ -200,77 +536,133 @@ export function NativeSceneArrangementControls({
   selectedId: string;
   onChange: SceneChange;
 }) {
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
   const framedCount = nativeSceneSelectionUnits(scene, selectedIds).length;
+  const alignmentHelpId = `native-alignment-help-${selectedId}`;
+  const layerHelpId = `native-layer-help-${selectedId}`;
   return (
-    <fieldset className={styles.designControls}>
-      <legend>Arrange objects</legend>
-      <div className={styles.actions} aria-label="Align selected objects">
-        {(["left", "center", "right", "top", "middle", "bottom"] as const).map((alignment) => (
-          <button
-            key={alignment}
-            type="button"
-            disabled={framedCount < 2 || !canAlignNativeSceneNodes(scene, selectedIds, alignment)}
-            onClick={() => {
-              if (canAlignNativeSceneNodes(scene, selectedIds, alignment))
-                onChange(alignNativeSceneNodes(scene, selectedIds, alignment));
-            }}
+    <NativeInspectorSection title={copy("Arrange objects")} icon="align-left" name="arrangement">
+      <fieldset lang={locale} className={styles.section}>
+        <legend>
+          <span className={styles.sectionTitle}>
+            <EditorIcon name="align-left" />
+            {copy("Arrange objects")}
+          </span>
+        </legend>
+        <div className={styles.sectionBody}>
+          <div className={styles.subsectionHeading}>
+            <span>{copy("Alignment")}</span>
+            <span className={styles.selectionCount}>
+              {copy("{count} selected", { count: framedCount })}
+            </span>
+          </div>
+          <div
+            className={styles.alignGrid}
+            role="group"
+            aria-label={copy("Align selected objects")}
           >
-            Align {alignment}
-          </button>
-        ))}
-      </div>
-      <div className={styles.actions} aria-label="Distribute selected objects">
-        {(["horizontal", "vertical"] as const).map((axis) => {
-          const enabled = canDistributeNativeSceneNodes(scene, selectedIds, axis);
-          return (
-            <button
-              key={axis}
-              type="button"
-              disabled={!enabled}
-              onClick={() => {
-                if (enabled) onChange(distributeNativeSceneNodes(scene, selectedIds, axis));
-              }}
+            {(["left", "center", "right", "top", "middle", "bottom"] as const).map((alignment) => (
+              <button
+                key={alignment}
+                type="button"
+                className={styles.iconButton}
+                aria-label={copy("Align {alignment}", { alignment: copy(alignment) })}
+                aria-describedby={alignmentHelpId}
+                title={copy("Align {alignment}", { alignment: copy(alignment) })}
+                disabled={
+                  framedCount < 2 || !canAlignNativeSceneNodes(scene, selectedIds, alignment)
+                }
+                onClick={() => {
+                  if (canAlignNativeSceneNodes(scene, selectedIds, alignment))
+                    onChange(alignNativeSceneNodes(scene, selectedIds, alignment));
+                }}
+              >
+                <EditorIcon name={`align-${alignment}` as EditorIconName} />
+                <span className={styles.shortLabel}>{copy(alignment)}</span>
+              </button>
+            ))}
+          </div>
+          <div
+            className={styles.twoColumnGrid}
+            role="group"
+            aria-label={copy("Distribute selected objects")}
+          >
+            {(["horizontal", "vertical"] as const).map((axis) => {
+              const enabled = canDistributeNativeSceneNodes(scene, selectedIds, axis);
+              return (
+                <button
+                  key={axis}
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={copy(
+                    axis === "horizontal" ? "Distribute horizontally" : "Distribute vertically",
+                  )}
+                  aria-describedby={alignmentHelpId}
+                  title={copy(
+                    axis === "horizontal" ? "Distribute horizontally" : "Distribute vertically",
+                  )}
+                  disabled={!enabled}
+                  onClick={() => {
+                    if (enabled) onChange(distributeNativeSceneNodes(scene, selectedIds, axis));
+                  }}
+                >
+                  <EditorIcon name={`distribute-${axis}`} />
+                  <span className={styles.shortLabel}>{copy(axis)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p id={alignmentHelpId} className={styles.help}>
+            {copy(
+              "Select at least two objects to align within their combined bounds; three to distribute with equal gaps. Stored groups count as one object. Distribution needs room without overlap, and rotated objects must stay inside the slide. Outer objects stay fixed when distributing.",
+            )}
+          </p>
+          <div className={styles.layerSection}>
+            <div className={styles.subsectionHeading}>
+              <span>{copy("Layer order")}</span>
+              <span className={styles.selectionCount}>{copy("Last selected")}</span>
+            </div>
+            <div
+              className={styles.twoColumnGrid}
+              role="group"
+              aria-label={copy("Last selected object layer")}
             >
-              Distribute {axis === "horizontal" ? "horizontally" : "vertically"}
-            </button>
-          );
-        })}
-      </div>
-      <p className={styles.help}>
-        Align at least two selected objects within their combined bounds. Stored groups count as one
-        object. Distribute at least three with equal gaps, keeping the outer objects fixed.
-        Distribution is unavailable when the objects cannot fit without overlap. Arrangement is
-        unavailable when rotated objects cannot reach the target while keeping their frames inside
-        the slide.
-      </p>
-      <div className={styles.actions} aria-label="Last selected object layer">
-        {(
-          [
-            ["back", "Send object to back"],
-            ["backward", "Move object backward"],
-            ["forward", "Move object forward"],
-            ["front", "Bring object to front"],
-          ] as const
-        ).map(([action, label]) => (
-          <button
-            key={action}
-            type="button"
-            disabled={!canLayerNativeSceneNode(scene, selectedId, action)}
-            onClick={() => {
-              if (canLayerNativeSceneNode(scene, selectedId, action))
-                onChange(layerNativeSceneNode(scene, selectedId, action));
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className={styles.help}>
-        Layer controls change the last selected object or its stored group on wide slides. Reading
-        order stays the same, including on narrow screens. Connectors follow objects and stay behind
-        them.
-      </p>
-    </fieldset>
+              {(
+                [
+                  ["back", "Send object to back", "To back"],
+                  ["backward", "Move object backward", "Backward"],
+                  ["forward", "Move object forward", "Forward"],
+                  ["front", "Bring object to front", "To front"],
+                ] as const
+              ).map(([action, label, shortLabel]) => (
+                <button
+                  key={action}
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={copy(label)}
+                  aria-describedby={layerHelpId}
+                  title={copy(label)}
+                  disabled={!canLayerNativeSceneNode(scene, selectedId, action)}
+                  onClick={() => {
+                    if (canLayerNativeSceneNode(scene, selectedId, action))
+                      onChange(layerNativeSceneNode(scene, selectedId, action));
+                  }}
+                >
+                  <EditorIcon name={`layer-${action}`} />
+                  <span>{copy(shortLabel)}</span>
+                </button>
+              ))}
+            </div>
+            <p id={layerHelpId} className={styles.help}>
+              {copy(
+                "Moves the last selected object or its group on wide slides. Reading order stays the same, including on narrow screens. Connectors follow objects and stay behind them.",
+              )}
+            </p>
+          </div>
+        </div>
+      </fieldset>
+    </NativeInspectorSection>
   );
 }
 
@@ -283,9 +675,12 @@ export function NativeSceneImageDesignControls({
   node: Extract<PresentationSceneNode, { type: "image" }>;
   onChange: SceneChange;
 }) {
-  const [failure, setFailure] = useState<{ scene: PresentationScene; message: string } | null>(
-    null,
-  );
+  const { locale } = useLocale();
+  const copy = nativeControlsCopy(locale);
+  const [failure, setFailure] = useState<{
+    scene: PresentationScene;
+    message: NativeControlsCopyKey;
+  } | null>(null);
   function update(next: typeof node, historyField?: string) {
     const result = PresentationSceneDraftSchema.safeParse({
       ...updateNativeNode(scene, node.id, () => next),
@@ -303,70 +698,91 @@ export function NativeSceneImageDesignControls({
     onChange(result.data, historyField);
   }
   return (
-    <>
-      <label>
-        Image fit
-        <select
-          value={node.fit ?? "contain"}
-          onChange={(event) => {
-            const { focalPoint: _focalPoint, ...rest } = node;
-            void _focalPoint;
-            update(
-              event.target.value === "cover"
-                ? {
-                    ...node,
-                    fit: "cover",
-                    focalPoint: node.focalPoint ?? { x: 50, y: 50 },
-                  }
-                : { ...rest, fit: "contain" },
-            );
-          }}
-        >
-          <option value="contain">Contain · show the whole image</option>
-          <option value="cover">Cover · crop to fill the frame</option>
-        </select>
-      </label>
-      {node.fit === "cover" ? (
-        <div className={styles.frameFields}>
-          {(["x", "y"] as const).map((axis) => (
-            <label key={axis}>
-              Image focal {axis.toUpperCase()} (%)
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                value={node.focalPoint?.[axis] ?? 50}
-                onChange={(event) => {
-                  const value = event.target.valueAsNumber;
-                  if (!Number.isFinite(value)) return;
-                  update(
-                    {
-                      ...node,
-                      focalPoint: {
-                        x: node.focalPoint?.x ?? 50,
-                        y: node.focalPoint?.y ?? 50,
-                        [axis]: Math.min(100, Math.max(0, value)),
-                      },
-                    },
-                    `native:${node.id}:focal:${axis}`,
-                  );
-                }}
-              />
-            </label>
-          ))}
+    <NativeInspectorSection
+      title={copy("Image and crop")}
+      icon="image"
+      name="image-crop"
+      defaultOpen
+    >
+      <fieldset lang={locale} className={styles.section}>
+        <legend>
+          <span className={styles.sectionTitle}>
+            <EditorIcon name="image" />
+            {copy("Image and crop")}
+          </span>
+        </legend>
+        <div className={styles.sectionBody}>
+          <label className={styles.field}>
+            {copy("Image fit")}
+            <select
+              value={node.fit ?? "contain"}
+              onChange={(event) => {
+                const { focalPoint: _focalPoint, ...rest } = node;
+                void _focalPoint;
+                update(
+                  event.target.value === "cover"
+                    ? {
+                        ...node,
+                        fit: "cover",
+                        focalPoint: node.focalPoint ?? { x: 50, y: 50 },
+                      }
+                    : { ...rest, fit: "contain" },
+                );
+              }}
+            >
+              <option value="contain">{copy("Contain · show the whole image")}</option>
+              <option value="cover">{copy("Cover · crop to fill the frame")}</option>
+            </select>
+          </label>
+          {node.fit === "cover" ? (
+            <div className={styles.cropSection}>
+              <div className={styles.subsectionHeading}>
+                <span>{copy("Crop focal point")}</span>
+                <span className={styles.selectionCount}>0–100%</span>
+              </div>
+              <div className={styles.frameFields}>
+                {(["x", "y"] as const).map((axis) => (
+                  <label key={axis} className={styles.field}>
+                    {copy("Image focal {axis} (%)", { axis: axis.toUpperCase() })}
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={node.focalPoint?.[axis] ?? 50}
+                      onChange={(event) => {
+                        const value = event.target.valueAsNumber;
+                        if (!Number.isFinite(value)) return;
+                        update(
+                          {
+                            ...node,
+                            focalPoint: {
+                              x: node.focalPoint?.x ?? 50,
+                              y: node.focalPoint?.y ?? 50,
+                              [axis]: Math.min(100, Math.max(0, value)),
+                            },
+                          },
+                          `native:${node.id}:focal:${axis}`,
+                        );
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {failure?.scene === scene ? (
+            <p role="alert" className={styles.formatError}>
+              {copy(failure.message)}
+            </p>
+          ) : null}
+          <p className={styles.help}>
+            {copy(
+              "Contain shows the whole image. Cover fills the frame on wide slides; set the focal point to keep your subject visible. Narrow screens show the whole image. Alternative text stays available.",
+            )}
+          </p>
         </div>
-      ) : null}
-      {failure?.scene === scene ? (
-        <p role="alert" className={styles.formatError}>
-          {failure.message}
-        </p>
-      ) : null}
-      <p className={styles.help}>
-        Contain shows the complete image. Cover crops the image on wide slides; adjust its focal
-        point to keep the subject visible. Narrow screens always show the complete image and its
-        alternative text stays available.
-      </p>
-    </>
+      </fieldset>
+    </NativeInspectorSection>
   );
 }

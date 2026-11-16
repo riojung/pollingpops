@@ -46,7 +46,7 @@ export function CompanionQuickCheckForm({
   };
 
   return (
-    <form className={styles.quickCheckForm} noValidate onSubmit={submit}>
+    <form className={styles.quickCheckForm} lang={locale} noValidate onSubmit={submit}>
       <p className="muted">{t("live.companion.quickCheck.description")}</p>
       <label className="field" htmlFor={`${id}-prompt`}>
         <span>{t("live.companion.quickCheck.prompt")}</span>
@@ -56,6 +56,7 @@ export function CompanionQuickCheckForm({
           className="input"
           disabled={disabled}
           id={`${id}-prompt`}
+          lang={draft.prompt.trim() ? "" : locale}
           maxLength={500}
           minLength={1}
           name="prompt"
@@ -85,6 +86,7 @@ export function CompanionQuickCheckForm({
                 aria-invalid={error?.field === "choices" || undefined}
                 className="input"
                 id={`${id}-choice-${index}`}
+                lang={choice.trim() ? "" : locale}
                 maxLength={180}
                 minLength={1}
                 name={`choice-${index + 1}`}

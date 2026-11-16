@@ -11,6 +11,8 @@ import {
 import { roomEntitlements } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
+  SessionActivitySchema,
+  AuthLogoutSchema,
   RoundClientCapabilitiesQuerySchema,
   RoundResponseModerationPageSchema,
   RoundTextResponseResultsSchema,
@@ -137,7 +139,13 @@ import { AuthoringError, type AuthoringService } from "./authoring-service.js";
 import { OidcError, type OidcService } from "./oidc-service.js";
 import { LtiError, type LtiService } from "./lti-service.js";
 import { InteractionError, type InteractionService } from "./interaction-service.js";
-import { instantiateStarter, starterSummaries } from "./starters.js";
+import {
+  instantiateStarter,
+  starterGuideForLocale,
+  starterSummariesForLocale,
+} from "./starters.js";
+import { STARTER_CONTENT_VERSION } from "./starter-localization.js";
+import { StarterLocaleRequestSchema } from "./starter-locale-request.js";
 import type { ProductEventDispatcher } from "./product-events.js";
 import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
 import { TextResponseReadError } from "./response-moderation.js";
@@ -1055,6 +1063,21 @@ export async function registerRoutes(
     };
   });
 
+  app.get("/v1/auth/session", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const session = await auth.sessionFromRequest(request);
+    if (!session) return auth.rejectUnauthenticated(request, reply);
+    return { session };
+  });
+
+  app.post("/v1/auth/session/activity", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const { intent } = SessionActivitySchema.parse(request.body);
+    const session = await auth.sessionFromRequest(request, intent);
+    if (!session) return auth.rejectUnauthenticated(request, reply);
+    return { session };
+  });
+
   app.get("/v1/auth/navigation", async (request, reply) => {
     reply.header("cache-control", "private, no-store");
     const user = await auth.userFromRequest(request);
@@ -1671,7 +1694,8 @@ export async function registerRoutes(
   });
 
   app.post("/v1/auth/logout", async (request, reply) => {
-    await auth.logout(request, reply);
+    const { expectedSessionId } = AuthLogoutSchema.parse(request.body ?? {});
+    if (!(await auth.logout(request, reply, expectedSessionId))) return;
     return { ok: true };
   });
 
@@ -1900,13 +1924,24 @@ export async function registerRoutes(
   app.get("/v1/starters", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    return StartersResponseSchema.parse({ starters: starterSummaries });
+    const { locale } = StarterLocaleRequestSchema.parse(request.query);
+    return {
+      ...StartersResponseSchema.parse({ starters: starterSummariesForLocale(locale) }),
+      contentLocale: locale,
+      contentVersion: STARTER_CONTENT_VERSION,
+    };
   });
   app.get("/v1/starters/:id", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { id } = StarterParamsSchema.parse(request.params);
-    return { draft: instantiateStarter(id) };
+    const { locale } = StarterLocaleRequestSchema.parse(request.query);
+    return {
+      draft: instantiateStarter(id, locale),
+      guide: starterGuideForLocale(id, locale),
+      contentLocale: locale,
+      contentVersion: STARTER_CONTENT_VERSION,
+    };
   });
 
   app.post("/v1/starters/:id/use", async (request, reply) => {
@@ -1914,7 +1949,10 @@ export async function registerRoutes(
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = StarterParamsSchema.parse(request.params);
-    const draft = instantiateStarter(id);
+    const { locale } = StarterLocaleRequestSchema.parse(
+      request.body === undefined ? {} : request.body,
+    );
+    const draft = instantiateStarter(id, locale);
     if ((await requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id)) !== true)
       return;
     const now = new Date();
@@ -1940,7 +1978,12 @@ export async function registerRoutes(
       targetType: "quiz",
       targetId: quiz.id,
       requestId: request.id,
-      metadata: { starterId: id, starterVersion: 1 },
+      metadata: {
+        starterId: id,
+        starterVersion: 1,
+        contentLocale: locale,
+        contentVersion: STARTER_CONTENT_VERSION,
+      },
     });
     return reply.code(201).send({ quiz });
   });

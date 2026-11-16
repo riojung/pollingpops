@@ -1,12 +1,14 @@
 # Reviewed native layout suggestions
 
-Implementation branch: `codex/presentation-layout-suggestions`, from merged selected-text
-assistance baseline `48429d7d10294dc021fe52e9c3f6f38b18687ae1` (PR #206). This bounded authoring
-increment remains undeployed.
+Original proposal: `codex/presentation-layout-suggestions`, from selected-text assistance baseline
+`48429d7d10294dc021fe52e9c3f6f38b18687ae1` (PR #206). The November 9
+`codex/presentation-design-quality` source integrates it into the contextual Layout inspector;
+see the [current design-quality record](presentation-design-quality.md) for qualification of
+that integrated source. The proposal results below are historical, not new validation results.
 
 ## Creator workflow and cost
 
-Choose **Suggest layouts** on a native slide with one title and one body, optionally with one
+In the **Layout** inspector, choose **Suggest layouts** on a native slide with one title and one body, optionally with one
 table. Select among up to three local alternatives, compare the current and selected placements,
 inspect actual rendered-font fit feedback and read complete text/table content. **Apply reviewed
 layout** makes one ordinary, independently undoable frame edit. **Cancel**, Escape and closing
@@ -44,7 +46,7 @@ passes through normal scene/deck validation once without a history coalescing ke
 change keeps review open. Media work and other mutation barriers disable this action. There is
 no independent recovery queue or second draft-writing path.
 
-## Verification
+## Original proposal verification
 
 - Candidate-engine and existing manual-design/template/deck-design suites: **103 tests pass**,
   including 16 new engine cases and all 19 bundled title/lead/table fixtures. Coverage includes
@@ -77,6 +79,6 @@ no independent recovery queue or second draft-writing path.
 
 These are bounded geometry alternatives for the supported text/table compositions. Group-aware
 layout, images/charts/mixed diagrams, typography changes, whole-deck design generation and AI
-layout proposals remain later work. Translation, question suggestions and rich-text rewriting
-also remain planned. Hosted rollout, physical-device/manual accessibility and measured creator
+layout proposals remain later work. Selected plain-text translation and question suggestions were
+implemented in separate later increments; rich-text rewriting remains open. Hosted rollout, physical-device/manual accessibility and measured creator
 task acceptance remain separate from local software verification.

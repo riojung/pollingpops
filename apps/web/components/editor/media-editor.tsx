@@ -1,6 +1,8 @@
 import type { QuestionDraft } from "@openround/contracts";
 import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
+import { authoringWorkflowCopy } from "./authoring-workflow-copy";
+import { creatorWorkflowCopy } from "./creator-workflow-copy";
 import styles from "./media-editor.module.css";
 
 export type MediaEditorState = "idle" | "uploading" | "scanning";
@@ -26,16 +28,27 @@ export function MediaEditor({
   onUpdateQuestion: QuestionUpdater;
   onUploadImage: (file: File | null) => void;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = creatorWorkflowCopy(locale);
+  const authoring = authoringWorkflowCopy(locale);
   return (
-    <div className={styles.container}>
+    <details
+      className={styles.container}
+      open={
+        Boolean(question.mediaId || mediaPreviewUrl || mediaState !== "idle" || uploadBlocked) ||
+        undefined
+      }
+    >
+      <summary className={styles.summary}>
+        {question.mediaId || mediaPreviewUrl ? copy.imageSettings : copy.addImage}
+      </summary>
       <div className={`media-editor ${styles.editor}`} data-has-preview={Boolean(mediaPreviewUrl)}>
         <div className={`field ${styles.fields}`}>
           <label htmlFor="media-alt">{t("delivery.builder.media")}</label>
           <input
             className="input"
             id="media-alt"
-            lang={question.mediaAlt ? "" : "en-CA"}
+            lang={question.mediaAlt ? "" : locale}
             maxLength={300}
             onChange={(event) =>
               onUpdateQuestion((item) => ({
@@ -43,11 +56,11 @@ export function MediaEditor({
                 mediaAlt: event.target.value || null,
               }))
             }
-            placeholder="Describe what the image teaches"
+            placeholder={authoring.imageAlt}
             value={question.mediaAlt ?? ""}
           />
-          <label className={uxBeta ? undefined : "sr-only"} htmlFor="media-upload" lang="en-CA">
-            Choose instructional image
+          <label className={uxBeta ? undefined : "sr-only"} htmlFor="media-upload" lang={locale}>
+            {authoring.chooseImage}
           </label>
           <input
             accept="image/jpeg,image/png,image/webp"
@@ -61,16 +74,16 @@ export function MediaEditor({
             }}
             type="file"
           />
-          <small className="muted" id="media-help" lang="en-CA">
+          <small className="muted" id="media-help" lang={locale}>
             {uploadBlocked
-              ? "Finish or discard the uploaded image attachment before choosing another image."
+              ? authoring.imagePending
               : mediaUploadsEnabled
-                ? "JPEG, PNG, or WebP up to 10 MB. Images are quarantined and scanned before use."
-                : "New image uploads are disabled until this operator configures malware scanning."}
+                ? authoring.imageHelp
+                : authoring.imageDisabled}
           </small>
           {mediaState !== "idle" ? (
-            <span className="notice" lang="en-CA" role="status">
-              {mediaState === "uploading" ? "Uploading to quarantine…" : "Checking image safety…"}
+            <span className="notice" lang={locale} role="status">
+              {mediaState === "uploading" ? authoring.imageUploading : authoring.imageChecking}
             </span>
           ) : null}
         </div>
@@ -90,6 +103,6 @@ export function MediaEditor({
           </div>
         ) : null}
       </div>
-    </div>
+    </details>
   );
 }

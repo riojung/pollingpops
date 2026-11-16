@@ -15,12 +15,15 @@ import {
 } from "../src/presentation-session-response-policy.js";
 import {
   buildPresentationHostSnapshot,
+  buildPresentationStageSnapshot,
+  buildPresentationCompanionSnapshot,
   buildPresentationParticipantSnapshot,
   buildPresentationProjectionData,
   buildTargetedPresentationParticipantSnapshot,
   presentationParticipantBlock,
 } from "../src/presentation-session-projections.js";
 import { generatePresentationReport } from "../src/presentation-reporting.js";
+import { designSceneBlock } from "./support/presentation-native-scene.js";
 
 const correctChoiceId = randomUUID();
 const alternateChoiceId = randomUUID();
@@ -84,6 +87,50 @@ function sessionFor(question: QuestionDraft, timeMode: "timed" | "flex") {
 }
 
 describe("Presentation response policy", () => {
+  it("carries only explicit frozen motion design to inherited question projections and preserves static omission", () => {
+    for (const motionBackground of ["mesh", undefined] as const) {
+      const session = sessionFor(choiceQuestion(), "timed");
+      const slide = designSceneBlock();
+      session.content = PresentationContentSchema.parse({
+        ...session.content,
+        schemaVersion: 17,
+        blocks: [
+          {
+            ...slide,
+            scene: {
+              ...slide.scene,
+              schemaVersion: 8,
+              design: { ...slide.scene.design, ...(motionBackground ? { motionBackground } : {}) },
+            },
+          },
+          ...session.content.blocks,
+        ],
+      });
+      session.currentBlockIndex = 1;
+      const data = buildPresentationProjectionData(session, [], []);
+      const participant = presentationParticipantBlock(session.content.blocks[1]!, session);
+      const host = buildPresentationHostSnapshot(session, data);
+      const stage = buildPresentationStageSnapshot(session, data);
+      const companion = buildPresentationCompanionSnapshot(session, data);
+      const expected = {
+        theme: "midnight",
+        font: "serif",
+        spacing: "relaxed",
+        ...(motionBackground ? { motionBackground } : {}),
+      };
+      for (const block of [
+        participant,
+        host.currentBlock,
+        stage.currentBlock,
+        companion.currentBlock,
+      ]) {
+        expect(block?.design).toEqual(expected);
+        expect(JSON.stringify(block)).not.toContain("PRIVATE");
+        if (!motionBackground) expect(block?.design).not.toHaveProperty("motionBackground");
+      }
+    }
+  });
+
   it("retains the legacy single-poll payload validation behavior", () => {
     const question = choiceQuestion({
       type: "poll",

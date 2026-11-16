@@ -34,7 +34,7 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -51,28 +51,40 @@
   outline-offset: -4px;
 }
 .node h1 {
-  font-size: clamp(20px, 5cqw, 48px);
-  line-height: var(--native-title-leading, 1.08);
+  /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
+     type and padding scale together, so a smaller editor does not change text fit. */
+  font-size: var(--native-node-size, 3.75cqw);
+  line-height: var(--native-node-leading, var(--native-title-leading, 1.08));
+  font-weight: var(--native-node-weight, 700);
+}
+.node[data-native-typography] h1,
+.node p,
+.richBody {
+  color: var(--native-node-color, inherit);
+  font-family: var(--native-node-font, inherit);
+  text-align: var(--native-node-align, inherit);
 }
 .stage[data-native-theme] .node h1 {
-  color: inherit;
+  color: var(--native-node-color, inherit);
   max-width: none;
-  font-family: inherit;
+  font-family: var(--native-node-font, inherit);
 }
 .node p {
-  font-size: clamp(14px, 2.5cqw, 26px);
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: clamp(14px, 2.5cqw, 26px);
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody p {
   width: auto;
@@ -115,7 +127,9 @@
 .shape span {
   position: relative;
   max-width: 85%;
-  font-size: clamp(12px, 2cqw, 22px);
+  font-size: 1.71875cqw;
+  /* Keep fixed-plane label metrics consistent with design-application fit checks. */
+  line-height: 1.35;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -142,6 +156,11 @@
 }
 .canvas {
   min-width: 0;
+}
+.canvas:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 .canvasSurface {
   position: relative;
@@ -182,6 +201,99 @@
 }
 .editableNode {
   cursor: grab;
+}
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.selectionOutline {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 2px solid #1769aa;
+  outline-offset: 0;
+  pointer-events: none;
+}
+.selectionDragBorder {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  background: #1769aa12;
+}
+.selectionDragBorder[data-native-move-border="n"] {
+  inset: -8px 0 auto;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="e"] {
+  inset: 0 -8px 0 auto;
+  width: 8px;
+}
+.selectionDragBorder[data-native-move-border="s"] {
+  inset: auto 0 -8px;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="w"] {
+  inset: 0 auto 0 -8px;
+  width: 8px;
+}
+@media (min-width: 701px) {
+  .stage[data-native-direct-selection="true"] .selected {
+    outline: none;
+  }
+}
+.directResizeHandle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.directResizeHandle::after {
+  content: "";
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #1769aa;
+  background: #fff;
+  transform: rotate(var(--native-handle-angle, 0deg));
+}
+.directResizeHandle[data-native-resize-corner]::after {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+.directResizeHandle[data-native-resize-handle="n"],
+.directResizeHandle[data-native-resize-handle="s"] {
+  cursor: ns-resize;
+}
+.directResizeHandle[data-native-resize-handle="w"],
+.directResizeHandle[data-native-resize-handle="e"] {
+  cursor: ew-resize;
+}
+.directResizeHandle[data-native-resize-handle="nw"],
+.directResizeHandle[data-native-resize-handle="se"] {
+  cursor: nwse-resize;
+}
+.directResizeHandle[data-native-resize-handle="ne"],
+.directResizeHandle[data-native-resize-handle="sw"] {
+  cursor: nesw-resize;
+}
+.directResizeHandle:focus-visible {
+  outline: 3px solid #1769aa;
+  outline-offset: -2px;
+  background: #ffffffcc;
 }
 .handles {
   position: absolute;
@@ -339,7 +451,7 @@
   color: var(--ui-text-muted, #52616f);
 }
 @media (max-width: 700px) {
-  .stage:where(:not([data-native-fixed-layout="true"])) {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) {
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
@@ -347,10 +459,10 @@
     padding: 12px;
     container-type: normal;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .connections {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connections {
     display: none;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .node {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node {
     position: relative !important;
     left: auto !important;
     top: auto !important;
@@ -358,66 +470,89 @@
     height: auto !important;
     transform: none !important;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .groupOutline,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-decorative="true"] {
+    display: none;
+  }
+  .groupOutline,
+  .selectionOverlay,
   .snapGuides {
     display: none;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .node h1,
-  :where(.stage:not([data-native-fixed-layout="true"])) .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     height: auto;
     overflow: visible;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .node h1 {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > p {
+    padding: var(--native-reading-padding, 6px);
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1 {
     font-size: 30px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     font-size: 18px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .richBody {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody {
     height: auto;
     overflow: visible;
     font-size: 18px;
+    padding: var(--native-reading-padding, 6px);
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .richBody p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .shape {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > :is(h1, p, .richBody) {
+    /* Nested rich paragraphs resolve this token rather than inheriting wrapper color. */
+    --native-node-color: var(--native-text, #102a43);
+    color: var(--native-text, #102a43);
+    line-height: 1.45;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > h1 {
+    line-height: 1.2;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .shape span {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape span {
     font-size: 18px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .image {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image {
     min-height: 80px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .image,
-  :where(.stage:not([data-native-fixed-layout="true"])) .image > :not(img) {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image > :not(img) {
     height: auto;
     overflow: visible;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .image img {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image img {
     height: auto;
     max-height: none;
     object-fit: contain;
     object-position: 50% 50%;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .editableNode {
+  .editableNode {
     cursor: auto;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .handles {
+  .handles {
     position: relative;
     inset: auto;
     justify-content: flex-end;
     gap: 3px;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .handles .resizeHandle {
+  .handles .resizeHandle {
     position: static;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .handles button {
+  .handles button {
     touch-action: auto;
     cursor: auto;
   }
-  :where(.stage:not([data-native-fixed-layout="true"])) .connectorSummary {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connectorSummary {
     position: static;
     width: auto;
     height: auto;
@@ -500,6 +635,7 @@
 }
 .interactionToolbar button:focus-visible,
 .interactionAction:focus-visible,
+.interaction:focus-visible,
 .revealBody:focus-visible {
   outline: 3px solid var(--native-link, var(--ui-focus, #1769aa));
   outline-offset: -4px;
@@ -609,6 +745,7 @@
   box-sizing: border-box;
   overflow: visible;
 }
+.outline .node[data-decorative="true"],
 .outline .connections {
   display: none;
 }
@@ -626,6 +763,11 @@
   height: auto;
   overflow: visible;
 }
+.outline .node > h1,
+.outline .node > p,
+.outline .richBody {
+  padding: var(--native-reading-padding, 6px);
+}
 .outline .node h1 {
   font-size: clamp(22px, 5cqw, 36px);
 }
@@ -633,9 +775,20 @@
 .outline .richBody {
   font-size: 16px;
 }
+.outline .node[data-native-typography] > :is(h1, p, .richBody) {
+  --native-node-color: var(--native-text, #102a43);
+  color: var(--native-text, #102a43);
+  line-height: 1.45;
+}
+.outline .node[data-native-typography] > h1 {
+  line-height: 1.2;
+}
 .outline .shape,
 .outline .image {
   min-height: 140px;
+}
+.outline .shape span {
+  font-size: 18px;
 }
 .outline .image img {
   max-height: 400px;
@@ -663,4 +816,150 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Native editor chrome stays separate from the audience slide and its phone reader. */
+.objectToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.objectToolbar .actions button,
+.insertDisclosure > summary,
+.editorDisclosure > summary {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--ui-surface-raised);
+  cursor: pointer;
+}
+
+.objectToolbar .actions button:focus-visible,
+.insertDisclosure > summary:focus-visible,
+.editorDisclosure > summary:focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+
+.insertDisclosure {
+  min-width: 0;
+}
+
+.insertDisclosure[open] {
+  flex-basis: 100%;
+}
+
+.insertDisclosure > summary {
+  width: fit-content;
+}
+
+.insertPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.insertPanel fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.insertPanel legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contextInspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.contextInspector > [data-native-inspector-section] {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.contextInspector > [hidden] {
+  display: none;
+}
+
+.contextInspector .actions button,
+.contextInspector .nodeList button {
+  min-height: 40px;
+}
+
+.contextInspector fieldset + fieldset {
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.selectionSummary {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.selectionSummary label,
+.selectionSummary .help {
+  margin-bottom: 0;
+}
+
+.editorDisclosure > summary {
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .objectToolbar {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .objectToolbar .actions button,
+  .insertDisclosure > summary,
+  .contextInspector .actions button,
+  .contextInspector .nodeList button {
+    min-height: 44px;
+  }
+}
+
+.staticThumbnail {
+  pointer-events: none;
+}
+
+/* Permission boundaries retain the existing normal-flow layout and portaled inspector. */
+.permissionControls {
+  margin: 0;
+  min-inline-size: 0;
+}
+.permissionControls:not(.objectToolbar) {
+  border: 0;
+  padding: 0;
+}
+.permissionControls.objectToolbar {
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.permissionControls[hidden] {
+  display: none;
 }

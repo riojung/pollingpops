@@ -1,70 +1,96 @@
 .description {
-  margin: 0 0 18px;
+  margin: 0 0 12px;
   max-width: 850px;
   color: var(--ui-text-subtle);
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.45;
 }
 .collection {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--workspace-grid-min, 16.5rem)), 1fr)
+  );
+  gap: var(--workspace-card-gap, 0.625rem);
+  align-items: start;
 }
 .card {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 20px;
-  padding: 22px;
+  gap: var(--workspace-card-gap, 0.625rem);
+  padding: var(--workspace-card-padding, 0.875rem);
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--ui-surface-raised);
   box-shadow: var(--ui-shadow-sm);
 }
 
 .cardTopline {
-  display: flex;
-  gap: 14px;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) fit-content(45%);
+  gap: 4px 8px;
   align-items: start;
 }
 .cardTopline > div {
-  min-width: 0;
+  display: contents;
 }
 .cardTopline h2 {
-  margin: 0 0 8px;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
   color: var(--ui-text-strong);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 .cardTopline p {
-  margin: 5px 0 0;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
   color: var(--ui-text-muted);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .cardTopline > span {
-  flex-shrink: 0;
+  grid-column: 2;
+  grid-row: 1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px 10px;
 }
 .metrics > div {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   align-content: start;
-  gap: 4px;
+  gap: 0 5px;
   min-width: 0;
 }
 .metrics strong {
+  min-width: 0;
+  max-width: 100%;
   color: var(--ui-text-strong);
-  font-size: 16px;
-  font-weight: 850;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .metrics span {
   color: var(--ui-text-muted);
   font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.metrics > div > span {
+  min-width: 0;
+  flex: 1 1 4.5rem;
 }
 .metrics strong > span {
   color: inherit;
@@ -73,21 +99,43 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: auto;
+  gap: 6px;
   align-items: center;
+}
+.actions > a,
+.actions > button {
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.actions > .deleteButton {
+  flex: 0 0 auto;
+  min-width: var(--workspace-control-height, 2.25rem);
+  width: var(--workspace-control-height, 2.25rem);
+  padding: 0;
+}
+.deleteButton svg {
+  width: 18px;
+  height: 18px;
 }
 .collection[data-view="list"] {
   grid-template-columns: 1fr;
+  gap: var(--workspace-row-gap, 0.5rem);
 }
 .collection[data-view="list"] .card {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(230px, 1fr) minmax(150px, 0.8fr);
-  gap: 22px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 14px;
   align-items: center;
 }
 .collection[data-view="list"] .actions {
   margin-top: 0;
+  justify-content: end;
 }
 .collection[data-view="list"] .actions:nth-child(2) {
   grid-column: 2 / -1;
@@ -95,11 +143,10 @@
 }
 .empty {
   display: grid;
-  min-height: 240px;
-  padding: 40px 20px;
+  padding: 24px 16px;
   place-items: center;
   align-content: center;
-  gap: 14px;
+  gap: 10px;
   border: 1px dashed var(--ui-border-strong);
   border-radius: 18px;
   text-align: center;
@@ -108,7 +155,7 @@
 .empty h2 {
   margin: 0;
   color: var(--ui-text-strong);
-  font-size: 24px;
+  font-size: 20px;
 }
 .empty p {
   max-width: 520px;
@@ -118,33 +165,37 @@
 .loadMore {
   display: flex;
   justify-content: center;
-  margin-top: 22px;
+  margin-top: 14px;
 }
 
-@media (max-width: 1180px) {
-  .collection[data-view="list"] .card {
-    grid-template-columns: minmax(0, 1.2fr) minmax(230px, 1fr);
-  }
-  .collection[data-view="list"] .actions {
-    grid-column: 1 / -1;
-  }
-  .collection[data-view="list"] .actions:nth-child(2) {
-    grid-column: 2;
-  }
-}
-
-@media (max-width: 620px) {
-  .card {
-    padding: 18px;
-  }
-  .cardTopline {
-    flex-wrap: wrap;
-  }
+@media (max-width: 760px) {
   .collection[data-view="list"] .card {
     display: flex;
     align-items: stretch;
   }
-  .collection[data-view="list"] .actions:nth-child(2) {
+  .collection[data-view="list"] .actions {
     justify-content: start;
+  }
+}
+
+@media (max-width: 380px) {
+  .cardTopline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cardTopline > span {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+}
+
+@media (pointer: coarse) {
+  .actions > a,
+  .actions > button {
+    min-height: 44px;
+  }
+  .actions > .deleteButton {
+    min-width: 44px;
+    width: 44px;
   }
 }

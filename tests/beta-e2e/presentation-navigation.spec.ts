@@ -115,7 +115,7 @@ async function fixture(page: Page, linked: boolean, info: TestInfo) {
     companion.getByRole("button", { name: "Open navigation", exact: true }),
   ).toBeVisible();
   const stagePopup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await stagePopup;
   return {
     sessionId,
@@ -150,7 +150,7 @@ async function audience(browser: Browser, host: Page, code: string, info: TestIn
   );
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill("E07 real browser response");
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
   return { page, context, frames };
 }
@@ -348,7 +348,17 @@ test("host navigation survives lost acknowledgement, returns and reviews saved e
       totalScore: 100,
     });
     await page.goto(`/presentation-session/${f.sessionId}/report`);
-    await expect(page.getByText("Skipped · not presented", { exact: true })).toBeVisible();
+    const skippedEvidence = page
+      .getByRole("region", { name: "Block evidence", exact: true })
+      .getByRole("article")
+      .filter({ has: page.getByRole("heading", { name: f.skipped.question.prompt, exact: true }) });
+    await expect(skippedEvidence).toHaveCount(1);
+    await expect(
+      skippedEvidence.getByText("Skipped · not presented", { exact: true }),
+    ).toBeVisible();
+    await expect(skippedEvidence).toContainText(
+      "This block was never presented. No response or assessment evidence was collected.",
+    );
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

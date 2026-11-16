@@ -1,6 +1,6 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { expect } from "vitest";
-import { PresentationContentSchema } from "@openround/contracts";
+import { PresentationContentSchema, type PresentationContent } from "@openround/contracts";
 import { interactionDocument } from "./presentation-interaction-fixture.js";
 import type { PresentationSessionRepositoryConformanceInput } from "./presentation-session-conformance.js";
 import type { PresentationSessionResponseRecord } from "../../src/index.js";
@@ -10,7 +10,7 @@ export async function expectPresentationOpinionResponseConformance(
   input: Pick<
     PresentationSessionRepositoryConformanceInput,
     "repository" | "workspaceId" | "presentationId" | "presentationVersionId" | "createdBy"
-  > & { schemaVersion?: 9 | 11 },
+  > & { schemaVersion?: 9 | 11 | 17; additionalBlocks?: PresentationContent["blocks"] },
 ) {
   for (const format of [
     "poll",
@@ -55,6 +55,7 @@ export async function expectPresentationOpinionResponseConformance(
           },
         },
         ...(input.schemaVersion === 11 ? interactionDocument().blocks : []),
+        ...(input.additionalBlocks ?? []),
       ],
     });
     const session = await input.repository.createSession({

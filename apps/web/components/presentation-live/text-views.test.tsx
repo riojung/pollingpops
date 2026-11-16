@@ -73,6 +73,50 @@ describe("Presentation text views", () => {
     expect(markup).not.toContain("responseId");
   });
   it.each([
+    { compact: false, largestFont: 40 },
+    { compact: true, largestFont: 24 },
+  ])(
+    "keeps complete stage counts with compact=$compact decorative sizing",
+    ({ compact, largestFont }) => {
+      fixtures.read = {
+        ...publicRead,
+        key: JSON.stringify([
+          "session",
+          "block",
+          "word_cloud",
+          3,
+          7,
+          "question_reveal",
+          "stage",
+          null,
+          0,
+        ]),
+        data: {
+          ...publicRead.data,
+          items: [],
+          terms: [
+            { value: "café f18b536a", label: "café f18b536a", count: 3 },
+            { value: "practice f18b536a", label: "practice f18b536a", count: 2 },
+          ],
+        },
+      };
+      const markup = renderToStaticMarkup(
+        <PresentationTextResults
+          {...props}
+          type="word_cloud"
+          projection="stage"
+          compact={compact}
+        />,
+      );
+      expect(markup).toContain(`font-size:${largestFont}px`);
+      expect(markup).toContain('aria-hidden="true"');
+      expect(markup).toContain("<caption>Word-cloud counts</caption>");
+      expect(markup).toContain('scope="row" lang="">café f18b536a</th><td>3</td>');
+      expect(markup).toContain('scope="row" lang="">practice f18b536a</th><td>2</td>');
+      expect(markup).not.toContain("responseId");
+    },
+  );
+  it.each([
     { seq: 8 },
     { revision: 4 },
     { blockId: "next-block" },

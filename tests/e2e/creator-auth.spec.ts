@@ -42,8 +42,11 @@ test("a new verified account signs in to Home in its default workspace without p
     "/library",
   );
   await expect(
-    page.getByRole("heading", { name: "Everything you are working on, together.", exact: true }),
+    page.getByRole("heading", { name: "Finish your first session", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("Create a draft", { exact: true })).toBeVisible();
+  await expect(page.getByText("Preview and publish", { exact: true })).toBeVisible();
+  await expect(page.getByText("Invite your audience", { exact: true })).toBeVisible();
   const layout = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     width: document.documentElement.scrollWidth,

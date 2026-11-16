@@ -12,6 +12,7 @@ import type {
   QuestionDraft,
 } from "../../packages/contracts/src/index.ts";
 import {
+  clickNavigatorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
@@ -82,7 +83,7 @@ async function contextFor(browser: Browser, host: Page, info: TestInfo) {
 async function participant(page: Page, code: string, nickname: string) {
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill(nickname);
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
 }
 
@@ -661,8 +662,7 @@ for (const suffix of ["", " @mobile"]) {
     const destination = await createE01Deck(page, [], 2);
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, destination.id, narrow);
-    if (narrow) await page.getByRole("button", { name: "Open map", exact: true }).click();
-    await page.getByRole("button", { name: /From published Round/ }).click();
+    await clickNavigatorAction(page, /From published Round/);
     const picker = page.getByRole("dialog", { name: "Insert from a published Round", exact: true });
     await picker
       .getByRole("combobox", { name: "Source Round", exact: true })

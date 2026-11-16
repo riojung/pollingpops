@@ -1,4 +1,6 @@
 "use client";
+import type { SupportedLocale } from "@openround/contracts";
+import { useLocale } from "../../../components/locale-provider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -11,8 +13,9 @@ import { surveyMutationKey } from "../../../lib/survey-client";
 
 function CreateSurvey() {
   const router = useRouter();
+  const { locale } = useLocale();
   const { canEdit, productFeatures } = useWorkspace();
-  const key = useRef("");
+  const pending = useRef<{ idempotencyKey: string; locale: SupportedLocale } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -51,11 +54,11 @@ function CreateSurvey() {
               onClick={async () => {
                 setBusy(true);
                 setError("");
-                key.current ||= surveyMutationKey();
+                pending.current ??= { idempotencyKey: surveyMutationKey(), locale };
                 try {
                   const { survey } = await apiFetch<{ survey: { id: string } }>("/v1/surveys", {
                     method: "POST",
-                    body: JSON.stringify({ idempotencyKey: key.current }),
+                    body: JSON.stringify(pending.current),
                   });
                   router.push(`/surveys/${survey.id}`);
                 } catch (caught) {

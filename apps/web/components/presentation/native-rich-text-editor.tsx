@@ -6,6 +6,7 @@ import {
   presentationRichTextToPlainText,
   type PresentationRichText,
   type PresentationSceneNode,
+  type SupportedLocale,
 } from "@openround/contracts";
 import {
   editNativeRichText,
@@ -14,7 +15,15 @@ import {
   setNativeRichTextParagraphKind,
   toggleNativeRichTextMark,
 } from "../../lib/presentation-rich-text";
-import styles from "./native-scene.module.css";
+import {
+  nativeTextVideoCopy,
+  nativeTextVideoValidationFeedback,
+  type NativeTextVideoFeedback,
+} from "./native-text-video-copy";
+import { formatNumber } from "../../lib/i18n/format";
+import { EditorIcon } from "./presentation-editor-chrome";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
+import styles from "./native-rich-text-editor.module.css";
 
 type TextNode = Extract<PresentationSceneNode, { type: "text" }>;
 
@@ -23,12 +32,15 @@ export function NativeRichTextEditor({
   onChange,
   onUndo,
   onRedo,
+  locale = "en-CA",
 }: {
   node: TextNode;
   onChange: (node: TextNode, field?: string) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  locale?: SupportedLocale;
 }) {
+  const copy = nativeTextVideoCopy(locale);
   const input = useRef<HTMLTextAreaElement>(null);
   const range = useRef({ start: 0, end: 0 });
   const beforeInput = useRef<{ text: string; start: number; end: number } | null>(null);
@@ -37,10 +49,27 @@ export function NativeRichTextEditor({
   const restoreEpoch = useRef(0);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [link, setLink] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<NativeTextVideoFeedback | null>(null);
   const richText = node.richText!;
-  const label = node.role === "title" ? "Native slide title" : "Node text";
+  const label = copy(node.role === "title" ? "Native slide title" : "Node text");
   const hasSelection = selection.end > selection.start;
+  const limit = node.role === "title" ? 160 : 4000;
+  const textInputId = `native-rich-text-${node.id}`;
+  const linkInputId = `${textInputId}-link`;
+  const countId = `${textInputId}-count`;
+  let paragraphOffset = 0;
+  const selectedParagraphKinds = new Set(
+    richText.paragraphs.flatMap((paragraph) => {
+      const start = paragraphOffset;
+      const end = start + paragraph.runs.reduce((length, run) => length + run.text.length, 0);
+      paragraphOffset = end + 1;
+      const selected = hasSelection
+        ? start < selection.end && end >= selection.start
+        : selection.start >= start && selection.start <= end;
+      return selected ? [paragraph.kind] : [];
+    }),
+  );
+  const paragraphKind = selectedParagraphKinds.size === 1 ? [...selectedParagraphKinds][0] : "";
 
   const cancelRestore = useCallback(() => {
     if (pendingRestore.current === null) return;
@@ -72,10 +101,10 @@ export function NativeRichTextEditor({
         consumedHistoryInput.current = inputType;
         const action = inputType === "historyUndo" ? onUndo : onRedo;
         if (action) {
-          setError("");
+          setError(null);
           action();
         } else {
-          setError("Undo and Redo are unavailable in this view.");
+          setError({ key: "Undo and Redo are unavailable in this view." });
         }
         return;
       }
@@ -111,10 +140,10 @@ export function NativeRichTextEditor({
     beforeInput.current = null;
     const action = redo ? onRedo : onUndo;
     if (action) {
-      setError("");
+      setError(null);
       action();
     } else {
-      setError("Undo and Redo are unavailable in this view.");
+      setError({ key: "Undo and Redo are unavailable in this view." });
     }
   }
 
@@ -132,53 +161,160 @@ export function NativeRichTextEditor({
         text: presentationRichTextToPlainText(richText),
         richText,
       }) as TextNode;
-      setError("");
+      setError(null);
       if (JSON.stringify(next) !== JSON.stringify(node)) onChange(next, field);
       if (restore) {
-        const { start, end } = range.current;
-        cancelRestore();
-        const epoch = restoreEpoch.current;
-        // Formatting controls may take focus, but they operate on the remembered text range.
-        pendingRestore.current = requestAnimationFrame(() => {
-          if (epoch !== restoreEpoch.current) return;
-          pendingRestore.current = null;
-          const element = input.current;
-          if (!element) return;
-          element.focus({ preventScroll: true });
-          element.setSelectionRange(start, end);
-          const next = { start: element.selectionStart, end: element.selectionEnd };
-          range.current = next;
-          setSelection((current) =>
-            current.start === next.start && current.end === next.end ? current : next,
-          );
-        });
+        restoreSelection();
       }
     } catch (caught) {
       setError(
-        caught instanceof Error && !("issues" in caught)
-          ? caught.message
-          : "This text change exceeds the formatting limits or contains unsupported characters. Shorten it or remove some formatting and try again.",
+        nativeTextVideoValidationFeedback(
+          caught,
+          "This text change exceeds the formatting limits or contains unsupported characters. Shorten it or remove some formatting and try again.",
+        ),
       );
     }
+  }
+  function restoreSelection() {
+    const { start, end } = range.current;
+    cancelRestore();
+    const epoch = restoreEpoch.current;
+    // Object typography and inline formatting both retain the last deliberate text range.
+    pendingRestore.current = requestAnimationFrame(() => {
+      if (epoch !== restoreEpoch.current) return;
+      pendingRestore.current = null;
+      const element = input.current;
+      if (!element) return;
+      element.focus({ preventScroll: true });
+      element.setSelectionRange(start, end);
+      const next = { start: element.selectionStart, end: element.selectionEnd };
+      range.current = next;
+      setSelection((current) =>
+        current.start === next.start && current.end === next.end ? current : next,
+      );
+    });
   }
   function mark(kind: "bold" | "italic") {
     apply(() => toggleNativeRichTextMark(richText, range.current.start, range.current.end, kind));
   }
   return (
     <div
-      className={styles.richEditor}
+      lang={locale}
+      className={styles.editor}
       onFocusCapture={cancelRestore}
       onBlurCapture={cancelRestore}
       onPointerDownCapture={cancelRestore}
       onKeyDownCapture={cancelRestore}
     >
-      <label>
-        {label}
+      <div className={styles.heading}>
+        <label className={styles.textLabel} htmlFor={textInputId}>
+          {label}
+        </label>
+        <span className={styles.characterCount} id={countId}>
+          {formatNumber(locale, node.text.length)} / {formatNumber(locale, limit)}
+        </span>
+      </div>
+      <NativeSceneTypographyControls
+        node={node}
+        locale={locale}
+        onChange={(next, field) => {
+          setError(null);
+          onChange(next, field);
+        }}
+      />
+      <div className={styles.writingSurface}>
+        <div className={styles.toolbar} role="group" aria-label={copy("Text formatting")}>
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={copy("Bold")}
+            title={copy("Bold")}
+            disabled={!hasSelection}
+            aria-pressed={nativeRichTextSelectionHasMark(
+              richText,
+              selection.start,
+              selection.end,
+              "bold",
+            )}
+            onClick={() => mark("bold")}
+          >
+            <EditorIcon name="bold" />
+            <span className={styles.screenReaderOnly}>{copy("Bold")}</span>
+          </button>
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={copy("Italic")}
+            title={copy("Italic")}
+            disabled={!hasSelection}
+            aria-pressed={nativeRichTextSelectionHasMark(
+              richText,
+              selection.start,
+              selection.end,
+              "italic",
+            )}
+            onClick={() => mark("italic")}
+          >
+            <EditorIcon name="italic" />
+            <span className={styles.screenReaderOnly}>{copy("Italic")}</span>
+          </button>
+          <label className={styles.paragraphField}>
+            <span className={styles.screenReaderOnly}>{copy("Paragraph style")}</span>
+            <select
+              className={styles.paragraphSelect}
+              aria-label={copy("Paragraph style")}
+              title={copy("Paragraph style")}
+              value={paragraphKind}
+              onChange={(event) => {
+                const kind = event.target.value as "paragraph" | "bullet" | "numbered";
+                if (!kind) return;
+                apply(() =>
+                  setNativeRichTextParagraphKind(
+                    richText,
+                    range.current.start,
+                    range.current.end,
+                    kind,
+                  ),
+                );
+              }}
+            >
+              <option value="">{copy("Choose for selected paragraphs")}</option>
+              <option value="paragraph">{copy("Paragraph")}</option>
+              {node.role !== "title" ? (
+                <option value="bullet">{copy("Bulleted list")}</option>
+              ) : null}
+              {node.role !== "title" ? (
+                <option value="numbered">{copy("Numbered list")}</option>
+              ) : null}
+            </select>
+          </label>
+          <span className={styles.divider} aria-hidden="true" />
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={copy("Remove formatting")}
+            title={copy("Remove formatting")}
+            onClick={() => {
+              const { richText: _richText, ...plain } = node;
+              void _richText;
+              setError(null);
+              onChange(plain);
+            }}
+          >
+            <EditorIcon name="remove-format" />
+            <span className={styles.screenReaderOnly}>{copy("Remove formatting")}</span>
+          </button>
+        </div>
         <textarea
+          lang={node.lang ?? ""}
           ref={input}
+          id={textInputId}
+          className={styles.textInput}
           data-native-text-input="true"
+          data-text-role={node.role}
           aria-label={label}
-          maxLength={node.role === "title" ? 160 : 4000}
+          aria-describedby={countId}
+          maxLength={limit}
           value={node.text}
           onSelect={remember}
           onKeyUp={remember}
@@ -241,109 +377,63 @@ export function NativeRichTextEditor({
             apply(() => editNativeRichText(richText, value, { start, end }), "text");
           }}
         />
-      </label>
-      <div className={styles.formatToolbar} aria-label="Text formatting">
-        <button
-          type="button"
-          disabled={!hasSelection}
-          aria-pressed={nativeRichTextSelectionHasMark(
-            richText,
-            selection.start,
-            selection.end,
-            "bold",
-          )}
-          onClick={() => mark("bold")}
-        >
-          Bold
-        </button>
-        <button
-          type="button"
-          disabled={!hasSelection}
-          aria-pressed={nativeRichTextSelectionHasMark(
-            richText,
-            selection.start,
-            selection.end,
-            "italic",
-          )}
-          onClick={() => mark("italic")}
-        >
-          Italic
-        </button>
-        <label>
-          Paragraph style
-          <select
-            aria-label="Paragraph style"
-            value=""
-            onChange={(event) => {
-              const kind = event.target.value as "paragraph" | "bullet" | "numbered";
-              if (!kind) return;
-              apply(() =>
-                setNativeRichTextParagraphKind(
-                  richText,
-                  range.current.start,
-                  range.current.end,
-                  kind,
-                ),
-              );
-            }}
-          >
-            <option value="">Choose for selected paragraphs</option>
-            <option value="paragraph">Paragraph</option>
-            {node.role !== "title" ? <option value="bullet">Bulleted list</option> : null}
-            {node.role !== "title" ? <option value="numbered">Numbered list</option> : null}
-          </select>
-        </label>
       </div>
-      <label>
-        Link address
-        <input
-          aria-label="Link address"
-          type="url"
-          placeholder="https://example.com"
-          maxLength={2048}
-          value={link}
-          onChange={(event) => setLink(event.target.value)}
-        />
-      </label>
-      <div className={styles.formatToolbar}>
-        <button
-          type="button"
-          disabled={!hasSelection || !link}
-          onClick={() =>
-            apply(() => linkNativeRichText(richText, range.current.start, range.current.end, link))
-          }
-        >
-          Apply link
-        </button>
-        <button
-          type="button"
-          disabled={!hasSelection}
-          onClick={() =>
-            apply(() => linkNativeRichText(richText, range.current.start, range.current.end, null))
-          }
-        >
-          Remove link
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const { richText: _richText, ...plain } = node;
-            void _richText;
-            setError("");
-            onChange(plain);
-          }}
-        >
-          Remove formatting
-        </button>
+      <div className={styles.linkControls}>
+        <label className={styles.linkLabel} htmlFor={linkInputId}>
+          {copy("Link address")}
+        </label>
+        <div className={styles.linkRow}>
+          <input
+            lang=""
+            id={linkInputId}
+            className={styles.linkInput}
+            aria-label={copy("Link address")}
+            type="url"
+            placeholder="https://example.com"
+            maxLength={2048}
+            value={link}
+            onChange={(event) => setLink(event.target.value)}
+          />
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={copy("Apply link")}
+            title={copy("Apply link")}
+            disabled={!hasSelection || !link}
+            onClick={() =>
+              apply(() =>
+                linkNativeRichText(richText, range.current.start, range.current.end, link),
+              )
+            }
+          >
+            <EditorIcon name="link" />
+            <span className={styles.screenReaderOnly}>{copy("Apply link")}</span>
+          </button>
+          <button
+            type="button"
+            className={styles.iconButton}
+            aria-label={copy("Remove link")}
+            title={copy("Remove link")}
+            disabled={!hasSelection}
+            onClick={() =>
+              apply(() =>
+                linkNativeRichText(richText, range.current.start, range.current.end, null),
+              )
+            }
+          >
+            <EditorIcon name="unlink" />
+            <span className={styles.screenReaderOnly}>{copy("Remove link")}</span>
+          </button>
+        </div>
       </div>
       <p className={styles.help}>
-        Select text before applying emphasis or a link. Paragraph style applies to the current or
-        selected paragraphs. Pasting adds plain text; existing text keeps its formatting. Links open
-        in a new tab when presenting or previewing.
+        {copy(
+          "Select text before applying emphasis or a link. Paragraph style applies to the current or selected paragraphs. Pasting adds plain text; existing text keeps its formatting. Links open in a new tab when presenting or previewing.",
+        )}
       </p>
       {error ? (
-        <p role="alert" className={styles.formatError}>
-          {error}
+        <p role="alert" className={styles.formatError} lang={error.key ? locale : "en-CA"}>
+          {error.key ? copy(error.key) : error.diagnostic}
         </p>
       ) : null}
     </div>

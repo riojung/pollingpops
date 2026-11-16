@@ -1,3 +1,8 @@
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import type * as ReactModule from "react";
+import type * as ApiModule from "../../lib/api";
+import { hookHarness, flushPromises } from "../canvas-artifact-links/test-support";
+import { packInsertionCopy } from "../../lib/i18n/pack-insertion-copy";
 import { randomUUID } from "node:crypto";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -5,11 +10,21 @@ import {
   recoveryPackContentHash,
   type RecoveryPackInsertion,
 } from "@openround/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   RecoveryPackPresentationPicker,
   RecoveryPackPresentationReferences,
 } from "./recovery-pack-insertion";
+
+const mocked = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock("../../lib/api", async (original) => ({
+  ...(await original<typeof ApiModule>()),
+  apiFetch: mocked.fetch,
+}));
+vi.mock("react", async (original) => {
+  const { hookReact } = await import("../canvas-artifact-links/test-support");
+  return hookReact(await original<typeof ReactModule>());
+});
 
 function insertion(): RecoveryPackInsertion {
   const recheckId = randomUUID();
@@ -175,5 +190,158 @@ describe("Presentation Recovery Pack authoring", () => {
     expect(markup).toContain("without creating another copy");
     expect(markup).toContain('<button disabled="" type="button">Cancel</button>');
     expect(markup).not.toContain("Open Recovery Pack library");
+  });
+});
+
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+
+describe("mounted localized Presentation picker", () => {
+  it("retains the selected immutable version across locale changes and exposes authored content without relabeling its language", async () => {
+    const pack = insertion();
+    mocked.fetch.mockReset().mockImplementation(async (path: string) =>
+      path === "/v1/recovery-packs"
+        ? {
+            packs: [
+              {
+                id: pack.packId,
+                title: pack.originalContent.title,
+                currentVersionId: pack.packVersionId,
+              },
+            ],
+          }
+        : { version: { id: pack.packVersionId, version: 2, content: pack.originalContent } },
+    );
+    vi.stubGlobal("document", { activeElement: null });
+    vi.stubGlobal("HTMLElement", class {});
+    const props: Parameters<typeof RecoveryPackPresentationPicker>[0] = {
+      locale: "ko-KR",
+      busy: false,
+      error: "",
+      retryVersionId: null,
+      afterSelectedBlock: false,
+      onInsert: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const view = hookHarness(() => RecoveryPackPresentationPicker(props));
+    try {
+      view.render();
+      await flushPromises();
+      view.render();
+      await flushPromises();
+      const initial = view.render();
+      expect(mocked.fetch).toHaveBeenCalledTimes(2);
+      const html = renderToStaticMarkup(initial);
+      expect(html).toContain('role="dialog"');
+      expect(html).toContain('lang="ko-KR"');
+      expect(html).toContain('aria-label="게시된 Pack 미리보기"');
+      expect(html).toContain('<dd lang="">What is half of 8?</dd>');
+      expect(html).toContain('lang="" value="' + pack.packId + '"');
+      props.locale = "de-DE";
+      const tree = view.render();
+      expect(mocked.fetch).toHaveBeenCalledTimes(2);
+      const insert = elements(tree).find(
+        (element) =>
+          element.type === "button" &&
+          element.props.children === packInsertionCopy("de-DE")("Insert Pack checkpoints"),
+      )!;
+      expect(insert.props.disabled).toBe(false);
+      (insert.props.onClick as () => void)();
+      expect(props.onInsert).toHaveBeenCalledWith(pack.packVersionId);
+      props.retryVersionId = pack.packVersionId;
+      props.error = "Save the latest Presentation changes before inserting a Pack.";
+      const retryTree = view.render(),
+        retryHtml = renderToStaticMarkup(retryTree);
+      expect(retryHtml).toContain('role="alert" lang="de-DE"');
+      expect(retryHtml).not.toContain("Open Recovery Pack library");
+      expect(elements(retryTree).find((element) => element.type === "select")?.props.disabled).toBe(
+        true,
+      );
+      const retry = elements(retryTree).find(
+        (element) =>
+          element.type === "button" &&
+          element.props.children === packInsertionCopy("de-DE")("Retry Pack insertion"),
+      )!;
+      (retry.props.onClick as () => void)();
+      expect(props.onInsert).toHaveBeenNthCalledWith(2, pack.packVersionId);
+      props.error = "Unknown diagnostic — private source id";
+      expect(renderToStaticMarkup(view.render())).toContain(
+        'role="alert" lang="en-CA">Unknown diagnostic — private source id',
+      );
+    } finally {
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+  it("traps keyboard focus, blocks Escape for an outstanding receipt, and restores the opener", () => {
+    const opener = { focus: vi.fn() },
+      first = { focus: vi.fn(), offsetParent: {} },
+      last = { focus: vi.fn(), offsetParent: {} };
+    class Element {}
+    Object.setPrototypeOf(opener, Element.prototype);
+    const documentStub = { activeElement: opener as unknown };
+    vi.stubGlobal("HTMLElement", Element);
+    vi.stubGlobal("document", documentStub);
+    mocked.fetch.mockReset().mockReturnValue(new Promise(() => undefined));
+    const props: Parameters<typeof RecoveryPackPresentationPicker>[0] = {
+      busy: false,
+      error: "",
+      retryVersionId: "exact-version",
+      afterSelectedBlock: true,
+      onInsert: vi.fn(),
+      onClose: vi.fn(),
+      locale: "ko-KR",
+    };
+    const view = hookHarness(() => RecoveryPackPresentationPicker(props));
+    try {
+      const event = {
+        key: "Escape",
+        shiftKey: false,
+        preventDefault: vi.fn(),
+        currentTarget: { querySelectorAll: () => [first, last], focus: vi.fn() },
+      };
+      const key = () =>
+        elements(view.render()).find((element) => element.props.role === "dialog")!.props
+          .onKeyDown as (event: unknown) => void;
+      key()(event);
+      expect(props.onClose).not.toHaveBeenCalled();
+      props.retryVersionId = null;
+      props.busy = true;
+      key()(event);
+      expect(props.onClose).not.toHaveBeenCalled();
+      props.busy = false;
+      key()(event);
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+      event.key = "Tab";
+      documentStub.activeElement = last;
+      key()(event);
+      expect(first.focus).toHaveBeenCalledOnce();
+      event.shiftKey = true;
+      documentStub.activeElement = first;
+      key()(event);
+      expect(last.focus).toHaveBeenCalledOnce();
+      props.locale = "de-DE";
+      view.render();
+      expect(opener.focus).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      expect(opener.focus).toHaveBeenCalledOnce();
+      vi.unstubAllGlobals();
+    }
+  });
+  it("localizes frozen reference chrome while retaining original citations and accepted content", () => {
+    const pack = insertion();
+    const html = renderToStaticMarkup(
+      <RecoveryPackPresentationReferences locale="ko-KR" insertions={[pack]} />,
+    );
+    expect(html).toContain('aria-label="Recovery Pack 진행자 참조"');
+    expect(html).toContain('<h2 lang="">Compare &lt; quantities</h2>');
+    expect(html).toContain('aria-label="카드 인용"');
+    expect(html).toContain('lang="">Teacher &lt; notes, p. 2 — Equal groups');
+    expect(html).toContain("버전 2");
+    expect(pack.originalContent.diagnostic.prompt).toBe("What is half of 8?");
   });
 });

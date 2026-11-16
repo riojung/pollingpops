@@ -8,7 +8,7 @@ export const PRESENTATION_STATIC_EXPORT_LIMITS = {
   maxImageTotalBytes: 40 * 1024 * 1024,
   maxOutputBytes: 40 * 1024 * 1024,
 } as const;
-export const PresentationStaticExportFormatSchema = z.enum(["pdf", "png", "html"]);
+export const PresentationStaticExportFormatSchema = z.enum(["pdf", "png", "html", "offline_html"]);
 export type PresentationStaticExportFormat = z.infer<typeof PresentationStaticExportFormatSchema>;
 export const PresentationStaticExportRequestSchema = z
   .object({
@@ -35,7 +35,7 @@ export const PresentationStaticExportRequestSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["blockId"],
-        message: "PDF and HTML export the complete published deck",
+        message: "PDF, readable HTML and offline HTML export the complete published deck",
       });
   });
 export type PresentationStaticExportRequest = z.infer<typeof PresentationStaticExportRequestSchema>;

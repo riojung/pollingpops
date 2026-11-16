@@ -11,10 +11,13 @@ import {
   type PresentationStageSnapshot,
 } from "../../packages/contracts/src/index.ts";
 import {
+  closeE01Overlays,
+  clickEditorAction,
   createE01Deck,
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
+  openE01Navigator,
   readE01Record,
 } from "./presentation-e01-support";
 import { signInBeta } from "./sign-in";
@@ -54,7 +57,7 @@ function checkpoint(prompt: string): InteractiveQuestionBlockDraft {
 }
 
 async function openArrange(page: Page) {
-  await page.getByRole("button", { name: "Arrange space", exact: true }).click();
+  await clickEditorAction(page, "Arrange space");
   const dialog = page.getByRole("dialog", { name: "Arrange space", exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -118,6 +121,9 @@ async function createFixture(page: Page, info: TestInfo) {
     )
     .toMatchObject({ x: 18000, y: 17000, width: 1600, height: 900 });
   await arrange.getByRole("button", { name: "Close arrange space", exact: true }).click();
+  await closeE01Overlays(page);
+  const moreOptions = page.locator('summary[aria-label="More options"]');
+  if ((await moreOptions.locator("..").getAttribute("open")) !== null) await moreOptions.click();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect
     .poll(
@@ -137,7 +143,7 @@ async function createFixture(page: Page, info: TestInfo) {
     )
     .toBe(1600);
   await page.reload();
-  if (narrow) await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
+  if (narrow) await closeE01Overlays(page);
   arrange = await openArrange(page);
   await arrange
     .getByRole("combobox", { name: "Selected frame", exact: true })
@@ -203,17 +209,23 @@ async function createFixture(page: Page, info: TestInfo) {
   await preview.getByRole("button", { name: "Next", exact: true }).click();
   await expect(spatialPanel(page)).toContainText("Page 2 of 4");
   await preview.getByRole("button", { name: "Close preview", exact: true }).click();
-  const map = page.getByRole("complementary", { name: "Presentation map", exact: true });
-  if (!(await map.isVisible()))
-    await page.getByRole("button", { name: "Open map", exact: true }).click();
-  await page.getByRole("button", { name: "Add section", exact: true }).click();
-  await page.getByLabel("Section 1 name", { exact: true }).fill(sectionMarker);
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
-  await page
-    .getByRole("combobox", { name: "Selected block section", exact: true })
+  const map = await openE01Navigator(page);
+  await map.locator(`[data-slide-id="${closing.id}"]`).getByRole("button").first().click();
+  const sectionTools = map.getByRole("region", { name: "Sections and navigation", exact: true });
+  await sectionTools.getByRole("button", { name: "Add section", exact: true }).click();
+  const sectionName = sectionTools.getByRole("textbox", { name: "Section name", exact: true });
+  await sectionName.fill(sectionMarker);
+  await sectionName.press("Enter");
+  await sectionTools
+    .getByRole("combobox", { name: "Selected slide section", exact: true })
     .selectOption({ label: sectionMarker });
   await expect
-    .poll(async () => (await readE01Record(page, record.id)).draft.sections?.[0]?.blockIds)
+    .poll(
+      async () =>
+        (await readE01Record(page, record.id)).draft.sections?.find(
+          (section) => section.title === sectionMarker,
+        )?.blockIds,
+    )
     .toContain(closing.id);
   if (narrow) await page.getByRole("button", { name: "Collapse map", exact: true }).click();
   const publishing = page.waitForResponse(
@@ -306,7 +318,7 @@ async function createFixture(page: Page, info: TestInfo) {
   const companion = await companionPopup;
   await expect(spatialPanel(companion)).toBeVisible();
   const stagePopup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await stagePopup;
   await stage.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
   return {
@@ -344,7 +356,7 @@ async function join(browser: Browser, host: Page, code: string, info: TestInfo) 
   );
   await page.goto(`/join?code=${code}`);
   await page.getByLabel("Nickname", { exact: true }).fill("E10 synthetic participant");
-  await page.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+  await page.getByRole("button", { name: "Join presentation", exact: true }).click();
   await expect(page).toHaveURL(/\/presentation-session\/[^/]+\/play$/);
   return { context, page, frames };
 }
@@ -585,6 +597,7 @@ for (const suffix of ["", " @mobile"]) {
       if (!originalResponseControl) throw new Error("Unsent response control must be mounted");
       const beforeLocal = windowState(await hostSnapshot(page, fixture.sessionId));
       const panel = spatialPanel(guest.page);
+      await panel.locator("summary").click();
       const overviewButton = panel.getByRole("button", { name: "Show overview", exact: true });
       await overviewButton.focus();
       await overviewButton.press("Enter");
@@ -594,6 +607,7 @@ for (const suffix of ["", " @mobile"]) {
       await expect(selected).toHaveAttribute("aria-pressed", "true");
       await panel.getByRole("button", { name: "Use spatial view", exact: true }).click();
       await panel.getByRole("button", { name: "Focus current page", exact: true }).click();
+      await guest.page.keyboard.press("Escape");
       await expect(selected).toHaveAttribute("aria-pressed", "true");
       expect(
         await selected.evaluate(

@@ -49,4 +49,58 @@ describe("published Presentation static export requests", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts offline HTML only as a strict whole-deck request with a canonical published version identity", () => {
+    const versionId = "abcdef12-3456-4789-8abc-def012345678";
+    expect(
+      PresentationStaticExportRequestSchema.parse({
+        versionId: versionId.toUpperCase(),
+        format: "offline_html",
+      }),
+    ).toEqual({ versionId, format: "offline_html" });
+    for (const input of [
+      { versionId, format: "offline_html", blockId: randomUUID() },
+      { versionId, format: "offline_html", blockId: null },
+      { versionId, format: "offline_html", speakerNotes: true },
+      { versionId, format: "offline_html", includeAnswers: true },
+      { versionId, format: "offline-html" },
+      { versionId, format: "OFFLINE_HTML" },
+      { versionId, format: "interactive_html" },
+    ])
+      expect(PresentationStaticExportRequestSchema.safeParse(input).success).toBe(false);
+    const result = PresentationStaticExportRequestSchema.safeParse({
+      versionId,
+      format: "offline_html",
+      blockId: randomUUID(),
+    });
+    if (result.success) throw new Error("Expected whole-deck-only validation");
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["blockId"],
+        message: expect.stringContaining("offline HTML"),
+      }),
+    );
+  });
+
+  it("retains the canonical request bytes and page-selection behavior of existing PDF, PNG and readable HTML", () => {
+    const versionId = "abcdef12-3456-4789-8abc-def012345678",
+      blockId = "fedcba98-7654-4321-8fed-cba987654321";
+    for (const format of ["pdf", "png", "html"] as const) {
+      const input = {
+        versionId: versionId.toUpperCase(),
+        format,
+        ...(format === "png" ? { blockId: blockId.toUpperCase() } : {}),
+      };
+      const expected = { versionId, format, ...(format === "png" ? { blockId } : {}) };
+      expect(JSON.stringify(PresentationStaticExportRequestSchema.parse(input))).toBe(
+        JSON.stringify(expected),
+      );
+      expect(
+        PresentationStaticExportRequestSchema.safeParse({ versionId, format, blockId }).success,
+      ).toBe(format === "png");
+      expect(PresentationStaticExportRequestSchema.safeParse({ versionId, format }).success).toBe(
+        format !== "png",
+      );
+    }
+  });
 });

@@ -1,5 +1,7 @@
+import console from "node:console";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import process from "node:process";
 
 const root = process.cwd();
 const packageDirectories = ["apps", "packages"].flatMap((parent) => {
@@ -56,8 +58,17 @@ for (const entry of packagesByName.values()) {
   const dockerfilePath = join(entry.directory, "Dockerfile");
   if (!existsSync(dockerfilePath)) continue;
   const dockerfile = readFileSync(dockerfilePath, "utf8");
-  const installAt = dockerfile.indexOf("RUN pnpm install");
-  const buildAt = dockerfile.indexOf(`RUN pnpm --filter ${entry.manifest.name} build`);
+  // A BuildKit store mount changes the RUN prefix, not the workspace input contract.
+  const installAt = dockerfile.search(
+    /^RUN[ \t]+(?:--mount=type=cache,[^\s]+[ \t]+)?pnpm install --frozen-lockfile(?:[ \t]|$)/m,
+  );
+  const packageName = entry.manifest.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const buildAt = dockerfile.search(
+    new RegExp(
+      `^RUN[ \\t]+(?:--mount=type=cache,[^\\s]+[ \\t]+)?pnpm --filter ${packageName} build(?:[ \\t]|$)`,
+      "m",
+    ),
+  );
   if (installAt < 0 || buildAt < installAt) {
     errors.push(`${portablePath(dockerfilePath)} must install dependencies before its build step`);
     continue;

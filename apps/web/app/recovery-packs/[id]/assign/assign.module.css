@@ -1,0 +1,63 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.page > p {
+  margin: 0;
+}
+
+.page button,
+.page select,
+.page input,
+.page textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.page button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.page > button {
+  justify-self: start;
+}
+
+.modeCard {
+  min-width: 0;
+  margin: 0;
+}
+
+.modeCard legend {
+  color: var(--ui-text-strong);
+  font-weight: 700;
+  padding-inline: 0.35rem;
+}
+
+.settingsFields {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.settingsFields > legend {
+  padding: 0;
+}
+
+.settingsFields fieldset > legend {
+  margin-bottom: 0.65rem;
+}
+
+.page summary:focus-visible,
+.page button:focus-visible,
+.page select:focus-visible,
+.page input:focus-visible,
+.page textarea:focus-visible,
+.page [tabindex="-1"]:focus {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}

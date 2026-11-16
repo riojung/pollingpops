@@ -5,10 +5,13 @@ import {
   PRESENTATION_SCENE_MAX_BYTES,
   PresentationSceneDraftSchema,
   type PresentationScene,
+  type SupportedLocale,
 } from "@openround/contracts";
+import * as nativeVideo from "../../lib/presentation-native-video";
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
 import { createNativeChartNode, createNativeTableNode } from "../../lib/presentation-native-data";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
+import { nativeTextVideoCopy, type NativeTextVideoCopyKey } from "./native-text-video-copy";
 
 const mocked = vi.hoisted(() => ({ hooks: null as { cursor: number; slots: unknown[] } | null }));
 vi.mock("react", async (original) => {
@@ -34,6 +37,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   mocked.hooks = null;
+  vi.restoreAllMocks();
 });
 
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
@@ -85,6 +89,7 @@ function fullScene(): PresentationScene {
 
 function harness(initial = sceneFixture(), accept?: () => boolean | void, canAdd = true) {
   let scene = initial;
+  let locale: SupportedLocale = "en-CA";
   let tree: ReactNode;
   const onSelect = vi.fn();
   const onChange = vi.fn((next: PresentationScene) => {
@@ -93,11 +98,12 @@ function harness(initial = sceneFixture(), accept?: () => boolean | void, canAdd
   });
   function render() {
     mocked.hooks!.cursor = 0;
-    tree = NativeSceneVideoControls({ scene, canAdd, onChange, onSelect });
+    tree = NativeSceneVideoControls({ scene, canAdd, onChange, onSelect, locale });
   }
-  function input(label: string) {
+  function input(label: NativeTextVideoCopyKey) {
     const field = elements(tree).find(
-      (element) => element.type === "label" && text(element).startsWith(label),
+      (element) =>
+        element.type === "label" && text(element).startsWith(nativeTextVideoCopy(locale)(label)),
     );
     const found = elements(field).find((element) => element.type === "input");
     if (!found) throw new Error(`Missing ${label}`);
@@ -113,13 +119,23 @@ function harness(initial = sceneFixture(), accept?: () => boolean | void, canAdd
     onChange,
     onSelect,
     render,
+    setLocale(next: SupportedLocale) {
+      locale = next;
+      render();
+    },
+    find(predicate: (element: ReactElement<Record<string, unknown>>) => boolean) {
+      const found = elements(tree).find(predicate);
+      if (!found) throw new Error("Missing video control");
+      return found;
+    },
+    input,
     get scene() {
       return scene;
     },
-    value(label: string) {
+    value(label: NativeTextVideoCopyKey) {
       return input(label).props.value;
     },
-    change(label: string, value: string) {
+    change(label: NativeTextVideoCopyKey, value: string) {
       (input(label).props.onChange as (event: unknown) => void)({ target: { value } });
       render();
     },
@@ -146,6 +162,119 @@ function fill(editor: ReturnType<typeof harness>) {
 }
 
 describe("native external video controls", () => {
+  it("retranslates active validation and retains all draft entries without adding a node", () => {
+    const scene = sceneFixture();
+    scene.schemaVersion = 7;
+    const title = scene.nodes.find((node) => node.type === "text");
+    if (title?.type !== "text") throw new Error("Missing authored title");
+    title.lang = "fr";
+    title.text = "Titre de la diapositive";
+    const before = structuredClone(scene);
+    const editor = harness(scene);
+    fill(editor);
+    editor.change("Video title", "Titre original 日本語");
+    editor.change("Video HTTPS link", "https://user:secret@example.com/video");
+    editor.click();
+    editor.setLocale("ko-KR");
+    expect(editor.error()).toBe("인증 정보가 포함되지 않은 HTTPS 링크를 사용하세요.");
+    expect(editor.find((element) => element.props.role === "alert").props.lang).toBe("ko-KR");
+    expect(editor.find((element) => element.type === "fieldset").props.lang).toBe("ko-KR");
+    expect(text(editor.find((element) => element.type === "legend"))).toBe("외부 동영상");
+    expect(text(editor.find((element) => element.type === "button"))).toBe("외부 동영상 링크 추가");
+    for (const key of [
+      "Video title",
+      "Video HTTPS link",
+      "Captions or transcript HTTPS link",
+    ] as const)
+      expect(editor.input(key).props.lang).toBe("");
+    expect(editor.value("Video title")).toBe("Titre original 日本語");
+    expect(editor.value("Video HTTPS link")).toBe("https://user:secret@example.com/video");
+    expect(editor.value("Captions or transcript HTTPS link")).toBe(
+      "https://example.com/transcript",
+    );
+    expect(editor.onChange).not.toHaveBeenCalled();
+    expect(editor.onSelect).not.toHaveBeenCalled();
+    expect(scene).toEqual(before);
+    editor.change("Video HTTPS link", "https://example.com/video?language=fr");
+    editor.click();
+    const video = editor.scene.nodes.at(-1);
+    if (video?.type !== "text") throw new Error("Missing new video node");
+    expect(video.text).toContain("External video: Titre original 日本語");
+    expect(video.richText!.paragraphs[0]!.runs[0]!.href).toBe(
+      "https://example.com/video?language=fr",
+    );
+    expect(video.richText!.paragraphs[1]!.runs[0]!.href).toBe("https://example.com/transcript");
+    expect(editor.scene.nodes.slice(0, -1)).toEqual(before.nodes);
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(editor.error()).toBe("");
+  });
+
+  it("translates retained parent rejection after locale changes and retries only on explicit add", () => {
+    let accepted = false;
+    const editor = harness(sceneFixture(), () => accepted);
+    fill(editor);
+    editor.click();
+    editor.setLocale("ko-KR");
+    expect(editor.error()).toBe(
+      "프레젠테이션에 이 링크를 추가할 수 없습니다. 입력한 내용은 유지됩니다. 콘텐츠를 줄이고 다시 시도하세요.",
+    );
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(editor.value("Video title")).toBe("Review evidence");
+    expect(editor.value("Captions or transcript HTTPS link")).toBe(
+      "https://example.com/transcript",
+    );
+    accepted = true;
+    editor.setLocale("ja-JP");
+    expect(editor.onChange).toHaveBeenCalledTimes(1);
+    expect(editor.onSelect).not.toHaveBeenCalled();
+    editor.click();
+    expect(editor.onChange).toHaveBeenCalledTimes(2);
+    expect(editor.onSelect).toHaveBeenCalledTimes(1);
+    expect(editor.value("Video title")).toBe("");
+  });
+
+  it.each([
+    ["Video title", "X".repeat(161), "동영상 제목은 160자 이내로 입력하세요."],
+    [
+      "Video HTTPS link",
+      `https://example.com/${"x".repeat(2048)}`,
+      "각 HTTPS 링크는 2048자 이내로 입력하세요.",
+    ],
+    ["Video HTTPS link", "malformed URL", "완전한 HTTPS 링크를 입력하세요."],
+    [
+      "Captions or transcript HTTPS link",
+      "http://example.com/transcript",
+      "인증 정보가 포함되지 않은 HTTPS 링크를 사용하세요.",
+    ],
+  ] as const)(
+    "localizes known validation for %s without changing entries",
+    (field, value, error) => {
+      const editor = harness();
+      fill(editor);
+      editor.change(field, value);
+      editor.setLocale("ko-KR");
+      editor.click();
+      expect(editor.error()).toBe(error);
+      expect(editor.value(field)).toBe(value);
+      expect(editor.onChange).not.toHaveBeenCalled();
+      expect(editor.onSelect).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains unknown library diagnostics verbatim with explicit English language", () => {
+    const editor = harness();
+    fill(editor);
+    vi.spyOn(nativeVideo, "createNativeVideoLink").mockImplementationOnce(() => {
+      throw new Error("Unknown video diagnostic {title}: original value");
+    });
+    editor.click();
+    editor.setLocale("ko-KR");
+    expect(editor.error()).toBe("Unknown video diagnostic {title}: original value");
+    expect(editor.find((element) => element.props.role === "alert").props.lang).toBe("en-CA");
+    expect(editor.value("Video title")).toBe("Review evidence");
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
   it("retains malformed entries, recovers visibly and preserves scene4 groups/data/rotation on success", () => {
     const scene = sceneFixture();
     const original = structuredClone(scene);

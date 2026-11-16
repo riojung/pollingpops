@@ -1,5 +1,7 @@
 import type { KeyboardEvent } from "react";
+import type { SupportedLocale } from "@openround/contracts";
 import type { NativeChartNode, NativeDataNode } from "../../lib/presentation-native-data";
+import { nativeAudienceCopy } from "./native-audience-copy";
 import styles from "./native-scene-data.module.css";
 
 // Each mark contrasts with paper and midnight; labels and the table also identify series.
@@ -164,27 +166,34 @@ function Cartesian({ node }: { node: NativeChartNode }) {
 export function NativeSceneDataView({
   node,
   fixedLayout = false,
+  locale = "en-CA",
+  contentLocale,
 }: {
   node: NativeDataNode;
   fixedLayout?: boolean;
+  locale?: SupportedLocale;
+  /** Known creation language; ordinary stored data keeps its existing unspecified boundary. */
+  contentLocale?: SupportedLocale;
 }) {
+  const copy = nativeAudienceCopy(locale);
   if (node.type === "table")
     return (
       <div
+        lang={node.caption.trim() ? (contentLocale ?? "") : locale}
         className={styles.dataView}
         data-native-data="table"
         data-native-fixed-layout={fixedLayout ? "true" : undefined}
         role="group"
-        aria-label={node.caption.trim() || "Data table"}
+        aria-label={node.caption.trim() || copy("Data table")}
         tabIndex={0}
         onKeyDown={scrollKey}
       >
         <table className={styles.dataTable}>
-          <caption>{node.caption}</caption>
+          <caption lang={contentLocale ?? ""}>{node.caption}</caption>
           <thead>
             <tr>
               {node.headers.map((header, index) => (
-                <th key={index} scope="col">
+                <th lang={contentLocale ?? ""} key={index} scope="col">
                   {header}
                 </th>
               ))}
@@ -194,7 +203,7 @@ export function NativeSceneDataView({
             {node.rows.map((row, index) => (
               <tr key={index}>
                 {row.map((value, column) => (
-                  <td key={column} data-label={node.headers[column]}>
+                  <td lang={contentLocale ?? ""} key={column} data-label={node.headers[column]}>
                     {value}
                   </td>
                 ))}
@@ -206,17 +215,21 @@ export function NativeSceneDataView({
     );
   const legend =
     node.chartType === "pie" ? node.categories : node.series.map((series) => series.name);
+  // Preserve the 1280px authored-plane layout as the same slide is scaled for editing.
+  const chartLayout = (node.frame.width / 100) * 1280 >= 600 ? "split" : "stack";
   return (
     <figure
+      lang={node.title.trim() ? (contentLocale ?? "") : locale}
       className={`${styles.dataView} ${styles.chart}`}
       data-native-data="chart"
       data-native-fixed-layout={fixedLayout ? "true" : undefined}
+      data-chart-layout={chartLayout}
       data-chart-type={node.chartType}
-      aria-label={node.title.trim() || "Chart"}
+      aria-label={node.title.trim() || copy("Chart")}
       tabIndex={0}
       onKeyDown={scrollKey}
     >
-      <figcaption>
+      <figcaption lang={contentLocale ?? ""}>
         <strong>{node.title}</strong>
         <div>{node.summary}</div>
       </figcaption>
@@ -225,7 +238,7 @@ export function NativeSceneDataView({
           <svg className={styles.plot} viewBox="0 0 640 270" aria-hidden="true" focusable="false">
             {node.chartType === "pie" ? <Pie node={node} /> : <Cartesian node={node} />}
           </svg>
-          <ul className={styles.legend} aria-label="Chart legend">
+          <ul lang={locale} className={styles.legend} aria-label={copy("Chart legend")}>
             {legend.map((name, index) => (
               <li key={index}>
                 <span
@@ -233,19 +246,26 @@ export function NativeSceneDataView({
                   style={{ background: NATIVE_CHART_COLORS[index % NATIVE_CHART_COLORS.length] }}
                   aria-hidden="true"
                 />
-                {index + 1}. {name} · {colorNames[index % colorNames.length]}
+                {index + 1}. <span lang={contentLocale ?? ""}>{name}</span> ·{" "}
+                {copy(colorNames[index % colorNames.length]!)}
               </li>
             ))}
           </ul>
-          <div className={styles.categoryHelp}>Category numbers match the data table.</div>
+          <div lang={locale} className={styles.categoryHelp}>
+            {copy("Category numbers match the data table.")}
+          </div>
         </div>
         <table className={styles.dataTable}>
-          <caption>{node.title} · chart data</caption>
+          <caption lang={locale}>
+            <span lang={contentLocale ?? ""}>{node.title}</span> · {copy("chart data")}
+          </caption>
           <thead>
             <tr>
-              <th scope="col">Category</th>
+              <th lang={locale} scope="col">
+                {copy("Category")}
+              </th>
               {node.series.map((series, index) => (
-                <th key={index} scope="col">
+                <th lang={contentLocale ?? ""} key={index} scope="col">
                   {series.name}
                 </th>
               ))}
@@ -254,11 +274,11 @@ export function NativeSceneDataView({
           <tbody>
             {node.categories.map((category, index) => (
               <tr key={index}>
-                <th scope="row">
+                <th lang={contentLocale ?? ""} scope="row">
                   {index + 1}. {category}
                 </th>
                 {node.series.map((series, seriesIndex) => (
-                  <td key={seriesIndex} data-label={series.name}>
+                  <td lang={contentLocale ?? ""} key={seriesIndex} data-label={series.name}>
                     {String(series.values[index])}
                   </td>
                 ))}

@@ -57,7 +57,12 @@ const mediaUnavailable = () =>
     409,
     "A published image is unavailable or changed. Retry after checking its scan status.",
   );
-const outputTypes = { pdf: "application/pdf", png: "image/png", html: "text/html" } as const;
+const outputTypes = {
+  pdf: "application/pdf",
+  png: "image/png",
+  html: "text/html",
+  offline_html: "text/html",
+} as const;
 function assetUnchanged(actual: MediaAssetRecord | null, expected: MediaAssetRecord) {
   return (
     !!actual &&
@@ -308,7 +313,7 @@ export class PresentationStaticExportService {
       }
       check();
       if (
-        result.extension !== input.format ||
+        result.extension !== (input.format === "offline_html" ? "html" : input.format) ||
         result.contentType.split(";", 1)[0] !== outputTypes[input.format] ||
         !Buffer.isBuffer(result.bytes)
       )
@@ -333,7 +338,7 @@ export class PresentationStaticExportService {
       return {
         bytes: result.bytes,
         contentType: outputTypes[input.format],
-        extension: input.format,
+        extension: result.extension,
       };
     } catch (error) {
       if (error instanceof PresentationStaticExportError) {

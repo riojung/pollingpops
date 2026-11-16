@@ -6,6 +6,7 @@ import {
   RecoveryPackLiveCardView,
   recoveryPackCardKey,
 } from "./recovery-pack-live-card";
+import { companionCopy } from "../lib/i18n/domains/live-delivery/companion-translations";
 
 const card: RecoveryPackLiveCard = {
   reference: {
@@ -29,6 +30,28 @@ const card: RecoveryPackLiveCard = {
 };
 
 describe("live Recovery Pack card", () => {
+  it("can localize Companion chrome while preserving the selected authored card and citations", () => {
+    const copy = companionCopy("ko-KR");
+    const markup = renderToStaticMarkup(
+      <RecoveryPackLiveCardView
+        card={card}
+        labels={{
+          language: "ko-KR",
+          regionName: copy("Active Recovery Pack card"),
+          attribution: `${copy("Recovery Pack card")} · ${copy("version {version}", { version: 2 })}`,
+          sources: copy("Sources"),
+        }}
+      />,
+    );
+    expect(markup).toContain('aria-label="사용 중인 Recovery Pack 카드"');
+    expect(markup).toContain('lang="ko-KR">출처</strong>');
+    expect(markup).toContain("Recovery Pack 카드 · 버전 2");
+    expect(markup).toContain('lang="">Contrast the examples</h2>');
+    expect(markup).toContain("One reference &lt; another");
+    expect(markup).not.toContain("<script>");
+    expect(markup).not.toContain("Active Recovery Pack card");
+  });
+
   it("renders selected content and citations as escaped, accessible plaintext", () => {
     const markup = renderToStaticMarkup(<RecoveryPackLiveCardView card={card} />);
     expect(markup).toContain('aria-label="Active Recovery Pack card"');

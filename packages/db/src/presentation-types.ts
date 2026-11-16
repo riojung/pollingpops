@@ -1,4 +1,9 @@
-import type { PresentationContent, PresentationDraft } from "@openround/contracts";
+import type {
+  PresentationContent,
+  PresentationDraft,
+  PresentationBlockDraft,
+  PresentationTextLanguage,
+} from "@openround/contracts";
 import type { LibraryArtifactDeletionResult } from "./types.js";
 
 export interface PresentationRecord {
@@ -33,6 +38,8 @@ export interface PresentationVersionRecord {
 
 export interface PresentationSummaryRecord extends Omit<PresentationRecord, "draft"> {
   blockCount: number;
+  /** Creator-only first visible slide for Library recognition; no separate draft fetch. */
+  previewBlock?: PresentationBlockDraft | null;
 }
 
 export interface PresentationHistoryRecord {
@@ -69,6 +76,14 @@ export interface PresentationDraftUpdate {
   textAssistanceSourceDigest?: string;
   textAssistanceBlockId?: string;
   textAssistanceNodeId?: string;
+  textAssistanceTargetLanguage?: PresentationTextLanguage;
+  textAssistanceSourceLanguage?: PresentationTextLanguage | null;
+  /** Serialize reviewed question insertion with exact saved source and private proposal authority. */
+  questionSuggestionsJobId?: string;
+  questionSuggestionsProposalHash?: string;
+  questionSuggestionsSourceDigest?: string;
+  questionSuggestionsBlockId?: string;
+  questionSuggestionsSuggestionId?: string;
 }
 
 export interface PresentationRepository {

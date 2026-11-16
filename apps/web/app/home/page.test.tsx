@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
 import type { HomeSummary, HomeWork } from "./home-model";
-import { hasHomeWork, homeWorkAction, recentHomeWork } from "./home-model";
+import { hasHomeWork, homeMilestones, homeWorkAction, recentHomeWork } from "./home-model";
 
 const mocked = vi.hoisted(() => ({
   summary: null as HomeSummary | null,
@@ -176,12 +176,247 @@ beforeEach(() => {
 });
 
 describe("workspace Home", () => {
+  it("shows missing report evidence separately from a measured zero", () => {
+    mocked.summary = emptySummary();
+    const result = {
+      id: "empty-assessment",
+      artifactType: "round" as const,
+      title: "Assessment without responses",
+      status: "ready" as const,
+      participantCount: 3,
+      accuracyPercent: null,
+      recoveryPercent: null,
+      createdAt: mocked.summary.generatedAt,
+      href: "/report/empty-assessment",
+    };
+    mocked.summary.resultHighlights = [
+      result,
+      {
+        ...result,
+        id: "measured-zero",
+        title: "Assessment with incorrect responses",
+        accuracyPercent: 0,
+        href: "/report/measured-zero",
+      },
+    ];
+    const markup = renderHome();
+    const empty = markup.match(/<a\b[^>]*href="\/report\/empty-assessment"[\s\S]*?<\/a>/)?.[0];
+    const measured = markup.match(/<a\b[^>]*href="\/report\/measured-zero"[\s\S]*?<\/a>/)?.[0];
+    expect(empty).toContain("Assessment without responses");
+    expect(empty).toContain("—");
+    expect(empty).not.toContain("0%");
+    expect(measured).toContain("0%");
+  });
+
+  it("shows workspace totals separately from recent result and assignment evidence", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.totals.artifacts = 120;
+    mocked.summary.totals.activeSessions = 3;
+    mocked.summary.assignments = [
+      {
+        id: "assignment",
+        quizId: "round",
+        title: "Recent practice",
+        status: "open",
+        checkpointCount: 1,
+        attemptCount: 4,
+        completedAttemptCount: 1,
+        opensAt: "2026-11-01T12:00:00Z",
+        closesAt: "2026-11-10T12:00:00Z",
+        href: "/practice/assignment",
+      },
+    ];
+    const result = {
+      id: "ready",
+      artifactType: "round" as const,
+      title: "Recent report",
+      status: "ready" as const,
+      participantCount: 3,
+      accuracyPercent: null,
+      recoveryPercent: null,
+      createdAt: mocked.summary.generatedAt,
+      href: "/report/ready",
+    };
+    mocked.summary.resultHighlights = [result, { ...result, id: "pending", status: "pending" }];
+    const markup = renderHome();
+    const widget = (name: string) => {
+      const tag = name === "work" ? "article" : "a";
+      return markup.match(new RegExp(`<${tag}[^>]*data-widget="${name}"[\\s\\S]*?</${tag}>`))?.[0];
+    };
+    expect(widget("work")).toContain(">120</strong>");
+    expect(widget("sessions")).toContain(">3</strong>");
+    expect(widget("assignments")).toContain("25%");
+    expect(widget("assignments")).toContain("1 of 4 attempts complete");
+    expect(widget("assignments")).toContain("From recent assignments");
+    expect(widget("reports")).toContain("1 of 2 recent results");
+    expect(markup).toContain('data-density="compact"');
+    expect(markup).toContain("data-work-row");
+  });
+
+  it("keeps no attempts distinct from an observed zero completion rate", () => {
+    mocked.summary = emptySummary();
+    let markup = renderHome();
+    const widget = () => markup.match(/<a[^>]*data-widget="assignments"[\s\S]*?<\/a>/)?.[0];
+    expect(widget()).toContain("No attempts yet");
+    expect(widget()).not.toContain("0%");
+    expect(widget()).not.toContain("<progress");
+    mocked.summary.assignments = [
+      {
+        id: "assignment",
+        quizId: "round",
+        title: "Recent practice",
+        status: "open",
+        checkpointCount: 1,
+        attemptCount: 5,
+        completedAttemptCount: 0,
+        opensAt: "2026-11-01T12:00:00Z",
+        closesAt: "2026-11-10T12:00:00Z",
+        href: "/practice/assignment",
+      },
+    ];
+    markup = renderHome();
+    expect(widget()).toContain("0%");
+    expect(widget()).toContain("0 of 5 attempts complete");
+    expect(widget()).toContain('value="0"');
+  });
+
+  it.each(["board-only", "mixed", "legacy"] as const)(
+    "offers Library and Boards destinations for %s accessible work",
+    (scope) => {
+      mocked.summary = scope === "mixed" ? mixedSummary() : emptySummary();
+      if (scope === "board-only") {
+        mocked.summary.totals.artifacts = 2;
+        mocked.summary.totals.boards = 2;
+        mocked.summary.recentBoards = mixedSummary().recentBoards;
+        mocked.canEdit = false;
+        mocked.creator.role = "viewer";
+      }
+      if (scope === "legacy") {
+        mocked.summary.totals.artifacts = 12;
+        delete mocked.summary.totals.boards;
+        delete mocked.summary.recentBoards;
+      }
+      const markup = renderHome();
+      const widget = markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0];
+      expect(widget).toContain(`>${mocked.summary.totals.artifacts}</strong>`);
+      expect(widget).toContain('href="/library"');
+      expect(widget).toContain('href="/boards"');
+      expect(widget).toContain("View Boards");
+      expect(markup).not.toMatch(/<a\b[^>]*data-widget="work"/);
+    },
+  );
+
+  it("shows Boards with a board rollout, while a known board-free disabled workspace keeps Library navigation", () => {
+    mocked.summary = emptySummary();
+    mocked.summary.totals.artifacts = 4;
+    let markup = renderHome();
+    expect(markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0]).not.toContain(
+      'href="/boards"',
+    );
+    mocked.productFeatures.canvasBoards = true;
+    markup = renderHome();
+    expect(markup.match(/<article[^>]*data-widget="work"[\s\S]*?<\/article>/)?.[0]).toContain(
+      'href="/boards"',
+    );
+  });
+
+  it("does not turn pending or omitted results into a completed-work claim", () => {
+    mocked.summary = emptySummary();
+    mocked.summary.resultHighlights = [
+      {
+        id: "pending",
+        artifactType: "round",
+        title: "A pending report",
+        status: "pending",
+        participantCount: 0,
+        accuracyPercent: null,
+        recoveryPercent: null,
+        createdAt: mocked.summary.generatedAt,
+        href: "/report/pending",
+      },
+    ];
+    const markup = renderHome();
+    const next = markup.match(
+      /<section[^>]*aria-labelledby="home-next-up-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(next).toContain("No suggested next steps");
+    expect(next).not.toContain("all caught up");
+    expect(next).toContain('href="/library"');
+  });
+
+  it("keeps next-step suggestions permission aware and routes a hidden active room to Sessions", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.totals.activeSessions = 250;
+    mocked.canEdit = false;
+    mocked.creator.role = "viewer";
+    const markup = renderHome();
+    const next = markup.match(
+      /<section[^>]*aria-labelledby="home-next-up-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(next).toContain("Return to a live session");
+    expect(next).toContain('href="/sessions"');
+    expect(next).not.toContain('data-insight="draft"');
+    expect(markup).toContain(">250+</strong>");
+    expect(markup).not.toContain('href="/host/setup/');
+  });
+
+  it("keeps first-session guidance after a draft and completes it only on delivery evidence", () => {
+    const summary = emptySummary();
+    summary.totals.artifacts = 1;
+    summary.recentArtifacts = [{ ...mixedSummary().recentArtifacts[1]!, id: "first-draft" }];
+    mocked.summary = summary;
+    expect(homeMilestones(summary)).toEqual({ created: true, published: false, delivered: false });
+    expect(renderHome()).toContain("Finish your first session");
+    summary.resultHighlights = [
+      {
+        id: "first-result",
+        artifactType: "round",
+        title: "First result",
+        status: "ready",
+        participantCount: 2,
+        accuracyPercent: null,
+        recoveryPercent: null,
+        createdAt: summary.generatedAt,
+        href: "/report/first-result",
+      },
+    ];
+    expect(homeMilestones(summary).delivered).toBe(true);
+    expect(renderHome()).not.toContain("Finish your first session");
+  });
+
+  it("puts an active room before recent work and keeps its canonical secure resume destination", () => {
+    mocked.summary = mixedSummary();
+    mocked.summary.sessions = [
+      {
+        id: "live-room",
+        artifactType: "round",
+        artifactId: "source",
+        title: "Audience waiting",
+        status: "active",
+        phase: "lobby",
+        code: "1234567",
+        participantCount: 4,
+        progressLabel: "Lobby",
+        createdAt: mocked.summary.generatedAt,
+        href: "/sessions",
+      },
+    ];
+    const markup = renderHome();
+    expect(markup.indexOf("Audience waiting")).toBeLessThan(markup.indexOf("Recent work"));
+    expect(markup).toContain('href="/sessions">Open Sessions');
+    expect(homeMilestones(mocked.summary)).toEqual({
+      created: true,
+      published: true,
+      delivered: false,
+    });
+  });
   it("routes Home creation to the universal hub without requiring advanced builder features", () => {
     const markup = renderHome();
     expect(markup).toContain(">Home</h1>");
     expect(markup).toContain('class="brand" href="/home"');
     expect(markup).toContain('href="/create"');
-    expect(markup).toContain("Everything you are working on, together.");
+    expect(markup).toContain("Welcome back, new user");
+    expect(markup).not.toContain("Everything you are working on, together.");
     expect(markup).not.toContain("Create a Round or Presentation");
     expect(markup).not.toContain("Your checkpoint sets");
     expect(markup).not.toContain("Loading your workspace");
@@ -212,7 +447,7 @@ describe("workspace Home", () => {
     expect(markup).toContain("Open Idea Board");
     expect(markup).toContain("Open Canvas");
     expect(markup).toContain("Host Round");
-    expect(markup).toContain("<strong>5</strong><span>Artifacts</span>");
+    expect(markup).toContain('data-layout="compact"');
     expect(markup).not.toContain("From a trusted source to useful evidence");
     expect(markup.indexOf("A planning canvas")).toBeLessThan(markup.indexOf("A useful Survey"));
   });
@@ -306,7 +541,7 @@ describe("workspace Home", () => {
     mocked.productFeatures.surveys = true;
     const markup = renderHome();
     expect(markup).toContain("No activities or boards in this workspace yet.");
-    expect(markup).toContain("Choose any format available to this workspace.");
+    expect(markup).toContain("Finish your first session");
     expect(markup).toContain("Create your first artifact");
     expect(markup).toContain('href="/create"');
   });
@@ -382,6 +617,21 @@ describe("workspace Home", () => {
     expect(markup).toContain('href="/canvas/shared-id"');
     expect(markup).toContain("View →");
   });
+
+  it.each([true, false])(
+    "retains an available quick-start guide for first-run viewers: %s",
+    (guideAvailable) => {
+      mocked.summary = emptySummary();
+      mocked.canEdit = false;
+      mocked.creator.role = "viewer";
+      mocked.productFeatures.uxBeta = true;
+      mocked.productFeatures.builderV2 = guideAvailable;
+      const markup = renderHome();
+      expect(markup.includes('href="/help#quick-start"')).toBe(guideAvailable);
+      expect(markup).not.toContain('href="/create"');
+      expect(markup).not.toContain("Ask a quick poll");
+    },
+  );
 
   it("labels linked workshop canvases correctly and omits unavailable timestamps/counts", () => {
     mocked.summary = emptySummary();

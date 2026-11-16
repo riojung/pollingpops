@@ -2,37 +2,46 @@
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
 }
 .privateNotice {
   margin: 0;
-  color: var(--ui-on-hero);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .backstage {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  align-items: start;
+  gap: 12px;
 }
 .panel {
   min-width: 0;
-  padding: 20px;
+  padding: 14px 16px;
   border: 1px solid var(--ui-border);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--ui-surface);
   color: var(--ui-text);
 }
 .panel h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
 }
 .notes {
+  min-height: 4rem;
+  font-size: 15px;
+  line-height: 1.7;
+  scrollbar-gutter: stable;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 24rem;
+  max-height: 18rem;
   overflow: auto;
 }
 .nextPreview {
-  max-height: 26rem;
+  max-height: 18rem;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -44,7 +53,7 @@
   min-width: 0;
   width: 100%;
 }
-.block h1 {
+.block > h1 {
   font-size: clamp(1.8rem, 4vw, 3.8rem);
   overflow-wrap: anywhere;
 }
@@ -203,6 +212,77 @@
 .launch a {
   color: var(--ui-link);
   overflow-wrap: anywhere;
+}
+.launchCompact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.launchScreen,
+.launchOptions > summary {
+  box-sizing: border-box;
+  min-height: 40px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.launchScreen {
+  color: var(--ui-on-accent);
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+}
+.launchScreen:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.launchOptions {
+  position: relative;
+  min-width: 0;
+}
+.launchOptions > summary {
+  display: inline-flex;
+  align-items: center;
+  list-style: none;
+}
+.launchOptions > summary::-webkit-details-marker {
+  display: none;
+}
+.launchOptions > summary:focus-visible,
+.launchScreen:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+.launchOptionsBody {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.launchCompact .launchOptionsBody {
+  position: fixed;
+  left: 12px;
+  top: 64px;
+  z-index: 30;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(540px, calc(100dvh - 76px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-lg);
 }
 @media (max-width: 850px) {
   .backstage {

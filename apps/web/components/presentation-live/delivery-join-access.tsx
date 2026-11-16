@@ -6,11 +6,15 @@ import type { PublicFeatures } from "@openround/contracts";
 import { apiFetch } from "../../lib/api";
 import { buildJoinUrl, isLoopbackJoinBase, selectJoinBase } from "../../lib/join-url";
 import { copyTextToClipboard } from "../../lib/clipboard";
-import styles from "./presentation-delivery.module.css";
+import { useLocale } from "../locale-provider";
+import { presentationDeliveryCopy } from "../../lib/i18n/presentation-delivery-copy";
+import styles from "./delivery-join-access.module.css";
 
 export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
+  const { locale } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
   const [base, setBase] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<"copied" | "copyUnavailable" | null>(null);
   useEffect(() => {
     let active = true;
     const current = window.location.origin;
@@ -32,43 +36,50 @@ export function PresentationDeliveryJoinAccess({ code }: { code: string }) {
   }, []);
   const url = buildJoinUrl(base, code);
   return (
-    <section className={styles.joinAccess} aria-label="Join this Presentation" lang="en-CA">
-      {url ? <QRCodeSVG value={url} size={84} title="Scan to join this Presentation" /> : null}
-      <div>
-        <p>
-          Join code <strong className={styles.joinCode}>{code}</strong>
+    <section className={styles.joinAccess} aria-label={copy("joinPresentation")} lang={locale}>
+      {url ? (
+        <QRCodeSVG
+          className={styles.qrCode}
+          value={url}
+          size={88}
+          marginSize={2}
+          title={copy("scanJoin")}
+        />
+      ) : null}
+      <div className={styles.details}>
+        <p className={styles.codeRow}>
+          <span>{copy("joinCode")}</span>
+          <strong className={styles.joinCode}>{code}</strong>
         </p>
         {url ? (
-          <p>
+          <p className={styles.linkRow}>
             <a href={url} target="_blank" rel="noopener noreferrer">
-              {url}
+              <span lang="">{url}</span>
             </a>
           </p>
         ) : null}
-        {url ? (
-          <button
-            className="button-quiet small-button"
-            type="button"
-            onClick={() =>
-              void copyTextToClipboard(url).then((copied) =>
-                setStatus(
-                  copied
-                    ? "Join link copied."
-                    : "Copy is unavailable. Use the visible join address.",
-                ),
-              )
-            }
-          >
-            Copy join link
-          </button>
-        ) : null}
         {base && isLoopbackJoinBase(base) ? (
-          <p>
-            This address works on this device. Use a public or network address for other devices.
+          <p className={styles.feedback}>{copy("loopbackAddress")}</p>
+        ) : null}
+        {status ? (
+          <p className={styles.feedback} role="status">
+            {copy(status)}
           </p>
         ) : null}
-        {status ? <p role="status">{status}</p> : null}
       </div>
+      {url ? (
+        <button
+          className={styles.copyButton}
+          type="button"
+          onClick={() =>
+            void copyTextToClipboard(url).then((copied) =>
+              setStatus(copied ? "copied" : "copyUnavailable"),
+            )
+          }
+        >
+          {copy("copyJoin")}
+        </button>
+      ) : null}
     </section>
   );
 }

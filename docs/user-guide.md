@@ -610,6 +610,77 @@ the same action. Per-tab recovery keeps identities and review choices without st
 outline. When another editor changes the saved deck, use **Reload saved deck**, check the
 insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
 
+### Create a question starter from a slide
+
+On a visible native slide, choose **Question starters**. Review a **Discussion** prompt, a
+**Clarity rating** or an eligible **Priority poll**, then choose **Insert reviewed question**.
+**Cancel** leaves the deck unchanged. These are optional local English templates quoting your
+slide text; no AI service or allowance is used. They do not analyze images, tables/charts or
+closed interaction details, and do not invent facts or correct answers.
+
+Priority polls use every complete authored body point when there are 2–6 distinct points of up
+to 180 characters each. Longer, duplicate or unsuitable lists keep discussion/clarity starters
+available; points are never silently cut or selected. The review shows the complete question,
+options/settings and private source context. All starters are opinions with zero points,
+confidence off and no correct answer.
+
+Insertion creates one independently undoable, editable question immediately after the source,
+in the same section. The question prompt receives focus for editing. The source stays intact;
+later source changes do not rewrite an inserted question. Source attribution is private creator
+context and does not independently verify the slide. Wait for **Saved** before leaving, and
+publish separately when ready. Use the existing **Add question** control for other formats or
+when a source is hidden, classic or incomplete. Starters currently support up to eight body text
+objects with at most 4,000 total body characters.
+
+### Suggest discussion questions with AI
+
+On an eligible native slide, choose **Suggest discussion questions**. The editor saves your
+selected slide first. Review the complete source and shared AI allowance, then choose
+**Generate discussion suggestions**. Opening the panel does not start a job. One generation
+uses one AI job; reviewing and inserting the result use no further allowance.
+
+Review both complete English questions and their exact source excerpts, choose **Discussion
+question** or **Reflection question**, and confirm the review checkbox. **Insert reviewed
+question** adds one independently editable open-text opinion immediately after the source, in
+the same section. It has zero points, confidence off and no correct answer or linked recheck.
+One fresh insertion is one Undo step. Your source stays intact, and publishing remains separate.
+
+AI wording and framing are unverified. Only visible title/body text is used, including rich
+text and declared language. Images, table/chart data, notes and closed details are not
+interpreted. The current limit is one title, up to eight nonblank body objects and 4,000 total
+body characters. **Question starters** and **Add question** remain available without AI.
+
+If a response is lost, reopen **Resume discussion suggestions** after reload, then use
+**Recover saved request** or **Retry exact insertion**; do not start a replacement job. Recovery is tied to this account, deck and exact source. **Reload exact
+source** can refresh a revision while its text/language/list/order is unchanged. If that source
+changed, discard the old proposal and generate from the current slide. A pending insertion must
+be recovered before other edits. If recovery cannot be verified, review the warning and reload
+the saved deck before clearing that invalid record. Private proposals expire after 24 hours;
+accepted insertion receipts remain recoverable.
+
+### Translate selected native text
+
+Select one plain native title/body object and choose **Translate text**. Pick a **Target
+language**, review the available authoring allowance, then choose **Generate translation
+proposal**. Opening the panel or choosing a language does not generate or consume allowance.
+Translation shares the existing outline/rewrite/shorten allowance and provider configuration.
+
+Compare complete original and translated wording, the requested language and previous citations.
+Check meaning, terminology, unsupported claims and slide fit, confirm the review, then choose
+**Apply reviewed translation**. Only the selected text and its language change, together with
+the latest AI-edit record; notes, citations, other objects and publication remain intact.
+Previous citations do not verify a translation. Proper nouns can retain identical wording while
+their language changes. Use normal Undo/Redo after a fresh application and **Resume text
+assistance** for interrupted generation/application; recovery retains the exact language intent.
+
+The initial options are English, French, Spanish, German, Italian, Portuguese, Dutch, Polish,
+Japanese, Korean, Simplified Chinese and Traditional Chinese. Translation supports one plain
+text object at a time. Formatted text remains manually editable. **Text language** lets you
+correct an object's language or clear it to **Unspecified** without AI use. The annotation stays
+with that object through later edits and formatting and helps screen readers pronounce it.
+Changing a source language during review requires a new request. Review expanded text in the
+slide preview before publishing; translation does not resize frames automatically.
+
 ### Rewrite or shorten selected native text
 
 Select a plain text object in a saved native slide, then choose **Rewrite text** or **Shorten
@@ -705,7 +776,8 @@ order. Spatial arrangement does not turn them into an interactive spatial packag
 
 ### Add reveal panels and safe links
 
-On a native slide, choose **Add reveal panel** or **Add link**. Give each control a short,
+On a native slide, open **Interactions**, then choose **Add reveal panel** or **Add link**. The
+new action opens in the Content inspector. Give each control a short,
 descriptive label. For a panel, enter **Revealed audience content**; for a link, enter a complete
 HTTP or HTTPS address without embedded credentials. An invalid address stays in the editor with
 a correction message until it can be saved safely. Complete labels, content and links before
@@ -720,7 +792,15 @@ want the host to reveal an assessment answer to the room.
 Use **Show accessible outline** for a readable layout in the slide's semantic order; the same
 panels and links work there. Buttons support touch, Enter and Space, and links announce that they
 open a new tab. Editing previews do not navigate. Page reloads or a new slide/source begin with
-panels collapsed. Hotspots, pop-up dialogs and branching are not part of this basic release.
+panels collapsed. The additional interactions below use the same picker.
+
+In the Content inspector, expand **How this interaction works** to see the trigger, result
+and audience. Complete the requested fields, then choose **Preview this slide** to try the current
+visible slide. Preview starts there even when earlier slides are hidden. Reveals stay local to
+your screen, including broadcast reveals; slide links navigate through the preview. Escape closes
+open details first, then the preview and returns to the invoking tools. Correct unsaved link
+entries before using this action. The regular header Preview still starts at the first visible
+slide. Trying an action does not publish changes or start a live session.
 
 ### Add hotspots, detail dialogs and shared reveals
 
@@ -824,6 +904,25 @@ A downloaded file is a separate copy that cannot be revoked. Protect and distrib
 Large decks or images can exceed the export limits; split the deck or reduce image sizes if the
 dialog asks. You can cancel an export or retry after a temporary failure. These static downloads
 do not create learner attempts or completion records.
+
+### Download an offline interactive presentation
+
+Publish the deck, choose **Export**, then select **Offline interactive HTML — whole
+presentation** and **Download export**. Open the downloaded
+`polling-pops-presentation-offline.html` in a browser. Its published visual snapshots, readable
+text and images are embedded in one file. Draft changes are excluded.
+
+Use the page index, section links, previous/next links and authored page links to move within
+the file. Below each visual snapshot, labeled reveal, detail and hotspot controls open native
+disclosure panels in the readable content. They work without JavaScript or an internet
+connection. The visual snapshots stay flat. Public content originally authored for broadcast
+reveal becomes a local disclosure in the file; it does not broadcast to other viewers.
+
+Activities are readable previews. This file never submits answers, awards points, records
+completion or saves learner progress. External links are labeled as leaving the file and may
+require an internet connection. The file contains every included public detail body, even when
+its panel is closed. Downloaded copies cannot be revoked; protect and distribute them yourself.
+Use the existing accessible HTML format when you want all details expanded for reading.
 
 ### Import a PDF or a set of slide images
 
@@ -1075,14 +1174,17 @@ when you need several images, shapes or connectors.
 ### Build a native slide
 
 Choose **New slide** above the canvas for a designed native starter; **Add native slide** in the
-map still adds a plain native starter. Select a node in the slide or its reading
-order list to edit its text, image description, shape or connector. The position and size fields
-use percentages of the slide. Focus a move or resize button and use arrow keys for 1% steps,
+map still adds a plain native starter. Select a node in the slide, its reading order list or the
+**Canvas object** selector above the slide to edit its text, image description, shape or connector.
+The selected object's **Move** and **Resize** controls stay outside the authored slide so they do
+not cover content. The position and size fields use percentages of the slide. Focus Move or
+Resize and use arrow keys for 1% steps,
 or hold Shift for 5% steps.
 Give shapes meaningful labels and images useful descriptions for people who cannot see them.
 
 On a desktop, drag an object or its move button to reposition it. Drag its resize button to change
-its width and height from the bottom-right corner. Release to save the change as one **Undo** step;
+its width and height from the bottom-right corner, even though the control sits above the slide.
+Release to save the change as one **Undo** step;
 press Escape before releasing to cancel. Movement stays inside the slide. During movement, local
 snap guides appear within six screen pixels of nearby object or slide edges/centres. Hold Alt to
 move freely. Guides are temporary editor feedback and are not saved in the slide.
@@ -1114,11 +1216,18 @@ builder. Wait for **Saved**, reload to verify the saved slide, then preview and 
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
 source information remain private.
 
-In **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
+Open the **Layout** inspector, then in **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
 **Apply design to all native slides** applies those choices to existing native slides, including
 hidden ones. Ordinary slides and activities keep their current appearance. Undo/Redo restores
 the complete design change. System fonts use those available on the viewer's device; review fit
 feedback after changing the font or layout.
+
+In the **Layout** inspector, choose **Suggest layouts** for a slide with one title and one body,
+optionally with one table. Compare up to three alternatives with the current slide, check the fit
+feedback and read the complete content below the previews. **Apply reviewed layout** changes only
+the object positions and sizes in one undoable edit. **Cancel** or Escape keeps the current slide.
+These alternatives use no AI credits. Grouped, rotated and other mixed-object slides keep their
+manual layout tools.
 
 Choose an available layout button to reposition existing text and images. Presets require the
 shown object combination and never delete content to make it fit. Use **Undo** to restore the
@@ -1126,19 +1235,6 @@ previous positions. Select multiple objects to align them or distribute at least
 Distribution is unavailable when their sizes cannot fit without overlap. Layer controls move the
 last selected object, or its stored group, in front of or behind other visual objects; reading order stays unchanged.
 Connectors follow their objects and stay behind them.
-
-Choose **Suggest layouts** for a slide with one title and one body text object, with an optional
-table. Select an alternative to compare its placement with the current layout. **Complete slide
-content** shows all wording and table values in reading order. Fit feedback measures the wide
-preview using the fonts available on your device; a suggestion can still need larger frames or
-shorter content. On phones, the scaled previews retain wide-slide geometry and the reading copy
-stays readable.
-
-Choose **Apply reviewed layout** to change placement in one Undo step, or **Cancel** to leave the
-slide as it is. Wording, formatting, links, data, reading order and source information are kept.
-Grouping, rotation and other object combinations use the existing manual layout and arrangement
-controls. Suggestions are generated on your device and use no AI allowance. Wait for **Saved**
-before leaving; publication remains a separate action.
 
 For an image, **Contain** shows the whole image; **Cover** crops it to fill the frame. Adjust its
 focal X/Y position to keep the important area in view. Narrow screens show the complete image in

@@ -1,5 +1,7 @@
 "use client";
 
+import { packPracticeTitle } from "../../../../lib/i18n/creation-content";
+
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -11,6 +13,15 @@ import { WorkspaceShell } from "../../../../components/workspace/workspace-shell
 import { PracticeLinkReceipt } from "../../../../components/practice/practice-link-receipt";
 import { PackPracticePreview } from "../../../../components/practice/pack-practice-preview";
 import styles from "../../../../components/practice/practice.module.css";
+import setupStyles from "./assign.module.css";
+import { useLocale } from "../../../../components/locale-provider";
+import { packPracticeCopy } from "../../../../lib/i18n/pack-practice-copy";
+import { packWorkspaceCopy } from "../../../../lib/i18n/pack-workspace-copy";
+import {
+  packPracticeSetupCopy,
+  packPracticeSetupFeedback,
+} from "../../../../lib/i18n/pack-practice-setup-copy";
+import { formatDateTime, formatNumber } from "../../../../lib/i18n/format";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { clientUuid } from "../../../../lib/uuid";
 import {
@@ -33,6 +44,9 @@ import {
 } from "../../../../lib/recovery-pack-practice";
 
 function AssignPackPracticeContent({ packId }: { packId: string }) {
+  const { locale } = useLocale();
+  const copy = packPracticeSetupCopy(locale);
+  const practiceCopy = packPracticeCopy(locale);
   const searchParams = useSearchParams();
   const expectedVersionId = searchParams.get("version");
   const [mode, setMode] = useState<PackPracticeMode>(
@@ -46,6 +60,9 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
   const [sourceConflict, setSourceConflict] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [title, setTitle] = useState("");
+  const generatedTitle = useRef("");
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const [timeMode, setTimeMode] = useState<PracticeTimeMode>("flex");
   const [opensLater, setOpensLater] = useState(false);
   const [opensAt, setOpensAt] = useState("");
@@ -113,14 +130,15 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
         if (abort.signal.aborted) return;
         setVersion(published);
         setSourceConflict(false);
-        setTitle(
-          published
-            ? `${modeRef.current === "full_sequence" ? "Pack sequence" : "Delayed probe"}: ${published.content.title}`.slice(
-                0,
-                160,
-              )
-            : "",
-        );
+        const initialTitle = published
+          ? packPracticeTitle(
+              localeRef.current,
+              modeRef.current === "full_sequence",
+              published.content.title,
+            )
+          : "";
+        generatedTitle.current = initialTitle;
+        setTitle(initialTitle);
       })
       .catch((caught) => {
         if (abort.signal.aborted) return;
@@ -156,6 +174,10 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
   const labelLimit = practicePersonalLinkLimit(entitlements);
   const labelError = personalLabelsError(personalLabels, labelLimit);
   const locked = creation.busy || creation.pending;
+  const feedbackContext = { labelLimit, retentionDays: entitlements?.reportRetentionDays };
+  const errorFeedback = packPracticeSetupFeedback(locale, error, feedbackContext);
+  const labelFeedback = packPracticeSetupFeedback(locale, labelError ?? "", feedbackContext);
+  const unavailableFeedback = packPracticeSetupFeedback(locale, unavailable ?? "");
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -197,76 +219,85 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
   return (
     <WorkspaceShell
       title={
-        mode === "full_sequence" ? "Assign full-sequence practice" : "Assign delayed-probe practice"
+        mode === "full_sequence"
+          ? practiceCopy("Assign full-sequence practice")
+          : practiceCopy("Assign delayed-probe practice")
       }
-      eyebrow="Recovery Packs"
+      eyebrow={packWorkspaceCopy(locale)("Recovery Packs")}
+      translationLevel="full"
       requireBeta={false}
       description={
         mode === "full_sequence"
-          ? "A frozen diagnostic, intervention cards, and linked recheck."
-          : "One standalone delayed probe from a frozen published Recovery Pack version."
+          ? copy("A frozen diagnostic, intervention cards, and linked recheck.")
+          : copy("One standalone delayed probe from a frozen published Recovery Pack version.")
       }
       actions={
         <Link className="button-quiet" href="/recovery-packs">
-          Back to Recovery Packs
+          {copy("Back to Recovery Packs")}
         </Link>
       }
     >
-      <div lang="en-CA">
+      <div lang={locale} className={setupStyles.page}>
         {creation.created ? (
-          <PracticeLinkReceipt created={creation.created} />
+          <PracticeLinkReceipt created={creation.created} locale={locale} />
         ) : (
           <>
             <p className="notice">
-              {mode === "full_sequence" ? (
-                "This assignment contains the Pack’s diagnostic, all intervention cards in order, and linked recheck. It does not include the optional delayed probe or a delayed recovery trail. Later source changes do not update this frozen sequence."
-              ) : (
-                <>
-                  This assignment contains only the Pack’s delayed probe. It is not full Pack
-                  recovery or a delayed recovery trail, and does not include the diagnostic,
-                  intervention cards, or recheck.
-                </>
-              )}
+              {mode === "full_sequence"
+                ? copy(
+                    "This assignment contains the Pack’s diagnostic, all intervention cards in order, and linked recheck. It does not include the optional delayed probe or a delayed recovery trail. Later source changes do not update this frozen sequence.",
+                  )
+                : copy(
+                    "This assignment contains only the Pack’s delayed probe. It is not full Pack recovery or a delayed recovery trail, and does not include the diagnostic, intervention cards, or recheck.",
+                  )}
             </p>
-            <fieldset disabled={locked} className={styles.formCard}>
-              <legend>Practice mode</legend>
+            <fieldset disabled={locked} className={`${styles.formCard} ${setupStyles.modeCard}`}>
+              <legend>{copy("Practice mode")}</legend>
               <label className="field" htmlFor="pack-practice-mode">
-                <span>Recovery Pack practice mode</span>
+                <span>{copy("Recovery Pack practice mode")}</span>
                 <select
                   className="select"
                   id="pack-practice-mode"
                   value={mode}
                   onChange={(event) => {
                     const nextMode = event.target.value as PackPracticeMode;
-                    if (
-                      version &&
-                      (title === `Delayed probe: ${version.content.title}`.slice(0, 160) ||
-                        title === `Pack sequence: ${version.content.title}`.slice(0, 160))
-                    )
-                      setTitle(
-                        `${nextMode === "full_sequence" ? "Pack sequence" : "Delayed probe"}: ${version.content.title}`.slice(
-                          0,
-                          160,
-                        ),
+                    if (version && title === generatedTitle.current) {
+                      const nextTitle = packPracticeTitle(
+                        locale,
+                        nextMode === "full_sequence",
+                        version.content.title,
                       );
+                      generatedTitle.current = nextTitle;
+                      setTitle(nextTitle);
+                    }
                     setMode(nextMode);
                   }}
                 >
-                  <option value="delayed_probe">Standalone delayed probe</option>
-                  <option value="full_sequence">Full sequence: diagnostic, cards, recheck</option>
+                  <option value="delayed_probe">{copy("Standalone delayed probe")}</option>
+                  <option value="full_sequence">
+                    {copy("Full sequence: diagnostic, cards, recheck")}
+                  </option>
                 </select>
               </label>
             </fieldset>
             {error ? (
-              <p className="error" role="alert" ref={errorRef} tabIndex={-1}>
-                {error}
+              <p
+                className="error"
+                role="alert"
+                ref={errorRef}
+                tabIndex={-1}
+                lang={errorFeedback.lang}
+              >
+                {errorFeedback.text}
               </p>
             ) : null}
             <p className={creation.pending ? "notice" : "sr-only"} aria-live="polite" role="status">
               {creation.busy
-                ? "Creating or recovering the same practice assignment…"
+                ? copy("Creating or recovering the same practice assignment…")
                 : creation.pending
-                  ? "Creation was not acknowledged. Keep this page open and retry the same private request to recover its result. Settings stay locked; no new assignment is created by changing settings."
+                  ? copy(
+                      "Creation was not acknowledged. Keep this page open and retry the same private request to recover its result. Settings stay locked; no new assignment is created by changing settings.",
+                    )
                   : ""}
             </p>
             {creation.pending ? (
@@ -276,24 +307,28 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                 onClick={() => void retry()}
                 type="button"
               >
-                Retry assignment acknowledgement
+                {copy("Retry assignment acknowledgement")}
               </button>
             ) : null}
             {loading ? (
               <p role="status">
                 {mode === "full_sequence"
-                  ? "Loading the frozen published sequence…"
-                  : "Loading the published delayed probe…"}
+                  ? copy("Loading the frozen published sequence…")
+                  : copy("Loading the published delayed probe…")}
               </p>
             ) : null}
-            {!loading && unavailable ? <p className="notice">{unavailable}</p> : null}
+            {!loading && unavailable ? (
+              <p className="notice" lang={unavailableFeedback.lang}>
+                {unavailableFeedback.text}
+              </p>
+            ) : null}
             {sourceConflict && !locked ? (
               <button
                 className="button-quiet"
                 onClick={() => setRefresh((value) => value + 1)}
                 type="button"
               >
-                Refresh published Pack
+                {copy("Refresh published Pack")}
               </button>
             ) : null}
             {!loading && version ? (
@@ -303,37 +338,43 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                   aria-labelledby="pack-practice-source-heading"
                 >
                   <p className="eyebrow">
-                    Frozen published Recovery Pack · version {version.version}
+                    {copy("Frozen published Recovery Pack · version {version}", {
+                      version: formatNumber(locale, version.version),
+                    })}
                   </p>
-                  <h2 id="pack-practice-source-heading">{version.content.title}</h2>
-                  <p>Published {new Date(version.publishedAt).toLocaleString("en-CA")}.</p>
-                  <PackPracticePreview version={version} mode={mode} />
+                  <h2 id="pack-practice-source-heading" lang="">
+                    {version.content.title}
+                  </h2>
+                  <p>
+                    {copy("Published {date}.", {
+                      date: formatDateTime(locale, version.publishedAt),
+                    })}
+                  </p>
+                  <PackPracticePreview version={version} mode={mode} locale={locale} />
                 </section>
                 {!unavailable && !sourceConflict ? (
                   <form className={styles.formCard} onSubmit={create}>
-                    <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0 }}>
+                    <fieldset disabled={locked} className={setupStyles.settingsFields}>
                       <legend>
-                        <h2>Practice settings</h2>
+                        <h2>{copy("Practice settings")}</h2>
                       </legend>
                       <div className={styles.fields}>
                         <label
                           className={`field ${styles.fullField}`}
                           htmlFor="pack-practice-title"
                         >
-                          <span>Practice title</span>
+                          <span>{copy("Practice title")}</span>
                           <input
                             className="input"
                             id="pack-practice-title"
+                            lang=""
                             maxLength={160}
                             value={title}
                             onChange={(event) => setTitle(event.target.value)}
                           />
                         </label>
-                        <fieldset
-                          className={styles.fullField}
-                          style={{ border: 0, margin: 0, padding: 0 }}
-                        >
-                          <legend className="field-label">Participant pacing</legend>
+                        <fieldset className={`${styles.fullField} ${setupStyles.settingsFields}`}>
+                          <legend className="field-label">{copy("Participant pacing")}</legend>
                           <div className={styles.optionGrid}>
                             <label className={styles.option}>
                               <input
@@ -343,8 +384,8 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                                 type="radio"
                               />
                               <span>
-                                <strong>Time-flex</strong>No countdown. Participants respond at
-                                their own pace.
+                                <strong>{copy("Time-flex")}</strong>
+                                {copy("No countdown. Participants respond at their own pace.")}
                               </span>
                             </label>
                             <label className={styles.option}>
@@ -355,19 +396,20 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                                 type="radio"
                               />
                               <span>
-                                <strong>Use the published timer</strong>
+                                <strong>{copy("Use the published timer")}</strong>
                                 {mode === "full_sequence"
-                                  ? "The server enforces each checkpoint’s published time limit when it opens. Intervention cards have no countdown."
-                                  : "The server enforces the delayed probe’s published time limit."}
+                                  ? copy(
+                                      "The server enforces each checkpoint’s published time limit when it opens. Intervention cards have no countdown.",
+                                    )
+                                  : copy(
+                                      "The server enforces the delayed probe’s published time limit.",
+                                    )}
                               </span>
                             </label>
                           </div>
                         </fieldset>
-                        <fieldset
-                          className={styles.fullField}
-                          style={{ border: 0, margin: 0, padding: 0 }}
-                        >
-                          <legend className="field-label">Open practice</legend>
+                        <fieldset className={`${styles.fullField} ${setupStyles.settingsFields}`}>
+                          <legend className="field-label">{copy("Open practice")}</legend>
                           <div className={styles.optionGrid}>
                             <label className={styles.option}>
                               <input
@@ -377,8 +419,8 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                                 type="radio"
                               />
                               <span>
-                                <strong>Now</strong>Participants can start once creation is
-                                acknowledged.
+                                <strong>{copy("Now")}</strong>
+                                {copy("Participants can start once creation is acknowledged.")}
                               </span>
                             </label>
                             <label className={styles.option}>
@@ -389,17 +431,19 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                                 type="radio"
                               />
                               <span>
-                                <strong>Schedule later</strong>Choose a future opening time.
+                                <strong>{copy("Schedule later")}</strong>
+                                {copy("Choose a future opening time.")}
                               </span>
                             </label>
                           </div>
                         </fieldset>
                         {opensLater ? (
                           <label className="field" htmlFor="pack-practice-opens">
-                            <span>Open date and time</span>
+                            <span>{copy("Open date and time")}</span>
                             <input
                               className="input"
                               id="pack-practice-opens"
+                              aria-describedby="pack-practice-window-help"
                               type="datetime-local"
                               min={minOpensAt || undefined}
                               max={maxClosesAt || undefined}
@@ -410,10 +454,11 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                           </label>
                         ) : null}
                         <label className="field" htmlFor="pack-practice-closes">
-                          <span>Close date and time</span>
+                          <span>{copy("Close date and time")}</span>
                           <input
                             className="input"
                             id="pack-practice-closes"
+                            aria-describedby="pack-practice-window-help"
                             type="datetime-local"
                             min={(opensLater ? opensAt : minOpensAt) || undefined}
                             max={maxClosesAt || undefined}
@@ -423,13 +468,25 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                           />
                         </label>
                       </div>
+                      {maxClosesAt && entitlements ? (
+                        <p className={styles.muted} id="pack-practice-window-help">
+                          {copy(
+                            "Practice must close by {date}, within the {days}-day retention window. Times use your device’s time zone.",
+                            {
+                              date: formatDateTime(locale, maxClosesAt),
+                              days: formatNumber(locale, entitlements.reportRetentionDays),
+                            },
+                          )}
+                        </p>
+                      ) : null}
                       <details className={styles.disclosure}>
-                        <summary>Create one-attempt personal links</summary>
+                        <summary>{copy("Create one-attempt personal links")}</summary>
                         <label className="field" htmlFor="pack-practice-labels">
-                          <span>One personal link label per line</span>
+                          <span>{copy("One personal link label per line")}</span>
                           <textarea
                             className="textarea"
                             id="pack-practice-labels"
+                            lang=""
                             rows={5}
                             aria-describedby="pack-practice-labels-help"
                             aria-invalid={Boolean(labelError)}
@@ -438,12 +495,17 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                           />
                         </label>
                         <p className={styles.muted} id="pack-practice-labels-help">
-                          Use non-sensitive labels. {personalLabels.length} of {labelLimit} personal
-                          links. A generic anonymous link is also created.
+                          {copy(
+                            "Use non-sensitive labels. {count} of {limit} personal links. A generic anonymous link is also created.",
+                            {
+                              count: formatNumber(locale, personalLabels.length),
+                              limit: formatNumber(locale, labelLimit),
+                            },
+                          )}
                         </p>
                         {labelError ? (
-                          <p className="error" role="alert">
-                            {labelError}
+                          <p className="error" role="alert" lang={labelFeedback.lang}>
+                            {labelFeedback.text}
                           </p>
                         ) : null}
                       </details>
@@ -454,10 +516,10 @@ function AssignPackPracticeContent({ packId }: { packId: string }) {
                           type="submit"
                         >
                           {creation.busy
-                            ? "Creating…"
+                            ? copy("Creating…")
                             : mode === "full_sequence"
-                              ? "Create full-sequence practice"
-                              : "Create delayed-probe practice"}
+                              ? copy("Create full-sequence practice")
+                              : copy("Create delayed-probe practice")}
                         </button>
                       </div>
                     </fieldset>

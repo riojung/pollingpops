@@ -1,7 +1,14 @@
 import type * as ReactModule from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
 import { createNativeContentBlock } from "../../lib/presentation-native-scene";
-import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
+import {
+  NativeSceneFitFeedback,
+  nativeFitFeedbackText,
+  type NativeFitFeedback,
+} from "./native-scene-fit-feedback";
 import { createNativeTableNode } from "../../lib/presentation-native-data";
 
 const mocked = vi.hoisted(() => ({
@@ -12,12 +19,12 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
-    useState: (initial: string) => {
-      mocked.feedback = initial;
+    useState: (initial: NativeFitFeedback) => {
+      mocked.feedback = nativeFitFeedbackText("en-CA", initial);
       return [
         initial,
-        (value: string) => {
-          mocked.feedback = value;
+        (value: NativeFitFeedback) => {
+          mocked.feedback = nativeFitFeedbackText("en-CA", value);
         },
       ];
     },
@@ -32,6 +39,19 @@ afterEach(() => {
 });
 
 describe("measured native text fit feedback", () => {
+  it("uses an explicit comparison locale with the provider language as its default", () => {
+    const scene = createNativeContentBlock().scene!;
+    const root = { current: null };
+    const selected = renderToStaticMarkup(
+      <NativeSceneFitFeedback root={root} scene={scene} locale="ko-KR" />,
+    );
+    const fallback = renderToStaticMarkup(<NativeSceneFitFeedback root={root} scene={scene} />);
+    expect(selected).toContain('lang="ko-KR"');
+    expect(selected).not.toContain("Check text fit after changing");
+    expect(selected).toContain("텍스트");
+    expect(fallback).toContain('lang="en-CA"');
+    expect(fallback).toContain("Check text fit after changing");
+  });
   it("reports actual data overflow by caption and rechecks it after resize", () => {
     const scene = createNativeContentBlock().scene!;
     const table = createNativeTableNode();
@@ -106,7 +126,7 @@ describe("measured native text fit feedback", () => {
     expect(mocked.feedback).toContain("Check text fit");
     expect(mocked.feedback).not.toContain("All text fits");
   });
-  function browserStage({ narrow = false, fixed = false, loading = false } = {}) {
+  function browserStage({ narrow = false, fixed = false, loading = false, outline = false } = {}) {
     const scene = createNativeContentBlock().scene!;
     const content = { scrollHeight: 100, clientHeight: 100, scrollWidth: 200, clientWidth: 200 };
     const node = { firstElementChild: content, dataset: { nodeId: scene.nodes[0]!.id } };
@@ -134,7 +154,10 @@ describe("measured native text fit feedback", () => {
     };
     const stage = {
       clientWidth: 1280,
-      dataset: { nativeFixedLayout: fixed ? "true" : undefined },
+      dataset: {
+        nativeFixedLayout: fixed ? "true" : undefined,
+        nativeOutline: outline ? "true" : undefined,
+      },
       ownerDocument: { defaultView: owner, fonts },
       querySelectorAll: () => [node],
     };
@@ -154,6 +177,13 @@ describe("measured native text fit feedback", () => {
     h.content.scrollHeight = 240;
     h.windowListeners.get("resize")!();
     expect(mocked.feedback).toContain("exceeds its frame");
+  });
+  it("does not use an accessible outline on a wide screen as proof of framed text fit", () => {
+    const h = browserStage({ fixed: true, outline: true });
+    expect(mocked.feedback).toContain("Wide slide fit cannot be checked");
+    h.stage.dataset.nativeOutline = undefined;
+    h.windowListeners.get("resize")!();
+    expect(mocked.feedback).toContain("All text fits");
   });
   it("waits for real fonts and remeasures on subsequent font loading and viewport changes", async () => {
     const h = browserStage({ fixed: true, loading: true });

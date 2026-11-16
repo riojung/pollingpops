@@ -136,6 +136,30 @@ back the export routes/controls leaves these records intact. Hosted load, physic
 manual accessibility and cost qualification are recorded separately from local checks in the
 [E13 evidence record](../evidence/presentation-e13-static-export.md).
 
+## Presentation offline interactive HTML compatibility
+
+The bounded E13 extension adds `offline_html` to the existing published-version export
+request. Its physical extension is `.html`, MIME type is `text/html`, and fixed download name
+is `polling-pops-presentation-offline.html`. Deploy matching contracts, HTTP routes, renderer
+worker entry points and web controls together before exposing this option. An older server
+rejects the new format; existing PDF, PNG and readable HTML requests keep their meanings.
+No migration, persisted-content version, job queue, entitlement or provider change is required.
+
+The existing recipient-safe projection, media reauthorization, worker cancellation and resource
+limits apply. Verify a compiled-worker offline render and open the result with networking and
+JavaScript disabled. Public reveal/detail bodies become local native disclosures; page and
+section navigation uses internal anchors. The file includes all public bodies, stores no
+progress, creates no learner attempts and cannot submit responses or claim scoring/completion.
+Do not add share credentials, source documents, remote media URLs or arbitrary authored HTML.
+
+The output blocks scripts, forms, embedding and network resources through its content policy
+and contains no application JavaScript. Explicit safe external hyperlinks leave the file.
+This is a portable readable companion, not an operating-system or browser isolation guarantee.
+Downloaded copies cannot be recalled. Rollback may remove the option and API format support
+without rewriting stored content; already downloaded files remain usable. Verification and
+remaining release qualification are in the
+[offline export record](../evidence/presentation-offline-export.md).
+
 ## Presentation stage credential compatibility
 
 Apply `090_presentation_stage_credentials.sql` before enabling the E03 delivery server/web
@@ -625,6 +649,103 @@ Participant, review and static-export projections omit this creator metadata.
 Verify combined capacity/quota races, unchanged-source/revision fencing, accepted retry recovery
 after expiry, erasure and all existing document15 response/scoring semantics before rollout.
 No new paid provider, service or commercial allowance is introduced.
+
+### Selected-text translation and document16
+
+Coordinate the HTTP, jobs, web, history/publication, private-review, static-export and live reader
+upgrade. Disable AI admission and drain/stop assistance workers before applying
+`103_presentation_text_translation.sql` after102. Deploy matching operation/language-capable
+readers and writers, refresh active editors, then re-enable admission. Translation jobs need the
+new readers even before Apply creates scene7/document16 content; disabled admission alone does
+not prevent an old worker from claiming an existing translation job.
+
+Migration103 retains all prior migration bytes and old rewrite/shorten canonical hashes. New
+translation intents bind exact source/target languages; fresh Apply checks the original node's
+wording, role, annotation and revision. Scene7 stores per-text `lang`; document16 permits the
+new scene and private translation provenance. Keep all corresponding SQL guards and optimized
+response readers together. Rehearse original-language-only source changes, unchanged proper
+nouns with changed language, exact lost creation/Apply acknowledgements, Undo/Redo, privacy
+projections, erasure and mixed document16 live questions alongside older document15 fixtures.
+
+After translated jobs or content exist, rollback images must retain operation/language and
+scene7/document16 support and migration103. An older strict job parser cannot list those rows;
+an older document reader cannot read their history or immutable publications. Use a compatible
+image set or forward repair. Do not remove language/provenance, change receipt identities or
+rewrite immutable versions to fit an older binary. See the
+[translation record](../evidence/presentation-e12-translation.md) for the bounded language scope
+and software qualification.
+
+### Reviewed AI discussion suggestions
+
+Apply `104_presentation_question_suggestions.sql` after103 with AI admission disabled and
+assistance workers drained/stopped. Deploy matching HTTP/jobs, queue readers, shared admission
+and cleanup/erasure handlers before enabling new discussion-suggestion generation. Refresh web
+clients so exact source bindings and insertion recovery use the matching contracts. Keep the
+approved `AUTHORING_AI_*` configuration and existing commercial allowance unchanged.
+
+The new private queue shares monthly admissions and the combined two-active-job cap with
+outline and selected-text assistance. All three repositories, worker image sets and SQL guards
+must use matching accounting. Validate source language/list/order changes, concurrent final-slot
+admission, canonical JSONB proposals, raw SQL guards, permission loss, private retention/erasure
+and exact creation/insertion retries, including recovery after job expiry.
+
+No Presentation document or scene version changes. Inserted questions use the existing
+open-text opinion contract and private citations/disclosure. After jobs exist, rollback images
+must retain migration104, its queue readers, accounting and erasure behavior; disable new
+admission and drain or preserve the queue before rollback. Do not drop private jobs or compact
+admission/mutation receipts to make an older binary appear compatible. Free local starters and
+manual editing remain available without the AI provider. See the
+[discussion-suggestion record](../evidence/presentation-question-suggestions.md).
+
+## Self-paced Presentation reading assignments
+
+Apply migration105 after104 before enabling new reading-assignment writes. Deploy matching HTTP,
+jobs/retention, account lifecycle and web readers together. The migration adds independent
+assignment, attempt and operation-receipt state; existing Presentation document/scene formats,
+live sessions, private review links and reports keep their current meanings.
+
+Verify forced tenant RLS, published-version binding, revocation and deadlines, source/account
+deletion and expiry cleanup. Test concurrent starts and page acknowledgements, exact retries after
+lost responses, stale revisions, early completion rejection and completion replay. Preview requests
+must not start attempts. Assignment credentials must not read private attempt progress. Verify
+private images again after storage reads and keep capabilities out of account exports and logs.
+
+Recipients must explicitly retain their personal resume links: active credentials and uncertain
+mutations stay in memory, and shared assignment links never automatically load another reader.
+Reading completion is a self-report and must not be presented as an assessment result or verified
+identity. Activity response collection remains outside this slice.
+
+After assignment records exist, rollback must retain migration105 and compatible retention,
+erasure and receipt readers. Fence new assignment writes before rollback; preserve accepted
+operations and frozen publications rather than dropping the new tables. Existing unrelated
+Presentation delivery can remain on its established gates. See the
+[reading-assignment record](../evidence/presentation-e08-reading-assignments.md).
+
+Reading insights adds a current-owner/editor-only aggregate endpoint and an explicit report/CSV
+panel in Assign reading. It requires migration105 but adds no migration or stored report format.
+Deploy matching HTTP and web readers; existing lifecycle/retention readers remain required.
+Check frozen-version page coverage, exact retry counts, direct/complementary small-group
+suppression and current-authority/cross-tenant denial. Revoked/expired assignments remain
+reportable until expiry plus seven days; delayed cleanup must not extend report access. Verify
+identity/source changes fence late results and clear export state. See the
+[reading-insights record](../evidence/presentation-reading-insights.md).
+
+## Self-paced Presentation choice practice
+
+Apply additive migration106 after105 before enabling practice writes. Deploy matching HTTP, web,
+retention and account-lifecycle readers. Separate practice tables/routes preserve existing reading
+and live delivery; no document or scene version changes.
+
+Check supported-publication eligibility, forced assignment-scoped RLS, preview without attempts,
+no keys/feedback before an accepted personal answer, immutable answers, CAS and exact historical
+receipt replay. Test private resume/clear and late requests, current permission/source/deletion
+fences after lock waits, media reauthorization, explicit completion and small-group reports.
+Verify erasure/export and expiry-plus-seven-day cleanup/access boundaries.
+
+After records exist, rollback retains106 and compatible source/lifecycle/receipt readers. Disable
+new practice admission first; preserve accepted progress and frozen publications. This slice adds
+no service/provider and does not enable timers, points, verified assessment or mastery claims.
+See the [practice record](../evidence/presentation-self-paced-practice.md).
 
 ## Native Presentation composition compatibility
 

@@ -5,6 +5,9 @@ import {
   upcastPresentationContent,
 } from "../src/index.js";
 import {
+  expectPresentationTranslationConformance,
+  expectPresentationTranslationLanguageFence,
+  expectPresentationTranslationUnchangedWording,
   expectPresentationTextAssistanceTargetFence,
   expectPresentationTextAssistanceLifecycle,
   expectPresentationTextAssistanceActorErasure,
@@ -14,6 +17,15 @@ import {
   presentationTextAssistanceFixture,
 } from "./support/presentation-text-assistance-conformance.js";
 describe("Presentation single-node text assistance persistence", () => {
+  it("binds translation targets and original language, preserves evidence and recovers accepted document16 receipts", async () => {
+    await expectPresentationTranslationConformance(new MemoryRepository());
+  });
+  it("rejects a stale original language annotation even when the exact source wording is unchanged", async () => {
+    await expectPresentationTranslationLanguageFence(new MemoryRepository());
+  });
+  it("permits unchanged translated wording only with a newly selected language annotation", async () => {
+    await expectPresentationTranslationUnchangedWording(new MemoryRepository());
+  });
   it("binds exact text and complete intent, preserves original evidence and recovers accepted receipts after expiry and later edits", async () => {
     await expectPresentationTextAssistanceConformance(new MemoryRepository());
   });

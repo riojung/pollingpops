@@ -6,7 +6,15 @@ import {
   type PresentationScene,
 } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
-import { e01ApiUrl, e01Slide, enterE01Editor, type E01Record } from "./presentation-e01-support";
+import {
+  openE01Inspector,
+  selectE01Object,
+  closeE01Overlays,
+  e01ApiUrl,
+  e01Slide,
+  enterE01Editor,
+  type E01Record,
+} from "./presentation-e01-support";
 
 test.use({ actionTimeout: 30_000 });
 
@@ -121,11 +129,7 @@ for (const suffix of ["", " @mobile"]) {
     await enterE01Editor(page, record.id, narrow);
     const stage = page.locator("[data-native-scene]");
     await expectImageCss(stage, narrow, false);
-    const selectImage = () =>
-      page
-        .getByRole("group", { name: "Slide objects · reading order", exact: true })
-        .getByRole("button", { name: "3. Synthetic image framing fixture", exact: true })
-        .click();
+    const selectImage = () => selectE01Object(page, "3. Synthetic image framing fixture", "Media");
     await selectImage();
     await page.getByRole("combobox", { name: "Image fit", exact: true }).selectOption("cover");
     await page.getByRole("spinbutton", { name: "Image focal X (%)", exact: true }).fill("25");
@@ -135,6 +139,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(scene(record).schemaVersion).toBe(3);
     await expectImageCss(stage, narrow, true);
     const beforeLayout = structuredClone(scene(record));
+    await openE01Inspector(page, "Layout");
     await page.getByRole("button", { name: "Image left", exact: true }).click();
     await expect.poll(() => image(record).frame).toEqual({ x: 7, y: 33, width: 40, height: 59 });
     expect(scene(record).nodes.find((node) => node.id === body.id)).toMatchObject({
@@ -148,6 +153,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.getByRole("button", { name: "Image right", exact: true }).click();
     await expect.poll(() => image(record).frame).toEqual({ x: 53, y: 33, width: 40, height: 59 });
     await expectImageCss(stage, narrow, true);
+    await openE01Inspector(page, "Media");
     await page.getByRole("combobox", { name: "Image fit", exact: true }).selectOption("contain");
     await expect.poll(() => image(record).fit).toBe("contain");
     expect(image(record)).not.toHaveProperty("focalPoint");
@@ -187,8 +193,7 @@ for (const suffix of ["", " @mobile"]) {
     ).toBeVisible();
     await page.reload();
     if (narrow) {
-      await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-      await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+      await closeE01Overlays(page);
     }
     await expectImageCss(page.locator("[data-native-scene]"), narrow, true);
     await selectImage();
@@ -204,6 +209,7 @@ for (const suffix of ["", " @mobile"]) {
     expect(record.draft).toEqual(expected);
     expect(saveEnvelopes.length).toBeGreaterThan(3);
     expect(saveEnvelopes.every((version) => version === 2)).toBe(true);
+    if (narrow) await closeE01Overlays(page);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const preview = page.getByRole("dialog", { name: "Presentation preview", exact: true });
     await expectImageCss(preview.locator("[data-native-scene]"), narrow, true);

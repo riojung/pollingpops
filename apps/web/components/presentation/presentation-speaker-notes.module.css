@@ -1,0 +1,320 @@
+.editor {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.heading,
+.presenterHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.heading label,
+.expandedLabel {
+  color: var(--ui-text);
+  font-weight: 650;
+}
+
+.privateBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface-soft);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.privateBadge svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.help,
+.rehearsalHelp {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 320px;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.textarea::placeholder {
+  color: var(--ui-text-muted);
+}
+
+.limit,
+.dialogFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--ui-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.count,
+.slideNumber {
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.actions button,
+.dialog button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actions button:disabled,
+.textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.editor:focus-visible,
+.textarea:focus-visible,
+.actions button:focus-visible,
+.dialog button:focus-visible,
+.notesBody:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+
+.dialog {
+  width: min(920px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 20px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  box-shadow: 0 24px 90px rgb(0 0 0 / 28%);
+}
+
+.dialog::backdrop {
+  background: rgb(12 20 30 / 65%);
+}
+
+.dialogLayout {
+  display: flex;
+  flex-direction: column;
+  height: var(--notes-dialog-height, min(780px, calc(100dvh - 36px)));
+  min-height: 0;
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 16px;
+}
+
+.dialogHeader h2 {
+  margin: 12px 0 8px;
+  font-size: 1.5rem;
+}
+
+.dialog .close {
+  flex-shrink: 0;
+  padding: 10px;
+}
+
+.writingArea {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 120px;
+  gap: 8px;
+  padding: 0 24px;
+}
+
+.expandedLabel {
+  font-size: 0.86rem;
+}
+
+.expandedTextarea {
+  flex: 1;
+  min-height: 100px;
+  resize: none;
+}
+
+.dialogFooter {
+  padding: 16px 24px 24px;
+}
+
+.presenterPanel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+}
+
+.presenterPanel h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.presenterHeading {
+  flex-shrink: 0;
+}
+
+.presenterPrivacy {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: 50%;
+  overflow: auto;
+  border-bottom: 1px solid var(--ui-border);
+  padding-bottom: 6px;
+}
+
+.presenterPrivacy summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.presenterPrivacy summary::-webkit-details-marker {
+  display: none;
+}
+
+.presenterPrivacy summary svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.presenterPrivacy summary svg:last-child {
+  margin-left: auto;
+}
+
+.presenterPrivacy[open] summary svg:last-child {
+  transform: rotate(180deg);
+}
+
+.presenterPrivacy summary:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -2px;
+}
+
+.presenterPrivacy > div {
+  display: grid;
+  gap: 8px;
+  padding-block: 8px 2px;
+}
+
+.slideNumber {
+  color: var(--ui-text-muted);
+  font-size: 0.8rem;
+}
+
+.notesBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-block: 2px 8px;
+  font-size: 1rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notesBody p {
+  margin: 0;
+}
+
+.rehearsalHelp {
+  font-size: 0.78rem;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+
+  .dialogLayout {
+    height: var(--notes-dialog-height, calc(100dvh - 20px));
+  }
+
+  .dialogHeader {
+    padding: 16px 16px 12px;
+  }
+
+  .writingArea {
+    padding-inline: 16px;
+  }
+
+  .dialogFooter {
+    padding: 12px 16px 16px;
+  }
+
+  .presenterPanel {
+    padding: 16px;
+  }
+}

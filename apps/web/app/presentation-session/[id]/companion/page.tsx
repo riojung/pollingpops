@@ -43,6 +43,10 @@ import {
   type PresentationRealtimeController,
 } from "../../../../lib/presentation-realtime";
 import { formatNumber } from "../../../../lib/i18n/format";
+import {
+  companionCopy,
+  localizeCompanionError,
+} from "../../../../lib/i18n/domains/live-delivery/companion-translations";
 import { clientUuid } from "../../../../lib/uuid";
 import { isPresentationHostPassRejection } from "../../../../lib/presentation-host-pass";
 import {
@@ -104,6 +108,7 @@ type CompanionRecovery = ReturnType<
 export default function PresentationCompanionPage() {
   const { id } = useParams<{ id: string }>();
   const { locale, t } = useLocale();
+  const copy = companionCopy(locale);
   const [pass, setPass] = useState<string | null>(null);
   const [captured, setCaptured] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -165,10 +170,10 @@ export default function PresentationCompanionPage() {
         }),
       );
     } catch {
-      setError(t("live.companion.missingPass"));
+      setError("Launch the companion from the Presentation host to connect this window.");
     }
     setCaptured(true);
-  }, [id, t]);
+  }, [id]);
 
   const applySnapshot = useCallback(
     (incoming: PresentationCompanionSnapshot) => setSnapshot(incoming),
@@ -383,7 +388,7 @@ export default function PresentationCompanionPage() {
 
   function retryLabel(command: PresentationCompanionCommand) {
     return isPresentationRecoverableCommand(command)
-      ? presentationNavigationRetryLabel(command)
+      ? localizeCompanionError(locale, presentationNavigationRetryLabel(command)).text
       : t(companionCommandRetryMessageKey(command));
   }
 
@@ -541,6 +546,7 @@ export default function PresentationCompanionPage() {
     ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${encodeURIComponent(snapshot.code)}`
     : "";
   const block = snapshot?.currentBlock;
+  const displayError = localizeCompanionError(locale, error);
   const interactionRuntime = presentationInteractionRuntime(snapshot, {
     mode: "live_staff",
     disabled:
@@ -552,11 +558,11 @@ export default function PresentationCompanionPage() {
     onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
   });
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <section className={styles.sidecar} aria-label={t("live.companion.title")}>
-        <header>
+        <header className={styles.header}>
           <h1>{t("live.companion.title")}</h1>
-          <p className="muted" role="status" aria-live="polite">
+          <p className={styles.connection} role="status" aria-live="polite">
             {t(
               !pass && captured
                 ? "live.companion.disconnected"
@@ -567,8 +573,8 @@ export default function PresentationCompanionPage() {
           </p>
         </header>
         {error ? (
-          <p className="error" role="alert">
-            {error}
+          <p className="error" role="alert" lang={displayError.language}>
+            {displayError.text}
           </p>
         ) : null}
         {!pass && captured ? (
@@ -579,20 +585,6 @@ export default function PresentationCompanionPage() {
         {pass && !snapshot ? <p role="status">{t("live.companion.loading")}</p> : null}
         {snapshot ? (
           <>
-            <PresentationSpatialDelivery
-              spatial={snapshot.spatial}
-              currentBlockIndex={snapshot.currentBlockIndex}
-              phase={snapshot.phase}
-              sourceKey={`${id}:${snapshot.presentationVersionId}`}
-              navigation={snapshot.navigation}
-              disabled={
-                commandState.busy ||
-                !!commandState.pendingCommand ||
-                !pass ||
-                !controllerRef.current?.canMutate()
-              }
-              onJump={(blockId) => void navigate("jump_to_block", blockId)}
-            />
             <div className={styles.current}>
               <span className={styles.phase}>{t(`live.companion.phase.${snapshot.phase}`)}</span>
               <h2 lang="">
@@ -612,8 +604,103 @@ export default function PresentationCompanionPage() {
                 })}
               </p>
             </div>
+            <div className={styles.primaryControls}>
+              <p className={styles.acknowledgement} role="status" aria-live="polite">
+                {t(
+                  commandState.busy
+                    ? "live.companion.waitingAck"
+                    : commandState.pendingCommand
+                      ? "live.companion.unconfirmed"
+                      : confirmed
+                        ? "live.companion.confirmed"
+                        : "live.companion.ready",
+                )}
+              </p>
+              <button
+                className="button full-width"
+                disabled={
+                  !pass ||
+                  commandState.busy ||
+                  !controllerRef.current?.canMutate() ||
+                  (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
+                }
+                onClick={() => void advanceOrRetry()}
+                ref={primaryButtonRef}
+                type="button"
+              >
+                {commandState.pendingCommand && !commandState.busy
+                  ? retryLabel(commandState.pendingCommand)
+                  : t(
+                      commandState.busy
+                        ? "live.common.updating"
+                        : snapshot.primaryAction === "none"
+                          ? "live.companion.noAction"
+                          : companionAdvanceMessageKey(snapshot),
+                    )}
+              </button>
+              <div className={styles.navigationTools}>
+                {snapshot.navigation ? (
+                  <button
+                    className="button-quiet"
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      setOverlay("navigation");
+                    }}
+                    aria-haspopup="dialog"
+                    aria-expanded={overlay === "navigation"}
+                  >
+                    {copy("Open navigation")}
+                  </button>
+                ) : null}
+                <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
+                  {t("live.companion.showJoin")}
+                </button>
+                {results || opinionResults || textResults ? (
+                  <button
+                    className="button-quiet"
+                    onClick={() => setOverlay("results")}
+                    type="button"
+                  >
+                    {t("live.companion.showResults")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <dl className={styles.metrics}>
+              {(
+                [
+                  ["joined", snapshot.roomStatus.joinedCount],
+                  ["answered", snapshot.roomStatus.responseCount],
+                  ["connectedCount", snapshot.roomStatus.connectedCount],
+                  ["disconnected", snapshot.roomStatus.notCurrentlyConnectedCount],
+                ] as const
+              ).map(([label, count]) => (
+                <div key={label}>
+                  <dt>{t(`live.companion.${label}`)}</dt>
+                  <dd>{formatNumber(locale, count)}</dd>
+                </div>
+              ))}
+            </dl>
+            <PresentationSpatialDelivery
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+              navigation={snapshot.navigation}
+              disabled={
+                commandState.busy ||
+                !!commandState.pendingCommand ||
+                !pass ||
+                !controllerRef.current?.canMutate()
+              }
+              onJump={(blockId) => void navigate("jump_to_block", blockId)}
+            />
             {block?.kind === "content" && block.scene?.nodes.some(isNativeInteractionNode) ? (
-              <section aria-label="Current slide interactions" className={styles.slideInteractions}>
+              <section
+                aria-label={copy("Current slide interactions")}
+                className={styles.slideInteractions}
+              >
                 <ContentSlideView
                   block={block}
                   interactionRuntime={interactionRuntime}
@@ -631,79 +718,7 @@ export default function PresentationCompanionPage() {
                 />
               </section>
             ) : null}
-            <dl className={styles.metrics}>
-              {(
-                [
-                  ["joined", snapshot.roomStatus.joinedCount],
-                  ["answered", snapshot.roomStatus.responseCount],
-                  ["connectedCount", snapshot.roomStatus.connectedCount],
-                  ["disconnected", snapshot.roomStatus.notCurrentlyConnectedCount],
-                ] as const
-              ).map(([label, count]) => (
-                <div key={label}>
-                  <dt>{t(`live.companion.${label}`)}</dt>
-                  <dd>{formatNumber(locale, count)}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className={styles.acknowledgement} role="status" aria-live="polite">
-              {t(
-                commandState.busy
-                  ? "live.companion.waitingAck"
-                  : commandState.pendingCommand
-                    ? "live.companion.unconfirmed"
-                    : confirmed
-                      ? "live.companion.confirmed"
-                      : "live.companion.ready",
-              )}
-            </p>
-            <button
-              className="button full-width"
-              disabled={
-                !pass ||
-                commandState.busy ||
-                !controllerRef.current?.canMutate() ||
-                (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
-              }
-              onClick={() => void advanceOrRetry()}
-              ref={primaryButtonRef}
-              type="button"
-            >
-              {commandState.pendingCommand && !commandState.busy
-                ? retryLabel(commandState.pendingCommand)
-                : t(
-                    commandState.busy
-                      ? "live.common.updating"
-                      : snapshot.primaryAction === "none"
-                        ? "live.companion.noAction"
-                        : companionAdvanceMessageKey(snapshot),
-                  )}
-            </button>
             <div className={styles.secondary}>
-              {snapshot.navigation ? (
-                <button
-                  className="button-quiet"
-                  lang="en-CA"
-                  type="button"
-                  onClick={() => setOverlay("navigation")}
-                  aria-haspopup="dialog"
-                  aria-expanded={overlay === "navigation"}
-                >
-                  Open navigation
-                </button>
-              ) : null}
-              <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
-                {t("live.companion.showJoin")}
-              </button>
-              {results || opinionResults || textResults ? (
-                <button
-                  className="button-quiet"
-                  onClick={() => setOverlay("results")}
-                  type="button"
-                >
-                  {t("live.companion.showResults")}
-                </button>
-              ) : null}
               {snapshot.canInsertRecoveryPack !== undefined ? (
                 <button
                   className="button-quiet"
@@ -770,10 +785,19 @@ export default function PresentationCompanionPage() {
               />
             ) : null}
             {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-              <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+              <RecoveryPackLiveCardView
+                card={snapshot.recoveryPackIntervention.card}
+                labels={{
+                  language: locale,
+                  regionName: copy("Active Recovery Pack card"),
+                  attribution: `${copy("Recovery Pack card")} · ${t("live.companion.packs.version", { version: formatNumber(locale, snapshot.recoveryPackIntervention.card.reference.packVersion) })}`,
+                  sources: copy("Sources"),
+                }}
+              />
             ) : null}
             {snapshot.branches ? (
               <PresentationBranches
+                locale={locale}
                 branches={snapshot.branches}
                 disabled={
                   commandState.busy ||
@@ -789,6 +813,7 @@ export default function PresentationCompanionPage() {
       </section>
       {overlay === "navigation" && snapshot?.navigation ? (
         <PresentationNavigationDialog
+          locale={locale}
           navigation={snapshot.navigation}
           disabled={
             commandState.busy ||
@@ -811,7 +836,13 @@ export default function PresentationCompanionPage() {
           <p>{t("live.presentationSession.joinCode")}</p>
           <p className={styles.joinCode}>{snapshot.code}</p>
           <QRCodeSVG value={joinUrl} size={200} title={t("live.companion.joinQr")} />
-          <a className={styles.joinLink} href={joinUrl} target="_blank" rel="noopener noreferrer">
+          <a
+            className={styles.joinLink}
+            href={joinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            lang=""
+          >
             {joinUrl}
           </a>
         </CompanionOverlay>
@@ -894,8 +925,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -937,8 +968,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -980,8 +1011,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>

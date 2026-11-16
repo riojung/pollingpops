@@ -47,6 +47,7 @@ import {
   presentationResponseMatchesBlock,
   presentationResponsesForContent,
 } from "./presentation-response-identifiers.js";
+import { presentationBlockDesign } from "./presentation-block-design.js";
 
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
 
@@ -121,6 +122,7 @@ export function presentationParticipantBlock(
   session?: PresentationSessionRecord,
 ) {
   if (!block) return null;
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -129,10 +131,12 @@ export function presentationParticipantBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(design ? { design } : {}),
       ...(block.scene ? { scene: presentationDeliveredScene(block, session) } : {}),
     };
   }
   const question = block.question;
+  const blockFields = { id: block.id, kind: block.kind, ...(design ? { design } : {}) };
   if (!presentationQuestionSupported(question)) {
     throw new Error("This response format currently supports Live Rounds only");
   }
@@ -155,11 +159,10 @@ export function presentationParticipantBlock(
       : {}),
   };
   if (question.type === "numeric" || isPresentationTextResultQuestion(question))
-    return { id: block.id, kind: block.kind, question: base };
+    return { ...blockFields, question: base };
   if (question.type === "rating") {
     return {
-      id: block.id,
-      kind: block.kind,
+      ...blockFields,
       question: {
         ...base,
         min: question.min,
@@ -171,8 +174,7 @@ export function presentationParticipantBlock(
   }
   if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
   return {
-    id: block.id,
-    kind: block.kind,
+    ...blockFields,
     question: {
       ...base,
       choices: question.choices.map(({ id, label }) => ({ id, label })),
@@ -269,6 +271,7 @@ function presentationRealtimeBlock(
   staffScene = facilitator,
 ) {
   if (!block) return null;
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -277,12 +280,14 @@ function presentationRealtimeBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
+      ...(design ? { design } : {}),
       ...(block.scene ? { scene: presentationDeliveredScene(block, session, staffScene) } : {}),
     };
   }
   return {
     id: block.id,
     kind: block.kind,
+    ...(design ? { design } : {}),
     question: presentationLiveQuestion(block.question, facilitator),
     ...(facilitator
       ? {
@@ -771,6 +776,7 @@ export function buildPresentationListSnapshot(
       session.phase === "question_reveal" ||
         session.phase === "intervention" ||
         session.phase === "finished",
+      session,
     ),
     questionOpenedAt: session.questionOpenedAt?.toISOString() ?? null,
     questionClosesAt: presentationQuestionDeadline(session)?.toISOString() ?? null,

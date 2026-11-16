@@ -10,6 +10,76 @@ import {
 } from "./presentation-session-insights.test-fixtures";
 
 describe("truthful Presentation insights projection", () => {
+  it("localizes only constructed UI labels and records authored boundaries for colliding titles, sections and options", () => {
+    const value = presentationInsightsFixture();
+    value.title = "Content";
+    value.delivery.blocks[0]!.title = "Content";
+    value.delivery.blocks[2]!.title = "Presented {block} $&";
+    value.delivery.sections[0]!.title = "Presented";
+    value.participation.questions.find(
+      (question) => question.purpose === "opinion",
+    )!.results[0]!.label = "Not recorded";
+    const before = structuredClone(value);
+    const csv = presentationInsightsCsv(value, "de-DE");
+    const html = presentationInsightsHtml(value, "de-DE");
+    const copy: NonNullable<Parameters<typeof presentationInsightsView>[2]> = (key, values = {}) =>
+      `UI ${key}`.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+    const view = presentationInsightsView(value, "de-DE", copy);
+    expect(view.title).toBe("Content");
+    expect(view.facts).toContainEqual([
+      "UI Content",
+      "UI Frozen session content; session additions are marked below.",
+    ]);
+    const sections = view.tables.find((table) => table.title === "UI Section delivery")!;
+    expect(sections.rows[0]![0]).toBe("Presented");
+    expect(sections.authoredCells![0]![0]).toBe(true);
+    expect(sections.rows[2]![0]).toBe("UI Unsectioned");
+    expect(sections.authoredCells![2]![0]).toBe(false);
+    const blocks = view.tables.find((table) => table.title === "UI Block delivery")!;
+    expect(blocks.rows[0]).toEqual([
+      "1. Content",
+      "UI Content",
+      "Presented",
+      "UI Presented",
+      "UI Published content",
+    ]);
+    expect(blocks.authoredCells![0]).toEqual([true, false, true]);
+    const distribution = view.tables.find((table) =>
+      table.title.startsWith("UI Opinion distribution"),
+    )!;
+    expect(distribution.title).toBe("UI Opinion distribution · 3. Presented {block} $&");
+    expect(distribution.titleParts?.filter((part) => part.authored)).toEqual([
+      { text: "3. Presented {block} $&", authored: true },
+    ]);
+    expect(distribution.rows[0]).toEqual(["Not recorded", "3"]);
+    expect(distribution.authoredCells![0]![0]).toBe(true);
+    const skipped = view.tables.find((table) =>
+      table.title.startsWith("UI Quick Check distribution"),
+    )!;
+    expect(skipped.rows[0]).toEqual(["UI Not applicable"]);
+    expect(skipped.authoredCells?.[0]?.[0]).not.toBe(true);
+    expect(value).toEqual(before);
+    expect(presentationInsightsCsv(value, "de-DE")).toBe(csv);
+    expect(presentationInsightsHtml(value, "de-DE")).toBe(html);
+  });
+
+  it("localizes generated block fallbacks while marking no authored language on missing titles", () => {
+    const value = presentationInsightsFixture();
+    value.delivery.blocks[0]!.title = "";
+    value.delivery.blocks[2]!.title = "";
+    const copy: NonNullable<Parameters<typeof presentationInsightsView>[2]> = (key, values = {}) =>
+      `UI ${key}`.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+    const view = presentationInsightsView(value, "en-CA", copy);
+    const blocks = view.tables.find((table) => table.title === "UI Block delivery")!;
+    expect(blocks.rows[0]![0]).toBe("1. UI Untitled block");
+    expect(blocks.authoredCells![0]![0]).toBe(false);
+    const distribution = view.tables.find((table) =>
+      table.title.startsWith("UI Opinion distribution"),
+    )!;
+    expect(distribution.titleParts?.some((part) => part.authored)).toBe(false);
+    expect(distribution.title).toBe("UI Opinion distribution · 3. UI Untitled block");
+  });
+
   it("uses recorded reveal rosters rather than the final joined count and keeps zero distinct from missing", () => {
     const view = presentationInsightsView(presentationInsightsFixture());
     const assessment = view.tables.find(

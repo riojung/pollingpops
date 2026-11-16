@@ -123,6 +123,7 @@ export function PresentationTextResults({
       ) : (
         <TextResultsView
           type={type}
+          compact={compact}
           respondents={current.data.approvedRespondents}
           items={current.data.items.map((item, index) => ({
             answerId: `${key}:${index}`,

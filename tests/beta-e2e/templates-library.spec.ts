@@ -50,11 +50,23 @@ for (const mobile of [false, true]) {
     });
     await expect(round).toBeVisible();
     await round.getByRole("button", { name: "Preview questions", exact: true }).click();
-    await expect(round.locator("#starter-preview-source-evaluation")).toContainText(
-      "Two articles make opposite claims. What is the most useful first comparison?",
+    const roundPreview = page.locator("#starter-preview-source-evaluation");
+    const sourceResponse = await page.request.get(
+      `${api}/v1/starters/source-evaluation?locale=en-CA`,
     );
-    // The preview is read-only; creation happens only after the explicit action.
+    expect(sourceResponse.ok()).toBe(true);
+    const source = await sourceResponse.json();
+    await expect(roundPreview).toContainText(source.draft.questions[0].prompt);
+    await expect(roundPreview).toContainText(source.draft.questions[0].explanation);
+    await expect(roundPreview).toContainText(source.guide.preparation);
+    await expect(roundPreview.locator("input")).toHaveCount(0);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    // Preview does not create a draft or submit answers.
     await expect(page).toHaveURL(/\/templates$/);
+    await roundPreview.getByRole("button", { name: "Close preview", exact: true }).click();
+    await expect(
+      round.getByRole("button", { name: "Preview questions", exact: true }),
+    ).toBeFocused();
     await round.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/quiz\/[0-9a-f-]+$/);
     const roundId = new URL(page.url()).pathname.split("/").at(-1);
@@ -62,8 +74,21 @@ for (const mobile of [false, true]) {
     expect(roundResponse.ok()).toBe(true);
     const { quiz } = await roundResponse.json();
     expect(quiz.draft.title).toBe("Evidence worth trusting");
-    expect(quiz.draft.questions).toHaveLength(2);
-    expect(quiz.draft.questions[0].linkedRecheckQuestionId).toBe(quiz.draft.questions[1].id);
+    expect(quiz.draft.questions).toHaveLength(6);
+    const questionsById = new Map<string, { delivery: string }>(
+      quiz.draft.questions.map((question: { id: string; delivery: string }) => [
+        question.id,
+        question,
+      ]),
+    );
+    for (const question of quiz.draft.questions.filter(
+      (item: { linkedRecheckQuestionId: string | null }) => item.linkedRecheckQuestionId,
+    )) {
+      expect(questionsById.get(question.linkedRecheckQuestionId)?.delivery).toBe("recheck");
+    }
+    expect(
+      quiz.draft.questions.every((question: { purpose: string }) => question.purpose !== "opinion"),
+    ).toBe(true);
 
     await page.goto("/templates");
     await types.getByRole("tab", { name: "Surveys", exact: true }).click();
@@ -71,6 +96,17 @@ for (const mobile of [false, true]) {
     const survey = page.getByRole("article").filter({
       has: page.getByRole("heading", { name: "Event experience", exact: true }),
     });
+    await survey.getByRole("button", { name: "Preview questionnaire", exact: true }).click();
+    const surveyPreview = page.locator("#starter-preview-event-feedback");
+    const questionnaireResponse = await page.request.get(
+      `${api}/v1/surveys/templates/event-feedback?locale=en-CA`,
+    );
+    expect(questionnaireResponse.ok()).toBe(true);
+    const questionnaire = (await questionnaireResponse.json()).draft;
+    await expect(surveyPreview).toContainText(questionnaire.description);
+    await expect(surveyPreview).toContainText("Optional");
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await surveyPreview.getByRole("button", { name: "Close preview", exact: true }).click();
     await survey.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
     const surveyId = new URL(page.url()).pathname.split("/").at(-1);
@@ -78,7 +114,11 @@ for (const mobile of [false, true]) {
     expect(surveyResponse.ok()).toBe(true);
     const storedSurvey = (await surveyResponse.json()).survey;
     expect(storedSurvey.draft.title).toBe("Event experience");
-    expect(storedSurvey.draft.items).toHaveLength(4);
+    expect(storedSurvey.draft.items).toHaveLength(8);
+    expect(storedSurvey.draft.description).toBe(questionnaire.description);
+    expect(storedSurvey.draft.items.map((item: { required: boolean }) => item.required)).toEqual(
+      questionnaire.items.map((item: { required: boolean }) => item.required),
+    );
     expect(
       storedSurvey.draft.items.every((item: { question: { type: string } }) =>
         ["poll", "rating"].includes(item.question.type),

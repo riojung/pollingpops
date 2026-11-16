@@ -4,8 +4,14 @@ import type {
   PresentationRevealedAnswer,
 } from "@openround/contracts";
 import { ContentSlideView } from "../presentation/content-slide-view";
+import {
+  PresentationActivitySlide,
+  type PresentationActivitySlideProps,
+} from "../presentation/presentation-activity-slide";
 import styles from "./presentation-delivery.module.css";
 import type { NativeSceneInteractionRuntime } from "../presentation/native-scene-interaction-view";
+import { useLocale } from "../locale-provider";
+import { presentationActivityCopy } from "../presentation/presentation-activity-copy";
 
 export function PresentationDeliveryBlock({
   block,
@@ -13,20 +19,29 @@ export function PresentationDeliveryBlock({
   revealedAnswer = null,
   interactionSourceKey,
   interactionRuntime,
+  accessibilityContext,
+  fixedLayout = false,
 }: {
   block: PresentationParticipantCurrentBlock;
   renderMedia: (mediaId: string | null, altText: string | null) => ReactNode;
   revealedAnswer?: PresentationRevealedAnswer | null;
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
+  accessibilityContext?: PresentationActivitySlideProps["accessibilityContext"];
+  /** Dedicated audience displays can retain content artwork at phone widths. */
+  fixedLayout?: boolean;
 }) {
+  const { locale } = useLocale();
+  const copy = presentationActivityCopy(locale);
   if (block.kind === "content") {
     return (
       <ContentSlideView
         block={block}
+        designOverride={block.design}
         interactionSourceKey={interactionSourceKey}
         interactionRuntime={interactionRuntime}
         variant="live"
+        fixedLayout={fixedLayout}
         media={renderMedia(block.mediaId, block.mediaAlt)}
         renderSceneImage={(id, alt) => renderMedia(id, alt)}
       />
@@ -34,32 +49,21 @@ export function PresentationDeliveryBlock({
   }
   return (
     <div className={styles.block}>
-      <h1 lang="">{block.question.prompt}</h1>
-      {renderMedia(block.question.mediaId, block.question.mediaAlt)}
-      <div className={styles.choices}>
-        {block.question.choices.map((choice) => {
-          const correct =
-            revealedAnswer?.kind === "choice" &&
-            revealedAnswer.correctChoiceIds.includes(choice.id);
-          return (
-            <div
-              className={`${styles.choice}${correct ? ` ${styles.correct}` : ""}`}
-              key={choice.id}
-            >
-              <span lang="">{choice.label}</span>
-              {correct ? <p lang="en-CA">Correct answer</p> : null}
-            </div>
-          );
-        })}
-      </div>
-      {!block.question.choices.length ? (
-        <p lang="en-CA">
-          {block.question.type === "numeric"
-            ? "Enter a number on your device."
-            : block.question.type === "open_text" || block.question.type === "word_cloud"
-              ? "Respond on your device. Responses are reviewed before they appear."
-              : "Choose a rating on your device."}
-        </p>
+      <PresentationActivitySlide
+        accessibilityContext={accessibilityContext}
+        question={block.question}
+        design={block.design}
+        media={
+          block.question.mediaId
+            ? renderMedia(block.question.mediaId, block.question.mediaAlt)
+            : undefined
+        }
+        revealedChoiceIds={
+          revealedAnswer?.kind === "choice" ? revealedAnswer.correctChoiceIds : undefined
+        }
+      />
+      {block.question.type === "open_text" || block.question.type === "word_cloud" ? (
+        <p lang={locale}>{copy.reviewNotice}</p>
       ) : null}
       {revealedAnswer?.kind === "numeric" ? (
         <p lang="">

@@ -16,6 +16,13 @@ const mimeTypes: Record<PresentationStaticExportFormat, string> = {
   pdf: "application/pdf",
   png: "image/png",
   html: "text/html",
+  offline_html: "text/html",
+};
+const filenames: Record<PresentationStaticExportFormat, string> = {
+  pdf: "polling-pops-presentation.pdf",
+  png: "polling-pops-presentation.png",
+  html: "polling-pops-presentation.html",
+  offline_html: "polling-pops-presentation-offline.html",
 };
 
 export async function fetchPresentationStaticExportSource(
@@ -146,7 +153,7 @@ export function downloadPresentationStaticExport({
   };
   try {
     anchor.href = url;
-    anchor.download = `polling-pops-presentation.${format}`;
+    anchor.download = filenames[format];
     document.body.append(anchor);
     anchor.click();
     timer = setTimeout(release, 0);

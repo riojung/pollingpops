@@ -22,6 +22,8 @@ import {
   PRESENTATION_SCENE_MAX_NODES,
   preparePresentationPublication,
   presentationTextAssistanceSourceDigest,
+  presentationQuestionSuggestionSource,
+  presentationQuestionSuggestionsSourceDigest,
   resolvePresentationSpatialFrames,
   type PresentationDraftMutation,
   resolveContentSlideFrames,
@@ -37,7 +39,7 @@ import {
   type ApplyPresentationRecoveryPackUpdate,
   type PresentationRecoveryPackUpdatePreview,
 } from "@openround/contracts";
-import { ApiClientError, apiFetch, humanError } from "../../lib/api";
+import { AUTH_CHANGE_EVENT, ApiClientError, apiFetch, humanError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
 import {
   clearBuilderRecovery,
@@ -48,12 +50,10 @@ import {
 import { formatDateTime } from "../../lib/i18n/format";
 import {
   addContentTextElement,
-  addPresentationSection,
   applyContentSlideLayout,
   assignPresentationBlockToSection,
   changePresentationQuestionType,
   contentSlideTitle,
-  createContentBlock,
   createContentTextElement,
   createQuestionBlock,
   duplicatePresentationBlock,
@@ -66,7 +66,6 @@ import {
   normalizePresentationRecoveryDraft,
   presentationReadiness,
   presentationInteractionTargets,
-  presentationSectionForBlock,
   promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
@@ -83,7 +82,21 @@ import { PresentationSpatialDelivery } from "../presentation-live/presentation-s
 import { PresentationSpatialEditor } from "./presentation-spatial-editor";
 import { RetainedPresentationSave } from "../../lib/presentation-draft-save";
 import { PresentationShareButton } from "../presentation-sharing/share-dialog";
+import { PresentationAssignmentButton } from "../presentation-assignments/assignment-dialog";
+import { PresentationPracticeButton } from "../presentation-practice/practice-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
+import { PresentationDesignGallery } from "../workspace/presentation-design-gallery";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../lib/i18n/presentation-design-copy";
+import {
+  applyPresentationDesign,
+  createDesignSlide,
+  type DesignLayoutId,
+  type PresentationDesignApplicationMode,
+  type PresentationDesignId,
+} from "../../lib/presentation-designs";
 import {
   applyNativeDesignToDeck,
   applyNativeSceneToDeck,
@@ -98,7 +111,6 @@ import {
 import { AuthoringAssistant } from "../authoring-assistant";
 import { CanvasArtifactLinks } from "../canvas-artifact-links/links";
 import { ResponseEditor } from "../editor/response-editor";
-import { TextResponseControl } from "../text-response-control";
 import { MediaEditor } from "../editor/media-editor";
 import type { RecoveryPackUpdateUndo } from "../editor/recovery-pack-update-panel";
 import { ContentSlideView, contentSlideRegionLabels } from "./content-slide-view";
@@ -117,16 +129,63 @@ import {
 } from "./recovery-pack-update-review";
 import styles from "./presentation-builder.module.css";
 import { NativeSceneEditor } from "./native-scene-editor";
+import { nativeEditorCopy } from "./native-editor-copy";
+import { nativeControlsCopy } from "./native-controls-copy";
+import { assistanceCopy } from "./assistance-copy";
+import { textAssistanceCopy, textAssistanceFeedback } from "./text-assistance-copy";
+import { PresentationActivitySlide } from "./presentation-activity-slide";
+import { SpeakerNotesEditor, PresenterNotesPanel } from "./presentation-speaker-notes";
+import {
+  inheritPresentationSceneDesign,
+  resolvePresentationContentDesign,
+  resolvePresentationActivityDesign,
+} from "../../lib/presentation-activity-design";
+import { applyNativeSceneDesign } from "../../lib/presentation-native-design";
+import {
+  EditorIcon,
+  EDITOR_MODAL_SELECTOR,
+  EditorDisclosure,
+  handoffEditorDisclosure,
+  EditorMenuSection,
+  type EditorIconName,
+  PresentationSlideThumbnail,
+} from "./presentation-editor-chrome";
+import { PresentationQuestionStarters } from "./presentation-question-starters";
+import { questionStartersFeedback } from "../../lib/i18n/question-starters-copy";
+import { questionSuggestionsCopy, questionSuggestionsFeedback } from "./question-suggestions-copy";
+import { visualImportCopy, visualImportFeedback } from "./visual-import-copy";
+import { sourceWorkflowsCopy, sourceWorkflowsFeedback } from "./source-workflows-copy";
+import { packUpdateCopy, packUpdateFeedback } from "../../lib/i18n/pack-update-copy";
+import { packInsertionFeedback } from "../../lib/i18n/pack-insertion-copy";
+import { insertPresentationQuestionStarter } from "../../lib/presentation-question-starters";
+import { PresentationQuestionSuggestions } from "./presentation-question-suggestions";
+import type { QuestionSuggestionsTarget } from "../../lib/presentation-question-suggestions-client";
 import { PresentationVisualImport } from "./presentation-visual-import";
 import { PresentationAssistance } from "./presentation-assistance";
-import { PresentationTextAssistance } from "./presentation-text-assistance";
+import {
+  PresentationTextAssistance,
+  textAssistanceLanguageDisplay,
+} from "./presentation-text-assistance";
 import {
   sameTextAssistanceBlockId,
   type TextAssistanceTarget,
   type TextAssistanceRecovery,
 } from "../../lib/presentation-text-assistance-client";
-import { PresentationSections } from "./presentation-sections";
+import { PresentationSectionHeader, PresentationSections } from "./presentation-sections";
+import { PresentationNavigatorResize } from "./presentation-navigator-resize";
+import {
+  addPresentationSectionAtBlock,
+  canMovePresentationSection,
+  movePresentationSection,
+  presentationSectionRuns,
+} from "../../lib/presentation-sections";
+import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
+import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
+import { presentationCommandCopy } from "./presentation-command-copy";
+import { authoringWorkflowCopy } from "../editor/authoring-workflow-copy";
+import { PresentationVersionChoice } from "./presentation-version-choice";
+import { publishBeforePresent } from "./publish-before-present";
 import {
   adaptContentSlideToScene,
   attachNativeImage,
@@ -171,6 +230,18 @@ type InspectorTab =
   | "accessibility"
   | "readiness";
 
+const inspectorTabIcons: Record<InspectorTab, EditorIconName> = {
+  build: "content",
+  diagnose: "preview",
+  recover: "recovery",
+  content: "content",
+  layout: "layout",
+  media: "media",
+  notes: "notes",
+  accessibility: "accessibility",
+  readiness: "check",
+};
+
 const HISTORY_LIMIT = 40;
 const TEXT_EDIT_COALESCE_MS = 750;
 const slideLayouts: Array<{ id: ContentSlideLayout; label: string }> = [
@@ -204,42 +275,6 @@ function updateBlock(
   };
 }
 
-const modalFocusable =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function focusModal(container: HTMLElement | null) {
-  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  const first = container?.querySelector<HTMLElement>(modalFocusable) ?? container;
-  first?.focus();
-  return () => previous?.focus();
-}
-
-function handleModalKeyDown(event: KeyboardEvent<HTMLElement>, onClose: () => void) {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    onClose();
-    return;
-  }
-  if (event.key !== "Tab") return;
-  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>(modalFocusable)].filter(
-    (element) => element.offsetParent !== null,
-  );
-  if (focusable.length === 0) {
-    event.preventDefault();
-    event.currentTarget.focus();
-    return;
-  }
-  const first = focusable[0]!;
-  const last = focusable.at(-1)!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
 function AuthenticatedMedia({ mediaId, altText }: { mediaId: string; altText: string | null }) {
   const [source, setSource] = useState("");
   useEffect(() => {
@@ -264,44 +299,113 @@ function AuthenticatedMedia({ mediaId, altText }: { mediaId: string; altText: st
   );
 }
 
+function nativeSlideTitleLanguage(block: PresentationBlockDraft) {
+  if (block.kind !== "content") return undefined;
+  const title = block.scene?.nodes.find((node) => node.type === "text" && node.role === "title");
+  return title?.type === "text" && title.text.trim() ? title.lang : undefined;
+}
+
 function PresentationPreview({
   draft,
   onClose,
+  initialBlockId,
+  initialMode = "audience",
+  origin,
 }: {
   draft: PresentationDraft;
   onClose: () => void;
+  initialBlockId?: string | null;
+  initialMode?: "audience" | "presenter";
+  origin?: "interaction" | "notes" | "slide";
 }) {
-  const [index, setIndex] = useState(0);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
+  const [mode, setMode] = useState(initialMode);
   const publication = preparePresentationPublication(draft);
+  const [index, setIndex] = useState(
+    Math.max(
+      0,
+      publication.blocks.findIndex(
+        (candidate) => candidate.id.toLowerCase() === initialBlockId?.toLowerCase(),
+      ),
+    ),
+  );
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const block = publication.blocks[index];
-  useEffect(() => focusModal(dialogRef.current), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.showModal();
+    const restoreFocus = focusModal(dialog);
+    return () => {
+      restoreFocus();
+      dialog.close();
+      previous?.focus({ preventScroll: true });
+    };
+  }, []);
+  useEffect(() => {
+    workspaceRef.current?.scrollTo({ top: 0, left: 0 });
+    canvasRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [block?.id, mode]);
   return (
-    <div
+    <dialog
       ref={dialogRef}
-      className={styles.previewBackdrop}
+      className={styles.previewModal}
       role="dialog"
       aria-modal="true"
-      aria-label="Presentation preview"
-      lang="en-CA"
-      onKeyDown={(event) => handleModalKeyDown(event, onClose)}
+      aria-label={authoring.preview}
+      data-presentation-preview="true"
+      data-preview-origin={origin ?? (initialBlockId ? "interaction" : undefined)}
+      data-preview-mode={mode}
+      lang={locale}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") event.stopPropagation();
+        handleModalKeyDown(event, onClose);
+      }}
       tabIndex={-1}
     >
       <div className={styles.previewStage}>
-        <div className={styles.previewBar}>
-          <strong lang={draft.title ? "" : "en-CA"}>
-            {draft.title || "Untitled presentation"}
+        <div className={styles.previewBar} data-preview-header>
+          <strong
+            lang={draft.title ? "" : locale}
+            title={draft.title || t("delivery.presentationBuilder.untitled")}
+          >
+            {draft.title || t("delivery.presentationBuilder.untitled")}
           </strong>
-          <span>
+          <span role="status" aria-atomic="true">
             {publication.blocks.length
               ? `${index + 1} / ${publication.blocks.length}`
-              : "No slides"}
+              : authoring.noSlides}
           </span>
+          <div className={styles.previewModes} role="group" aria-label={authoring.previewMode}>
+            <button
+              type="button"
+              aria-pressed={mode === "audience"}
+              onClick={() => setMode("audience")}
+            >
+              <EditorIcon name="slides" /> {authoring.audienceView}
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "presenter"}
+              onClick={() => setMode("presenter")}
+            >
+              <EditorIcon name="notes" /> {authoring.presenterView}
+            </button>
+          </div>
           <button className={styles.iconButton} onClick={onClose} type="button">
-            Close preview
+            {authoring.closePreview}
           </button>
         </div>
         <PresentationSpatialDelivery
+          compact
           spatial={
             publication.spatial
               ? {
@@ -319,81 +423,103 @@ function PresentationPreview({
           phase="content"
           sourceKey={`builder-preview:${JSON.stringify(publication.spatial)}:${publication.blocks.map((block) => block.id).join(":")}`}
         />
-        <div className={styles.previewCanvas}>
-          {!block ? (
-            <p>Show a slide or add an activity to preview this presentation.</p>
-          ) : block.kind === "content" ? (
-            <ContentSlideView
-              block={block}
-              media={
-                block.mediaId ? (
-                  <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
-                ) : undefined
-              }
-              renderSceneImage={(mediaId, altText) => (
-                <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+        <div
+          ref={workspaceRef}
+          data-preview-body
+          className={
+            mode === "presenter" ? styles.previewWorkspacePresenter : styles.previewWorkspace
+          }
+        >
+          <div
+            ref={canvasRef}
+            className={styles.previewCanvas}
+            role="region"
+            aria-label="Slide preview"
+            tabIndex={0}
+            data-preview-slide-viewport
+          >
+            <div className={styles.previewSlide} key={block?.id ?? "empty"} data-preview-slide>
+              {!block ? (
+                <p>{authoring.emptyPreview}</p>
+              ) : block.kind === "content" ? (
+                <ContentSlideView
+                  block={block}
+                  media={
+                    block.mediaId ? (
+                      <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
+                    ) : undefined
+                  }
+                  renderSceneImage={(mediaId, altText) => (
+                    <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                  )}
+                  variant="preview"
+                  designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
+                  interactionRuntime={{
+                    mode: "review",
+                    navigationTargets: presentationInteractionTargets(publication, block.id).map(
+                      (target) => ({ blockId: target.id, available: true, blockedReason: null }),
+                    ),
+                    onNavigate: (_nodeId, targetId) => {
+                      const target = publication.blocks.findIndex(
+                        (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
+                      );
+                      if (target >= 0) {
+                        // The link is about to unmount. The surviving region remains in
+                        // the dialog's Tab order, including reverse keyboard navigation.
+                        dialogRef.current
+                          ?.querySelector<HTMLElement>(
+                            '[role="region"][aria-label="Slide preview"]',
+                          )
+                          ?.focus({ preventScroll: true });
+                        setIndex(target);
+                      }
+                    },
+                  }}
+                />
+              ) : (
+                <PresentationActivitySlide
+                  accessibilityContext="preview"
+                  question={block.question}
+                  design={resolvePresentationActivityDesign(publication.blocks, block.id)}
+                  media={
+                    block.question.mediaId ? (
+                      <AuthenticatedMedia
+                        mediaId={block.question.mediaId}
+                        altText={block.question.mediaAlt}
+                      />
+                    ) : undefined
+                  }
+                />
               )}
-              variant="preview"
-              interactionRuntime={{
-                mode: "review",
-                navigationTargets: presentationInteractionTargets(publication, block.id).map(
-                  (target) => ({ blockId: target.id, available: true, blockedReason: null }),
-                ),
-                onNavigate: (_nodeId, targetId) => {
-                  const target = publication.blocks.findIndex(
-                    (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
-                  );
-                  if (target >= 0) setIndex(target);
-                },
-              }}
+            </div>
+          </div>
+          {mode === "presenter" ? (
+            <PresenterNotesPanel
+              key={block?.id ?? "empty"}
+              notes={block?.kind === "content" ? block.speakerNotes : ""}
+              slideNumber={block ? index + 1 : undefined}
+              totalSlides={publication.blocks.length}
             />
-          ) : (
-            <article className={styles.previewQuestion}>
-              <span className={styles.previewEyebrow}>Audience question</span>
-              <h1 lang={block.question.prompt ? "" : "en-CA"}>
-                {block.question.prompt || "Untitled question"}
-              </h1>
-              {"choices" in block.question ? (
-                <div className={styles.previewChoices}>
-                  {block.question.choices.map((choice, choiceIndex) => (
-                    <div key={choice.id}>
-                      <span>{String.fromCharCode(65 + choiceIndex)}</span>
-                      <span lang={choice.label ? "" : "en-CA"}>
-                        {choice.label || `Answer ${choiceIndex + 1}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : block.question.type === "numeric" ? (
-                <div className={styles.previewAnswer}>Participants enter a number</div>
-              ) : block.question.type === "rating" ? (
-                <div className={styles.previewAnswer}>
-                  {block.question.min} — {block.question.max}
-                </div>
-              ) : isTextQuestion(block.question.type) ? (
-                <TextResponseControl type={block.question.type} disabled />
-              ) : null}
-            </article>
-          )}
+          ) : null}
         </div>
-        <div className={styles.previewControls}>
+        <div className={styles.previewControls} data-preview-footer>
           <button
             disabled={index === 0}
             onClick={() => setIndex((value) => value - 1)}
             type="button"
           >
-            Previous
+            <EditorIcon name="back" /> {authoring.previous}
           </button>
           <button
             disabled={index >= publication.blocks.length - 1}
             onClick={() => setIndex((value) => value + 1)}
             type="button"
           >
-            Next
+            {authoring.next} <EditorIcon name="back" />
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -438,39 +564,178 @@ export function PresentationBuilder({ presentationId, startOutline }: Presentati
 function PresentationEditor({ presentationId, startOutline }: PresentationBuilderProps) {
   const { creator, canEdit, productFeatures } = useWorkspace();
   const { locale, t } = useLocale();
+  const authoring = authoringWorkflowCopy(locale);
+  const commands = presentationCommandCopy(locale);
+  const designLibraryCopy = presentationDesignCopy(locale);
+  const sectionsSpatial = sectionsSpatialCopy(locale);
+  const nativeEditorUi = nativeEditorCopy(locale);
+  const nativeControlUi = nativeControlsCopy(locale);
+  const assistanceUi = assistanceCopy(locale);
+  const textAssistanceUi = textAssistanceCopy(locale);
+  const questionSuggestionsUi = questionSuggestionsCopy(locale);
+  const visualImportUi = visualImportCopy(locale);
+  const sourceWorkflowsUi = sourceWorkflowsCopy(locale);
+  const packUpdateUi = packUpdateCopy(locale);
   const router = useRouter();
+  const compactLayout = useRef<boolean | null>(null);
   const commandBarRef = useCallback((element: HTMLElement | null) => {
     const builder = element?.parentElement;
     if (!element || !builder) return;
     const measure = () => {
+      // Layout pixels keep offsets and the responsive mode correct under page zoom.
+      builder.style.setProperty("--presentation-command-height", `${element.offsetHeight}px`);
+      // Container units under CSS zoom differ between engines. Size drawers
+      // from the same layout width used for the responsive mode.
       builder.style.setProperty(
-        "--presentation-command-height",
-        `${Math.ceil(element.getBoundingClientRect().height)}px`,
+        "--presentation-panel-width",
+        `${Math.min(340, builder.offsetWidth * 0.9)}px`,
       );
+      const compact = builder.offsetWidth <= 920;
+      if (compactLayout.current !== compact) {
+        compactLayout.current = compact;
+        setCompactEditor(compact);
+        const inspectorDialogOpen = Boolean(
+          inspectorPanel.current?.querySelector("dialog[open]") ||
+          document.querySelector(
+            '[data-presentation-preview="true"][data-preview-origin="interaction"], [data-presentation-preview="true"][data-preview-origin="notes"]',
+          ),
+        );
+        // Only the insertion menu can invoke an external navigator dialog.
+        // The Sections panel is also an open <details>, but does not own one.
+        const mapDialogOpen = Boolean(
+          !inspectorDialogOpen &&
+          document.querySelector(EDITOR_MODAL_SELECTOR) &&
+          mapPanel.current?.querySelector(`details.${styles.insertMenu}[open]`),
+        );
+        setMapOpen(!compact || mapDialogOpen);
+        setInspectorOpen(!compact || inspectorDialogOpen);
+      }
     };
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element, { box: "border-box" });
+    observer?.observe(builder, { box: "border-box" });
     if (!observer) window.addEventListener("resize", measure);
     return () => {
       observer?.disconnect();
       if (!observer) window.removeEventListener("resize", measure);
       builder.style.removeProperty("--presentation-command-height");
+      builder.style.removeProperty("--presentation-panel-width");
     };
   }, []);
   const recoveryKey = `presentation:${presentationId}`;
   const pendingSaveKey = `${recoveryKey}:pending-save`;
   const [record, setRecord] = useState<PresentationRecord | null>(null);
+  const [presentChoiceOpen, setPresentChoiceOpen] = useState(false);
   const [draft, setDraft] = useState<PresentationDraft | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+  const lastNavigatorSelection = useRef<string | null>(null);
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
-  const [mapOpen, setMapOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [designLibraryOpen, setDesignLibraryOpen] = useState(false);
+  const designLibraryTrigger = useRef<HTMLButtonElement>(null);
+  const designLibraryPanel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!designLibraryOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const panel = designLibraryPanel.current;
+      panel?.scrollIntoView({ block: "start" });
+      panel
+        ?.querySelector<HTMLInputElement>('input[type="search"]')
+        ?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [designLibraryOpen]);
+  const [compactEditor, setCompactEditor] = useState(false);
+  const [nativeInspectorTarget, setNativeInspectorTarget] = useState<HTMLDivElement | null>(null);
+  const mapTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorTrigger = useRef<HTMLButtonElement>(null);
+  const mapPanel = useRef<HTMLElement>(null);
+  const inspectorPanel = useRef<HTMLElement>(null);
+  const drawerOpener = useRef<HTMLElement | null>(null);
+  function toggleMap() {
+    if (compactEditor) setInspectorOpen(false);
+    setMapOpen((value) => !value);
+  }
+  function toggleInspector() {
+    if (compactEditor) setMapOpen(false);
+    setInspectorOpen((value) => !value);
+  }
+  function closeEditorPanels(restoreFocus = false) {
+    setMapOpen(false);
+    setInspectorOpen(false);
+    if (restoreFocus) {
+      const opener = drawerOpener.current;
+      requestAnimationFrame(() => (opener?.isConnected ? opener : mapTrigger.current)?.focus());
+    }
+  }
+  useEffect(() => {
+    if (!compactEditor || (!mapOpen && !inspectorOpen)) return;
+    const panel = mapOpen ? mapPanel.current : inspectorPanel.current;
+    const trigger = mapOpen ? mapTrigger.current : inspectorTrigger.current;
+    if (!panel) return;
+    // A breakpoint change can mount drawer behavior while a preview owns focus.
+    // Preserve its active control and the original drawer opener until the modal closes.
+    if (!document.querySelector(EDITOR_MODAL_SELECTOR)) {
+      drawerOpener.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
+      panel
+        .querySelector<HTMLElement>("button:not(:disabled),[tabindex='0']")
+        ?.focus({ preventScroll: true });
+    }
+    const outside = (event: Event) => {
+      if (document.querySelector(EDITOR_MODAL_SELECTOR) || !(event.target instanceof Node)) return;
+      if (event.target instanceof Element && event.target.closest("[data-editor-history]")) return;
+      if (!panel.contains(event.target) && !trigger?.contains(event.target)) closeEditorPanels();
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.key !== "Escape" ||
+        document.querySelector(EDITOR_MODAL_SELECTOR)
+      )
+        return;
+      event.preventDefault();
+      closeEditorPanels(true);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [compactEditor, mapOpen, inspectorOpen]);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("build");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewStartBlockId, setPreviewStartBlockId] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"audience" | "presenter">("audience");
+  const [previewOrigin, setPreviewOrigin] = useState<"interaction" | "notes" | "slide" | undefined>(
+    undefined,
+  );
+  const [selectedActivityChoiceId, setSelectedActivityChoiceId] = useState<string | undefined>(
+    undefined,
+  );
+  const acceptedInsertMenu = useRef<{ blockId: string; menu: HTMLDetailsElement } | null>(null);
+  useEffect(() => {
+    const pending = acceptedInsertMenu.current;
+    if (!pending || !draft?.blocks.some((block) => block.id === pending.blockId)) return;
+    acceptedInsertMenu.current = null;
+    pending.menu.open = false;
+    pending.menu.querySelector("summary")?.focus({ preventScroll: true });
+  }, [draft]);
+  function openDraftPreview() {
+    setPreviewMode("audience");
+    setPreviewOrigin(undefined);
+    setPreviewStartBlockId(null);
+    setPreviewOpen(true);
+  }
   const [spatialOpen, setSpatialOpen] = useState(false);
   useEffect(() => {
     if (!canEdit) setSpatialOpen(false);
@@ -484,6 +749,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [loaded, setLoaded] = useState(false);
   const [roundSources, setRoundSources] = useState<RoundSource[]>([]);
   const [roundImportOpen, setRoundImportOpen] = useState(false);
+  const roundImportMenuSource = useRef<HTMLButtonElement | undefined>(undefined);
+  useEffect(() => {
+    if (roundImportOpen) return;
+    const source = roundImportMenuSource.current;
+    roundImportMenuSource.current = undefined;
+    handoffEditorDisclosure(source);
+  }, [roundImportOpen]);
   const [sourceImportOpen, setSourceImportOpen] = useState(false);
   const [textAssistanceOpen, setTextAssistanceOpen] = useState(false);
   const [textAssistancePending, setTextAssistancePending] = useState(false);
@@ -493,7 +765,32 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   );
   const textAssistanceActive = useRef(false);
   textAssistanceActive.current = textAssistanceOpen || textAssistancePending;
+  const [questionSuggestionsOpen, setQuestionSuggestionsOpen] = useState(false);
+  const [questionSuggestionsPending, setQuestionSuggestionsPending] = useState(false);
+  const [questionSuggestionsRecovery, setQuestionSuggestionsRecovery] = useState(false);
+  const [questionSuggestionsTarget, setQuestionSuggestionsTarget] =
+    useState<QuestionSuggestionsTarget | null>(null);
+  const questionSuggestionsActive = useRef(false);
+  questionSuggestionsActive.current = questionSuggestionsOpen || questionSuggestionsPending;
+  const questionSuggestionsAuthorization = useRef(true);
+  const publicationAuthorization = useRef(true);
+  useEffect(() => {
+    const changed = () => {
+      questionSuggestionsAuthorization.current = false;
+      publicationAuthorization.current = false;
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, changed);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, changed);
+  }, []);
   const [assistanceOpen, setAssistanceOpen] = useState(false);
+  const assistanceMenuSource = useRef<HTMLButtonElement | undefined>(undefined);
+  useEffect(() => {
+    if (assistanceOpen) return;
+    const source = assistanceMenuSource.current;
+    assistanceMenuSource.current = undefined;
+    // Run after the dialog's focus cleanup and after the workspace loses inert.
+    handoffEditorDisclosure(source);
+  }, [assistanceOpen]);
   const [assistancePending, setAssistancePending] = useState(false);
   const [assistanceTarget, setAssistanceTarget] = useState({
     revision: 0,
@@ -556,16 +853,19 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const previousBlockCount = useRef<number | null>(null);
   const canInsertPack =
     canEdit && Boolean(productFeatures?.presentations && productFeatures?.recoveryPacks);
-  const builderMutationBlocked =
+  // Pack review owns its exact update/undo retry; competing operations still fence the panel.
+  const unrelatedEditorMutationBlocked =
     textAssistanceOpen ||
+    questionSuggestionsOpen ||
+    questionSuggestionsPending ||
     textAssistancePending ||
     assistanceOpen ||
     assistancePending ||
     packImportOpen ||
-    packUpdateBusy ||
-    packUpdateReceiptPending ||
     visualImportOpen ||
     visualImportReceiptPending;
+  const builderMutationBlocked =
+    unrelatedEditorMutationBlocked || packUpdateBusy || packUpdateReceiptPending;
   const outlineStartBlocked =
     !loaded ||
     !record ||
@@ -605,6 +905,76 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const sectionRuns = useMemo(
+    () => presentationSectionRuns(draft?.blocks ?? [], draft?.sections),
+    [draft?.blocks, draft?.sections],
+  );
+  useEffect(() => {
+    if (!selectedBlockId || lastNavigatorSelection.current === selectedBlockId) return;
+    const run = sectionRuns.find((run) => run.blocks.some((block) => block.id === selectedBlockId));
+    if (!run) return;
+    lastNavigatorSelection.current = selectedBlockId;
+    const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+    setCollapsedSections((current) => {
+      if (!current.has(collapseKey)) return current;
+      const next = new Set(current);
+      next.delete(collapseKey);
+      return next;
+    });
+    const frame = requestAnimationFrame(() => {
+      if (mapOpen)
+        mapPanel.current
+          ?.querySelector<HTMLElement>('[aria-current="step"]')
+          ?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Section changes may change a run. Only a new slide selection expands it;
+    // the author may deliberately collapse the section containing the current slide.
+  }, [mapOpen, sectionRuns, selectedBlockId]);
+  useEffect(() => {
+    if (!mapOpen) return;
+    const frame = requestAnimationFrame(() =>
+      mapPanel.current
+        ?.querySelector<HTMLElement>('[aria-current="step"]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [mapOpen]);
+  const questionSuggestionSource = selectedBlock
+    ? presentationQuestionSuggestionSource(selectedBlock)
+    : null;
+  const questionStarterContext = {
+    actorKey: textRecoveryContext,
+    presentationId,
+    selectedBlockId,
+    blocked:
+      !loaded ||
+      !canEdit ||
+      builderMutationBlocked ||
+      preparingImport ||
+      importingQuestions ||
+      roundImportOpen ||
+      sourceImportOpen ||
+      packBusy ||
+      previewOpen ||
+      spatialOpen ||
+      recoveryPreviewOpen ||
+      saveConflictPresent ||
+      recovery !== null ||
+      mediaState !== "idle" ||
+      pendingNativeImage !== null,
+  };
+  const latestQuestionStarterContext = useRef(questionStarterContext);
+  latestQuestionStarterContext.current = questionStarterContext;
+  const questionStarterFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!questionStarterFocus.current || questionSuggestionsOpen || questionSuggestionsPending)
+      return;
+    const target = questionStarterFocus.current;
+    questionStarterFocus.current = null;
+    if (target !== selectedBlockId || selectedBlock?.kind !== "question") return;
+    document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Question prompt"]')?.focus();
+  }, [selectedBlockId, selectedBlock?.kind, questionSuggestionsOpen, questionSuggestionsPending]);
   const selectedOpinionOnly =
     selectedBlock?.kind === "question" &&
     (isTextQuestion(selectedBlock.question.type) ||
@@ -751,6 +1121,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, [sourceImportOpen]);
 
   useEffect(() => {
+    const dialog = sourceImportDialogRef.current;
+    // A permission change can remove the focused proposal control. Retain the
+    // initial opener above, while keeping keyboard commands inside the open dialog.
+    if (sourceImportOpen && dialog && !dialog.contains(document.activeElement)) {
+      (dialog.querySelector<HTMLButtonElement>("button") ?? dialog).focus({ preventScroll: true });
+    }
+  }, [sourceImportOpen, canEdit]);
+
+  useEffect(() => {
     void apiFetch<{ mediaUploads: boolean }>("/v1/features")
       .then(({ mediaUploads }) => setMediaUploadsEnabled(mediaUploads))
       .catch(() => setMediaUploadsEnabled(false));
@@ -824,7 +1203,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const commit = useCallback(
     (value: SetStateAction<PresentationDraft>, historyKey?: string) => {
       if (
+        !assistancePermission.current ||
         textAssistanceActive.current ||
+        questionSuggestionsActive.current ||
         importPreparation.current ||
         assistanceActive.current ||
         visualImportActive.current ||
@@ -835,7 +1216,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       )
         return;
       setDraft((current) => {
-        if (!current) return current;
+        if (!current || !assistancePermission.current) return current;
         const next = reconcilePresentationSpatialBlocks(
           current,
           promotePresentationOpinionFormats(
@@ -1002,6 +1383,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       !draft ||
       saveConflictPresent ||
       textAssistanceOpen ||
+      questionSuggestionsOpen ||
+      questionSuggestionsPending ||
       textAssistancePending ||
       preparingImport ||
       assistanceOpen ||
@@ -1024,6 +1407,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     loaded,
     saveConflictPresent,
     textAssistanceOpen,
+    questionSuggestionsOpen,
+    questionSuggestionsPending,
     textAssistancePending,
     preparingImport,
     assistanceOpen,
@@ -1048,6 +1433,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         pendingNativeImage !== null ||
         ordinarySavePending ||
         textAssistancePending ||
+        questionSuggestionsPending ||
         assistancePending ||
         visualImportReceiptPending
       ) {
@@ -1064,6 +1450,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     pendingNativeImage,
     ordinarySavePending,
     textAssistancePending,
+    questionSuggestionsPending,
     assistancePending,
     visualImportReceiptPending,
   ]);
@@ -1185,17 +1572,43 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setSelectedTextElementId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
   }
 
-  function addBlock(block: PresentationBlockDraft) {
+  function changeSpeakerNotes(value: string) {
+    updateSelected(
+      (block) => (block.kind === "content" ? { ...block, speakerNotes: value } : block),
+      "speakerNotes",
+    );
+  }
+  function openSelectedPreview(mode: "audience" | "presenter", origin: "notes" | "slide") {
+    if (!selectedBlock || (selectedBlock.kind === "content" && selectedBlock.hidden)) return;
+    setPreviewMode(mode);
+    setPreviewOrigin(origin);
+    setPreviewStartBlockId(selectedBlock.id);
+    setPreviewOpen(true);
+  }
+  function addBlock(block: PresentationBlockDraft, source?: HTMLButtonElement) {
+    if (!draft || !canEdit || builderMutationBlocked || preparingImport) return;
+    const menu = source?.closest("details");
+    if (menu) acceptedInsertMenu.current = { blockId: block.id, menu };
     commit((current) => {
       const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
+      const created =
+        block.kind === "content" && block.scene
+          ? {
+              ...block,
+              scene: applyNativeSceneDesign(
+                block.scene,
+                inheritPresentationSceneDesign(current.blocks, selectedBlockId),
+              ),
+            }
+          : block;
       const blocks = [...current.blocks];
-      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
+      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, created);
       return {
         ...current,
         blocks,
-        ...(block.kind === "content" && block.scene
+        ...(created.kind === "content" && created.scene
           ? {
-              schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene),
+              schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, created.scene),
             }
           : {}),
       };
@@ -1204,10 +1617,73 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setInspectorTab(block.kind === "content" ? "content" : "build");
   }
 
+  function applyDesignFromLibrary(
+    id: PresentationDesignId,
+    scope: "deck" | "slide",
+    application: PresentationDesignApplicationMode,
+  ) {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const options = {
+      scope,
+      application,
+      ...(selectedBlockId ? { blockId: selectedBlockId } : {}),
+    };
+    // Preflight the latest local document before closing a preview. The functional commit
+    // repeats validation against its authoritative snapshot rather than replacing later edits.
+    applyPresentationDesign(JSON.parse(latestDraftJson.current) as PresentationDraft, id, options);
+    commit((current) => {
+      try {
+        return applyPresentationDesign(current, id, options).draft;
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    return true;
+  }
+
+  function insertDesignLayout(id: PresentationDesignId, layout: DesignLayoutId) {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const block = createDesignSlide(
+      id,
+      layout,
+      presentationDesignDraftCopy(id, locale).slides[layout],
+    );
+    const insert = (current: PresentationDraft): PresentationDraft => {
+      const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
+      const blocks = [...current.blocks];
+      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
+      const next = reconcilePresentationSpatialBlocks(current, {
+        ...current,
+        blocks,
+        schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene!),
+      });
+      PresentationDraftSchema.parse(next);
+      return next;
+    };
+    insert(JSON.parse(latestDraftJson.current) as PresentationDraft);
+    // Unlike a generic blank slide, a chosen layout keeps the design the user previewed.
+    commit((current) => {
+      try {
+        return insert(current);
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    setSelectedBlockId(block.id);
+    setInspectorTab("content");
+    return true;
+  }
+
   function undo() {
     if (
+      !assistancePermission.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1234,8 +1710,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   function redo() {
     if (
+      !assistancePermission.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packOperation.current ||
       packPending.current ||
@@ -1257,9 +1735,18 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   async function reloadLatestDraft(
     preferredBlockId?: string,
-    exactTextTarget?: Pick<TextAssistanceRecovery, "blockId" | "nodeId" | "role" | "sourceDigest">,
+    exactTextTarget?: Pick<
+      TextAssistanceRecovery,
+      "blockId" | "nodeId" | "role" | "sourceDigest" | "operation" | "sourceLanguage"
+    >,
     textPermissionFence = false,
     recoveryReset?: { canAdopt: () => boolean; preserveWorkingDraft: () => boolean },
+    exactQuestionSource?: { blockId: string; sourceDigest: string },
+    questionRead?: {
+      canAdopt: () => boolean;
+      minimumRevision: number;
+      acceptedDraft?: PresentationDraft;
+    },
   ) {
     if (retainedSave.current.pending && !recoveryReset) {
       setError("Retry the outstanding save acknowledgement before loading another draft.");
@@ -1275,6 +1762,31 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         `/v1/presentations/${presentationId}`,
         { cache: "no-store" },
       );
+      if (questionRead) {
+        if (!questionRead.canAdopt()) return false;
+        if (
+          typeof response.presentation?.id !== "string" ||
+          !sameTextAssistanceBlockId(response.presentation.id, presentationId) ||
+          !Number.isSafeInteger(questionRead.minimumRevision) ||
+          questionRead.minimumRevision < 0 ||
+          !Number.isSafeInteger(response.presentation.draftRevision) ||
+          response.presentation.draftRevision <
+            Math.max(questionRead.minimumRevision, revisionRef.current, draftBaseRevision.current)
+        )
+          throw new Error(
+            "The saved deck read is invalid or older than the reviewed request. Recover the latest saved deck before continuing.",
+          );
+        response.presentation.draft = PresentationDraftSchema.parse(response.presentation.draft);
+        if (
+          questionRead.acceptedDraft &&
+          response.presentation.draftRevision === questionRead.minimumRevision &&
+          JSON.stringify(response.presentation.draft) !==
+            JSON.stringify(PresentationDraftSchema.parse(questionRead.acceptedDraft))
+        )
+          throw new Error(
+            "The saved deck does not match the accepted insertion. Retry receipt recovery before editing.",
+          );
+      }
       if (recoveryReset) {
         if (!recoveryReset.canAdopt()) return false;
         if (
@@ -1325,6 +1837,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         if (!recoveryReset.canAdopt()) return false;
       }
       if (textPermissionFence && (!alive.current || !assistancePermission.current)) return false;
+      if (exactQuestionSource) {
+        const block = response.presentation.draft.blocks.find((candidate) =>
+          sameTextAssistanceBlockId(candidate.id, exactQuestionSource.blockId),
+        );
+        const source = block ? presentationQuestionSuggestionSource(block) : null;
+        if (
+          !source?.supported ||
+          presentationQuestionSuggestionsSourceDigest(source.source) !==
+            exactQuestionSource.sourceDigest
+        )
+          throw new Error(
+            "The exact slide text or its language changed. Discard this proposal and review the current slide before generating again.",
+          );
+      }
       if (exactTextTarget) {
         const block = response.presentation.draft.blocks.find((block) =>
           sameTextAssistanceBlockId(block.id, exactTextTarget.blockId),
@@ -1337,10 +1863,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           node?.type !== "text" ||
           node.richText ||
           node.role !== exactTextTarget.role ||
-          presentationTextAssistanceSourceDigest(node.text) !== exactTextTarget.sourceDigest
+          presentationTextAssistanceSourceDigest(node.text) !== exactTextTarget.sourceDigest ||
+          (exactTextTarget.operation === "translate" &&
+            (node.lang ?? null) !== exactTextTarget.sourceLanguage)
         ) {
           throw new Error(
-            "The exact text object was changed or deleted. Discard this proposal and select text for a new request.",
+            exactTextTarget.operation === "translate"
+              ? "The exact text object or its language was changed or deleted. Discard this proposal and select text for a new request."
+              : "The exact text object was changed or deleted. Discard this proposal and select text for a new request.",
           );
         }
       }
@@ -1387,7 +1917,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     } catch (caught) {
       setError(humanError(caught));
       setSaveState("error");
-      if (exactTextTarget) throw caught;
+      if (exactTextTarget || exactQuestionSource) throw caught;
       return false;
     }
   }
@@ -1531,12 +2061,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setMediaPreviewUrl("");
   }
 
-  function openRoundImport() {
+  function openRoundImport(source?: HTMLButtonElement) {
     if (
       importPreparation.current ||
       packOperation.current ||
       packImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packUpdateOperation.current ||
@@ -1544,6 +2075,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     )
       return;
     const first = roundSources[0]?.id ?? "";
+    roundImportMenuSource.current = source;
     setSelectedRoundId((current) => current || first);
     setRoundImportOpen(true);
     setError("");
@@ -1558,6 +2090,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packUpdatePending.current ||
       importPreparation.current ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       roundImportOpen ||
@@ -1701,6 +2234,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       importPreparation.current ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       packImportOpen ||
@@ -1763,6 +2297,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       packImportOpen ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current ||
       sourceImportOpen ||
       mediaState !== "idle"
@@ -1869,6 +2404,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
 
   async function openSourceImport() {
     if (
+      !alive.current ||
+      !assistancePermission.current ||
       !draft ||
       importPreparation.current ||
       packOperation.current ||
@@ -1878,6 +2415,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       roundImportOpen ||
       sourceImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       visualImportActive.current
     )
       return;
@@ -1886,7 +2424,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     setError("");
     try {
       await enqueueSave(draft);
-      if (!alive.current) return;
+      if (!alive.current || !assistancePermission.current) return;
       const serialized = JSON.stringify(draft);
       if (lastSavedJson.current !== serialized || latestDraftJson.current !== serialized) {
         throw new Error("Save this Presentation before inserting source proposals.");
@@ -1919,12 +2457,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, [draft, enqueueSave]);
 
   const openAssistance = useCallback(
-    async (automatic = false) => {
+    async (automatic = false, source?: HTMLButtonElement) => {
       if (
         !draft ||
         !canEdit ||
         importPreparation.current ||
         textAssistanceActive.current ||
+        questionSuggestionsActive.current ||
         assistanceActive.current ||
         packOperation.current ||
         packPending.current ||
@@ -1951,6 +2490,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           return;
         setAssistanceTarget({ revision, anchor: selectedBlockId });
         assistanceActive.current = true;
+        assistanceMenuSource.current = source;
         setAssistanceOpen(true);
         consumeOutlineStart();
       } catch (caught) {
@@ -1989,7 +2529,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     void openAssistance(true);
   }, [startOutline, outlineStartBlocked, preparingImport, openAssistance]);
 
-  async function openTextAssistance(nodeId: string, operation: "rewrite" | "shorten") {
+  async function openTextAssistance(nodeId: string, operation: TextAssistanceTarget["operation"]) {
     if (textAssistanceRecovery) {
       setTextAssistanceOpen(true);
       return;
@@ -2037,7 +2577,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         savedNode?.type !== "text" ||
         savedNode.richText ||
         savedNode.role !== sourceNode.role ||
-        savedNode.text !== sourceNode.text
+        savedNode.text !== sourceNode.text ||
+        (operation === "translate" && savedNode.lang !== sourceNode.lang)
       )
         throw new Error(
           "The exact selected text could not be saved. Retry after saving your changes.",
@@ -2049,9 +2590,114 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         text: savedNode.text,
         operation,
         expectedRevision,
+        ...(operation === "translate" ? { sourceLanguage: savedNode.lang ?? null } : {}),
       });
       textAssistanceActive.current = true;
       setTextAssistanceOpen(true);
+    } catch (caught) {
+      if (alive.current) setError(humanError(caught));
+    } finally {
+      importPreparation.current = false;
+      if (alive.current) setPreparingImport(false);
+    }
+  }
+
+  async function openQuestionSuggestions() {
+    if (
+      !alive.current ||
+      !assistancePermission.current ||
+      !questionSuggestionsAuthorization.current ||
+      !draft ||
+      !canEdit ||
+      questionSuggestionsOpen ||
+      importPreparation.current ||
+      textAssistanceActive.current ||
+      assistanceActive.current ||
+      visualImportActive.current ||
+      packOperation.current ||
+      packPending.current ||
+      packUpdateOperation.current ||
+      packUpdatePending.current ||
+      pendingNativeImageRef.current ||
+      mediaState !== "idle" ||
+      previewOpen ||
+      spatialOpen ||
+      recoveryPreviewOpen ||
+      packImportOpen ||
+      packBusy ||
+      packUpdateBusy ||
+      importingQuestions ||
+      roundImportOpen ||
+      sourceImportOpen
+    )
+      return;
+    const resuming = questionSuggestionsRecovery;
+    // An uncertain insertion owns the server revision; recover it before any ordinary save.
+    if (resuming && questionSuggestionsPending) {
+      questionSuggestionsActive.current = true;
+      setQuestionSuggestionsOpen(true);
+      return;
+    }
+    if (questionSuggestionsActive.current) return;
+    if (
+      recovery !== null ||
+      saveConflict.current ||
+      (!resuming &&
+        (!selectedBlockId ||
+          questionStarterContext.blocked ||
+          !questionSuggestionSource?.supported))
+    )
+      return;
+    const selectedSource =
+      !resuming && questionSuggestionSource?.supported ? questionSuggestionSource.source : null;
+    const sourceDigest = selectedSource
+      ? presentationQuestionSuggestionsSourceDigest(selectedSource)
+      : null;
+    const blockId = resuming
+      ? (questionSuggestionsTarget?.blockId ?? null)
+      : selectedBlockId!.toLowerCase();
+    const context = textRecoveryContext;
+    importPreparation.current = true;
+    setPreparingImport(true);
+    setError("");
+    try {
+      const expectedRevision = await prepareVisualInsertion();
+      if (
+        !alive.current ||
+        !assistancePermission.current ||
+        !questionSuggestionsAuthorization.current ||
+        currentTextRecoveryContext.current !== context ||
+        (!resuming &&
+          latestQuestionStarterContext.current.selectedBlockId?.toLowerCase() !== blockId)
+      )
+        return;
+      const saved = JSON.parse(lastSavedJson.current) as PresentationDraft;
+      const block = blockId
+        ? saved.blocks.find((candidate) => sameTextAssistanceBlockId(candidate.id, blockId))
+        : null;
+      const source = block ? presentationQuestionSuggestionSource(block) : null;
+      if (
+        !resuming &&
+        (!source?.supported ||
+          presentationQuestionSuggestionsSourceDigest(source.source) !== sourceDigest)
+      )
+        throw new Error(
+          "The exact slide text could not be saved. Retry after saving your changes.",
+        );
+      // Resuming a proposal also saves manual edits. A changed source remains visible to the
+      // controller as a mismatch, rather than inserting against a stale saved copy.
+      setQuestionSuggestionsTarget(
+        source?.supported
+          ? {
+              blockId: source.source.blockId,
+              expectedRevision,
+              source: source.source,
+              sourceDigest: presentationQuestionSuggestionsSourceDigest(source.source),
+            }
+          : null,
+      );
+      questionSuggestionsActive.current = true;
+      setQuestionSuggestionsOpen(true);
     } catch (caught) {
       if (alive.current) setError(humanError(caught));
     } finally {
@@ -2070,6 +2716,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       sourceImportOpen ||
       roundImportOpen ||
       textAssistanceActive.current ||
+      questionSuggestionsActive.current ||
       assistanceActive.current ||
       packImportOpen ||
       mediaState !== "idle" ||
@@ -2143,17 +2790,38 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }
 
   async function publish() {
-    if (!draft || packUpdateOperation.current || packUpdatePending.current) return;
+    if (
+      !draft ||
+      !alive.current ||
+      !publicationAuthorization.current ||
+      !assistancePermission.current
+    )
+      return false;
+    if (
+      builderMutationBlocked ||
+      preparingImport ||
+      packUpdateOperation.current ||
+      packUpdatePending.current
+    ) {
+      setError("Finish or recover the current operation before publishing.");
+      return false;
+    }
+    if (mediaState !== "idle" || pendingNativeImage) {
+      setError("Finish or discard the pending image attachment before publishing.");
+      return false;
+    }
     if (issues.length) {
       recordAuthoringEvent("publish_blocked", "presentation");
       setInspectorOpen(true);
       setInspectorTab("readiness");
       setError("Resolve the readiness issues before publishing.");
-      return;
+      return false;
     }
     setError("");
     try {
       await enqueueSave(draft);
+      if (!alive.current || !publicationAuthorization.current || !assistancePermission.current)
+        return false;
       const serialized = JSON.stringify(draft);
       if (lastSavedJson.current !== serialized || latestDraftJson.current !== serialized) {
         throw new Error("Save the latest Presentation changes before publishing.");
@@ -2165,8 +2833,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           body: JSON.stringify({ expectedDraftRevision: revisionRef.current }),
         },
       );
+      if (!alive.current || !publicationAuthorization.current || !assistancePermission.current)
+        return false;
       setRecord(response.presentation);
       setSaveState("saved");
+      return true;
     } catch (caught) {
       if (
         caught instanceof ApiClientError &&
@@ -2177,6 +2848,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         recordAuthoringEvent("publish_blocked", "presentation");
       }
       setError(humanError(caught));
+      return false;
     }
   }
 
@@ -2190,6 +2862,16 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       </main>
     );
   }
+
+  // Keep stored errors canonical; only explicit system feedback is projected at render.
+  const sourceWorkflowError = [
+    sourceWorkflowsFeedback(locale, error),
+    questionStartersFeedback(locale, error),
+    questionSuggestionsFeedback(locale, error),
+    visualImportFeedback(locale, error),
+    packUpdateFeedback(locale, error, "Presentation"),
+    packInsertionFeedback(locale, error),
+  ].find((feedback) => feedback.lang === locale) ?? { text: error, lang: "en-CA" };
 
   const questionBlocks = draft.blocks.flatMap((block) =>
     block.kind === "question" ? [block.question] : [],
@@ -2235,6 +2917,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           : saveState === "conflict"
             ? t("delivery.presentationBuilder.newerVersion")
             : t("delivery.common.saved");
+  const hasUnpublishedChanges =
+    record.hasUnpublishedChanges ||
+    (record.currentVersionId !== null && JSON.stringify(draft) !== lastSavedJson.current);
 
   return (
     <div className={styles.builder}>
@@ -2258,105 +2943,274 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             className={styles.exitLink}
             href="/library?type=presentations"
             onClick={guardBuilderExit}
+            aria-label={t("delivery.presentationBuilder.library")}
+            title={t("delivery.presentationBuilder.library")}
           >
-            ← {t("delivery.presentationBuilder.library")}
+            <EditorIcon name="back" />
+            <span className={styles.exitLabel}>{t("delivery.presentationBuilder.library")}</span>
           </Link>
           <button
+            ref={mapTrigger}
             aria-expanded={mapOpen}
+            aria-controls="presentation-slide-navigator"
+            aria-label={
+              mapOpen
+                ? t("delivery.presentationBuilder.hideMap")
+                : t("delivery.presentationBuilder.openMap")
+            }
+            title={
+              mapOpen
+                ? t("delivery.presentationBuilder.hideMap")
+                : t("delivery.presentationBuilder.openMap")
+            }
             className={styles.iconButton}
-            onClick={() => setMapOpen((value) => !value)}
+            onClick={toggleMap}
             type="button"
           >
-            {mapOpen
-              ? t("delivery.presentationBuilder.hideMap")
-              : t("delivery.presentationBuilder.showMap")}
-          </button>
-        </div>
-        <label className={styles.titleField}>
-          <span className="sr-only">{t("delivery.presentationBuilder.titleLabel")}</span>
-          <input
-            lang={draft.title.trim() ? "" : locale}
-            maxLength={160}
-            onChange={(event) =>
-              commit((current) => ({ ...current, title: event.target.value }), "presentation:title")
-            }
-            placeholder={t("delivery.presentationBuilder.untitled")}
-            value={draft.title}
-          />
-        </label>
-        <div className={styles.commandActions}>
-          <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
-            {saveLabel}
-          </span>
-          <button disabled={!undoStack.length} onClick={undo} type="button">
-            {t("delivery.builder.undo")}
-          </button>
-          <button disabled={!redoStack.length} onClick={redo} type="button">
-            {t("delivery.builder.redo")}
-          </button>
-          <button onClick={() => setPreviewOpen(true)} type="button">
-            {t("delivery.common.preview")}
+            <EditorIcon name="slides" />
           </button>
           <button
-            className={styles.spatialButton}
-            disabled={!canEdit}
-            lang="en-CA"
-            onClick={() => setSpatialOpen(true)}
+            ref={inspectorTrigger}
+            aria-expanded={inspectorOpen}
+            aria-controls="presentation-object-inspector"
+            className={styles.iconButton}
+            onClick={toggleInspector}
             type="button"
+            aria-label={
+              inspectorOpen
+                ? t("delivery.presentationBuilder.hideInspector")
+                : t("delivery.presentationBuilder.openInspector")
+            }
+            title={
+              inspectorOpen
+                ? t("delivery.presentationBuilder.hideInspector")
+                : t("delivery.presentationBuilder.openInspector")
+            }
           >
-            Arrange space
+            <EditorIcon name="inspector" />
+          </button>
+        </div>
+        <div className={styles.documentIdentity}>
+          <label className={styles.titleField}>
+            <span className="sr-only">{t("delivery.presentationBuilder.titleLabel")}</span>
+            <input
+              lang={draft.title.trim() ? "" : locale}
+              maxLength={160}
+              onChange={(event) =>
+                commit(
+                  (current) => ({ ...current, title: event.target.value }),
+                  "presentation:title",
+                )
+              }
+              placeholder={t("delivery.presentationBuilder.untitled")}
+              value={draft.title}
+            />
+          </label>
+          <div className={styles.documentState}>
+            <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
+              {saveLabel}
+            </span>
+            <span className={styles.publicationState} lang={locale}>
+              {!record.currentVersionId
+                ? authoring.draft
+                : hasUnpublishedChanges
+                  ? authoring.unpublished
+                  : authoring.publishedReady}
+            </span>
+          </div>
+        </div>
+        <div className={styles.commandActions}>
+          <button
+            ref={designLibraryTrigger}
+            aria-expanded={designLibraryOpen}
+            aria-controls="presentation-design-library"
+            onClick={() => setDesignLibraryOpen((open) => !open)}
+            type="button"
+            data-presentation-designs
+            lang={locale}
+          >
+            <EditorIcon name="palette" /> {designLibraryCopy.title}
+          </button>
+          <div className={styles.historyActions} data-editor-history>
+            <button
+              className={styles.iconButton}
+              disabled={!canEdit || !undoStack.length}
+              onClick={undo}
+              type="button"
+              aria-label={t("delivery.builder.undo")}
+              title={t("delivery.builder.undo")}
+            >
+              <EditorIcon name="undo" />
+            </button>
+            <button
+              className={styles.iconButton}
+              disabled={!canEdit || !redoStack.length}
+              onClick={redo}
+              type="button"
+              aria-label={t("delivery.builder.redo")}
+              title={t("delivery.builder.redo")}
+            >
+              <EditorIcon name="redo" />
+            </button>
+          </div>
+          <button
+            className={styles.iconButton}
+            onClick={openDraftPreview}
+            type="button"
+            aria-label={t("delivery.common.preview")}
+            title={t("delivery.common.preview")}
+          >
+            <EditorIcon name="preview" />
           </button>
           <button className={styles.publishButton} onClick={() => void publish()} type="button">
-            {record.status === "published" && !record.hasUnpublishedChanges
+            {record.status === "published" && !hasUnpublishedChanges
               ? t("delivery.presentationBuilder.published")
               : t("delivery.common.publish")}
           </button>
+          {record.currentVersionId && canEdit ? (
+            <Link
+              className={styles.presentButton}
+              href={`/presentation/${presentationId}/host`}
+              prefetch={false}
+              onClick={(event) => {
+                if (hasUnpublishedChanges) {
+                  event.preventDefault();
+                  // Touch activation in WebKit does not focus links; retain the modal opener.
+                  event.currentTarget.focus();
+                  setError("");
+                  setPresentChoiceOpen(true);
+                } else guardBuilderExit(event);
+              }}
+              title={authoring.presentHelp}
+              lang={locale}
+            >
+              <EditorIcon name="play" />
+              {authoring.present}
+            </Link>
+          ) : (
+            <button
+              className={styles.presentButton}
+              disabled
+              type="button"
+              title={authoring.publishFirst}
+              lang={locale}
+            >
+              <EditorIcon name="play" />
+              {authoring.present}
+            </button>
+          )}
           <PresentationShareButton
             className={styles.shareButton}
             presentationId={presentationId}
             versionId={record.currentVersionId}
             disabled={!canEdit}
           />
-          <PresentationExportButton
-            className={styles.shareButton}
-            presentationId={presentationId}
-            versionId={record.currentVersionId}
-            disabled={!canEdit}
-          />
-          <button
-            aria-expanded={inspectorOpen}
-            className={styles.iconButton}
-            onClick={() => setInspectorOpen((value) => !value)}
-            type="button"
-          >
-            {inspectorOpen
-              ? t("delivery.presentationBuilder.hideInspector")
-              : t("delivery.presentationBuilder.openInspector")}
-          </button>
+          <EditorDisclosure label={authoring.moreOptions} compact className={styles.moreActions}>
+            <PresentationAssignmentButton
+              actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <PresentationPracticeButton
+              actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <PresentationExportButton
+              className={styles.shareButton}
+              presentationId={presentationId}
+              versionId={record.currentVersionId}
+              disabled={!canEdit}
+            />
+            <hr />
+            <button
+              className={styles.spatialButton}
+              disabled={!canEdit}
+              lang={locale}
+              onClick={() => setSpatialOpen(true)}
+              type="button"
+            >
+              {authoring.arrangeSpace}
+            </button>
+          </EditorDisclosure>
         </div>
       </header>
 
+      {presentChoiceOpen ? (
+        <PresentationVersionChoice
+          publicationContext={{
+            actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+            presentationId,
+            versionId: record.currentVersionId!,
+          }}
+          href={`/presentation/${presentationId}/host`}
+          error={error}
+          onClose={() => setPresentChoiceOpen(false)}
+          onPublishedExit={guardBuilderExit}
+          onPublish={() =>
+            publishBeforePresent(
+              publish,
+              () => router.push(`/presentation/${presentationId}/host`),
+              () =>
+                alive.current && publicationAuthorization.current && assistancePermission.current,
+            )
+          }
+        />
+      ) : null}
+
       {textAssistanceRecovery && !textAssistanceOpen ? (
-        <div className={styles.errorBanner} role="status">
+        <div
+          className={textAssistancePending ? styles.errorBanner : styles.sourceBanner}
+          role="status"
+          lang={locale}
+        >
           <p>
             {textAssistancePending
-              ? "A text assistance receipt is outstanding. Recover it before editing this deck."
-              : "A text assistance proposal is available for review."}
+              ? textAssistanceUi(
+                  "A text assistance receipt is outstanding. Recover it before editing this deck.",
+                )
+              : textAssistanceUi("A text assistance proposal is available for review.")}
           </p>
           <button
             type="button"
             data-text-assistance-resume
             onClick={() => setTextAssistanceOpen(true)}
           >
-            Resume text assistance
+            {textAssistanceUi("Resume text assistance")}
           </button>
         </div>
       ) : null}
       {assistancePending && !assistanceOpen ? (
-        <div className={styles.errorBanner} role="status" lang="en-CA">
-          <p>Recover the outline insertion acknowledgement before continuing to edit.</p>
+        <div className={styles.errorBanner} role="status" lang={locale}>
+          <p>
+            {assistanceUi(
+              "Recover the outline insertion acknowledgement before continuing to edit.",
+            )}
+          </p>
           <button type="button" onClick={() => setAssistanceOpen(true)}>
-            Resume outline assistance
+            {assistanceUi("Resume outline assistance")}
+          </button>
+        </div>
+      ) : null}
+      {questionSuggestionsRecovery && !questionSuggestionsOpen ? (
+        <div className={styles.errorBanner} role="status" lang={locale}>
+          <p>
+            {questionSuggestionsPending
+              ? questionSuggestionsUi(
+                  "A discussion question insertion receipt is outstanding. Recover it before editing this deck.",
+                )
+              : questionSuggestionsUi("A discussion question proposal is available for review.")}
+          </p>
+          <button
+            type="button"
+            data-question-suggestions-resume
+            onClick={() => void openQuestionSuggestions()}
+          >
+            {questionSuggestionsUi("Resume discussion suggestions")}
           </button>
         </div>
       ) : null}
@@ -2448,14 +3302,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </div>
       ) : null}
       {draft.sourceDisclosure ? (
-        <div className={styles.sourceBanner} lang="en-CA" role="note">
+        <div className={styles.sourceBanner} lang={locale} role="note">
           <span>
-            <strong>Grounded source:</strong>{" "}
-            <span lang="">{draft.sourceDisclosure.sourceName}</span> · generated by{" "}
+            <strong>{sourceWorkflowsUi("Grounded source:")}</strong>{" "}
+            <span lang="">{draft.sourceDisclosure.sourceName}</span> ·{" "}
+            {sourceWorkflowsUi("generated by")}{" "}
             <span lang="">
               {draft.sourceDisclosure.provider} / {draft.sourceDisclosure.model}
             </span>
-            . Verify citations before publishing.
+            . {sourceWorkflowsUi("Verify citations before publishing.")}
           </span>
           {draft.sourceDisclosure.conversionNotes?.length ? (
             <ul>
@@ -2474,7 +3329,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           inert={builderMutationBlocked || preparingImport}
           role="alert"
         >
-          <span lang="en-CA">{error}</span>
+          <span lang={sourceWorkflowError.lang}>{sourceWorkflowError.text}</span>
           {(saveState === "error" || ordinarySavePending) && saveState !== "saving" ? (
             <button onClick={() => void enqueueSave(draft)} type="button">
               {t("delivery.builder.retrySave")}
@@ -2499,17 +3354,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       {draft.recoveryPackInsertions?.length ? (
         <section
           className={styles.packReviews}
-          aria-label="Presentation Recovery Pack updates"
-          inert={builderMutationBlocked || preparingImport}
+          aria-label={packUpdateUi("Presentation Recovery Pack updates")}
+          lang={locale}
+          inert={unrelatedEditorMutationBlocked || preparingImport}
         >
           {packUpdateReceiptPending ? (
-            <p className="notice" role="status" lang="en-CA">
-              Editing is paused until the outstanding Pack acknowledgement is recovered. Retry the
-              same update or undo below; it cannot create a duplicate revision.
+            <p className="notice" role="status">
+              {packUpdateUi(
+                "Editing is paused until the outstanding Pack acknowledgement is recovered. Retry the same update or undo below; it cannot create a duplicate revision.",
+              )}
             </p>
           ) : null}
           {draft.recoveryPackInsertions.map((insertion) => (
             <PresentationRecoveryPackUpdateReview
+              locale={locale}
               key={insertion.id}
               presentationId={presentationId}
               insertionId={insertion.id}
@@ -2531,18 +3389,67 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </section>
       ) : null}
 
+      {designLibraryOpen ? (
+        <section
+          ref={designLibraryPanel}
+          id="presentation-design-library"
+          className={styles.designLibrary}
+          aria-labelledby="presentation-design-library-title"
+          inert={builderMutationBlocked || preparingImport}
+          lang={locale}
+        >
+          <div className={styles.designLibraryHeading}>
+            <div>
+              <h2 id="presentation-design-library-title">{designLibraryCopy.title}</h2>
+              <p>{designLibraryCopy.description}</p>
+            </div>
+            <button
+              type="button"
+              aria-label={commands.closePanel}
+              onClick={() => {
+                setDesignLibraryOpen(false);
+                designLibraryTrigger.current?.focus();
+              }}
+            >
+              <EditorIcon name="close" />
+            </button>
+          </div>
+          <PresentationDesignGallery
+            draft={draft}
+            selectedBlockId={selectedBlockId ?? undefined}
+            onApply={applyDesignFromLibrary}
+            onInsert={insertDesignLayout}
+            renderSceneImage={(mediaId, altText) => (
+              <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+            )}
+            disabled={!canEdit || builderMutationBlocked || preparingImport}
+          />
+        </section>
+      ) : null}
+
+      {compactEditor && (mapOpen || inspectorOpen) ? (
+        <button
+          type="button"
+          className={styles.drawerBackdrop}
+          aria-label={commands.closePanel}
+          onClick={() => closeEditorPanels(true)}
+          tabIndex={-1}
+        />
+      ) : null}
       <div
         className={`${styles.workspace} ${mapOpen ? "" : styles.mapClosed} ${inspectorOpen ? "" : styles.inspectorClosed}`}
         inert={builderMutationBlocked || preparingImport}
       >
         <aside
+          id="presentation-slide-navigator"
+          ref={mapPanel}
           className={styles.map}
           aria-label={t("delivery.presentationBuilder.presentationMap")}
         >
           <div className={styles.mapHeader}>
             <div>
               <span className={styles.eyebrow}>
-                {t("delivery.presentationBuilder.presentationMap")}
+                <span lang={locale}>{commands.slides}</span>
               </span>
               <strong>
                 {t(
@@ -2554,7 +3461,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               </strong>
             </div>
             <button
-              onClick={() => setMapOpen(false)}
+              onClick={() => (compactEditor ? closeEditorPanels(true) : setMapOpen(false))}
               type="button"
               aria-label={t("delivery.presentationBuilder.collapseMap")}
             >
@@ -2565,207 +3472,317 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             enabled={draft.schemaVersion >= 12}
             sections={draft.sections ?? []}
             selectedBlockId={selectedBlockId}
-            onEnable={() => commit(enablePresentationSections)}
-            onAdd={() => {
+            disabled={!canEdit}
+            onEnable={() => {
+              if (canEdit) commit(enablePresentationSections);
+            }}
+            onAdd={(title) => {
+              if (!canEdit) return;
               const sectionId = clientUuid();
-              commit((current) => addPresentationSection(current, sectionId));
+              // A generated title is authored exactly once, in the creation locale.
+              commit((current) =>
+                addPresentationSectionAtBlock(
+                  current,
+                  sectionId,
+                  title ?? sectionsSpatial("New section"),
+                  selectedBlockId,
+                ),
+              );
             }}
             onRename={(sectionId, title) =>
-              commit((current) => renamePresentationSection(current, sectionId, title))
+              canEdit && commit((current) => renamePresentationSection(current, sectionId, title))
             }
             onDelete={(sectionId) =>
-              commit((current) => removePresentationSection(current, sectionId))
+              canEdit && commit((current) => removePresentationSection(current, sectionId))
             }
             onAssign={(blockId, sectionId) =>
+              canEdit &&
               commit((current) => assignPresentationBlockToSection(current, blockId, sectionId))
             }
           />
-          <ol className={styles.blockList}>
-            {draft.blocks.map((block, index) => (
-              <li key={block.id}>
+          <div className={styles.filmstripScroll} data-slide-filmstrip="true">
+            {sectionRuns.map((run) => {
+              const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+              // The last removed section may merge unsectioned runs. Without a
+              // remaining header, an old collapse preference must not hide slides.
+              const collapsed =
+                Boolean(draft.sections?.length) && collapsedSections.has(collapseKey);
+              return (
+                <div key={run.key} data-section-run={run.section?.id ?? "unsectioned"}>
+                  {draft.sections?.length ? (
+                    <PresentationSectionHeader
+                      section={run.section}
+                      runKey={run.key}
+                      count={run.blocks.length}
+                      continued={run.continued}
+                      collapsed={collapsed}
+                      disabled={!canEdit}
+                      fragmented={Boolean(
+                        run.section &&
+                        sectionRuns.filter(
+                          (candidate) =>
+                            candidate.section?.id === run.section?.id && candidate.blocks.length,
+                        ).length > 1,
+                      )}
+                      canMove={(direction) =>
+                        Boolean(
+                          run.section &&
+                          canMovePresentationSection(draft, run.section.id, direction),
+                        )
+                      }
+                      onToggle={() =>
+                        setCollapsedSections((current) => {
+                          const next = new Set(current);
+                          if (next.has(collapseKey)) next.delete(collapseKey);
+                          else next.add(collapseKey);
+                          return next;
+                        })
+                      }
+                      onRename={(sectionId, title) =>
+                        canEdit &&
+                        commit((current) => renamePresentationSection(current, sectionId, title))
+                      }
+                      onDelete={(sectionId) => {
+                        if (!canEdit) return;
+                        commit((current) => removePresentationSection(current, sectionId));
+                        requestAnimationFrame(() =>
+                          mapPanel.current
+                            ?.querySelector<HTMLElement>('[aria-current="step"]')
+                            ?.focus({ preventScroll: true }),
+                        );
+                      }}
+                      onMove={(sectionId, direction) =>
+                        canEdit &&
+                        commit((current) => movePresentationSection(current, sectionId, direction))
+                      }
+                    />
+                  ) : null}
+                  <ol
+                    className={styles.blockList}
+                    id={`section-slides-${run.key}`}
+                    start={run.startIndex + 1}
+                    hidden={collapsed}
+                  >
+                    {run.blocks.map((block, runIndex) => {
+                      const index = run.startIndex + runIndex;
+                      return (
+                        <li
+                          key={block.id}
+                          className={styles.filmstripItem}
+                          data-slide-id={block.id}
+                        >
+                          <PresentationSlideThumbnail
+                            block={block}
+                            design={resolvePresentationContentDesign(draft.blocks, block.id)}
+                            priority={index < 3 || selectedBlockId === block.id}
+                            mediaEnabled={mapOpen && !collapsed}
+                            mediaScope={{
+                              actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+                              presentationId,
+                            }}
+                          />
+                          <button
+                            aria-current={selectedBlockId === block.id ? "step" : undefined}
+                            className={
+                              selectedBlockId === block.id ? styles.blockActive : styles.blockButton
+                            }
+                            onClick={() => setSelectedBlockId(block.id)}
+                            type="button"
+                          >
+                            <span className={styles.thumbnailSpace} aria-hidden="true" />
+                            <span className={styles.blockNumber}>{index + 1}</span>
+                            <span className={styles.blockText}>
+                              <small>
+                                {block.kind === "content"
+                                  ? t("delivery.presentation.contentSlide")
+                                  : `${t(
+                                      (block.question.delivery ?? "main") === "recheck"
+                                        ? "delivery.builder.recheck"
+                                        : "delivery.presentation.interactiveQuestion",
+                                    )} · ${t(questionTypeMessageKeys[block.question.type])}`}
+                              </small>
+                              <strong
+                                lang={
+                                  (block.kind === "content"
+                                    ? contentSlideTitle(block)
+                                    : block.question.prompt
+                                  ).trim()
+                                    ? (nativeSlideTitleLanguage(block) ?? "")
+                                    : undefined
+                                }
+                              >
+                                {(block.kind === "content"
+                                  ? contentSlideTitle(block)
+                                  : block.question.prompt
+                                ).trim() ||
+                                  t(
+                                    block.kind === "content"
+                                      ? "delivery.builder.slide"
+                                      : "delivery.builder.question",
+                                    { number: index + 1 },
+                                  )}
+                              </strong>
+                            </span>
+                            {block.kind === "content" && block.hidden ? (
+                              <span className={styles.hiddenBadge} lang={locale}>
+                                {commands.hidden}
+                              </span>
+                            ) : issuesByBlock.has(block.id) ? (
+                              <span
+                                className={styles.issueBadge}
+                                aria-label={t(
+                                  issuesByBlock.get(block.id) === 1
+                                    ? "delivery.builder.issueCount.one"
+                                    : "delivery.builder.issueCount.other",
+                                  { count: issuesByBlock.get(block.id) ?? 0 },
+                                )}
+                              >
+                                {issuesByBlock.get(block.id)}
+                              </span>
+                            ) : null}
+                          </button>
+                          {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
+                            <span className={styles.recoveryLink}>
+                              ↳ {t("delivery.presentationBuilder.pairedRecovery")}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
+          </div>
+          <div className={styles.addActions}>
+            <button
+              className={styles.newSlideButton}
+              onClick={() => addBlock(createDesignedNativeContentBlock())}
+              type="button"
+            >
+              <EditorIcon name="plus" /> {commands.newSlide}
+            </button>
+            <EditorDisclosure
+              label={commands.insertImport}
+              icon="import"
+              align="start"
+              className={styles.insertMenu}
+            >
+              <EditorMenuSection label={commands.createSlide}>
                 <button
-                  aria-current={selectedBlockId === block.id ? "step" : undefined}
-                  className={selectedBlockId === block.id ? styles.blockActive : styles.blockButton}
-                  onClick={() => setSelectedBlockId(block.id)}
+                  title={commands.emptyCanvas}
+                  onClick={(event) => addBlock(createNativeContentBlock(), event.currentTarget)}
                   type="button"
                 >
-                  <span className={styles.blockNumber}>{index + 1}</span>
-                  <span className={styles.blockText}>
-                    <small>
-                      {block.kind === "content"
-                        ? t("delivery.presentation.contentSlide")
-                        : `${t(
-                            (block.question.delivery ?? "main") === "recheck"
-                              ? "delivery.builder.recheck"
-                              : "delivery.presentation.interactiveQuestion",
-                          )} · ${t(questionTypeMessageKeys[block.question.type])}`}
-                    </small>
-                    <strong
-                      lang={
-                        (block.kind === "content"
-                          ? contentSlideTitle(block)
-                          : block.question.prompt
-                        ).trim()
-                          ? ""
-                          : undefined
-                      }
-                    >
-                      {(block.kind === "content"
-                        ? contentSlideTitle(block)
-                        : block.question.prompt
-                      ).trim() ||
-                        t(
-                          block.kind === "content"
-                            ? "delivery.builder.slide"
-                            : "delivery.builder.question",
-                          { number: index + 1 },
-                        )}
-                    </strong>
-                    {presentationSectionForBlock(draft.sections, block.id) ? (
-                      <span className={styles.sectionBadge} lang="">
-                        {presentationSectionForBlock(draft.sections, block.id)?.title ||
-                          "Unnamed section"}
-                      </span>
-                    ) : null}
+                  <EditorIcon name="slides" />
+                  <span className={styles.insertChoice}>
+                    <span>{commands.blankSlide}</span>
+                    <small>{commands.emptyCanvas}</small>
                   </span>
-                  {block.kind === "content" && block.hidden ? (
-                    <span className={styles.hiddenBadge} lang="en-CA">
-                      Hidden
-                    </span>
-                  ) : issuesByBlock.has(block.id) ? (
-                    <span
-                      className={styles.issueBadge}
-                      aria-label={t(
-                        issuesByBlock.get(block.id) === 1
-                          ? "delivery.builder.issueCount.one"
-                          : "delivery.builder.issueCount.other",
-                        { count: issuesByBlock.get(block.id) ?? 0 },
-                      )}
-                    >
-                      {issuesByBlock.get(block.id)}
-                    </span>
-                  ) : (
-                    <span className={styles.readyBadge} aria-label={t("delivery.builder.ready")}>
-                      ✓
-                    </span>
-                  )}
                 </button>
-                {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
-                  <span className={styles.recoveryLink}>
-                    ↳ {t("delivery.presentationBuilder.pairedRecovery")}
+                <button
+                  title={commands.bodyCanvas}
+                  onClick={(event) =>
+                    addBlock(createDesignedNativeContentBlock(), event.currentTarget)
+                  }
+                  type="button"
+                >
+                  <EditorIcon name="content" />
+                  <span className={styles.insertChoice}>
+                    <span>{t("delivery.presentation.contentSlide")}</span>
+                    <small>{commands.bodyCanvas}</small>
                   </span>
+                </button>
+                <button
+                  onClick={(event) =>
+                    addBlock(createQuestionBlock("single_select", locale), event.currentTarget)
+                  }
+                  type="button"
+                >
+                  <EditorIcon name="interaction" />
+                  <span>{t("delivery.builder.addQuestion")}</span>
+                </button>
+                <button
+                  aria-label={commands.outlineToSlides}
+                  disabled={!canEdit || preparingImport}
+                  lang={locale}
+                  onClick={(event) => void openAssistance(false, event.currentTarget)}
+                  type="button"
+                >
+                  <EditorIcon name="outline" />
+                  <span>{commands.outlineToSlides}</span>
+                </button>
+              </EditorMenuSection>
+              <EditorMenuSection label={commands.bringContent}>
+                <button
+                  disabled={!roundSources.length || preparingImport}
+                  onClick={(event) => openRoundImport(event.currentTarget)}
+                  type="button"
+                >
+                  <EditorIcon name="round" />
+                  <span>{t("delivery.presentationBuilder.fromPublishedRound")}</span>
+                </button>
+                <button
+                  disabled={preparingImport}
+                  onClick={() => void openSourceImport()}
+                  type="button"
+                >
+                  <EditorIcon name="source" />
+                  <span>{t("delivery.presentationBuilder.fromTrustedSource")}</span>
+                </button>
+                <button
+                  disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
+                  lang={locale}
+                  onClick={openVisualImport}
+                  type="button"
+                >
+                  <EditorIcon name="image" />
+                  <span>{commands.importVisual}</span>
+                </button>
+                {canInsertPack ? (
+                  <button
+                    disabled={mediaState !== "idle" || preparingImport}
+                    lang={locale}
+                    onClick={() => void openPackImport()}
+                    type="button"
+                  >
+                    <EditorIcon name="recovery" />
+                    <span>{commands.fromPack}</span>
+                  </button>
                 ) : null}
-              </li>
-            ))}
-          </ol>
-          <div className={styles.addActions}>
-            <button onClick={() => addBlock(createNativeContentBlock())} type="button">
-              Add native slide
-            </button>
-            <button onClick={() => addBlock(createContentBlock())} type="button">
-              + {t("delivery.presentation.contentSlide")}
-            </button>
-            <button onClick={() => addBlock(createQuestionBlock())} type="button">
-              + {t("delivery.builder.addQuestion")}
-            </button>
-            <button
-              disabled={!roundSources.length || preparingImport}
-              onClick={openRoundImport}
-              type="button"
-            >
-              + {t("delivery.presentationBuilder.fromPublishedRound")}
-            </button>
-            <button
-              disabled={preparingImport}
-              onClick={() => void openSourceImport()}
-              type="button"
-            >
-              + {t("delivery.presentationBuilder.fromTrustedSource")}
-            </button>
-            <button
-              disabled={!canEdit || preparingImport}
-              lang="en-CA"
-              onClick={() => void openAssistance()}
-              type="button"
-            >
-              Outline to slides
-            </button>
-            <button
-              disabled={preparingImport || mediaState !== "idle" || pendingNativeImage !== null}
-              lang="en-CA"
-              onClick={openVisualImport}
-              type="button"
-            >
-              + Import visual slides
-            </button>
-            {canInsertPack ? (
-              <button
-                disabled={mediaState !== "idle" || preparingImport}
-                lang="en-CA"
-                onClick={() => void openPackImport()}
-                type="button"
-              >
-                + From Recovery Pack
-              </button>
-            ) : null}
+              </EditorMenuSection>
+            </EditorDisclosure>
           </div>
         </aside>
 
+        <PresentationNavigatorResize enabled={mapOpen && !compactEditor} />
         <main className={styles.canvasArea} id="presentation-canvas">
           <div className={styles.compactCommands} inert={builderMutationBlocked || preparingImport}>
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
               {saveLabel}
             </span>
-            <button
-              className={styles.compactPreview}
-              onClick={() => setPreviewOpen(true)}
-              type="button"
-            >
+            <button className={styles.compactPreview} onClick={openDraftPreview} type="button">
               {t("delivery.common.preview")}
             </button>
           </div>
-          {productFeatures?.canvasBoards ? (
-            <CanvasArtifactLinks
-              target={{ kind: "presentation", targetId: presentationId }}
-              editable={canEdit}
-              disabled={builderMutationBlocked}
-            />
-          ) : null}
-          <RecoveryPackPresentationReferences insertions={draft.recoveryPackInsertions ?? []} />
-          {!mapOpen ? (
-            <button
-              className={styles.floatingMapButton}
-              onClick={() => setMapOpen(true)}
-              type="button"
-            >
-              {t("delivery.presentationBuilder.openMap")}
-            </button>
-          ) : null}
           {selectedBlock ? (
-            <div className={styles.canvasToolbar} aria-label="Selected block actions" lang="en-CA">
-              <button
-                className={styles.primarySlideAction}
-                onClick={() => addBlock(createDesignedNativeContentBlock())}
-                type="button"
-              >
-                New slide
-              </button>
-              <button
-                className={styles.compactHistory}
-                disabled={!undoStack.length}
-                onClick={undo}
-                type="button"
-              >
-                {t("delivery.builder.undo")}
-              </button>
-              <button
-                className={styles.compactHistory}
-                disabled={!redoStack.length}
-                onClick={redo}
-                type="button"
-              >
-                {t("delivery.builder.redo")}
-              </button>
+            <div
+              className={styles.canvasToolbar}
+              role="group"
+              aria-label={commands.selectedActions}
+              lang={locale}
+            >
+              <span className={styles.slidePosition}>
+                {commands.slidePosition
+                  .replace(
+                    "{current}",
+                    new Intl.NumberFormat(locale).format(
+                      draft.blocks.findIndex((block) => block.id === selectedBlock.id) + 1,
+                    ),
+                  )
+                  .replace("{total}", new Intl.NumberFormat(locale).format(draft.blocks.length))}
+              </span>
+
               {selectedBlock.kind === "content" && !selectedBlock.scene ? (
                 <>
                   <button
@@ -2773,7 +3790,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     onClick={addTextBox}
                     type="button"
                   >
-                    Add text box
+                    {commands.addTextBox}
                   </button>
                   <button
                     disabled={!selectedTextElement}
@@ -2787,7 +3804,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }}
                     type="button"
                   >
-                    Move text earlier
+                    {commands.moveTextEarlier}
                   </button>
                   <button
                     disabled={!selectedTextElement}
@@ -2801,7 +3818,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }}
                     type="button"
                   >
-                    Move text later
+                    {commands.moveTextLater}
                   </button>
                   <button
                     className={styles.dangerButton}
@@ -2809,7 +3826,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     onClick={deleteSelectedTextBox}
                     type="button"
                   >
-                    Delete text box
+                    {commands.deleteTextBox}
                   </button>
                 </>
               ) : null}
@@ -2829,72 +3846,100 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     }
                   }}
                 >
-                  Convert to native slide
+                  {commands.convertNative}
                 </button>
               ) : null}
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
-                }
-                type="button"
+              <div
+                className={styles.slideActionGroup}
+                role="group"
+                aria-label={commands.slideOrder}
               >
-                Move earlier
-              </button>
-              <button
-                disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
-                title="Keep linked rechecks after their source question."
-                onClick={() =>
-                  commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
-                }
-                type="button"
-              >
-                Move later
-              </button>
-              {selectedBlock.kind === "content" ? (
                 <button
-                  type="button"
+                  aria-label={commands.moveEarlier}
+                  disabled={!canMovePresentationBlock(draft, selectedBlock.id, -1)}
+                  title={commands.moveEarlierHelp}
                   onClick={() =>
-                    commit((current) =>
-                      setPresentationSlideHidden(current, selectedBlock.id, !selectedBlock.hidden),
-                    )
+                    commit((current) => movePresentationBlock(current, selectedBlock.id, -1))
                   }
+                  type="button"
                 >
-                  {selectedBlock.hidden ? "Show slide" : "Hide slide"}
+                  <EditorIcon name="arrow-up" />
                 </button>
-              ) : (
-                <p className={styles.helpText} lang="en-CA">
-                  Activities stay in the presentation. Remove an activity to exclude it; linked
-                  rechecks keep their order.
-                </p>
-              )}
-              <button
-                disabled={draft.blocks.length >= 200}
-                onClick={() => {
-                  const copy = duplicatePresentationBlock(selectedBlock);
-                  commit((current) =>
-                    insertPresentationBlockDuplicate(current, selectedBlock.id, copy),
-                  );
-                  setSelectedBlockId(copy.id);
-                  setInspectorTab(copy.kind === "content" ? "content" : "build");
-                }}
-                type="button"
+                <button
+                  aria-label={commands.moveLater}
+                  disabled={!canMovePresentationBlock(draft, selectedBlock.id, 1)}
+                  title={commands.moveLaterHelp}
+                  onClick={() =>
+                    commit((current) => movePresentationBlock(current, selectedBlock.id, 1))
+                  }
+                  type="button"
+                >
+                  <EditorIcon name="arrow-down" />
+                </button>
+              </div>
+              <div
+                className={styles.slideActionGroup}
+                role="group"
+                aria-label={commands.slideActions}
               >
-                Duplicate
-              </button>
-              <button
-                className={styles.dangerButton}
-                onClick={() => {
-                  const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
-                  const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
-                  commit((current) => removePresentationBlock(current, selectedBlock.id));
-                  setSelectedBlockId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
-                }}
-                type="button"
-              >
-                Delete
-              </button>
+                {selectedBlock.kind === "content" ? (
+                  <button
+                    aria-label={selectedBlock.hidden ? commands.showSlide : commands.hideSlide}
+                    title={selectedBlock.hidden ? commands.showSlide : commands.hideSlide}
+                    type="button"
+                    onClick={() =>
+                      commit((current) =>
+                        setPresentationSlideHidden(
+                          current,
+                          selectedBlock.id,
+                          !selectedBlock.hidden,
+                        ),
+                      )
+                    }
+                  >
+                    <EditorIcon name={selectedBlock.hidden ? "preview" : "eye-off"} />
+                    <span>{selectedBlock.hidden ? commands.showSlide : commands.hideSlide}</span>
+                  </button>
+                ) : (
+                  <p className={styles.helpText} lang={locale}>
+                    {commands.activityOrderHelp}
+                  </p>
+                )}
+                <button
+                  aria-label={t("delivery.common.duplicate")}
+                  title={commands.duplicateSlide}
+                  disabled={draft.blocks.length >= 200}
+                  onClick={() => {
+                    const copy = duplicatePresentationBlock(selectedBlock);
+                    commit((current) =>
+                      insertPresentationBlockDuplicate(current, selectedBlock.id, copy),
+                    );
+                    setSelectedBlockId(copy.id);
+                    setInspectorTab(copy.kind === "content" ? "content" : "build");
+                  }}
+                  type="button"
+                >
+                  <EditorIcon name="duplicate" />
+                  <span>{t("delivery.common.duplicate")}</span>
+                </button>
+                <button
+                  aria-label={t("delivery.common.delete")}
+                  title={commands.deleteSlide}
+                  className={styles.dangerButton}
+                  onClick={() => {
+                    const index = draft.blocks.findIndex((block) => block.id === selectedBlock.id);
+                    const remaining = draft.blocks.filter((block) => block.id !== selectedBlock.id);
+                    commit((current) => removePresentationBlock(current, selectedBlock.id));
+                    setSelectedBlockId(
+                      remaining[Math.min(index, remaining.length - 1)]?.id ?? null,
+                    );
+                  }}
+                  type="button"
+                >
+                  <EditorIcon name="trash" />
+                  <span>{t("delivery.common.delete")}</span>
+                </button>
+              </div>
             </div>
           ) : null}
           {selectedBlock?.kind === "content" && selectedBlock.hidden ? (
@@ -2910,16 +3955,20 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           ) : null}
           {selectedBlock?.kind === "content" &&
           selectedBlock.sourceDisclosure?.model === "visual-import-v1" ? (
-            <p className={styles.sourceBanner} role="note" lang="en-CA">
+            <p className={styles.sourceBanner} role="note" lang={locale}>
               <strong>
                 {selectedBlock.scene?.nodes.some((node) => node.type === "image")
-                  ? "Imported visual slide"
-                  : "Imported reading slide"}
+                  ? visualImportUi("Imported visual slide")
+                  : visualImportUi("Imported reading slide")}
               </strong>
               {" · "}
               {selectedBlock.scene?.nodes.some((node) => node.type === "image")
-                ? "Source objects, animation and media are flattened. Edit image placement or use its reading slide for editable text."
-                : "Author-reviewed accessible text is editable on this reading slide."}
+                ? visualImportUi(
+                    "Source objects, animation and media are flattened. Edit image placement or use its reading slide for editable text.",
+                  )
+                : visualImportUi(
+                    "Author-reviewed accessible text is editable on this reading slide.",
+                  )}
             </p>
           ) : null}
           {!selectedBlock ? (
@@ -2929,15 +3978,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               <p>{t("delivery.presentationBuilder.emptyDescription")}</p>
               <div>
                 <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
-                  New slide
+                  Create first slide
                 </button>
-                <button onClick={() => addBlock(createContentBlock())} type="button">
+                <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
                 </button>
-                <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                <button
+                  onClick={() => addBlock(createQuestionBlock("single_select", locale))}
+                  type="button"
+                >
                   {t("delivery.presentationBuilder.addAudienceQuestion")}
                 </button>
-                <button disabled={!roundSources.length} onClick={openRoundImport} type="button">
+                <button
+                  disabled={!roundSources.length}
+                  onClick={(event) => openRoundImport(event.currentTarget)}
+                  type="button"
+                >
                   {t("delivery.presentationBuilder.reuseRound")}
                 </button>
                 <button onClick={() => void openSourceImport()} type="button">
@@ -2945,44 +4001,61 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 </button>
                 <button
                   disabled={!canEdit || preparingImport}
-                  lang="en-CA"
+                  lang={locale}
                   onClick={() => void openAssistance()}
                   type="button"
                 >
-                  Outline to slides
+                  {assistanceUi("Outline to slides")}
                 </button>
-                <button lang="en-CA" onClick={openVisualImport} type="button">
-                  Import visual slides
+                <button lang={locale} onClick={openVisualImport} type="button">
+                  {visualImportUi("Import visual slides")}
                 </button>
               </div>
             </section>
           ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
-            <section className={styles.slideCanvas} lang="en-CA">
-              {selectedBlock.textAssistance ? (
-                <aside aria-label="Latest AI text edit" className={styles.errorBanner}>
-                  <strong>Latest AI text edit — unverified wording</strong>
-                  <p>
-                    {selectedBlock.textAssistance.operation === "shorten"
-                      ? "Shortened"
-                      : "Rewritten"}{" "}
-                    {selectedBlock.textAssistance.role} object {selectedBlock.textAssistance.nodeId}{" "}
-                    by {selectedBlock.textAssistance.provider} /{" "}
-                    {selectedBlock.textAssistance.model} at{" "}
-                    {selectedBlock.textAssistance.generatedAt}.
-                  </p>
-                  <p>
-                    {selectedBlock.textAssistance.reviewWarning} This records the latest edit on
-                    this slide, not a complete edit history or fact check.
-                  </p>
-                </aside>
-              ) : null}
+            <section className={styles.slideCanvas} lang={locale}>
               <NativeSceneEditor
+                canEdit={canEdit}
                 key={selectedBlock.id}
                 scene={selectedBlock.scene}
+                inspectorTarget={nativeInspectorTarget}
+                inspectorSection={
+                  inspectorTab === "layout" ||
+                  inspectorTab === "media" ||
+                  inspectorTab === "accessibility"
+                    ? inspectorTab
+                    : "content"
+                }
+                onInspectSelection={(openInspector = false) => {
+                  setInspectorTab("content");
+                  if (openInspector) {
+                    if (compactEditor) setMapOpen(false);
+                    setInspectorOpen(true);
+                  }
+                }}
+                onArrangeSelection={() => {
+                  setInspectorTab("layout");
+                  if (compactEditor) setMapOpen(false);
+                  setInspectorOpen(true);
+                }}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
                 layoutSuggestionsDisabled={!canEdit || builderMutationBlocked || preparingImport}
                 layoutSuggestionsSourceKey={selectedBlock.id}
+                onPreviewInteraction={() => {
+                  if (builderMutationBlocked || preparingImport || selectedBlock.hidden) return;
+                  setPreviewMode("audience");
+                  setPreviewOrigin("interaction");
+                  setPreviewStartBlockId(selectedBlock.id);
+                  setPreviewOpen(true);
+                }}
+                previewInteractionUnavailableReason={
+                  selectedBlock.hidden
+                    ? "Show this slide before previewing it."
+                    : builderMutationBlocked || preparingImport
+                      ? "Finish the pending edit before previewing."
+                      : undefined
+                }
                 navigationTargets={presentationInteractionTargets(draft, selectedBlock.id)}
                 onUndo={undo}
                 onRedo={redo}
@@ -3035,11 +4108,165 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   void uploadSelectedImage(file, altText);
                 }}
               />
+              <EditorDisclosure
+                label={sourceWorkflowsUi("Slide ideas & audience activities")}
+                className={styles.slideIdeas}
+                icon="interaction"
+                inline
+              >
+                <PresentationQuestionStarters
+                  locale={locale}
+                  key={`question-starters:${selectedBlock.id}`}
+                  block={selectedBlock}
+                  sourceKey={selectedBlock.id}
+                  disabled={questionStarterContext.blocked}
+                  onInsert={(starter) => {
+                    if (
+                      latestQuestionStarterContext.current.actorKey !==
+                        questionStarterContext.actorKey ||
+                      latestQuestionStarterContext.current.presentationId !==
+                        questionStarterContext.presentationId ||
+                      latestQuestionStarterContext.current.selectedBlockId !==
+                        questionStarterContext.selectedBlockId ||
+                      latestQuestionStarterContext.current.blocked ||
+                      questionStarterContext.blocked ||
+                      !alive.current ||
+                      !assistancePermission.current ||
+                      importPreparation.current ||
+                      textAssistanceActive.current ||
+                      questionSuggestionsActive.current ||
+                      assistanceActive.current ||
+                      visualImportActive.current ||
+                      packOperation.current ||
+                      packPending.current ||
+                      packUpdateOperation.current ||
+                      packUpdatePending.current ||
+                      mediaUploadInFlight.current ||
+                      pendingNativeImageRef.current ||
+                      starter.source.blockId.toLowerCase() !== selectedBlock.id.toLowerCase()
+                    )
+                      return false;
+                    const ids = {
+                      blockId: clientUuid(),
+                      questionId: clientUuid(),
+                      ...(starter.type === "poll"
+                        ? { choiceIds: (starter.choices ?? []).map(() => clientUuid()) }
+                        : {}),
+                    };
+                    const checked = insertPresentationQuestionStarter(
+                      JSON.parse(latestDraftJson.current) as PresentationDraft,
+                      starter,
+                      ids,
+                    );
+                    if (!checked.ok) {
+                      setError(checked.reason);
+                      return false;
+                    }
+                    // Recheck the current draft in the ordinary commit; identities stay stable
+                    // if React replays the updater. One insertion is one independent Undo step.
+                    commit((current) => {
+                      const result = insertPresentationQuestionStarter(current, starter, ids);
+                      if (!result.ok) {
+                        setError(result.reason);
+                        return current;
+                      }
+                      questionStarterFocus.current = result.blockId;
+                      setSelectedBlockId(result.blockId);
+                      setInspectorTab("build");
+                      setError("");
+                      return result.draft;
+                    });
+                    return true;
+                  }}
+                />
+                <section
+                  className={styles.ideaCard}
+                  lang={locale}
+                  aria-label={questionSuggestionsUi("AI discussion suggestions")}
+                >
+                  <div className={styles.ideaCardHeading}>
+                    <EditorIcon name="sparkle" />
+                    <span>{questionSuggestionsUi("AI assistance")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    data-question-suggestions-trigger
+                    disabled={
+                      questionStarterContext.blocked || !questionSuggestionSource?.supported
+                    }
+                    onClick={() => void openQuestionSuggestions()}
+                  >
+                    <EditorIcon name="sparkle" />
+                    <span>{questionSuggestionsUi("Suggest discussion questions")}</span>
+                  </button>
+                  <p className={styles.helpText}>
+                    {questionSuggestionsUi(
+                      "Review your source and shared AI allowance before generating two English discussion suggestions.",
+                    )}
+                  </p>
+                </section>
+                {selectedBlock.textAssistance ? (
+                  <aside
+                    aria-label={textAssistanceUi("Latest AI text edit")}
+                    className={styles.sourceBanner}
+                    lang={locale}
+                  >
+                    <strong>{textAssistanceUi("Latest AI text edit — unverified wording")}</strong>
+                    <p>
+                      {selectedBlock.textAssistance.operation === "translate"
+                        ? textAssistanceUi("Translated to {language}", {
+                            language: textAssistanceLanguageDisplay(
+                              selectedBlock.textAssistance.targetLanguage!,
+                              locale,
+                            ).text,
+                          })
+                        : selectedBlock.textAssistance.operation === "shorten"
+                          ? textAssistanceUi("Shortened")
+                          : textAssistanceUi("Rewritten")}
+                      {" · "}
+                      {textAssistanceUi("Text object")}:{" "}
+                      {nativeControlUi(
+                        selectedBlock.textAssistance.role === "title" ? "Slide title" : "Body text",
+                      )}
+                      {" · "}
+                      <span lang="">{selectedBlock.textAssistance.nodeId}</span>
+                    </p>
+                    <p>
+                      {textAssistanceUi("Generated by")}{" "}
+                      <span lang="">
+                        {selectedBlock.textAssistance.provider} /{" "}
+                        {selectedBlock.textAssistance.model}
+                      </span>
+                      {" · "}
+                      <time dateTime={selectedBlock.textAssistance.generatedAt}>
+                        {formatDateTime(locale, selectedBlock.textAssistance.generatedAt)}
+                      </time>
+                    </p>
+                    <p>
+                      <span
+                        lang={
+                          textAssistanceFeedback(locale, selectedBlock.textAssistance.reviewWarning)
+                            .lang
+                        }
+                      >
+                        {
+                          textAssistanceFeedback(locale, selectedBlock.textAssistance.reviewWarning)
+                            .text
+                        }
+                      </span>{" "}
+                      {textAssistanceUi(
+                        "This records the latest edit on this slide, not a complete edit history or fact check.",
+                      )}
+                    </p>
+                  </aside>
+                ) : null}
+              </EditorDisclosure>
             </section>
           ) : selectedBlock.kind === "content" ? (
             <section className={styles.slideCanvas} lang="en-CA">
               <ContentSlideView
                 block={selectedBlock}
+                designOverride={resolvePresentationContentDesign(draft.blocks, selectedBlock.id)}
                 bodyPlaceholder={
                   selectedBlock.layout === "quote"
                     ? "Add the quote or reflection prompt"
@@ -3063,81 +4290,155 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               />
             </section>
           ) : (
-            <section className={styles.questionCanvas}>
-              <div className={styles.questionMeta}>
-                <span>{t("delivery.presentation.interactiveQuestion")}</span>
-                <span lang="en-CA">{selectedBlock.question.timeLimitSeconds} seconds</span>
+            <section className={styles.activityEditor} aria-label="Activity editor">
+              <div className={styles.activityHeading}>
+                <div>
+                  <span>Audience activity</span>
+                  <strong>Edit the prompt and answers on the slide</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.currentTarget.focus({ preventScroll: true });
+                    openSelectedPreview("audience", "slide");
+                  }}
+                >
+                  <EditorIcon name="preview" /> Preview this slide
+                </button>
               </div>
-              <textarea
-                aria-label="Question prompt"
-                className={styles.questionPrompt}
-                lang={selectedBlock.question.prompt.trim() ? "" : "en-CA"}
-                maxLength={500}
-                onChange={(event) =>
+              <PresentationActivitySlide
+                question={selectedBlock.question}
+                accessibilityContext="editor"
+                design={resolvePresentationActivityDesign(draft.blocks, selectedBlock.id)}
+                editable
+                onPromptChange={(prompt) =>
+                  updateQuestion((question) => ({ ...question, prompt }), "prompt")
+                }
+                onChoiceChange={(id, label) =>
                   updateQuestion(
-                    (question) => ({ ...question, prompt: event.target.value }),
-                    "prompt",
+                    (question) =>
+                      isChoiceQuestion(question) && question.type !== "true_false"
+                        ? {
+                            ...question,
+                            choices: question.choices.map((choice) =>
+                              choice.id === id ? { ...choice, label } : choice,
+                            ),
+                          }
+                        : question,
+                    `choice:${id}`,
                   )
                 }
-                placeholder="What do you want the room to think about?"
-                value={selectedBlock.question.prompt}
+                selectedChoiceId={selectedActivityChoiceId}
+                onSelectChoice={setSelectedActivityChoiceId}
+                media={
+                  selectedBlock.question.mediaId ? (
+                    <AuthenticatedMedia
+                      altText={selectedBlock.question.mediaAlt}
+                      mediaId={selectedBlock.question.mediaId}
+                    />
+                  ) : undefined
+                }
               />
-              {selectedBlock.question.mediaId ? (
-                <div className={styles.canvasMedia}>
-                  <AuthenticatedMedia
-                    altText={selectedBlock.question.mediaAlt}
-                    mediaId={selectedBlock.question.mediaId}
+              <section className={styles.activitySettings} aria-label="Activity settings">
+                <div className={styles.activitySettingsHeading}>
+                  <EditorIcon name="inspector" />
+                  <div>
+                    <h2>Activity settings</h2>
+                    <p>
+                      Configure responses and follow-up paths. These controls are private editing
+                      tools.
+                    </p>
+                  </div>
+                </div>
+                <div className={styles.responseSurface}>
+                  <ResponseEditor
+                    multiSelectPollsEnabled
+                    rankingPollsEnabled
+                    onStructuralChange={(question) => updateQuestion(() => question)}
+                    onUpdateChoiceQuestion={(updater) =>
+                      updateQuestion(
+                        (question) => (isChoiceQuestion(question) ? updater(question) : question),
+                        "response",
+                      )
+                    }
+                    onUpdateQuestion={(updater) => updateQuestion(updater, "response")}
+                    question={selectedBlock.question}
+                    uxBeta
                   />
                 </div>
-              ) : null}
-              <div className={styles.responseSurface}>
-                <ResponseEditor
-                  multiSelectPollsEnabled
-                  rankingPollsEnabled
-                  onStructuralChange={(question) => updateQuestion(() => question)}
-                  onUpdateChoiceQuestion={(updater) =>
-                    updateQuestion(
-                      (question) => (isChoiceQuestion(question) ? updater(question) : question),
-                      "response",
+                <PresentationBranchEditor
+                  locale={locale}
+                  disabled={!canEdit || builderMutationBlocked || preparingImport}
+                  block={selectedBlock}
+                  targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
+                  onChange={(branches, historyField) =>
+                    commit(
+                      (current) => ({
+                        ...current,
+                        schemaVersion: current.schemaVersion >= 13 ? current.schemaVersion : 13,
+                        sections: current.sections ?? [],
+                        blocks: current.blocks.map((block) => {
+                          if (block.id !== selectedBlock.id || block.kind !== "question")
+                            return block;
+                          const copy = { ...block };
+                          delete copy.branches;
+                          return branches.length ? { ...copy, branches } : copy;
+                        }),
+                      }),
+                      historyField ? `${selectedBlock.id}:${historyField}` : undefined,
                     )
                   }
-                  onUpdateQuestion={(updater) => updateQuestion(updater, "response")}
-                  question={selectedBlock.question}
-                  uxBeta
                 />
-              </div>
-              <PresentationBranchEditor
-                block={selectedBlock}
-                targets={presentationInteractionTargets(draft, selectedBlock.id, true)}
-                onChange={(branches, historyField) =>
-                  commit(
-                    (current) => ({
-                      ...current,
-                      schemaVersion: current.schemaVersion >= 13 ? current.schemaVersion : 13,
-                      sections: current.sections ?? [],
-                      blocks: current.blocks.map((block) => {
-                        if (block.id !== selectedBlock.id || block.kind !== "question")
-                          return block;
-                        const copy = { ...block };
-                        delete copy.branches;
-                        return branches.length ? { ...copy, branches } : copy;
-                      }),
-                    }),
-                    historyField ? `${selectedBlock.id}:${historyField}` : undefined,
-                  )
-                }
-              />
+              </section>
             </section>
           )}
+          {productFeatures?.canvasBoards || draft.recoveryPackInsertions?.length ? (
+            <EditorDisclosure
+              label="Related content"
+              icon="source"
+              inline
+              className={styles.slideIdeas}
+            >
+              {productFeatures?.canvasBoards ? (
+                <CanvasArtifactLinks
+                  target={{ kind: "presentation", targetId: presentationId }}
+                  editable={canEdit}
+                  disabled={builderMutationBlocked}
+                />
+              ) : null}
+              <RecoveryPackPresentationReferences
+                locale={locale}
+                insertions={draft.recoveryPackInsertions ?? []}
+              />
+            </EditorDisclosure>
+          ) : null}
         </main>
 
         <aside
+          id="presentation-object-inspector"
+          ref={inspectorPanel}
           className={styles.inspector}
           aria-label={t("delivery.presentationBuilder.blockInspector")}
         >
+          <div className={styles.inspectorHeading}>
+            <div>
+              <h2>{nativeEditorUi("Slide tools")}</h2>
+              <span className={styles.inspectorCurrentSection}>
+                {inspectorTabs.find((tab) => tab.id === inspectorTab)?.label}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => (compactEditor ? closeEditorPanels(true) : setInspectorOpen(false))}
+              aria-label={nativeEditorUi("Close inspector panel")}
+            >
+              <EditorIcon name="close" />
+            </button>
+          </div>
           <div
             className={styles.inspectorTabs}
             role="tablist"
+            aria-orientation="horizontal"
             aria-label={t("delivery.presentationBuilder.inspectorSections")}
             onKeyDown={moveInspectorTab}
           >
@@ -3146,6 +4447,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 id={`inspector-tab-${tab.id}`}
                 aria-controls="inspector-panel"
                 aria-selected={inspectorTab === tab.id}
+                aria-label={tab.label}
+                title={tab.label}
+                data-state={tab.id === "readiness" && issues.length ? "attention" : undefined}
                 className={
                   inspectorTab === tab.id ? styles.inspectorTabActive : styles.inspectorTab
                 }
@@ -3155,7 +4459,16 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 tabIndex={inspectorTab === tab.id ? 0 : -1}
                 type="button"
               >
-                {tab.label}
+                <EditorIcon name={inspectorTabIcons[tab.id]} />
+                {tab.id === "readiness" && issues.length ? (
+                  <span
+                    className={styles.inspectorTabBadge}
+                    data-inspector-tab-badge
+                    aria-hidden="true"
+                  >
+                    {new Intl.NumberFormat(locale).format(issues.length)}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -3166,6 +4479,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             aria-labelledby={`inspector-tab-${inspectorTab}`}
             tabIndex={0}
           >
+            {selectedBlock?.kind === "content" && selectedBlock.scene ? (
+              <div
+                ref={setNativeInspectorTarget}
+                hidden={inspectorTab === "notes" || inspectorTab === "readiness"}
+                className={styles.nativeInspectorHost}
+              />
+            ) : null}
             {inspectorTab === "readiness" ? (
               <section>
                 <p className={styles.eyebrow}>
@@ -3217,31 +4537,21 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             ) : !selectedBlock ? (
               <p>{t("delivery.presentationBuilder.selectBlock")}</p>
             ) : selectedBlock.kind === "content" && selectedBlock.scene ? (
-              <section lang="en-CA">
-                <h2>Native slide</h2>
-                <p className={styles.helpText}>
-                  Select and edit slide objects below the canvas. Readiness checks include every
-                  image description and shape label.
-                </p>
-                <label className={styles.field}>
-                  <span>Speaker notes</span>
-                  <textarea
-                    aria-label="Speaker notes"
-                    maxLength={2000}
-                    value={selectedBlock.speakerNotes}
-                    onChange={(event) =>
-                      updateSelected(
-                        (block) =>
-                          block.kind === "content"
-                            ? { ...block, speakerNotes: event.target.value }
-                            : block,
-                        "speakerNotes",
-                      )
-                    }
-                    placeholder="Private facilitation cues"
-                  />
-                </label>
-              </section>
+              inspectorTab === "notes" ? (
+                <SpeakerNotesEditor
+                  value={selectedBlock.speakerNotes}
+                  onChange={changeSpeakerNotes}
+                  onPreview={() => openSelectedPreview("presenter", "notes")}
+                  disabled={!canEdit || builderMutationBlocked || preparingImport}
+                  sourceKey={selectedBlock.id}
+                  previewDisabled={Boolean(selectedBlock.hidden)}
+                  previewDisabledReason={
+                    selectedBlock.hidden
+                      ? "Show this slide before previewing it. Hidden slides are excluded from delivery."
+                      : undefined
+                  }
+                />
+              ) : null
             ) : selectedBlock.kind === "content" ? (
               <section>
                 <p className={styles.eyebrow}>{t("delivery.presentation.contentSlide")}</p>
@@ -3283,7 +4593,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                       onClick={addTextBox}
                       type="button"
                     >
-                      Add text box
+                      {commands.addTextBox}
                     </button>
                   </>
                 ) : inspectorTab === "layout" ? (
@@ -3507,24 +4817,19 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     ) : null}
                   </>
                 ) : inspectorTab === "notes" ? (
-                  <label className={styles.field}>
-                    <span lang="en-CA">Speaker notes</span>
-                    <textarea
-                      lang={selectedBlock.speakerNotes.trim() ? "" : "en-CA"}
-                      maxLength={2000}
-                      onChange={(event) =>
-                        updateSelected(
-                          (block) =>
-                            block.kind === "content"
-                              ? { ...block, speakerNotes: event.target.value }
-                              : block,
-                          "speakerNotes",
-                        )
-                      }
-                      placeholder="Private facilitation cues"
-                      value={selectedBlock.speakerNotes}
-                    />
-                  </label>
+                  <SpeakerNotesEditor
+                    value={selectedBlock.speakerNotes}
+                    onChange={changeSpeakerNotes}
+                    onPreview={() => openSelectedPreview("presenter", "notes")}
+                    disabled={!canEdit || builderMutationBlocked || preparingImport}
+                    sourceKey={selectedBlock.id}
+                    previewDisabled={Boolean(selectedBlock.hidden)}
+                    previewDisabledReason={
+                      selectedBlock.hidden
+                        ? "Show this slide before previewing it. Hidden slides are excluded from delivery."
+                        : undefined
+                    }
+                  />
                 ) : (
                   <>
                     <label className={styles.field}>
@@ -3565,7 +4870,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                         onChange={(event) => {
                           const type = event.target.value as QuestionType;
                           commit((current) =>
-                            changePresentationQuestionType(current, selectedBlock.id, type),
+                            changePresentationQuestionType(current, selectedBlock.id, type, locale),
                           );
                         }}
                         value={selectedBlock.question.type}
@@ -3774,7 +5079,13 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </aside>
       </div>
       {previewOpen ? (
-        <PresentationPreview draft={draft} onClose={() => setPreviewOpen(false)} />
+        <PresentationPreview
+          draft={draft}
+          initialBlockId={previewStartBlockId}
+          initialMode={previewMode}
+          origin={previewOrigin}
+          onClose={() => setPreviewOpen(false)}
+        />
       ) : null}
       {recoveryPreviewOpen && recovery ? (
         <PresentationPreview draft={recovery.draft} onClose={() => setRecoveryPreviewOpen(false)} />
@@ -3862,27 +5173,29 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           role="dialog"
           aria-modal="true"
           aria-labelledby="source-import-title"
+          lang={locale}
           onKeyDown={(event) => handleModalKeyDown(event, () => setSourceImportOpen(false))}
           tabIndex={-1}
         >
-          <section className={`${styles.importDialog} ${styles.sourceImportDialog}`} lang="en-CA">
+          <section className={`${styles.importDialog} ${styles.sourceImportDialog}`}>
             <div className={styles.sourceImportHeading}>
               <div>
-                <p className={styles.eyebrow}>Review before insertion</p>
-                <h2 id="source-import-title">Insert from a trusted source</h2>
+                <p className={styles.eyebrow}>{sourceWorkflowsUi("Review before insertion")}</p>
+                <h2 id="source-import-title">{t("delivery.assistant.insertTrustedSource")}</h2>
                 <p className={styles.helpText}>
-                  Create a proposal, choose the cited content and Recovery questions you want, then
-                  confirm once. Nothing is inserted while the proposal is processing.
+                  {sourceWorkflowsUi(
+                    "Create a proposal, choose the cited content and Recovery questions you want, then confirm once. Nothing is inserted while the proposal is processing.",
+                  )}
                 </p>
               </div>
               <button onClick={() => setSourceImportOpen(false)} type="button">
-                Close
+                {sourceWorkflowsUi("Close")}
               </button>
             </div>
             <div lang={locale}>
               <AuthoringAssistant
                 artifactType="presentation"
-                canEdit
+                canEdit={canEdit}
                 insertionTarget={{
                   presentationId,
                   expectedRevision: revisionRef.current,
@@ -3908,7 +5221,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           onClose={() => setSpatialOpen(false)}
           onPreviewPath={() => {
             setSpatialOpen(false);
-            setPreviewOpen(true);
+            openDraftPreview();
           }}
           renderPreview={(block) =>
             block.kind === "content" ? (
@@ -3926,18 +5239,22 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               />
             ) : (
               <article>
-                <h3>{block.question.prompt || "Untitled activity"}</h3>
+                <h3 lang={block.question.prompt ? "" : locale}>
+                  {block.question.prompt || sectionsSpatial("Untitled activity")}
+                </h3>
                 {"choices" in block.question ? (
                   <ul>
                     {block.question.choices.map((choice) => (
-                      <li key={choice.id}>{choice.label}</li>
+                      <li key={choice.id} lang="">
+                        {choice.label}
+                      </li>
                     ))}
                   </ul>
                 ) : (
                   <p>
                     {block.question.type === "rating"
                       ? `${block.question.min} – ${block.question.max}`
-                      : "Participant response"}
+                      : sectionsSpatial("Participant response")}
                   </p>
                 )}
               </article>
@@ -3946,11 +5263,14 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         />
       ) : null}
       <PresentationVisualImport
+        locale={locale}
         presentationId={presentationId}
         open={visualImportOpen}
         preparationBlocked={
           preparingImport ||
           textAssistanceOpen ||
+          questionSuggestionsOpen ||
+          questionSuggestionsPending ||
           textAssistancePending ||
           assistanceOpen ||
           assistancePending
@@ -3975,6 +5295,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onPendingChange={setVisualImportReceiptPending}
       />
       <PresentationTextAssistance
+        locale={locale}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}
@@ -4007,7 +5328,8 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             !node.richText &&
             node.role === receipt.role &&
             node.text.trim().length > 0 &&
-            presentationTextAssistanceSourceDigest(node.text) === receipt.sourceDigest;
+            presentationTextAssistanceSourceDigest(node.text) === receipt.sourceDigest &&
+            (receipt.operation !== "translate" || (node.lang ?? null) === receipt.sourceLanguage);
           const loaded = await reloadLatestDraft(receipt.blockId, undefined, true);
           if (!loaded || saveConflict.current || retainedSave.current.pending)
             throw new Error("Recover the text application acknowledgement before continuing.");
@@ -4045,6 +5367,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             operation: binding.operation,
             text: node.text,
             expectedRevision: loadedTarget.revision,
+            ...(binding.operation === "translate"
+              ? { targetLanguage: binding.targetLanguage, sourceLanguage: binding.sourceLanguage }
+              : {}),
           };
           setTextAssistanceTarget(target);
           return target;
@@ -4064,6 +5389,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               packOperation.current ||
               packUpdateOperation.current ||
               assistanceActive.current ||
+              questionSuggestionsActive.current ||
               visualImportActive.current ||
               importPreparation.current,
             );
@@ -4086,6 +5412,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         onRecoveryChange={setTextAssistanceRecovery}
       />
       <PresentationAssistance
+        locale={locale}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}
@@ -4117,8 +5444,148 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         }}
         onPendingChange={setAssistancePending}
       />
+      <PresentationQuestionSuggestions
+        locale={locale}
+        presentationId={presentationId}
+        actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
+        canEdit={canEdit}
+        open={questionSuggestionsOpen}
+        target={questionSuggestionsTarget}
+        onClose={() => setQuestionSuggestionsOpen(false)}
+        onPendingChange={(pending) => {
+          if (pending) questionSuggestionsActive.current = true;
+          setQuestionSuggestionsPending(pending);
+        }}
+        onRecoveryChange={setQuestionSuggestionsRecovery}
+        onInserted={async (receipt) => {
+          const context = textRecoveryContext;
+          const canAdopt = () =>
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          if (!canAdopt())
+            throw new Error("Your sign-in changed. Reload before recovering this insertion.");
+          const beforeJson = latestDraftJson.current;
+          const before = JSON.parse(beforeJson) as PresentationDraft;
+          const beforeRevision = draftBaseRevision.current;
+          const clean =
+            beforeJson === lastSavedJson.current && beforeRevision === revisionRef.current;
+          const history = undoStack;
+          const block = before.blocks.find((candidate) =>
+            sameTextAssistanceBlockId(candidate.id, receipt.sourceBlockId),
+          );
+          const source = block ? presentationQuestionSuggestionSource(block) : null;
+          const sourceMatches =
+            source?.supported &&
+            presentationQuestionSuggestionsSourceDigest(source.source) === receipt.sourceDigest;
+          questionStarterFocus.current = receipt.insertedBlockId;
+          const loaded = await reloadLatestDraft(
+            receipt.insertedBlockId,
+            undefined,
+            true,
+            undefined,
+            undefined,
+            {
+              canAdopt,
+              minimumRevision: receipt.acceptedRevision,
+              acceptedDraft: receipt.acceptedDraft,
+            },
+          );
+          if (!loaded || !canAdopt() || saveConflict.current || retainedSave.current.pending)
+            throw new Error(
+              "Recover the discussion question insertion acknowledgement before continuing.",
+            );
+          if (
+            clean &&
+            sourceMatches &&
+            beforeRevision === receipt.acceptedRevision - 1 &&
+            loaded.revision === receipt.acceptedRevision &&
+            JSON.stringify(PresentationDraftSchema.parse(loaded.draft)) ===
+              JSON.stringify(receipt.acceptedDraft)
+          ) {
+            setUndoStack([...history, before].slice(-HISTORY_LIMIT));
+            setRedoStack([]);
+          }
+        }}
+        onReloadTarget={async (binding) => {
+          const context = textRecoveryContext;
+          const canAdopt = () =>
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          if (!canAdopt())
+            throw new Error("Your sign-in changed. Reload before recovering this source.");
+          const loaded = await reloadLatestDraft(
+            binding.blockId,
+            undefined,
+            true,
+            undefined,
+            binding,
+            { canAdopt, minimumRevision: binding.expectedRevision },
+          );
+          if (!loaded || !canAdopt())
+            throw new Error("The exact saved source could not be loaded. Your review is retained.");
+          const block = loaded.draft.blocks.find((candidate) =>
+            sameTextAssistanceBlockId(candidate.id, binding.blockId),
+          );
+          const source = block ? presentationQuestionSuggestionSource(block) : null;
+          if (!source?.supported) throw new Error("The exact source is unavailable.");
+          const target = {
+            blockId: binding.blockId,
+            expectedRevision: loaded.revision,
+            source: source.source,
+            sourceDigest: presentationQuestionSuggestionsSourceDigest(source.source),
+          };
+          setQuestionSuggestionsTarget(target);
+          return target;
+        }}
+        onReloadForInvalidRecovery={async (canContinue) => {
+          const context = textRecoveryContext;
+          const current = () =>
+            canContinue() &&
+            questionSuggestionsAuthorization.current &&
+            alive.current &&
+            assistancePermission.current &&
+            currentTextRecoveryContext.current === context;
+          const otherReceiptPending = () =>
+            Boolean(
+              retainedSave.current.pending ||
+              packPending.current ||
+              packUpdatePending.current ||
+              packOperation.current ||
+              packUpdateOperation.current ||
+              textAssistanceActive.current ||
+              assistanceActive.current ||
+              visualImportActive.current ||
+              importPreparation.current,
+            );
+          if (!current())
+            throw new Error(
+              "Editor permission changed. Reload before clearing discussion recovery.",
+            );
+          const loaded = await reloadLatestDraft(
+            selectedBlockId ?? undefined,
+            undefined,
+            true,
+            { canAdopt: current, preserveWorkingDraft: otherReceiptPending },
+            undefined,
+            {
+              canAdopt: current,
+              minimumRevision: Math.max(revisionRef.current, draftBaseRevision.current),
+            },
+          );
+          if (!loaded || !current())
+            throw new Error(
+              "The current saved deck could not be checked. The recovery record is retained.",
+            );
+          setQuestionSuggestionsTarget(null);
+        }}
+      />
       {packImportOpen ? (
         <RecoveryPackPresentationPicker
+          locale={locale}
           afterSelectedBlock={Boolean(selectedBlockId)}
           busy={packBusy}
           error={packError}

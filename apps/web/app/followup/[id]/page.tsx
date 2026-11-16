@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { ConfidenceValue, FollowupSnapshot, ResponsePayload } from "@openround/contracts";
+import { useLocale } from "../../../components/locale-provider";
+import { followupCopy, localizeFollowupMessage } from "../../../lib/i18n/followup-copy";
+import { formatNumber } from "../../../lib/i18n/format";
 import { Brand } from "../../../components/brand";
 import { Countdown } from "../../../components/countdown";
 import { QuestionMedia } from "../../../components/question-media";
@@ -47,6 +50,8 @@ async function followupFetch<T>(path: string, token: string, init: RequestInit =
 }
 
 function FollowupContent() {
+  const { locale, t } = useLocale();
+  const copy = followupCopy(locale);
   const { id } = useParams<{ id: string }>();
   const [snapshot, setSnapshot] = useState<FollowupSnapshot | null>(null);
   const [attemptToken, setAttemptToken] = useState("");
@@ -373,30 +378,54 @@ function FollowupContent() {
   const locked = busy || commandState.pendingAction !== null || snapshotSyncRequired;
 
   return (
-    <div className="live-shell" lang="en-CA">
+    <div className="live-shell" lang={locale}>
       <header className="shell live-topbar">
         <Brand inverted />
         {snapshot ? (
           <span className="status-pill">
             {snapshot.phase === "intervention" || snapshot.timeMode === "flex"
-              ? "No countdown"
-              : `${snapshot.timeMultiplier}× time`}
+              ? copy("No countdown")
+              : copy("{multiplier}× time", {
+                  multiplier: formatNumber(locale, snapshot.timeMultiplier),
+                })}
           </span>
         ) : null}
       </header>
       <main className="shell live-stage" id="main">
         <p aria-atomic="true" aria-live="polite" className="sr-only">
-          {followupStatusAnnouncement(snapshot)}
+          {followupStatusAnnouncement(snapshot, locale)}
         </p>
         {error ? (
           <section className="live-card">
             <p className="error" role="alert">
-              {error}
+              <span lang={localizeFollowupMessage(locale, error).language}>
+                {localizeFollowupMessage(locale, error).text}
+              </span>
             </p>
             {!snapshot ? (
-              <Link className="button-quiet" href="/">
-                Return home
-              </Link>
+              <>
+                <p>
+                  {copy(
+                    "Ask the facilitator for a new private link if access has expired or was revoked.",
+                  )}
+                </p>
+                <div className="button-row">
+                  <button
+                    className="button"
+                    onClick={() => {
+                      setError("");
+                      accessRevisionRef.current += 1;
+                      setAccessRevision(accessRevisionRef.current);
+                    }}
+                    type="button"
+                  >
+                    {copy("Retry opening practice")}
+                  </button>
+                  <Link className="button-quiet" href="/">
+                    {copy("Return home")}
+                  </Link>
+                </div>
+              </>
             ) : null}
           </section>
         ) : null}
@@ -404,8 +433,10 @@ function FollowupContent() {
           <section className="live-card">
             <p role="status" aria-live="polite">
               {commandState.busy
-                ? "Waiting for acknowledgement…"
-                : "The request was not acknowledged. Keep this page open and retry the same request; no new response or continue action will be sent."}
+                ? copy("Waiting for acknowledgement…")
+                : copy(
+                    "The request was not acknowledged. Keep this page open and retry the same request; no new response or continue action will be sent.",
+                  )}
             </p>
             <button
               className="button"
@@ -414,16 +445,17 @@ function FollowupContent() {
               type="button"
             >
               {commandState.pendingAction === "answer"
-                ? "Retry response acknowledgement"
-                : "Retry continue acknowledgement"}
+                ? copy("Retry response acknowledgement")
+                : copy("Retry continue acknowledgement")}
             </button>
           </section>
         ) : null}
         {snapshotSyncRequired ? (
           <section className="live-card">
             <p role="status" aria-live="polite">
-              Refresh the current practice state before responding or continuing. No action will be
-              sent until the current state is confirmed.
+              {copy(
+                "Refresh the current practice state before responding or continuing. No action will be sent until the current state is confirmed.",
+              )}
             </p>
             <button
               className="button"
@@ -431,20 +463,22 @@ function FollowupContent() {
               onClick={() => void refreshSnapshot()}
               type="button"
             >
-              {busy ? "Syncing practice…" : "Retry practice sync"}
+              {busy ? copy("Syncing practice…") : copy("Retry practice sync")}
             </button>
           </section>
         ) : null}
         {!snapshot && !error ? (
           <section className="live-card">
-            <p>Opening your private practice…</p>
+            <p role="status">{copy("Opening your private practice…")}</p>
           </section>
         ) : null}
         {snapshot?.status === "completed" ? (
           <section className="live-card">
-            <p className="eyebrow">{assignment ? "Practice complete" : "Follow-up complete"}</p>
-            <h1 tabIndex={-1}>Thanks for checking your understanding.</h1>
-            <p className="lead">Your responses were saved without creating an account.</p>
+            <p className="eyebrow">
+              {assignment ? copy("Practice complete") : copy("Follow-up complete")}
+            </p>
+            <h1 tabIndex={-1}>{copy("Thanks for checking your understanding.")}</h1>
+            <p className="lead">{copy("Your responses were saved without creating an account.")}</p>
           </section>
         ) : null}
         {snapshot?.phase === "intervention" &&
@@ -452,6 +486,7 @@ function FollowupContent() {
         snapshot.status === "in_progress" ? (
           <FollowupInterventionCard
             intervention={snapshot.intervention}
+            locale={locale}
             busy={locked}
             onContinue={() => void advance()}
           />
@@ -460,10 +495,25 @@ function FollowupContent() {
           <section className="live-card">
             <div className="page-heading" style={{ alignItems: "center", marginBottom: 20 }}>
               <span className="status-pill">
-                Question {(snapshot.questionIndex ?? 0) + 1} of {snapshot.questionCount}
+                {copy("Question {current} of {total}", {
+                  current: formatNumber(locale, (snapshot.questionIndex ?? 0) + 1),
+                  total: formatNumber(locale, snapshot.questionCount),
+                })}
               </span>
               {snapshot.phase === "question_open" && snapshot.deadline ? (
-                <Countdown deadline={snapshot.deadline} />
+                <Countdown
+                  deadline={snapshot.deadline}
+                  labels={{
+                    seconds: (seconds) =>
+                      copy("{seconds}s", { seconds: formatNumber(locale, seconds) }),
+                    remaining: (seconds) =>
+                      copy("{seconds} seconds remaining", {
+                        seconds: formatNumber(locale, seconds),
+                      }),
+                    paused: copy("Paused"),
+                    timeUp: copy("Time is up"),
+                  }}
+                />
               ) : null}
             </div>
             <p className="eyebrow" lang="">
@@ -484,13 +534,13 @@ function FollowupContent() {
             {snapshot.question.type === "ranking" ||
             snapshot.question.type === "open_text" ||
             snapshot.question.type === "word_cloud" ? (
-              <p className="notice" lang="en-CA">
-                These opinion formats currently support live Rounds only.
+              <p className="notice" lang={locale}>
+                {copy("These opinion formats currently support live Rounds only.")}
               </p>
             ) : ["single_select", "true_false", "multi_select", "poll"].includes(
                 snapshot.question.type,
               ) ? (
-              <div className="answer-grid" aria-label="Response choices">
+              <div className="answer-grid" aria-label={copy("Response choices")}>
                 {snapshot.question.choices.map((choice, index) => {
                   const selected = displayedChoiceIds.includes(choice.id);
                   const correct =
@@ -520,7 +570,8 @@ function FollowupContent() {
             ) : snapshot.question.type === "numeric" ? (
               <label className="field">
                 <span>
-                  Numeric response <span lang="">{snapshot.question.unit ?? ""}</span>
+                  {t("live.presentationPlay.numericResponse")}{" "}
+                  <span lang="">{snapshot.question.unit ?? ""}</span>
                 </span>
                 <input
                   className="input"
@@ -534,7 +585,7 @@ function FollowupContent() {
               </label>
             ) : snapshot.question.rating ? (
               <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-                <legend className="field-label">Choose a rating</legend>
+                <legend className="field-label">{t("live.presentationPlay.chooseRating")}</legend>
                 <div className="answer-grid">
                   {Array.from(
                     { length: snapshot.question.rating.max - snapshot.question.rating.min + 1 },
@@ -549,7 +600,7 @@ function FollowupContent() {
                       onClick={() => setRatingValue(value)}
                       type="button"
                     >
-                      {value}
+                      {formatNumber(locale, value)}
                     </button>
                   ))}
                 </div>
@@ -561,13 +612,16 @@ function FollowupContent() {
             {snapshot.question.confidence !== "off" && snapshot.phase === "question_open" ? (
               <fieldset className="field" style={{ border: 0, padding: 0 }}>
                 <legend className="field-label">
-                  How sure are you?{snapshot.question.confidence === "required" ? " Required" : ""}
+                  {copy("How sure are you?")}
+                  {snapshot.question.confidence === "required"
+                    ? ` ${t("live.presentationPlay.required")}`
+                    : ""}
                 </legend>
                 <div className="button-row">
                   {[
-                    [1, "Not sure"],
-                    [2, "Somewhat sure"],
-                    [3, "Very sure"],
+                    [1, t("live.roundPlay.confidence.notSure")],
+                    [2, t("live.roundPlay.confidence.somewhat")],
+                    [3, t("live.roundPlay.confidence.very")],
                   ].map(([value, label]) => (
                     <button
                       aria-pressed={confidence === value}
@@ -592,17 +646,17 @@ function FollowupContent() {
                 onClick={() => void submit()}
                 type="button"
               >
-                {busy ? "Saving…" : "Submit response"}
+                {busy ? t("live.common.saving") : t("live.presentationPlay.submit")}
               </button>
             ) : null}
             {revealed ? (
               <div className={snapshot.correct === true ? "success" : "notice"}>
                 <strong>
                   {snapshot.question.purpose === "opinion"
-                    ? "Response recorded"
+                    ? t("live.presentationPlay.responseRecorded")
                     : snapshot.correct
-                      ? "Correct"
-                      : "Review this question"}
+                      ? copy("Correct")
+                      : copy("Review this question")}
                 </strong>
                 {snapshot.explanation ? <div lang="">{snapshot.explanation}</div> : null}
                 {snapshot.feedback ? <div lang="">{snapshot.feedback}</div> : null}
@@ -615,11 +669,11 @@ function FollowupContent() {
                 >
                   {snapshot.questionIndex === snapshot.questionCount - 1
                     ? assignment
-                      ? "Finish practice"
-                      : "Finish follow-up"
+                      ? copy("Finish practice")
+                      : copy("Finish follow-up")
                     : snapshot.practiceMode === "full_sequence"
-                      ? "Review recovery guidance"
-                      : "Next question"}
+                      ? copy("Review recovery guidance")
+                      : t("live.host.command.nextQuestion")}
                 </button>
               </div>
             ) : null}

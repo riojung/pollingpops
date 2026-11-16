@@ -128,6 +128,9 @@ export function textProposal(
     blockId: claim.blockId,
     originalText: claim.originalText,
     text,
+    ...(claim.operation === "translate"
+      ? { targetLanguage: claim.targetLanguage, sourceLanguage: claim.sourceLanguage }
+      : {}),
   };
 }
 export const textFence = (claim: PresentationTextAssistanceClaim, now: Date) => ({
@@ -152,10 +155,16 @@ export function textApplication(
     model: proposal.model,
     generatedAt: proposal.generatedAt,
     reviewWarning: proposal.reviewWarning,
+    ...(proposal.operation === "translate"
+      ? { targetLanguage: proposal.targetLanguage, sourceLanguage: proposal.sourceLanguage }
+      : {}),
   });
   const draft = PresentationDraftSchema.parse({
     ...f.presentation.draft,
-    schemaVersion: 15,
+    schemaVersion: Math.max(
+      proposal.operation === "translate" ? 16 : 15,
+      f.presentation.draft.schemaVersion,
+    ),
     blocks: f.presentation.draft.blocks.map((block) =>
       block.kind !== "content" || block.id !== proposal.blockId
         ? block
@@ -164,8 +173,17 @@ export function textApplication(
             textAssistance: metadata,
             scene: {
               ...block.scene!,
+              ...(proposal.operation === "translate" ? { schemaVersion: 7 as const } : {}),
               nodes: block.scene!.nodes.map((node) =>
-                node.id === proposal.nodeId ? { ...node, text: proposal.text } : node,
+                node.id === proposal.nodeId
+                  ? {
+                      ...node,
+                      text: proposal.text,
+                      ...(proposal.operation === "translate"
+                        ? { lang: proposal.targetLanguage }
+                        : {}),
+                    }
+                  : node,
               ),
             },
           },
@@ -184,7 +202,214 @@ export function textApplication(
     textAssistanceSourceDigest: proposal.sourceDigest,
     textAssistanceBlockId: proposal.blockId,
     textAssistanceNodeId: proposal.nodeId,
+    ...(proposal.operation === "translate"
+      ? {
+          textAssistanceTargetLanguage: proposal.targetLanguage,
+          textAssistanceSourceLanguage: proposal.sourceLanguage,
+        }
+      : {}),
   };
+}
+
+export async function expectPresentationTranslationConformance(repository: Repository) {
+  const f = await presentationTextAssistanceFixture(repository);
+  const input = {
+    ...f.create(),
+    request: {
+      ...f.request(),
+      operation: "translate" as const,
+      targetLanguage: "fr" as const,
+      sourceLanguage: null,
+    },
+  };
+  const created = await f.jobs.create(input);
+  expect(created.job).toMatchObject({
+    operation: "translate",
+    targetLanguage: "fr",
+    sourceLanguage: null,
+  });
+  expect((await f.jobs.create(input)).status).toBe("duplicate");
+  await expect(
+    f.jobs.create({ ...input, request: { ...input.request, targetLanguage: "de" } }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  await expect(
+    f.jobs.create({
+      ...input,
+      request: { ...input.request, requestId: randomUUID(), sourceLanguage: "en" },
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  const claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 1000)))!;
+  const proposal = textProposal(claim, "Texte privé à examiner avant utilisation.");
+  await expect(
+    f.jobs.complete({
+      ...textFence(claim, f.now),
+      proposal: { ...proposal, targetLanguage: "de" },
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(await f.jobs.complete({ ...textFence(claim, f.now), proposal })).toBe(true);
+  const application = textApplication(f, claim.id, proposal);
+  await expect(
+    f.presentations.updatePresentationDraft({ ...application, textAssistanceTargetLanguage: "de" }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  await expect(
+    f.presentations.updatePresentationDraft({
+      ...application,
+      textAssistanceSourceLanguage: undefined,
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  const accepted = (await f.presentations.updatePresentationDraft(application))!;
+  expect(accepted.draft.schemaVersion).toBe(16);
+  const block = accepted.draft.blocks[0]!;
+  if (block.kind !== "content" || !block.scene) throw new Error("Expected translated scene");
+  expect(block.scene.schemaVersion).toBe(7);
+  expect(block.scene.nodes.find((node) => node.id === f.nodeId)).toMatchObject({
+    text: proposal.text,
+    lang: "fr",
+  });
+  expect(block.scene.nodes[0]).toEqual(
+    f.presentation.draft.blocks[0]!.kind === "content"
+      ? f.presentation.draft.blocks[0]!.scene!.nodes[0]
+      : null,
+  );
+  expect(block.citations).toEqual(f.presentation.draft.blocks[0]!.citations);
+  expect(block.sourceDisclosure).toEqual(f.presentation.draft.blocks[0]!.sourceDisclosure);
+  let currentAccepted = accepted;
+  // Latest-edit metadata can move to another object; each translated object keeps its language.
+  for (const selected of [
+    {
+      nodeId: "Native:Title",
+      role: "title" as const,
+      originalText: "Original title",
+      sourceLanguage: null,
+      targetLanguage: "ko" as const,
+      text: "원래 제목",
+    },
+    {
+      nodeId: f.nodeId,
+      role: "body" as const,
+      originalText: proposal.text,
+      sourceLanguage: "fr" as const,
+      targetLanguage: "de" as const,
+      text: "Privaten Text vor der Verwendung prüfen.",
+    },
+  ]) {
+    await f.jobs.create({
+      ...f.create(),
+      role: selected.role,
+      originalText: selected.originalText,
+      request: {
+        ...f.request(),
+        nodeId: selected.nodeId,
+        expectedRevision: currentAccepted.draftRevision,
+        sourceDigest: presentationTextAssistanceSourceDigest(selected.originalText),
+        operation: "translate",
+        targetLanguage: selected.targetLanguage,
+        sourceLanguage: selected.sourceLanguage,
+      },
+    });
+    const nextClaim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 1000)))!;
+    const nextProposal = textProposal(nextClaim, selected.text);
+    expect(await f.jobs.complete({ ...textFence(nextClaim, f.now), proposal: nextProposal })).toBe(
+      true,
+    );
+    currentAccepted = (await f.presentations.updatePresentationDraft(
+      textApplication({ ...f, presentation: currentAccepted }, nextClaim.id, nextProposal),
+    ))!;
+    expect(currentAccepted.draft.blocks[0]).toMatchObject({
+      scene: {
+        nodes: [
+          { id: "Native:Title", lang: "ko" },
+          { id: f.nodeId, lang: selected.role === "title" ? "fr" : "de" },
+        ],
+      },
+    });
+  }
+  const later = structuredClone(currentAccepted.draft);
+  const laterBlock = later.blocks[0]!;
+  if (laterBlock.kind !== "content" || !laterBlock.scene) throw new Error("Missing scene");
+  const node = laterBlock.scene.nodes.find((node) => node.id === f.nodeId)!;
+  if (node.type !== "text") throw new Error("Missing text");
+  node.lang = "es";
+  await f.presentations.updatePresentationDraft({
+    ...application,
+    draft: later,
+    expectedRevision: currentAccepted.draftRevision,
+    mutationId: randomUUID(),
+    draftHash: createHash("sha256").update(JSON.stringify(later)).digest("hex"),
+    textAssistanceJobId: undefined,
+  });
+  expect((await f.jobs.create({ ...input, originalText: "", monthlyLimit: 0 })).status).toBe(
+    "duplicate",
+  );
+  await f.jobs.purgeExpired(new Date(claim.expiresAt));
+  expect(await f.presentations.updatePresentationDraft(application)).toEqual(accepted);
+  return { ...f, application, accepted, proposal, claim };
+}
+
+export async function expectPresentationTranslationLanguageFence(repository: Repository) {
+  const f = await presentationTextAssistanceFixture(repository);
+  const input = {
+    ...f.create(),
+    request: {
+      ...f.request(),
+      operation: "translate" as const,
+      targetLanguage: "fr" as const,
+      sourceLanguage: null,
+    },
+  };
+  await f.jobs.create(input);
+  const claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 1000)))!;
+  const proposal = textProposal(claim);
+  await f.jobs.complete({ ...textFence(claim, f.now), proposal });
+  const current = structuredClone(f.presentation.draft);
+  current.schemaVersion = 16;
+  const block = current.blocks[0]!;
+  if (block.kind !== "content" || !block.scene) throw new Error("Missing scene");
+  block.scene.schemaVersion = 7;
+  const node = block.scene.nodes.find((node) => node.id === f.nodeId)!;
+  if (node.type !== "text") throw new Error("Missing text");
+  node.lang = "en";
+  const changed = (await f.presentations.updatePresentationDraft({
+    workspaceId: f.actor.workspaceId,
+    presentationId: f.presentation.id,
+    draft: current,
+    expectedRevision: f.presentation.draftRevision,
+    mutationId: randomUUID(),
+    draftHash: "manual-language-correction",
+    editorId: f.actor.userId,
+  }))!;
+  await expect(
+    f.presentations.updatePresentationDraft({
+      ...textApplication(f, claim.id, proposal),
+      expectedRevision: changed.draftRevision,
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(await f.presentations.getPresentation(f.actor.workspaceId, f.presentation.id)).toEqual(
+    changed,
+  );
+}
+
+export async function expectPresentationTranslationUnchangedWording(repository: Repository) {
+  const f = await presentationTextAssistanceFixture(repository);
+  const input = {
+    ...f.create(),
+    request: {
+      ...f.request(),
+      operation: "translate" as const,
+      targetLanguage: "ja" as const,
+      sourceLanguage: null,
+    },
+  };
+  await f.jobs.create(input);
+  const claim = (await f.jobs.claim(f.now, new Date(f.now.getTime() + 1000)))!;
+  const proposal = textProposal(claim, claim.originalText);
+  expect(await f.jobs.complete({ ...textFence(claim, f.now), proposal })).toBe(true);
+  const accepted = (await f.presentations.updatePresentationDraft(
+    textApplication(f, claim.id, proposal),
+  ))!;
+  expect(accepted.draft.blocks[0]).toMatchObject({
+    scene: { nodes: [{}, { text: privateText, lang: "ja" }] },
+  });
 }
 export async function expectPresentationTextAssistanceConformance(repository: Repository) {
   const f = await presentationTextAssistanceFixture(repository),

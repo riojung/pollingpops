@@ -1,3 +1,5 @@
+import type { SupportedLocale } from "@openround/contracts";
+import { creationContent } from "./i18n/creation-content";
 import {
   InsertRecoveryPackSchema,
   QUESTION_TYPE_REGISTRY,
@@ -63,6 +65,7 @@ export function recoveryPackDraftFromPair(
   diagnostic: QuestionDraft,
   recheck: QuestionDraft,
   cardId: string,
+  locale: SupportedLocale = "en-CA",
 ): RecoveryPackDraft {
   const clone = (question: QuestionDraft) => {
     if (!supportsRecoveryPack(question))
@@ -115,7 +118,7 @@ export function recoveryPackDraftFromPair(
     interventions: [
       {
         id: cardId,
-        title: "Facilitator intervention",
+        title: creationContent(locale)("intervention"),
         body: diagnostic.explanation,
         citations: diagnostic.sourceCitations ?? [],
       },

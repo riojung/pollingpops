@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale } from "../locale-provider";
+import { presentationStartCopy, localizedOutlineError } from "./presentation-start-copy";
 import { AUTH_CHANGE_EVENT } from "../../lib/api";
 import {
   createOutlineDraftCreation,
@@ -15,6 +17,8 @@ type Controller = ReturnType<typeof createOutlineDraftCreation>;
 
 export function PresentationOutlineStart() {
   const router = useRouter();
+  const { locale, t } = useLocale();
+  const copy = presentationStartCopy(locale);
   const { creator, canEdit, productFeatures } = useWorkspace();
   const userId = creator?.userId ?? "";
   const workspaceId = creator?.workspaceId ?? "";
@@ -73,39 +77,35 @@ export function PresentationOutlineStart() {
   }
   const disabled = !allowed.current || !state.ready || state.busy;
   const recovery = state.recovery;
+  const localError = localizedOutlineError(state.error, copy);
   return (
-    <section className={styles.panel} lang="en-CA" aria-labelledby="outline-start-title">
-      <p className="eyebrow">Optional AI assistance</p>
-      <h2 id="outline-start-title">Start from an outline</h2>
-      <p>
-        Create a saved draft first, then add your outline and review 3–8 proposed slides in the
-        editor. Creating this draft does not use an AI job. Generation uses the allowance shown in
-        the editor. Your draft stays in your Library if you cancel or generation fails.
-      </p>
-      <p>
-        Only the outline you submit in the editor is sent for generation. Nothing is published
-        automatically.
-      </p>
-      {!canEdit ? <p role="status">An owner or editor is required to create a draft.</p> : null}
+    <section className={styles.panel} lang={locale} aria-labelledby="outline-start-title">
+      <p className="eyebrow">{copy.optionalAI}</p>
+      <h2 id="outline-start-title">{copy.startOutline}</h2>
+      <p>{copy.outlineDescription}</p>
+      <p>{copy.outlinePrivacy}</p>
+      {!canEdit ? <p role="status">{copy.editorRequired}</p> : null}
       {state.error ? (
-        <p className="error" role="alert">
-          {state.error}
-        </p>
+        <div className="error" role="alert">
+          <p>{localError ?? copy.requestError}</p>
+          {!localError ? (
+            <details>
+              <summary>{copy.details}</summary>
+              <p lang="en-CA">{state.error}</p>
+            </details>
+          ) : null}
+        </div>
       ) : null}
       {!state.ready && !authInvalid ? (
         <>
-          <p role="status">
-            {state.error
-              ? "Recover tab storage before creating a draft."
-              : "Checking draft recovery…"}
-          </p>
+          <p role="status">{state.error ? copy.recoverStorage : copy.checkingRecovery}</p>
           {state.error ? (
             <button
               className="button-quiet"
               type="button"
               onClick={() => controller.current?.restore()}
             >
-              Retry tab recovery
+              {copy.retryRecovery}
             </button>
           ) : null}
         </>
@@ -113,14 +113,14 @@ export function PresentationOutlineStart() {
         <div className={styles.blankForm}>
           <p role="status">
             {recovery.presentationId
-              ? `Your saved draft “${outlineDraftTitle(recovery)}” is ready. Open it to continue, or explicitly start another.`
+              ? copy.savedDraft.replace("{title}", outlineDraftTitle(recovery))
               : recovery.deleted
-                ? "The draft from this request was deleted. Start another explicitly to create a new draft."
-                : "Draft creation is awaiting acknowledgement. Retry the saved request before changing its title or starting another."}
+                ? copy.deletedDraft
+                : copy.pendingDraft}
           </p>
           <label className="field">
-            <span>Presentation title</span>
-            <input className="input" value={outlineDraftTitle(recovery)} readOnly />
+            <span>{t("delivery.presentationBuilder.titleLabel")}</span>
+            <input className="input" lang="" value={outlineDraftTitle(recovery)} readOnly />
           </label>
           <div className="button-row">
             {recovery.presentationId || recovery.deleted ? (
@@ -132,7 +132,7 @@ export function PresentationOutlineStart() {
                     disabled={disabled}
                     onClick={() => controller.current?.openSaved()}
                   >
-                    Open saved draft
+                    {copy.openDraft}
                   </button>
                 ) : null}
                 <button
@@ -143,7 +143,7 @@ export function PresentationOutlineStart() {
                     if (controller.current?.startAnother()) setTitle("");
                   }}
                 >
-                  Start another
+                  {copy.startAnother}
                 </button>
               </>
             ) : (
@@ -153,7 +153,7 @@ export function PresentationOutlineStart() {
                 disabled={disabled}
                 onClick={() => void controller.current?.retry()}
               >
-                {state.busy ? "Creating draft…" : "Retry draft creation"}
+                {state.busy ? copy.creatingDraft : copy.retryDraft}
               </button>
             )}
           </div>
@@ -161,9 +161,10 @@ export function PresentationOutlineStart() {
       ) : state.ready ? (
         <form className={styles.blankForm} onSubmit={(event) => void submit(event)}>
           <label className="field">
-            <span>Presentation title</span>
+            <span>{t("delivery.presentationBuilder.titleLabel")}</span>
             <input
               className="input"
+              lang=""
               required
               maxLength={160}
               value={sameActor ? title : ""}
@@ -173,7 +174,7 @@ export function PresentationOutlineStart() {
           </label>
           <div>
             <button className="button" type="submit" disabled={disabled || !title.trim()}>
-              Create draft and continue
+              {copy.createDraft}
             </button>
           </div>
         </form>

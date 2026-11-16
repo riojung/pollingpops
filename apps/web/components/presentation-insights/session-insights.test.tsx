@@ -1,10 +1,15 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PresentationSessionInsightsEnvelope } from "@openround/contracts";
+import type { PresentationSessionInsightsEnvelope, SupportedLocale } from "@openround/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../lib/api";
 import type * as Client from "../../lib/presentation-session-insights-client";
+import { presentationInsightsCopy } from "../../lib/i18n/presentation-insights-copy";
+import {
+  presentationInsightsCsv,
+  presentationInsightsHtml,
+} from "../../lib/presentation-session-insights-export";
 import {
   insightsId,
   insightsSource,
@@ -23,6 +28,7 @@ const mocked = vi.hoisted(() => ({
   hooks: null as Hooks | null,
   fetch: vi.fn(),
   download: vi.fn(),
+  locale: "en-CA" as SupportedLocale,
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
@@ -66,7 +72,7 @@ vi.mock("react", async (original) => {
     },
   };
 });
-vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: mocked.locale }) }));
 vi.mock("../../lib/presentation-session-insights-client", async (original) => ({
   ...(await original<typeof Client>()),
   fetchPresentationSessionInsights: mocked.fetch,
@@ -83,7 +89,7 @@ function text(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(text).join("");
   return isValidElement<{ children?: ReactNode }>(node) ? text(node.props.children) : "";
 }
-function mount() {
+function mount(canUseEvidence?: () => boolean) {
   const hooks: Hooks = {
     cursor: 0,
     slots: [],
@@ -100,7 +106,7 @@ function mount() {
       hooks.effects = [];
       mocked.hooks = hooks;
       try {
-        tree = PresentationSessionInsightsPanel({ source });
+        tree = PresentationSessionInsightsPanel({ source, canUseEvidence });
       } finally {
         mocked.hooks = null;
       }
@@ -130,6 +136,7 @@ function mount() {
   return view;
 }
 function setup() {
+  mocked.locale = "en-CA";
   mocked.fetch
     .mockReset()
     .mockResolvedValue({ status: "ready", insights: presentationInsightsFixture() });
@@ -151,6 +158,117 @@ afterEach(() => {
 });
 
 describe("additive Session insights panel", () => {
+  it("rejects captured CSV and HTML callbacks when the report authority guard is invalidated", async () => {
+    setup();
+    let authorized = true;
+    const view = mount(() => authorized);
+    await settle();
+    const callbacks = elements(view.render())
+      .filter(
+        (element) =>
+          element.type === "button" &&
+          ["Export coverage CSV", "Download readable summary"].includes(text(element)),
+      )
+      .map((element) => element.props.onClick as () => void);
+    expect(callbacks).toHaveLength(2);
+    authorized = false;
+    for (const callback of callbacks) callback();
+    expect(mocked.download).not.toHaveBeenCalled();
+    expect(view.markup()).not.toContain("Download started.");
+  });
+
+  it("changes language around a pending read and download receipt without another read or download, retaining canonical export bytes", async () => {
+    setup();
+    const request = deferred();
+    mocked.fetch.mockReturnValueOnce(request.promise);
+    const view = mount();
+    mocked.locale = "ko-KR";
+    let copy = presentationInsightsCopy(mocked.locale);
+    expect(view.markup()).toContain(copy("Loading session insights…"));
+    expect(mocked.fetch).toHaveBeenCalledTimes(1);
+    const value = presentationInsightsFixture();
+    request.resolve({ status: "ready", insights: value });
+    await settle();
+    let markup = view.markup();
+    expect(markup).toContain('lang="ko-KR"');
+    expect(markup).toContain(copy("Session insights"));
+    expect(markup).toContain(copy("Not recorded for this older activity"));
+    expect(markup).not.toContain("Response coverage · Assessed activities");
+    view.click(copy("Export coverage CSV"));
+    expect(mocked.download).toHaveBeenLastCalledWith(
+      presentationInsightsCsv(value, "ko-KR"),
+      "csv",
+    );
+    mocked.locale = "de-DE";
+    copy = presentationInsightsCopy(mocked.locale);
+    markup = view.markup();
+    expect(markup).toContain(copy("Download started. Downloaded copies cannot be revoked."));
+    expect(mocked.fetch).toHaveBeenCalledTimes(1);
+    expect(mocked.download).toHaveBeenCalledTimes(1);
+    view.click(copy("Download readable summary"));
+    expect(mocked.download).toHaveBeenLastCalledWith(
+      presentationInsightsHtml(value, "de-DE"),
+      "html",
+    );
+    expect(mocked.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["de-DE", "ko-KR"] as const)(
+    "keeps authored collisions in their language while %s UI labels, statuses and missing values stay localized",
+    (locale) => {
+      const value = presentationInsightsFixture();
+      value.delivery.blocks[0]!.title = "Content";
+      value.delivery.blocks[2]!.title = "Presented {block} $&";
+      value.delivery.sections[0]!.title = "Presented";
+      value.participation.questions.find(
+        (question) => question.purpose === "opinion",
+      )!.results[0]!.label = "Not recorded";
+      const copy = presentationInsightsCopy(locale);
+      const markup = renderToStaticMarkup(
+        <PresentationInsightsDetails insights={value} locale={locale} />,
+      );
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain('<th scope="row" lang="">1. Content</th>');
+      expect(markup).toContain('<th scope="row" lang="">Presented</th>');
+      expect(markup).toContain('<td lang="">Presented</td>');
+      expect(markup).toContain(`<td>${copy("Content")}</td>`);
+      expect(markup).toContain(`<td>${copy("Presented")}</td>`);
+      expect(markup).toContain('<th scope="row" lang="">Not recorded</th>');
+      expect(markup).toContain('<span lang="">3. Presented {block} $&amp;</span>');
+      expect(markup).toContain(`<th scope="row">${copy("Not applicable")}</th>`);
+      expect(markup).not.toContain(`<th scope="row" lang="">${copy("Not applicable")}</th>`);
+    },
+  );
+
+  it("retranslates known download failures and retains unknown diagnostics in their original language", async () => {
+    setup();
+    mocked.download.mockImplementationOnce(() => {
+      throw new Error("This summary exceeds the 1 MiB download limit. No file was downloaded.");
+    });
+    const view = mount();
+    await settle();
+    view.click("Download readable summary");
+    mocked.locale = "ko-KR";
+    let copy = presentationInsightsCopy(mocked.locale);
+    expect(view.markup()).toContain(
+      copy("This summary exceeds the 1 MiB download limit. No file was downloaded."),
+    );
+    expect(mocked.download).toHaveBeenCalledTimes(1);
+    mocked.download.mockImplementationOnce(() => {
+      throw new Error("Synthetic original diagnostic {amount} $&");
+    });
+    view.click(copy("Download readable summary"));
+    mocked.locale = "de-DE";
+    copy = presentationInsightsCopy(mocked.locale);
+    const markup = view.markup();
+    expect(markup).toContain(copy("Service message (original language)"));
+    expect(markup).toContain(
+      '<span lang="en-CA">Synthetic original diagnostic {amount} $&amp;</span>',
+    );
+    expect(mocked.download).toHaveBeenCalledTimes(2);
+    expect(mocked.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("loads once and labels the region, coverage, version, freshness and response denominators", async () => {
     setup();
     const view = mount();

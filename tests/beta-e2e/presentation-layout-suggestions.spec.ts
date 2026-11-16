@@ -11,6 +11,8 @@ import {
   e01ApiUrl,
   e01Slide,
   enterE01Editor,
+  closeE01Overlays,
+  openE01Inspector,
   readE01Record,
   selectE01Block,
 } from "./presentation-e01-support";
@@ -88,14 +90,8 @@ function withoutFrames(value: PresentationScene) {
     }),
   };
 }
-async function closeDrawers(page: Page) {
-  if ((page.viewportSize()?.width ?? 1280) > 920) return;
-  const inspector = page.getByRole("button", { name: "Hide inspector", exact: true });
-  if (await inspector.isVisible()) await inspector.click();
-  const map = page.getByRole("button", { name: "Collapse map", exact: true });
-  if (await map.isVisible()) await map.click();
-}
 async function openSuggestions(page: Page) {
+  await openE01Inspector(page, "Layout");
   await page.getByRole("button", { name: "Suggest layouts", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Review layout suggestions", exact: true });
   await expect(dialog).toBeVisible();
@@ -129,7 +125,7 @@ for (const suffix of ["", " @mobile"]) {
     const hidden = { ...e01Slide("Hidden planning text"), hidden: true as const };
     const record = await createE01Deck(page, [block, hidden], 15);
     const initialStatus = await availability(page, record.id);
-    expect(initialStatus.enabled).toBe(false);
+    expect(initialStatus.enabled).toBe(process.env.BETA_E2E_AUTHORING === "true");
     const publication = await page.request.post(
       `${e01ApiUrl}/v1/presentations/${record.id}/publish`,
       {
@@ -172,7 +168,7 @@ for (const suffix of ["", " @mobile"]) {
     expect({ ...appliedBlock, scene: undefined }).toEqual({ ...block, scene: undefined });
     expect(applied.draft.blocks[1]).toEqual(record.draft.blocks[1]);
     expect(applied.draft.schemaVersion).toBe(15);
-    await closeDrawers(page);
+    await closeE01Overlays(page);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect
       .poll(async () => (await readE01Record(page, record.id)).draft)
@@ -182,6 +178,7 @@ for (const suffix of ["", " @mobile"]) {
       .poll(async () => (await readE01Record(page, record.id)).draft)
       .toEqual(applied.draft);
     await page.reload();
+    await openE01Inspector(page, "Layout");
     await expect(page.getByRole("button", { name: "Suggest layouts", exact: true })).toBeVisible();
     expect((await readE01Record(page, record.id)).draft).toEqual(applied.draft);
     expect((await availability(page, record.id)).used).toBe(initialStatus.used);
@@ -215,6 +212,7 @@ for (const suffix of ["", " @mobile"]) {
     const dialog = await openSuggestions(page);
     await dialog.getByRole("radio").first().check();
     await page.setViewportSize({ width: 320, height: 760 });
+    await expect(dialog).toBeVisible();
     expect(
       await dialog
         .getByRole("button", { name: "Close layout review", exact: true })
@@ -250,19 +248,21 @@ for (const suffix of ["", " @mobile"]) {
     await page.screenshot({ path: info.outputPath("layout-review-320.png"), fullPage: true });
     await dialog.getByRole("button", { name: "Apply reviewed layout", exact: true }).click();
     await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "Suggest layouts", exact: true })).toBeFocused();
     await expect
       .poll(async () => (await readE01Record(page, record.id)).draftRevision)
       .toBe(record.draftRevision + 1);
     const updated = await readE01Record(page, record.id);
     expect(withoutFrames(scene(updated))).toEqual(withoutFrames(scene(record)));
     expect(updated.draft.blocks[1]).toEqual(record.draft.blocks[1]);
-    await closeDrawers(page);
+    await closeE01Overlays(page);
     await selectE01Block(page, "Grouped objects", true);
+    await openE01Inspector(page, "Layout");
     await expect(page.getByRole("button", { name: "Suggest layouts", exact: true })).toBeDisabled();
     expect((await readE01Record(page, record.id)).draftRevision).toBe(updated.draftRevision);
     await noOverflow(page);
     // Fixed review planes must leave the ordinary phone table and accessible outline intact.
-    await closeDrawers(page);
+    await closeE01Overlays(page);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const delivery = page.getByRole("dialog", { name: "Presentation preview", exact: true });
     await expect(delivery.locator("table")).toHaveCSS("display", "block");

@@ -3,9 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const e2eWebPort = 3100;
 const e2eApiPort = 4100;
 const productionWeb = process.env.PLAYWRIGHT_PRODUCTION === "true";
-const nextCommand = productionWeb
-  ? `NEXT_PUBLIC_API_URL=http://127.0.0.1:${e2eApiPort} pnpm --filter @openround/web build && cp -r apps/web/public apps/web/.next/standalone/apps/web/public && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && PORT=${e2eWebPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`
-  : `NEXT_PUBLIC_API_URL=http://127.0.0.1:${e2eApiPort} pnpm --filter @openround/web exec next dev -p ${e2eWebPort}`;
+const nextCommand = `node scripts/build/browser.mjs ${productionWeb ? "start" : "dev"} core ${e2eWebPort} ${e2eApiPort}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -38,7 +36,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `node scripts/prepare-playwright-next.mjs && ${nextCommand}`,
+      command: nextCommand,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
       port: e2eWebPort,
       reuseExistingServer: false,
       timeout: productionWeb ? 180_000 : 120_000,

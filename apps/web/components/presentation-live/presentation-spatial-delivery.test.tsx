@@ -3,16 +3,23 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  PresentationNavigationSnapshot,
-  PresentationSpatialSnapshot,
+import {
+  supportedLocales,
+  type SupportedLocale,
+  type PresentationNavigationSnapshot,
+  type PresentationSpatialSnapshot,
 } from "@openround/contracts";
+import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { shouldApplyPresentationSnapshot } from "../../lib/presentation-realtime";
 import { PresentationSpatialDelivery } from "./presentation-spatial-delivery";
 
 type Effect = { deps?: readonly unknown[]; run: () => void | (() => void); cleanup?: () => void };
 type Hooks = { cursor: number; slots: unknown[]; effects: Map<number, Effect>; pending: Effect[] };
-const fixture = vi.hoisted(() => ({ hooks: null as Hooks | null }));
+const fixture = vi.hoisted(() => ({
+  hooks: null as Hooks | null,
+  locale: "en-CA" as SupportedLocale,
+}));
+vi.mock("../locale-provider", () => ({ useLocale: () => ({ locale: fixture.locale }) }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
@@ -144,6 +151,12 @@ function harness(overrides: Partial<Props> = {}) {
       elements(render()).find((element) => element.type === "g" && element.props.style)?.props
         .style,
     diagram: () => elements(render()).find((element) => element.props["data-spatial-view"])!,
+    disclosure: () => elements(render()).find((element) => element.type === "details")!,
+    toggleDisclosure(open: boolean) {
+      (result.disclosure().props.onToggle as (event: unknown) => void)({
+        currentTarget: { open },
+      });
+    },
     button: (label: string) =>
       elements(render()).find(
         (element) => element.type === "button" && element.props.children === label,
@@ -180,10 +193,190 @@ function setupObserver() {
 }
 afterEach(() => {
   fixture.hooks = null;
+  fixture.locale = "en-CA";
   vi.unstubAllGlobals();
 });
 
 describe("geometry-only live presentation spatial delivery", () => {
+  it("keeps the existing live markup unless compact preview is explicitly requested", () => {
+    const props: Props = {
+      spatial,
+      currentBlockIndex: 0,
+      phase: "content",
+      sourceKey: "live",
+    };
+    const live = renderToStaticMarkup(<PresentationSpatialDelivery {...props} />);
+    expect(live).toBe(
+      renderToStaticMarkup(<PresentationSpatialDelivery {...props} compact={false} />),
+    );
+    expect(live).not.toContain("<details");
+    expect(live).not.toContain("data-spatial-compact");
+  });
+
+  it.each(supportedLocales)(
+    "starts compact preview collapsed with localized geometry-only content in %s",
+    (locale) => {
+      fixture.locale = locale;
+      const before = structuredClone(spatial);
+      const markup = renderToStaticMarkup(
+        <PresentationSpatialDelivery
+          compact
+          spatial={spatial}
+          navigation={navigation}
+          currentBlockIndex={0}
+          phase="content"
+          sourceKey="preview"
+        />,
+      );
+      const label = sectionsSpatialCopy(locale)("Presentation spatial path");
+      expect(markup).toContain('data-spatial-compact="true"');
+      expect(markup).toContain(`<summary aria-label="${label}">`);
+      expect(markup).toMatch(/<details[^>]*>/);
+      expect(markup).not.toMatch(/<details[^>]*\sopen(?:\s|=|>)/);
+      expect(markup.match(/data-spatial-page=/g)).toHaveLength(3);
+      expect(markup).not.toContain("Current private title");
+      expect(markup).not.toContain("Guarded activity");
+      expect(markup).not.toContain("00000000-");
+      expect(markup).not.toContain(sectionsSpatialCopy(locale)("Jump to page"));
+      expect(spatial).toEqual(before);
+    },
+  );
+
+  it.each(["en-CA", "ko-KR"] as const)("keeps header navigation geometry-only in %s", (locale) => {
+    fixture.locale = locale;
+    const markup = renderToStaticMarkup(
+      <PresentationSpatialDelivery
+        placement="header"
+        spatial={spatial}
+        navigation={navigation}
+        currentBlockIndex={1}
+        phase="content"
+        sourceKey="public-header"
+      />,
+    );
+    expect(markup).toContain('data-spatial-header="true"');
+    expect(markup).toContain(sectionsSpatialCopy(locale)("Presentation spatial path"));
+    expect(markup).not.toMatch(/<details[^>]*\sopen(?:\s|=|>)/);
+    expect(markup.match(/data-spatial-page=/g)).toHaveLength(3);
+    expect(markup).not.toContain("Current private title");
+    expect(markup).not.toContain("Guarded activity");
+    expect(markup).not.toContain("00000000-");
+    expect(markup).not.toContain(sectionsSpatialCopy(locale)("Jump to page"));
+  });
+
+  it("remeasures a compact diagram on expansion without ResizeObserver and preserves local view state", () => {
+    vi.stubGlobal("ResizeObserver", undefined);
+    const addEventListener = vi.fn(),
+      removeEventListener = vi.fn();
+    vi.stubGlobal("window", { addEventListener, removeEventListener });
+    const panel = harness({ compact: true });
+    panel.click("Show overview");
+    const initialCamera = panel.camera();
+    panel.dom.getBoundingClientRect = () => ({ width: 320, height: 120 });
+    panel.toggleDisclosure(true);
+    expect(panel.camera()).not.toEqual(initialCamera);
+    const expandedCamera = panel.camera();
+    panel.click("Use linear view");
+    expect(panel.diagram().props.hidden).toBe(true);
+    panel.dom.getBoundingClientRect = () => ({ width: 0, height: 0 });
+    panel.toggleDisclosure(false);
+    panel.toggleDisclosure(true);
+    expect(panel.diagram().props.hidden).toBe(true);
+    expect(panel.button("Use spatial view").props["aria-pressed"]).toBe(true);
+    expect(panel.camera()).toEqual(expandedCamera);
+    panel.dom.getBoundingClientRect = () => ({ width: 480, height: 160 });
+    panel.click("Use spatial view");
+    expect(panel.diagram().props.hidden).toBe(false);
+    expect(panel.diagram().props["data-spatial-view"]).toBe("overview");
+    expect(panel.camera()).not.toEqual(expandedCamera);
+    expect(addEventListener).toHaveBeenCalledExactlyOnceWith("resize", expect.any(Function));
+    panel.unmount();
+    expect(removeEventListener).toHaveBeenCalledExactlyOnceWith(
+      "resize",
+      addEventListener.mock.calls[0]![1],
+    );
+  });
+
+  it("retains guarded staff selection across compact disclosure changes without optimistic navigation", () => {
+    setupObserver();
+    const onJump = vi.fn();
+    const panel = harness({ compact: true, navigation, onJump });
+    const initialCamera = panel.camera();
+    panel.select(navigation.entries[1]!.blockId);
+    panel.toggleDisclosure(false);
+    panel.toggleDisclosure(true);
+    expect(panel.button("Jump to selected page").props.disabled).toBe(true);
+    (panel.button("Jump to selected page").props.onClick as () => void)();
+    expect(onJump).not.toHaveBeenCalled();
+    panel.select(navigation.entries[2]!.blockId);
+    panel.click("Jump to selected page");
+    expect(onJump).toHaveBeenCalledExactlyOnceWith(navigation.entries[2]!.blockId);
+    expect(panel.camera()).toEqual(initialCamera);
+    panel.render({ disabled: true });
+    (panel.button("Jump to selected page").props.onClick as () => void)();
+    expect(onJump).toHaveBeenCalledTimes(1);
+    panel.unmount();
+  });
+
+  it.each(supportedLocales)(
+    "localizes audience spatial controls in %s without exposing private navigation metadata",
+    (locale) => {
+      fixture.locale = locale;
+      const before = structuredClone(spatial);
+      const markup = renderToStaticMarkup(
+        <PresentationSpatialDelivery
+          spatial={spatial}
+          navigation={navigation}
+          currentBlockIndex={0}
+          phase="content"
+          sourceKey="audience"
+        />,
+      );
+      const copy = sectionsSpatialCopy(locale);
+      expect(markup).toContain(`aria-label="${copy("Presentation spatial path")}"`);
+      expect(markup).toContain(copy("Show overview"));
+      expect(markup).toContain(copy("Use linear view"));
+      expect(markup).toContain(copy("Page {current} of {total}", { current: 1, total: 3 }));
+      expect(markup).not.toContain("Current private title");
+      expect(markup).not.toContain("Guarded activity");
+      expect(markup).not.toContain("00000000-");
+      expect(markup).not.toContain(copy("Jump to page"));
+      expect(spatial).toEqual(before);
+    },
+  );
+  it("localizes known server guards while preserving private targets, unknown errors and jump authority", () => {
+    setupObserver();
+    fixture.locale = "ko-KR";
+    const guarded = {
+      ...navigation,
+      entries: navigation.entries.map((entry, index) =>
+        index === 1
+          ? { ...entry, blockedReason: "Complete the linked recheck before navigating." }
+          : entry,
+      ),
+    };
+    const onJump = vi.fn();
+    const panel = harness({ navigation: guarded, onJump });
+    panel.select(guarded.entries[1]!.blockId);
+    expect(panel.markup()).toContain('lang="ko-KR">탐색하기 전에 연결된 재확인을 완료하세요.');
+    expect(panel.button("선택한 페이지로 이동").props.disabled).toBe(true);
+    (panel.button("선택한 페이지로 이동").props.onClick as () => void)();
+    expect(onJump).not.toHaveBeenCalled();
+    panel.render({
+      navigation: {
+        ...guarded,
+        entries: guarded.entries.map((entry, index) =>
+          index === 1 ? { ...entry, blockedReason: "Unknown service diagnostic 74" } : entry,
+        ),
+      },
+    });
+    expect(panel.markup()).toContain('lang="en-CA">Unknown service diagnostic 74');
+    panel.select(navigation.entries[2]!.blockId);
+    panel.click("선택한 페이지로 이동");
+    expect(onJump).toHaveBeenCalledExactlyOnceWith(navigation.entries[2]!.blockId);
+    expect(panel.markup()).toMatch(/<option[^>]*lang=""[^>]*>3\. Allowed slide<\/option>/);
+    panel.unmount();
+  });
   it("preserves legacy linear delivery and exposes only numbered geometry to audiences", () => {
     expect(
       PresentationSpatialDelivery({ currentBlockIndex: 0, phase: "content", sourceKey: "legacy" }),
@@ -331,7 +524,7 @@ describe("geometry-only live presentation spatial delivery", () => {
     expect(paintedFrames.at(-1)?.props["data-current"]).toBe(true);
     expect(
       elements(paintedFrames.at(-1)).find((element) => element.type === "text")?.props.children,
-    ).toBe(1);
+    ).toBe("1");
     expect(nodes.find((element) => element.type === "polyline")?.props.points).toBe(
       "640,360 640,360 18640,17360",
     );

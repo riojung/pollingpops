@@ -37,16 +37,18 @@ export function NativeRichTextView({
   title = false,
   editing = false,
   layoutKey = "",
+  lang,
 }: {
   richText: PresentationRichText;
   title?: boolean;
   editing?: boolean;
   layoutKey?: string;
+  lang?: string;
 }) {
-  const scroll = useNativeTextOverflow(JSON.stringify([richText, title, layoutKey]));
+  const scroll = useNativeTextOverflow(JSON.stringify([richText, title, layoutKey, lang]));
   if (title) {
     return (
-      <h1 className={styles.richTitle} {...scroll}>
+      <h1 className={styles.richTitle} lang={lang} {...scroll}>
         {richText.paragraphs.map((paragraph, index) => (
           <Fragment key={index}>
             {index ? <br /> : null}
@@ -83,7 +85,7 @@ export function NativeRichTextView({
     );
   }
   return (
-    <div className={styles.richBody} {...scroll}>
+    <div className={styles.richBody} lang={lang} {...scroll}>
       {content}
     </div>
   );

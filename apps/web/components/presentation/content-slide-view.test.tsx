@@ -66,6 +66,42 @@ function slideFixture() {
 }
 
 describe("ContentSlideView", () => {
+  it("opts legacy display artwork into fixed geometry without making its text or media inert", () => {
+    const block = slideFixture();
+    block.mediaId = "11111111-1111-4111-8111-111111111111";
+    const media = <img src="/authorized-image" alt="Audience evidence" />;
+    const fixed = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="live" media={media} fixedLayout />,
+    );
+    const ordinary = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="live" media={media} />,
+    );
+    expect(fixed).toContain('data-content-fixed-layout="true"');
+    expect(fixed).toContain('tabindex="0"');
+    expect(fixed).toContain('src="/authorized-image"');
+    expect(fixed).not.toContain('inert=""');
+    expect(fixed).not.toContain("data-static-thumbnail");
+    expect(ordinary).not.toContain("data-content-fixed-layout");
+    expect(fixed.replace(' data-content-fixed-layout="true"', "")).toBe(ordinary);
+  });
+
+  it("opts legacy slides into inert thumbnail artwork without editor controls", () => {
+    const block = slideFixture();
+    const markup = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="editor" staticThumbnail />,
+    );
+    expect(markup).toContain('data-static-thumbnail="true"');
+    expect(markup).toContain('inert=""');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain("Start with the evidence");
+    expect(markup).toContain('style="left:68%;top:5%;width:28%;height:20%"');
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("<textarea");
+    const ordinary = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    expect(ordinary).not.toContain("data-static-thumbnail");
+    expect(ordinary).not.toContain('inert=""');
+  });
+
   it.each(["constructor", "toString", "__proto__"])(
     "resolves opaque element ID %s without reading inherited transient properties",
     (id) => {
@@ -252,5 +288,44 @@ describe("ContentSlideView", () => {
     expect(markups[0]).not.toContain("data-media-frame=");
     expect(markups[1]).not.toContain('data-media-bay="true"');
     expect(markups[2]).not.toContain('data-media-bay="true"');
+  });
+});
+
+describe("contextual deck appearance", () => {
+  const design = { theme: "sunset", font: "serif", spacing: "compact" } as const;
+  it("uses the collection palette for ordinary slides without changing their geometry", () => {
+    const block = createContentBlock();
+    const base = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    const themed = renderToStaticMarkup(
+      <ContentSlideView
+        block={block}
+        variant="preview"
+        designOverride={{ ...design, palette: "coral" }}
+      />,
+    );
+    expect(themed).toContain("--content-slide-background:#ff634e");
+    expect(renderedFrames(themed)).toEqual(renderedFrames(base));
+  });
+  it("styles source content without changing its stored text or geometry", () => {
+    const block = createContentBlock("section");
+    block.textElements[0]!.text = "An imported plan remains editable";
+    const before = JSON.stringify(block);
+    const base = renderToStaticMarkup(<ContentSlideView block={block} variant="preview" />);
+    const themed = renderToStaticMarkup(
+      <ContentSlideView block={block} variant="preview" designOverride={design} />,
+    );
+    expect(themed).toContain('data-design-theme="sunset"');
+    expect(themed).toContain("--content-slide-background:#fff0e5");
+    expect(themed).toContain("An imported plan remains editable");
+    expect(renderedFrames(themed)).toEqual(renderedFrames(base));
+    expect(JSON.stringify(block)).toBe(before);
+  });
+  it("uses public block context for participant and companion callers without rewriting content", () => {
+    const block = { ...createContentBlock(), design };
+    const before = JSON.stringify(block);
+    const markup = renderToStaticMarkup(<ContentSlideView block={block} variant="live" />);
+    expect(markup).toContain('data-design-theme="sunset"');
+    expect(markup).toContain("--content-slide-background:#fff0e5");
+    expect(JSON.stringify(block)).toBe(before);
   });
 });

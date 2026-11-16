@@ -26,6 +26,30 @@ describe("Results overview widgets", () => {
     expect(absent).toContain("No evidence recorded");
     expect(absent).not.toContain("0%");
   });
+  it("keeps finished and active Presentation counts alongside their lifecycle signals", () => {
+    const items = (["finished", "active"] as const).map((status) => ({
+      id: status,
+      presentationId: "presentation",
+      title: "Presentation",
+      status,
+      phase: status === "finished" ? "finished" : "lobby",
+      participantCount: 0,
+      responseCount: 0,
+      blockCount: 1,
+      createdAt: "2026-10-01",
+    }));
+    const markup = renderToStaticMarkup(<ResultsOverview kind="presentations" items={items} />);
+    expect(markup).toContain('data-status="finished" data-tone="neutral"');
+    expect(markup).toContain('data-status="active" data-tone="active"');
+    expect(markup).toContain('aria-hidden="true" data-status="finished"');
+    expect(markup).toContain('aria-hidden="true" data-status="active"');
+    expect(markup).toContain("Finished<strong>1</strong>");
+    expect(markup).toContain("Active<strong>1</strong>");
+    expect(markup).toContain('aria-valuenow="50"');
+    expect(markup).toContain('aria-valuetext="1 / 2"');
+    expect(markup).toContain("0<p>Across the Presentation sessions shown");
+    expect(markup).not.toContain('data-tone="danger"');
+  });
   it("labels Survey metadata as shown runs and identifies report-level response evidence", () => {
     const items = [
       {

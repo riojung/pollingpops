@@ -6,6 +6,7 @@ import type * as ManagementNavigationModule from "../../components/management-na
 import type * as ApiModule from "../../lib/api";
 import { ApiClientError, LOGOUT_REVOCATION_WARNING } from "../../lib/api";
 import { PIN_RESUME_STORAGE_KEY, SIGNIN_INTENT_STORAGE_KEY } from "../../lib/signin-pin";
+import { SIGNUP_CONTINUATION_KEY } from "./signup-continuation";
 
 type EffectSlot = { dependencies?: unknown[]; cleanup?: () => void };
 
@@ -334,11 +335,83 @@ describe("public product sign-in", () => {
     expect(page.markup).not.toContain("secret-verification-token");
     expect(page.markup).not.toContain('id="signin-pin"');
     expect(fixtures.replace).not.toHaveBeenCalled();
-    click(button(page.node, "Sign in"));
+    click(button(page.node, "Continue after verification"));
     page = renderPage();
     const consent = find(page.node, (element) => element.props.type === "checkbox");
     expect(consent.props.checked).toBe(false);
     expect(page.markup).toContain("Send sign-in PIN");
+  });
+
+  it("puts email before optional preferences while keeping explicit organization choices expanded", async () => {
+    let page = await hydratedPage("?mode=signup&returnTo=%2Fcreate");
+    expect(page.markup.indexOf('id="email"')).toBeLessThan(
+      page.markup.indexOf("Workspace preferences"),
+    );
+    const personalPreferences = find(page.node, (element) => element.type === "details");
+    expect(personalPreferences.props.open).toBe(false);
+    expect(page.markup).toContain('aria-label="Account setup progress"');
+    expect(page.markup).toContain('aria-current="step"');
+    expect(page.markup).toContain("Verify email");
+    expect(page.markup).toContain("Create</li>");
+    remount();
+    page = await hydratedPage("?mode=signup&accountType=organization");
+    expect(find(page.node, (element) => element.type === "details").props.open).toBe(true);
+    expect(button(page.node, "Organization workspace").props["aria-pressed"]).toBe(true);
+  });
+
+  it("retains the submitted email after matching verification without trusting an email query or signing in", async () => {
+    let page = await hydratedPage("?mode=signup&returnTo=%2Fcreate");
+    enterEmail(page.node);
+    page = renderPage();
+    await submit(page.node);
+    expect(fixtures.storage.has(SIGNUP_CONTINUATION_KEY)).toBe(true);
+    expect(pinRequests()).toHaveLength(0);
+    remount();
+    page = await hydratedPage("?verified=1&returnTo=%2Fcreate&email=untrusted%40example.com");
+    expect(find(page.node, (element) => element.props.id === "email").props.value).toBe(
+      "creator@example.com",
+    );
+    expect(page.markup).toContain("Email verified — sign in next");
+    expect(page.markup).toContain("Request a sign-in PIN for your verified email");
+    expect(find(page.node, (element) => element.props.type === "checkbox").props.checked).toBe(
+      false,
+    );
+    expect(pinRequests()).toHaveLength(0);
+    expect(fixtures.replace).not.toHaveBeenCalled();
+    await click(button(page.node, "Use another email"));
+    page = renderPage();
+    expect(fixtures.storage.has(SIGNUP_CONTINUATION_KEY)).toBe(false);
+    expect(find(page.node, (element) => element.props.id === "email").props.value).toBe("");
+  });
+
+  it("does not reuse a signup email for a different return destination", async () => {
+    let page = await hydratedPage("?mode=signup&returnTo=%2Fcreate");
+    enterEmail(page.node);
+    page = renderPage();
+    await submit(page.node);
+    remount();
+    page = await hydratedPage("?verified=1&returnTo=%2Faccount");
+    expect(find(page.node, (element) => element.props.id === "email").props.value).toBe("");
+    expect(pinRequests()).toHaveLength(0);
+  });
+
+  it("does not store a late verification response after leaving the signup page", async () => {
+    let page = await hydratedPage("?mode=signup&returnTo=%2Fcreate");
+    enterEmail(page.node);
+    page = renderPage();
+    let complete!: (value: unknown) => void;
+    fixtures.api.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const submitting = submit(page.node);
+    remount();
+    complete({ accepted: true });
+    await submitting;
+    expect(fixtures.storage.has(SIGNUP_CONTINUATION_KEY)).toBe(false);
+    expect(pinRequests()).toHaveLength(0);
   });
 
   it("shows verified confirmation without autofilling an email or automatically requesting a PIN", async () => {
@@ -383,7 +456,7 @@ describe("public product sign-in", () => {
         }),
       });
       // A user who verifies in another tab can continue in this tab too.
-      click(button(page.node, "Sign in"));
+      click(button(page.node, "Continue after verification"));
       page = renderPage();
       enterEmail(page.node);
       page = renderPage();

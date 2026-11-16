@@ -158,7 +158,7 @@ export async function registerPresentationStaticExportRoutes(
             .header("content-type", result.contentType)
             .header(
               "content-disposition",
-              `attachment; filename="polling-pops-presentation.${result.extension}"`,
+              `attachment; filename="polling-pops-presentation${input.format === "offline_html" ? "-offline" : ""}.${result.extension}"`,
             )
             .header("content-length", String(result.bytes.byteLength))
             .send(result.bytes);

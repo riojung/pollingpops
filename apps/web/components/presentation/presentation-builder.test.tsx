@@ -64,6 +64,69 @@ vi.mock("../workspace/workspace-provider", () => ({ useWorkspace: () => workspac
 import { PresentationBuilder } from "./presentation-builder";
 
 describe("Presentation Builder UI", () => {
+  it.each([false, true])(
+    "keeps legacy preview layout styling unless the deck explicitly supplies design (%s)",
+    (authoredDesign) => {
+      const slide = createContentBlock("section");
+      slide.textElements[0]!.text = "Preserved section title";
+      const neighbor = createNativeContentBlock();
+      if (authoredDesign)
+        neighbor.scene = {
+          ...neighbor.scene!,
+          schemaVersion: 3,
+          design: { theme: "sunset", font: "serif", spacing: "compact" },
+        };
+      editor.draft = {
+        schemaVersion: authoredDesign ? 7 : 5,
+        title: "Design parity",
+        description: "",
+        experiencePreset: { id: "focus", version: 1 },
+        blocks: [slide, neighbor],
+      };
+      const before = structuredClone(editor.draft);
+      editor.preview = true;
+      const markup = renderToStaticMarkup(
+        withEnglishLocale(<PresentationBuilder presentationId="presentation-1" />),
+      );
+      const preview = markup.slice(markup.indexOf('aria-label="Presentation preview"'));
+      const article = preview.match(/<article[^>]*data-layout="section"[^>]*>/)?.[0];
+      expect(article).toBeDefined();
+      if (authoredDesign) expect(article).toContain('data-design-theme="sunset"');
+      else expect(article).not.toContain("data-design-theme");
+      expect(preview).toContain("Preserved section title");
+      expect(editor.draft).toEqual(before);
+    },
+  );
+
+  it("renders Korean primary publication and slide commands without changing authored words", async () => {
+    const slide = createContentBlock();
+    slide.textElements[0]!.text = "AUTHOR original English";
+    editor.draft = {
+      schemaVersion: 5,
+      title: "AUTHOR deck title",
+      description: "",
+      experiencePreset: { id: "focus", version: 1 },
+      blocks: [slide],
+    };
+    editor.nullCursor = 0;
+    editor.tab = "content";
+    const domains = localeDomainsForPath("/presentation/presentation-1");
+    const messages = await loadMessages("ko-KR", domains);
+    const markup = renderToStaticMarkup(
+      <LocaleProvider initialLocale="ko-KR" initialDomains={domains} initialMessages={messages}>
+        <PresentationBuilder presentationId="presentation-1" />
+      </LocaleProvider>,
+    );
+    expect(markup).toContain("초안");
+    expect(markup).toContain("발표하기 전에 버전을 게시하세요");
+    expect(markup).toContain("추가 옵션");
+    expect(markup).toContain("새 슬라이드");
+    expect(markup).toContain("삽입 및 가져오기");
+    expect(markup).toContain("AUTHOR original English");
+    expect(markup).toContain("AUTHOR deck title");
+    expect(markup).not.toContain('title="Publish a version before presenting"');
+  });
+
   beforeEach(() => {
     editor.draft = null;
     editor.nullCursor = 0;
@@ -134,8 +197,11 @@ describe("Presentation Builder UI", () => {
     );
     const map = markup.slice(markup.indexOf("<ol"), markup.indexOf("</ol>") + 5);
     expect(map.indexOf("Sequence first")).toBeLessThan(map.indexOf("Sequence second"));
-    expect(map.match(/Evidence group/g)).toHaveLength(2);
-    expect(markup).toContain("Selected block section");
+    expect(map.match(/data-slide-id=/g)).toHaveLength(2);
+    expect(markup).toContain(`data-section-header="${sectionId}"`);
+    expect(markup).toContain("Collapse section Evidence group");
+    expect(markup).toContain("2 slides");
+    expect(markup).toContain("Selected slide section");
     expect(markup).toContain("Rename");
     expect(markup).toContain("Move earlier");
     expect(markup).toContain("Move later");
@@ -192,6 +258,7 @@ describe("Presentation Builder UI", () => {
         messages,
       });
       expect(markup).toContain('aria-label="Presentation preview"');
+      expect(markup).toMatch(/role="region" aria-label="Slide preview" tabindex="0"/);
       expect(markup).toContain(type === "open_text" ? "Your response" : "A word or short phrase");
       expect(markup).toContain(`0 of ${type === "open_text" ? 1000 : 80} characters`);
       expect(markup).toContain("Only approved responses can appear publicly after reveal");
@@ -268,10 +335,10 @@ describe("Presentation Builder UI", () => {
     (canEdit) => {
       workspace.canEdit = canEdit;
       const markup = opinionMarkup(createQuestionBlock("poll").question);
-      const button = markup.match(/<button[^>]*>Outline to slides<\/button>/)?.[0];
+      const button = markup.match(/<button[^>]*aria-label="Outline to slides"[^>]*>/)?.[0];
       expect(button).toBeDefined();
       expect(button?.includes('disabled=""')).toBe(!canEdit);
-      expect(markup).toContain("Add native slide");
+      expect(markup).toContain("New slide");
       expect(markup).not.toContain('aria-labelledby="presentation-assistance-title"');
     },
   );

@@ -171,7 +171,11 @@ export interface CanvasTransaction {
   timer(boardId: string, lock?: boolean): Promise<CanvasTimer>;
   grant(boardId: string, userId: string): Promise<CanvasState["grants"][number] | null>;
   groupRoles(boardId: string, userId: string, lock?: boolean): Promise<CanvasBoardGroupGrant[]>;
-  sharingGroups(workspaceId: string, userId: string): Promise<CanvasSharingGroup[]>;
+  sharingGroups(
+    workspaceId: string,
+    userId: string,
+    activeOnly?: boolean,
+  ): Promise<CanvasSharingGroup[]>;
   sharingGroup(workspaceId: string, groupId: string): Promise<CanvasSharingGroup | null>;
   sourceMetadata(
     id: string,

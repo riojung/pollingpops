@@ -146,6 +146,12 @@ export class MemoryPlatformStore implements PlatformStore {
       .map(([, record]) => structuredClone(record.value) as T);
   }
   putSync<T>(kind: string, id: string, org: string | null, value: T) {
+    if (kind === "member" && (value as OrganizationMemberRecord).role === "billing") {
+      const member = value as OrganizationMemberRecord;
+      this.root().rollbackActions.push(
+        this.repository.deleteOrganizationGroupMembership(member.organizationId, member.userId),
+      );
+    }
     if (kind === "workspace") {
       const workspace = value as OrganizationWorkspaceRecord;
       const current = this.repository.workspaces.get(id);
@@ -196,6 +202,13 @@ export class MemoryPlatformStore implements PlatformStore {
     if (!this.bound) return this.transaction(`delete:${kind}`, (store) => store.remove(kind, id));
     if (["ledger", "audit", "coverage", "stripe_transaction"].includes(kind))
       throw new PlatformError("IMMUTABLE_RECORD", "Financial and audit records cannot be deleted");
+    if (kind === "member") {
+      const member = this.getSync<OrganizationMemberRecord>(kind, id);
+      if (member)
+        this.root().rollbackActions.push(
+          this.repository.deleteOrganizationGroupMembership(member.organizationId, member.userId),
+        );
+    }
     return this.root().records.delete(this.key(kind, id));
   }
   async userExists(id: string) {

@@ -1761,6 +1761,95 @@ allow existing authorized reads but reject new links. No guest, participant, pub
 activity/image export or duplication contract is extended with these private authoring references.
 Authorized account exports include reference metadata for owned workspaces.
 
+## Collaboration Groups
+
+The authenticated Groups collection supports both existing workspace groups and additive
+organization groups. The directory is joined-only: nonmembers cannot discover or inspect a
+group, including organization administrators who have not joined it. There is no public
+directory, open join or request-to-join endpoint. Group owners add eligible existing members;
+this does not create an organization invitation, workspace membership or creator license.
+
+| Route                                               | Behavior                                                                                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/groups`                                    | Return joined group summaries and current creation context for both scopes                                     |
+| `POST /v1/groups`                                   | Create a group and add its creator as an owner                                                                 |
+| `GET /v1/groups/:id`                                | Return authorized group detail, members, available-member choices, content and discussion                      |
+| `GET /v1/groups/:id/available-members?search=…`     | Active-group owner searches eligible members to add; returns up to 100 `{userId, email}` entries and `hasMore` |
+| `PATCH /v1/groups/:id`                              | Owner updates active-group metadata, archives a group or restores an archived group                            |
+| `POST /v1/groups/:id/members`                       | Owner adds `{userId}` from the scope's current eligible members                                                |
+| `PATCH /v1/groups/:id/members/:userId`              | Owner sets `{role: "owner" \| "member"}` with last-owner protection                                            |
+| `DELETE /v1/groups/:id/members/:userId`             | Owner removes a member with last-owner protection                                                              |
+| `POST /v1/groups/:id/messages`                      | Current member posts `{body}` to an active group                                                               |
+| `POST /v1/groups/:id/library-shares`                | Organization-group owner curates an authorized same-organization publication with `{shareId}`                  |
+| `DELETE /v1/groups/:id/library-shares/:shareId`     | Organization-group owner removes that association without revoking its publication                             |
+| `POST /v1/groups/:id/artifacts`                     | Existing workspace-group curation with `{artifactType, artifactId}`                                            |
+| `DELETE /v1/groups/:id/artifacts/:artifactRecordId` | Existing workspace-group artifact removal                                                                      |
+| `POST /v1/groups/:id/schedule`                      | Existing workspace-group scheduling; unavailable for organization groups                                       |
+
+Create accepts `{name, description?, scope?, organizationId?, purpose?}`. `name` is trimmed and
+1–120 characters; `description` is at most 1,000 characters. `scope` is `workspace` (the compatible
+default) or `organization`. `purpose` is `team` (default), `department`, `project`, `cohort`,
+`community` or `other`. Purpose is descriptive and grants no authority. An organization group
+requires an organization owner or administrator in the same active organization. Group roles
+are separate `owner` and `member` roles; organization administration does not override group
+membership or group ownership on existing groups.
+
+List returns `{groups, context}`. Each summary includes `scope`, `scopeName`, `purpose`,
+`status: "active" | "archived"`, the caller's `role`, counts and server-derived
+`capabilities: {manageMembers, shareContent, postMessage, schedule, manageGroup}` alongside its
+identity, name, description and timestamps. `context` contains `organizationId`,
+`organizationName`, `canCreateOrganizationGroup` and `canCreateWorkspaceGroup`. Directory
+scope/purpose/access/status filters operate on this authorized result; they do not expose
+groups outside it. Clients must honor capabilities instead of deriving foreign-content
+authority from the active workspace's edit role.
+
+Detail returns `{group}` with `members`, `availableMembers`, `messages`, `artifacts`,
+`canvasBoards`, `schedule` and, for organization groups, `sharedLibrary` summaries. Available
+member choices are returned only to authorized membership managers. Organization groups return
+empty workspace artifact, Canvas and schedule collections; current authorized Library
+publications appear in `sharedLibrary` instead. Ordinary organization-group members can read
+and post; group owners additionally manage members, metadata and curated associations.
+
+PATCH accepts one or more of `{name?, description?, purpose?, status?}`. Status is `active` or
+`archived`. Archived groups preserve authorized reading but reject group mutations except a
+separate `{status: "active"}` restore. The owner retains `manageGroup` for restoration; other
+mutation capabilities are false while archived. Changing roles or removing members cannot
+remove the final owner. Workspace-group creation, curation, membership management and scheduling
+also retain the applicable owning-workspace role and feature checks.
+
+Canvas sharing does not offer archived workspace groups as new grant targets and rejects grant
+creation or role updates to them. Existing board access remains governed by current Canvas
+permissions. An authorized source-board owner or facilitator can still revoke an existing grant
+with `DELETE /v1/canvas-boards/:id/group-grants/:groupId` and `{operationId}` while the target
+group is archived; archive guards must preserve revocation and source cleanup.
+
+Organization curation accepts only an existing Library publication whose `organizationId`
+matches the group and whose `audience` is `organization`. The caller must currently be able to
+read it through Library authorization. Direct `people` shares, unpublished content, foreign
+publications, Guided workshops and Canvas boards cannot be linked to organization groups.
+Association grants zero additional content access. Group detail and counts include publications
+only while the requesting person remains authorized through the Library.
+
+Open organization content through `GET /v1/library/shares/:id` and its existing media, progress
+and copy routes below. Preserve the shared reader's `view`/`use` distinction, pinned version,
+privacy projection, destination license checks and durable copy receipts. There is no
+group-derived original edit, host, assignment, response or results permission. Use a permitted
+independent copy before the normal workspace delivery workflow. Publication `dueAt` and recipient
+progress support follow-up in Content; organization groups omit the Schedule panel and do not
+introduce a scheduling endpoint.
+
+Removing group membership invalidates subsequent group detail and discussion access. It does
+**not** revoke an independently authorized organization-wide publication; the former member
+may still open it through the organization Library. Removing a curated association or archiving
+a group likewise does not revoke the share or delete completed copies. Organization membership
+removal, source eligibility and publication revocation continue to govern all Library reads.
+
+Migration **112** adds the organization-group domain and common purpose/status metadata while
+preserving existing workspace groups, content associations, board grants, messages and schedules.
+There is no automatic group conversion or content migration. See
+[Groups, workspaces and organizations](groups-workspaces-organizations.md) for the action matrix,
+lifecycle and design rationale.
+
 ## Authenticated organization Library sharing
 
 These routes distribute explicit published versions across workspaces in the same organization.

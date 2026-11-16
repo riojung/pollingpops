@@ -210,6 +210,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
       });
       const directory = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
       const baselineDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-"));
+      const upgradeDirectory = await mkdtemp(join(tmpdir(), "openround-baseline-110-"));
       const database = `baseline_${randomUUID().replaceAll("-", "")}`;
       const sentinel = `baseline_privileges_${randomUUID().replaceAll("-", "")}`;
       const adminPool = new Pool({ connectionString: adminUrl });
@@ -275,7 +276,12 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
           can_delete: false,
         });
         phase("migration-file-setup");
-        const migrations = await discoverMigrations(directory);
+        const migrations = (await discoverMigrations(directory)).filter(
+          (migration) => migration.version <= 110,
+        );
+        // This legacy bootstrap fixture tests migration110; newer publications have their own upgrade fixtures.
+        for (const migration of migrations)
+          await writeFile(join(upgradeDirectory, migration.fileName), migration.sql);
         await writeFile(join(baselineDirectory, migrations[0]!.fileName), migrations[0]!.sql);
         // Migration 001 grants CRUD on public explicitly, so search_path isolation would
         // broaden another fixture's runtime grants. Keep the entire legacy baseline separate.
@@ -289,9 +295,9 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         phase("legacy-tracker-removal");
         await pool.query("DROP TABLE _openround_migrations");
         phase("baseline-upgrade");
-        await runMigrations(pool, directory);
+        await runMigrations(pool, upgradeDirectory);
         phase("idempotence-check");
-        await runMigrations(pool, directory);
+        await runMigrations(pool, upgradeDirectory);
         phase("upgrade-assertions");
         expect(
           (await pool.query("SELECT count(*)::integer AS count FROM _openround_migrations")).rows[0]
@@ -314,6 +320,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         await runtimePool.end();
         await adminPool.end();
         await rm(baselineDirectory, { recursive: true, force: true });
+        await rm(upgradeDirectory, { recursive: true, force: true });
         phase("complete");
       }
     },
@@ -1448,6 +1455,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 109, name: "presentation_frame_arithmetic" },
       { version: 110, name: "workspace_idle_timeout" },
       { version: 111, name: "library_sharing" },
+      { version: 112, name: "organization_groups" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.

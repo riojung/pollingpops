@@ -3,143 +3,89 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocale } from "../../components/locale-provider";
-import { apiFetch, humanError } from "../../lib/api";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
+import { LibraryShareActions } from "../../components/workspace/library-sharing/share-actions";
+import { LibraryShareDue } from "../../components/workspace/library-sharing/share-due";
+import {
+  listLibraryShares,
+  type LibraryShareSummary,
+} from "../../components/workspace/library-sharing/client";
+import { apiFetch, AUTH_CHANGE_EVENT, humanError } from "../../lib/api";
 import { listIdeaBoards } from "../../lib/idea-board-client";
-import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
+import { groupsMessages } from "../../lib/i18n/groups-messages";
+import { librarySharingMessages } from "../../lib/i18n/library-sharing-messages";
+import { GroupDialog, type GroupFormValues } from "./group-dialog";
+import {
+  artifactKey,
+  defaultGroupFilters,
+  filterGroups,
+  groupPurposes,
+  readArtifactKey,
+  resolveGroupCapabilities,
+  type GroupDetail,
+  type GroupFilters,
+  type GroupSummary,
+  type GroupsContext as Context,
+  type LibraryArtifact,
+  type GroupArtifact,
+} from "./groups-model";
+import {
+  DiscussionPanel,
+  GroupCanvasBoards,
+  PanelEmpty,
+  SchedulePanel,
+  SectionHeading,
+  SharedArtifacts,
+} from "./workspace-panels";
 import styles from "./groups.module.css";
 
-type ArtifactType = "round" | "presentation" | "idea_board";
-
-interface GroupSummary {
-  id: string;
-  name: string;
-  description: string;
-  role: "owner" | "member";
-  memberCount: number;
-  artifactCount: number;
-  upcomingCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface GroupMember {
-  userId: string;
-  email: string;
-  role: "owner" | "member";
-  workspaceRole: "owner" | "editor" | "viewer" | null;
-  joinedAt: string;
-}
-
-interface AvailableMember {
-  userId: string;
-  email: string;
-  role: "owner" | "editor" | "viewer";
-  joinedAt: string | null;
-}
-
-interface GroupArtifact {
-  id: string;
-  artifactType: ArtifactType;
-  artifactId: string;
-  title: string;
-  status: "draft" | "published" | "archived" | "collecting" | "voting" | "closed";
-  published: boolean;
-  editHref: string;
-  hostHref: string;
-  assignHref: string | null;
-  createdAt: string;
-}
-
-interface GroupMessage {
-  id: string;
-  authorId: string;
-  authorEmail: string;
-  body: string;
-  createdAt: string;
-}
-
-interface GroupScheduleItem {
-  id: string;
-  artifactType: ArtifactType;
-  artifactId: string;
-  artifactTitle: string;
-  kind: "live_session" | "round_assignment";
-  scheduledFor: string;
-  note: string;
-  createdAt: string;
-}
-
-interface GroupDetail extends GroupSummary {
-  members: GroupMember[];
-  availableMembers: AvailableMember[];
-  artifacts: GroupArtifact[];
-  messages: GroupMessage[];
-  schedule: GroupScheduleItem[];
-  canvasBoards?: Array<{
-    id: string;
-    title: string;
-    boardType: "team" | "workshop";
-    status: "active" | "archived" | "frozen" | "closed";
-    role: "owner" | "editor" | "viewer" | "facilitator";
-    workspaceId: string;
-    expiresAt: string;
-  }>;
-}
-
-interface LibraryArtifact {
-  id: string;
-  title: string;
-  status: "draft" | "published" | "archived";
-  currentVersionId: string | null;
-}
-
-function formatDateTime(locale: string, value: string) {
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function artifactKey(type: ArtifactType, id: string) {
-  return `${type}:${id}`;
-}
-
-function readArtifactKey(value: string): { artifactType: ArtifactType; artifactId: string } | null {
-  const divider = value.indexOf(":");
-  if (divider < 0) return null;
-  const artifactType = value.slice(0, divider);
-  const artifactId = value.slice(divider + 1);
-  if (!["round", "presentation", "idea_board"].includes(artifactType) || !artifactId) return null;
-  return { artifactType: artifactType as ArtifactType, artifactId };
-}
+type Section = "content" | "members" | "discussion" | "schedule";
 
 function GroupsContent() {
   const { locale, t } = useLocale();
-  const { canEdit, creator, productFeatures } = useWorkspace();
+  const copy = groupsMessages(locale);
+  const libraryCopy = librarySharingMessages(locale);
+  const { canEdit, creator, workspace, productFeatures } = useWorkspace();
   const presentationsEnabled = productFeatures?.presentations === true;
   const ideaBoardsEnabled = productFeatures?.ideaBoards === true;
   const [groups, setGroups] = useState<GroupSummary[]>([]);
+  const [context, setContext] = useState<Context>({
+    organizationId: null,
+    organizationName: null,
+    canCreateOrganizationGroup: false,
+    canCreateWorkspaceGroup: false,
+  });
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [rounds, setRounds] = useState<LibraryArtifact[]>([]);
-  const [presentations, setPresentations] = useState<LibraryArtifact[]>([]);
-  const [ideaBoards, setIdeaBoards] = useState<LibraryArtifact[]>([]);
-  const [ideaBoardCursor, setIdeaBoardCursor] = useState<string | null>(null);
-  const [ideaBoardLoading, setIdeaBoardLoading] = useState(false);
-  const moreController = useRef<AbortController | null>(null);
-  useEffect(() => () => moreController.current?.abort(), []);
+  const [filters, setFilters] = useState<GroupFilters>(defaultGroupFilters);
+  const [section, setSection] = useState<Section>("content");
+  const [contentType, setContentType] = useState("all");
+  const [dialog, setDialog] = useState<"create" | "settings" | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [groupDescription, setGroupDescription] = useState("");
+  const [reload, setReload] = useState(0);
+  const [rounds, setRounds] = useState<LibraryArtifact[]>([]);
+  const [presentations, setPresentations] = useState<LibraryArtifact[]>([]);
+  const [ideaBoards, setIdeaBoards] = useState<LibraryArtifact[]>([]);
+  const [ideaBoardCursor, setIdeaBoardCursor] = useState<string | null>(null);
+  const [ideaBoardLoading, setIdeaBoardLoading] = useState(false);
+  const [publications, setPublications] = useState<LibraryShareSummary[]>([]);
+  const [publicationCursor, setPublicationCursor] = useState<string | null>(null);
+  const [publicationsLoading, setPublicationsLoading] = useState(false);
+  const [publicationError, setPublicationError] = useState(false);
+  const [publicationReload, setPublicationReload] = useState(0);
+  const [shareId, setShareId] = useState("");
   const [memberId, setMemberId] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberOptions, setMemberOptions] = useState<Array<{ userId: string; email: string }>>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersMore, setMembersMore] = useState(false);
+  const [membersError, setMembersError] = useState(false);
+  const [membersReload, setMembersReload] = useState(0);
   const [shareKey, setShareKey] = useState("");
   const [messageBody, setMessageBody] = useState("");
   const [scheduleKey, setScheduleKey] = useState("");
@@ -148,128 +94,292 @@ function GroupsContent() {
   );
   const [scheduledFor, setScheduledFor] = useState("");
   const [scheduleNote, setScheduleNote] = useState("");
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  const inFlight = useRef(false);
+  const openDialog = useRef(dialog);
+  openDialog.current = dialog;
+  const lifetime = useRef<AbortController | null>(null);
+  const publicationController = useRef<AbortController | null>(null);
+  const moreController = useRef<AbortController | null>(null);
 
-  const refreshGroups = useCallback(async () => {
-    const response = await apiFetch<{ groups: GroupSummary[] }>("/v1/groups");
-    setGroups(response.groups);
-    setSelectedId((current) =>
-      response.groups.some((group) => group.id === current)
-        ? current
-        : (response.groups[0]?.id ?? ""),
-    );
+  useEffect(() => {
+    const active = new AbortController();
+    lifetime.current = active;
+    const invalidate = () => {
+      lifetime.current?.abort();
+      lifetime.current = new AbortController();
+      publicationController.current?.abort();
+      moreController.current?.abort();
+      selectedRef.current = "";
+      setSelectedId("");
+      setPublications([]);
+      setMemberOptions([]);
+      setBusy("");
+      inFlight.current = false;
+      setGroups([]);
+      setDetail(null);
+      setContext({
+        organizationId: null,
+        organizationName: null,
+        canCreateOrganizationGroup: false,
+        canCreateWorkspaceGroup: false,
+      });
+      setDialog(null);
+      setReload((value) => value + 1);
+    };
+    const refresh = () => {
+      if (!inFlight.current && !openDialog.current) setReload((value) => value + 1);
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, invalidate);
+    window.addEventListener("polling-pops:workspace-updated", invalidate);
+    window.addEventListener("focus", refresh);
+    return () => {
+      lifetime.current?.abort();
+      moreController.current?.abort();
+      window.removeEventListener(AUTH_CHANGE_EVENT, invalidate);
+      window.removeEventListener("polling-pops:workspace-updated", invalidate);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
+  // Legacy workspace responses remain readable while the enriched API rolls out.
+  const normalize = useCallback(
+    (group: GroupSummary): GroupSummary => ({
+      ...group,
+      scope: group.scope ?? "workspace",
+      scopeName: group.scopeName ?? workspace?.name ?? copy.workspace,
+      purpose: group.purpose ?? "team",
+      status: group.status ?? "active",
+      capabilities: resolveGroupCapabilities(group, canEdit, creator?.role === "owner"),
+    }),
+    [canEdit, copy.workspace, creator?.role, workspace?.name],
+  );
   const normalizeDetail = useCallback(
-    (group: GroupDetail): GroupDetail =>
-      presentationsEnabled
-        ? group
-        : {
-            ...group,
-            artifacts: group.artifacts.filter(
-              (artifact) => artifact.artifactType !== "presentation",
-            ),
-            schedule: group.schedule.filter((item) => item.artifactType === "round"),
-          },
-    [presentationsEnabled],
+    (group: GroupDetail): GroupDetail => ({
+      ...group,
+      ...normalize(group),
+      members: group.members ?? [],
+      availableMembers: group.availableMembers ?? [],
+      artifacts: (group.artifacts ?? []).filter(
+        (item) =>
+          (item.artifactType !== "presentation" || presentationsEnabled) &&
+          (item.artifactType !== "idea_board" || ideaBoardsEnabled),
+      ),
+      schedule: (group.schedule ?? []).filter(
+        (item) => item.artifactType !== "presentation" || presentationsEnabled,
+      ),
+      messages: group.messages ?? [],
+    }),
+    [ideaBoardsEnabled, normalize, presentationsEnabled],
   );
 
+  const refreshGroups = useCallback(
+    async (signal?: AbortSignal) => {
+      const response = await apiFetch<{ groups: GroupSummary[]; context?: Context }>("/v1/groups", {
+        signal,
+        cache: "no-store",
+      });
+      if (signal?.aborted) return;
+      setGroups(response.groups.map(normalize));
+      setContext(
+        response.context ?? {
+          organizationId: null,
+          organizationName: null,
+          canCreateOrganizationGroup: false,
+          canCreateWorkspaceGroup: canEdit,
+        },
+      );
+    },
+    [canEdit, normalize],
+  );
   const refreshDetail = useCallback(
-    async (groupId: string) => {
-      const response = await apiFetch<{ group: GroupDetail }>(`/v1/groups/${groupId}`);
-      setDetail(normalizeDetail(response.group));
+    async (id: string, signal?: AbortSignal) => {
+      const response = await apiFetch<{ group: GroupDetail }>(`/v1/groups/${id}`, {
+        signal,
+        cache: "no-store",
+      });
+      if (!signal?.aborted && selectedRef.current === id)
+        setDetail(normalizeDetail(response.group));
     },
     [normalizeDetail],
   );
 
   useEffect(() => {
-    const controller = new AbortController();
+    const active = new AbortController();
     setLoading(true);
     setError("");
-    const requests: Array<Promise<unknown>> = [
-      apiFetch<{ groups: GroupSummary[] }>("/v1/groups", { signal: controller.signal }).then(
-        (response) => {
-          setGroups(response.groups);
-          setSelectedId(response.groups[0]?.id ?? "");
-        },
-      ),
-    ];
-    if (canEdit) {
-      requests.push(
-        Promise.all([
-          apiFetch<{ quizzes: LibraryArtifact[] }>("/v1/quizzes?archived=true&summary=true", {
-            signal: controller.signal,
-          }),
-          presentationsEnabled
-            ? apiFetch<{ presentations: LibraryArtifact[] }>("/v1/presentations", {
-                signal: controller.signal,
-              })
-            : Promise.resolve({ presentations: [] }),
-        ]).then(([roundResponse, presentationResponse]) => {
-          setRounds(roundResponse.quizzes.filter((round) => round.status !== "archived"));
-          setPresentations(
-            presentationResponse.presentations.filter(
-              (presentation) => presentation.status !== "archived",
-            ),
-          );
-        }),
-      );
-      if (ideaBoardsEnabled)
-        requests.push(
-          listIdeaBoards("", controller.signal).then((result) => {
-            setIdeaBoards(
-              result.boards.map((board) => ({
-                id: board.id,
-                title: board.title,
-                status: "draft" as const,
-                currentVersionId: null,
-              })),
-            );
-            setIdeaBoardCursor(result.nextCursor);
-          }),
-        );
-    }
-    void Promise.all(requests)
+    void refreshGroups(active.signal)
       .catch((caught) => {
-        if (!controller.signal.aborted) setError(humanError(caught));
+        if (!active.signal.aborted) {
+          setGroups([]);
+          setDetail(null);
+          setError(humanError(caught));
+        }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!active.signal.aborted) setLoading(false);
       });
-    return () => controller.abort();
-  }, [canEdit, presentationsEnabled, ideaBoardsEnabled]);
+    return () => active.abort();
+  }, [refreshGroups, reload]);
+
+  const visibleGroups = useMemo(
+    () => filterGroups(groups, filters, locale),
+    [filters, groups, locale],
+  );
+  useEffect(() => {
+    if (loading || busy) return;
+    if (!visibleGroups.some((group) => group.id === selectedId)) {
+      setSelectedId(visibleGroups[0]?.id ?? "");
+      setDetail(null);
+    }
+  }, [busy, loading, selectedId, visibleGroups]);
 
   useEffect(() => {
+    setDetail(null);
+    setMemberId("");
+    setMemberSearch("");
+    setMemberOptions([]);
+    setShareKey("");
+    setShareId("");
+    setMessageBody("");
+    setScheduleKey("");
+    setScheduledFor("");
+    setScheduleNote("");
+    setContentType("all");
+    setSection("content");
+  }, [selectedId]);
+
+  useEffect(() => {
+    const active = new AbortController();
+    setDetail(null);
     if (!selectedId) {
-      setDetail(null);
-      return;
+      setDetailLoading(false);
+      return () => active.abort();
     }
-    const controller = new AbortController();
     setDetailLoading(true);
     setError("");
-    void apiFetch<{ group: GroupDetail }>(`/v1/groups/${selectedId}`, {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!controller.signal.aborted) setDetail(normalizeDetail(response.group));
-      })
+    void refreshDetail(selectedId, active.signal)
       .catch((caught) => {
-        if (!controller.signal.aborted) setError(humanError(caught));
+        if (!active.signal.aborted) setError(humanError(caught));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setDetailLoading(false);
+        if (!active.signal.aborted) setDetailLoading(false);
       });
-    return () => controller.abort();
-  }, [normalizeDetail, selectedId]);
+    return () => active.abort();
+  }, [refreshDetail, selectedId, reload]);
 
-  const visibleGroups = useMemo(() => {
-    const normalized = search.trim().toLocaleLowerCase(locale);
-    return groups.filter(
-      (group) =>
-        !normalized ||
-        group.name.toLocaleLowerCase(locale).includes(normalized) ||
-        group.description.toLocaleLowerCase(locale).includes(normalized),
-    );
-  }, [groups, locale, search]);
+  useEffect(() => {
+    if (!canEdit) return;
+    const active = new AbortController();
+    void Promise.all([
+      apiFetch<{ quizzes: LibraryArtifact[] }>("/v1/quizzes?archived=true&summary=true", {
+        signal: active.signal,
+      }),
+      presentationsEnabled
+        ? apiFetch<{ presentations: LibraryArtifact[] }>("/v1/presentations", {
+            signal: active.signal,
+          })
+        : Promise.resolve({ presentations: [] }),
+      ideaBoardsEnabled
+        ? listIdeaBoards("", active.signal)
+        : Promise.resolve({ boards: [], nextCursor: null }),
+    ])
+      .then(([roundResult, presentationResult, ideaResult]) => {
+        if (active.signal.aborted) return;
+        setRounds(roundResult.quizzes.filter((item) => item.status !== "archived"));
+        setPresentations(
+          presentationResult.presentations.filter((item) => item.status !== "archived"),
+        );
+        setIdeaBoards(
+          ideaResult.boards.map((board) => ({
+            id: board.id,
+            title: board.title,
+            status: "draft",
+            currentVersionId: null,
+          })),
+        );
+        setIdeaBoardCursor(ideaResult.nextCursor);
+      })
+      .catch((caught) => {
+        if (!active.signal.aborted) setError(humanError(caught));
+      });
+    return () => active.abort();
+  }, [canEdit, ideaBoardsEnabled, presentationsEnabled]);
+
+  const canCurateOrganization =
+    detail?.scope === "organization" && detail.capabilities.shareContent;
+  const selectedOrganizationId = detail?.scope === "organization" ? detail.organizationId : null;
+  useEffect(() => {
+    const active = new AbortController();
+    publicationController.current = active;
+    setPublications([]);
+    setPublicationCursor(null);
+    setPublicationError(false);
+    if (!canCurateOrganization || !selectedOrganizationId || section !== "content") {
+      setPublicationsLoading(false);
+      return () => active.abort();
+    }
+    setPublicationsLoading(true);
+    void listLibraryShares("organization", active.signal, undefined, selectedOrganizationId)
+      .then((result) => {
+        if (!active.signal.aborted) {
+          setPublications(
+            result.shares.filter(
+              (share) =>
+                share.audience === "organization" &&
+                share.organizationId === selectedOrganizationId,
+            ),
+          );
+          setPublicationCursor(result.nextCursor);
+        }
+      })
+      .catch(() => {
+        if (!active.signal.aborted) setPublicationError(true);
+      })
+      .finally(() => {
+        if (!active.signal.aborted) setPublicationsLoading(false);
+      });
+    return () => active.abort();
+  }, [canCurateOrganization, selectedId, selectedOrganizationId, section, publicationReload]);
+
+  const canSearchMembers =
+    detail?.scope === "organization" && detail.capabilities.manageMembers && section === "members";
+  useEffect(() => {
+    const active = new AbortController();
+    setMemberOptions([]);
+    setMemberId("");
+    setMembersMore(false);
+    setMembersError(false);
+    if (!canSearchMembers || !selectedId) {
+      setMembersLoading(false);
+      return () => active.abort();
+    }
+    setMembersLoading(true);
+    const timer = window.setTimeout(() => {
+      const query = new URLSearchParams({ search: memberSearch.trim() });
+      void apiFetch<{ members: Array<{ userId: string; email: string }>; hasMore: boolean }>(
+        `/v1/groups/${selectedId}/available-members?${query}`,
+        { signal: active.signal, cache: "no-store" },
+      )
+        .then((result) => {
+          if (!active.signal.aborted && selectedRef.current === selectedId) {
+            setMemberOptions(result.members);
+            setMembersMore(result.hasMore);
+          }
+        })
+        .catch(() => {
+          if (!active.signal.aborted) setMembersError(true);
+        })
+        .finally(() => {
+          if (!active.signal.aborted) setMembersLoading(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      active.abort();
+    };
+  }, [canSearchMembers, selectedId, memberSearch, detail?.members, membersReload]);
 
   const shareCandidates = useMemo(() => {
     const shared = new Set(
@@ -278,948 +388,977 @@ function GroupsContent() {
       ),
     );
     return [
-      ...rounds.map((artifact) => ({ ...artifact, artifactType: "round" as const })),
-      ...presentations.map((artifact) => ({
-        ...artifact,
-        artifactType: "presentation" as const,
-      })),
-      ...(ideaBoardsEnabled
-        ? ideaBoards.map((artifact) => ({ ...artifact, artifactType: "idea_board" as const }))
-        : []),
-    ].filter((artifact) => !shared.has(artifactKey(artifact.artifactType, artifact.id)));
-  }, [detail?.artifacts, presentations, rounds, ideaBoards, ideaBoardsEnabled]);
-
-  const scheduledArtifact = detail?.artifacts.find(
-    (artifact) => artifactKey(artifact.artifactType, artifact.artifactId) === scheduleKey,
+      ...rounds.map((item) => ({ ...item, artifactType: "round" as const })),
+      ...presentations.map((item) => ({ ...item, artifactType: "presentation" as const })),
+      ...ideaBoards.map((item) => ({ ...item, artifactType: "idea_board" as const })),
+    ].filter((item) => !shared.has(artifactKey(item.artifactType, item.id)));
+  }, [detail?.artifacts, ideaBoards, presentations, rounds]);
+  const currentSelection =
+    detail?.id === selectedId && visibleGroups.some((group) => group.id === selectedId);
+  const visiblePublications =
+    detail?.sharedLibrary?.filter(
+      (share) => contentType === "all" || share.artifactType === contentType,
+    ) ?? [];
+  const publicationCandidates = publications.filter(
+    (share) => !detail?.sharedLibrary?.some((current) => current.id === share.id),
   );
-  const canManageMembers = detail?.role === "owner" || creator?.role === "owner";
+  const scheduledArtifact = detail?.artifacts.find(
+    (item) => artifactKey(item.artifactType, item.artifactId) === scheduleKey,
+  );
+  const canCreate = context.canCreateWorkspaceGroup || context.canCreateOrganizationGroup;
 
-  async function runMutation(label: string, mutation: () => Promise<void>) {
+  async function mutate(label: string, work: (signal: AbortSignal) => Promise<void>) {
+    const active = lifetime.current;
+    if (!active || active.signal.aborted || inFlight.current) return;
+    inFlight.current = true;
     setBusy(label);
     setError("");
     setNotice("");
     try {
-      await mutation();
+      await work(active.signal);
     } catch (caught) {
-      setError(humanError(caught));
+      if (!active.signal.aborted) setError(humanError(caught));
     } finally {
-      setBusy("");
+      if (lifetime.current === active) inFlight.current = false;
+      if (!active.signal.aborted) setBusy("");
     }
   }
-
-  async function createGroup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const name = groupName.trim();
-    if (!name) return;
-    await runMutation("create", async () => {
-      const response = await apiFetch<{ group: GroupSummary }>("/v1/groups", {
-        method: "POST",
-        body: JSON.stringify({ name, description: groupDescription.trim() }),
-      });
-      setGroupName("");
-      setGroupDescription("");
-      setShowCreate(false);
-      await refreshGroups();
-      setSelectedId(response.group.id);
-      setNotice(t("pages.groups.notice.created", { name: response.group.name }));
-    });
-  }
-
-  async function addMember(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!detail || !memberId) return;
-    await runMutation("member", async () => {
-      await apiFetch(`/v1/groups/${detail.id}/members`, {
-        method: "POST",
-        body: JSON.stringify({ userId: memberId }),
-      });
-      setMemberId("");
-      await Promise.all([refreshDetail(detail.id), refreshGroups()]);
-      setNotice(t("pages.groups.notice.memberAdded"));
-    });
-  }
-
-  async function shareArtifact(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function changeGroup(path: string, method: string, body?: unknown) {
     if (!detail) return;
-    const artifact = readArtifactKey(shareKey);
-    if (!artifact) return;
-    await runMutation("share", async () => {
-      await apiFetch(`/v1/groups/${detail.id}/artifacts`, {
-        method: "POST",
-        body: JSON.stringify(artifact),
+    const id = detail.id;
+    await mutate(path || "group", async (signal) => {
+      await apiFetch(`/v1/groups/${id}${path}`, {
+        method,
+        signal,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      setShareKey("");
-      await Promise.all([refreshDetail(detail.id), refreshGroups()]);
-      setNotice(t("pages.groups.notice.artifactShared"));
+      const removedSelf = method === "DELETE" && path === `/members/${creator?.userId}`;
+      if (removedSelf) {
+        if (!signal.aborted && selectedRef.current === id) {
+          selectedRef.current = "";
+          setSelectedId("");
+          setDetail(null);
+        }
+        await refreshGroups(signal);
+      } else {
+        await Promise.all([refreshDetail(id, signal), refreshGroups(signal)]);
+      }
+      if (
+        !signal.aborted &&
+        method === "PATCH" &&
+        path === "" &&
+        body &&
+        typeof body === "object" &&
+        "status" in body
+      ) {
+        setFilters((current) => ({
+          ...current,
+          status: (body as { status: "active" | "archived" }).status,
+        }));
+      }
+      if (!signal.aborted) {
+        setMemberId("");
+        setShareId("");
+        setShareKey("");
+        setMessageBody("");
+        setScheduleKey("");
+        setScheduledFor("");
+        setScheduleNote("");
+        setNotice(copy.saved);
+      }
     });
   }
-
+  async function saveGroup(values: GroupFormValues) {
+    await mutate("save", async (signal) => {
+      if (dialog === "settings" && detail) {
+        await apiFetch(`/v1/groups/${detail.id}`, {
+          method: "PATCH",
+          signal,
+          body: JSON.stringify({
+            name: values.name,
+            description: values.description,
+            purpose: values.purpose,
+          }),
+        });
+        await Promise.all([refreshDetail(detail.id, signal), refreshGroups(signal)]);
+      } else {
+        const result = await apiFetch<{ group: GroupSummary }>("/v1/groups", {
+          method: "POST",
+          signal,
+          body: JSON.stringify({
+            ...values,
+            ...(values.scope === "organization" ? { organizationId: context.organizationId } : {}),
+          }),
+        });
+        await refreshGroups(signal);
+        if (!signal.aborted) {
+          setFilters(defaultGroupFilters);
+          setSelectedId(result.group.id);
+        }
+      }
+      if (!signal.aborted) {
+        setDialog(null);
+        setNotice(t("pages.groups.notice.created", { name: values.name }));
+      }
+    });
+  }
   async function moreIdeaBoards() {
     if (!ideaBoardCursor || ideaBoardLoading) return;
-    setIdeaBoardLoading(true);
     const active = new AbortController();
     moreController.current = active;
+    setIdeaBoardLoading(true);
     try {
       const result = await listIdeaBoards("", active.signal, ideaBoardCursor);
-      if (active.signal.aborted) return;
-      setIdeaBoards((current) => [
-        ...new Map(
-          [
-            ...current,
-            ...result.boards.map((board) => ({
-              id: board.id,
-              title: board.title,
-              status: "draft" as const,
-              currentVersionId: null,
-            })),
-          ].map((board) => [board.id, board]),
-        ).values(),
-      ]);
-      setIdeaBoardCursor(result.nextCursor);
+      if (!active.signal.aborted) {
+        setIdeaBoards((items) => [
+          ...new Map(
+            [
+              ...items,
+              ...result.boards.map((board) => ({
+                id: board.id,
+                title: board.title,
+                status: "draft" as const,
+                currentVersionId: null,
+              })),
+            ].map((board) => [board.id, board]),
+          ).values(),
+        ]);
+        setIdeaBoardCursor(result.nextCursor);
+      }
     } catch (caught) {
       if (!active.signal.aborted) setError(humanError(caught));
     } finally {
       if (!active.signal.aborted) setIdeaBoardLoading(false);
     }
   }
-
-  async function removeArtifact(artifact: GroupArtifact) {
-    if (!detail) return;
-    await runMutation(`remove:${artifact.id}`, async () => {
-      await apiFetch(`/v1/groups/${detail.id}/artifacts/${artifact.id}`, { method: "DELETE" });
-      if (scheduleKey === artifactKey(artifact.artifactType, artifact.artifactId)) {
-        setScheduleKey("");
+  async function morePublications() {
+    const active = publicationController.current;
+    if (!active || active.signal.aborted || !publicationCursor || publicationsLoading) return;
+    setPublicationsLoading(true);
+    try {
+      const result = await listLibraryShares(
+        "organization",
+        active.signal,
+        publicationCursor,
+        selectedOrganizationId ?? undefined,
+      );
+      if (!active.signal.aborted) {
+        setPublications((items) => [
+          ...new Map(
+            [
+              ...items,
+              ...result.shares.filter(
+                (share) =>
+                  share.audience === "organization" &&
+                  share.organizationId === selectedOrganizationId,
+              ),
+            ].map((share) => [share.id, share]),
+          ).values(),
+        ]);
+        setPublicationCursor(result.nextCursor);
       }
-      await Promise.all([refreshDetail(detail.id), refreshGroups()]);
-      setNotice(t("pages.groups.notice.artifactRemoved", { title: artifact.title }));
-    });
+    } catch {
+      if (!active.signal.aborted) setPublicationError(true);
+    } finally {
+      if (!active.signal.aborted) setPublicationsLoading(false);
+    }
   }
-
-  async function postMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!detail || !messageBody.trim()) return;
-    await runMutation("message", async () => {
-      await apiFetch(`/v1/groups/${detail.id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ body: messageBody.trim() }),
-      });
-      setMessageBody("");
-      await refreshDetail(detail.id);
-      setNotice(t("pages.groups.notice.posted"));
-    });
+  function patchFilter<K extends keyof GroupFilters>(key: K, value: GroupFilters[K]) {
+    setFilters((current) => ({ ...current, [key]: value }));
   }
-
-  async function scheduleArtifact(event: FormEvent<HTMLFormElement>) {
+  function submitArtifact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!detail || !scheduledFor) return;
+    const artifact = readArtifactKey(shareKey);
+    return artifact ? changeGroup("/artifacts", "POST", artifact) : Promise.resolve();
+  }
+  function submitSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     const artifact = readArtifactKey(scheduleKey);
-    if (!artifact || artifact.artifactType === "idea_board") return;
-    await runMutation("schedule", async () => {
-      await apiFetch(`/v1/groups/${detail.id}/schedule`, {
-        method: "POST",
-        body: JSON.stringify({
+    return artifact && artifact.artifactType !== "idea_board" && scheduledFor
+      ? changeGroup("/schedule", "POST", {
           ...artifact,
           kind: artifact.artifactType === "presentation" ? "live_session" : scheduleKind,
           scheduledFor: new Date(scheduledFor).toISOString(),
           note: scheduleNote.trim(),
-        }),
-      });
-      setScheduledFor("");
-      setScheduleNote("");
-      await Promise.all([refreshDetail(detail.id), refreshGroups()]);
-      setNotice(t("pages.groups.notice.scheduled"));
-    });
+        })
+      : Promise.resolve();
   }
+  const contentLabel = (type: string) =>
+    type === "round"
+      ? t("pages.common.round")
+      : type === "presentation"
+        ? t("pages.common.presentation")
+        : type === "survey"
+          ? t("pages.common.surveys")
+          : type === "idea_board"
+            ? copy.workshop
+            : copy.canvas;
 
   return (
     <WorkspaceShell
+      title={t("page.groups.title")}
+      eyebrow={copy.eyebrow}
+      description={copy.description}
+      requiredFeature="groups"
+      translationLevel="full"
       actions={
-        canEdit ? (
+        canCreate ? (
           <button
             className="button"
-            onClick={() => setShowCreate((current) => !current)}
             type="button"
+            disabled={Boolean(busy)}
+            onClick={() => {
+              setError("");
+              setDialog("create");
+            }}
           >
-            {showCreate ? t("pages.common.close") : t("pages.groups.create")}
+            {t("pages.groups.create")}
           </button>
         ) : null
       }
-      description={t("page.groups.description")}
-      eyebrow={t("page.groups.eyebrow")}
-      requiredFeature="groups"
-      title={t("page.groups.title")}
-      translationLevel="full"
     >
-      {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
-        </p>
+      {error && !dialog ? (
+        <div className={styles.feedback} role="alert">
+          <p className="error" lang="en-CA">
+            {error}
+          </p>
+          <button
+            className="button-quiet small-button"
+            type="button"
+            onClick={() => setReload((value) => value + 1)}
+          >
+            {copy.retry}
+          </button>
+        </div>
       ) : null}
       {notice ? (
         <p className={styles.notice} role="status">
           {notice}
         </p>
       ) : null}
-
-      {showCreate ? (
-        <form className={styles.createPanel} onSubmit={createGroup}>
-          <div>
-            <p className={styles.eyebrow}>{t("pages.groups.createEyebrow")}</p>
-            <h2>{t("pages.groups.create")}</h2>
-            <p>{t("pages.groups.createDescription")}</p>
-          </div>
-          <label className={styles.field}>
-            <span>{t("pages.groups.name")}</span>
-            <input
-              autoFocus
-              lang={groupName ? "" : locale}
-              maxLength={120}
-              onChange={(event) => setGroupName(event.target.value)}
-              placeholder={t("pages.groups.namePlaceholder")}
-              required
-              value={groupName}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>{t("pages.common.description")}</span>
-            <textarea
-              lang={groupDescription ? "" : locale}
-              maxLength={1000}
-              onChange={(event) => setGroupDescription(event.target.value)}
-              placeholder={t("pages.groups.descriptionPlaceholder")}
-              rows={2}
-              value={groupDescription}
-            />
-          </label>
-          <button
-            className="button"
-            disabled={busy === "create" || !groupName.trim()}
-            type="submit"
-          >
-            {busy === "create" ? t("pages.groups.creating") : t("pages.groups.create")}
-          </button>
-        </form>
-      ) : null}
-
-      <div className={styles.workspaceGrid}>
-        <aside className={styles.groupRail} aria-label={t("pages.groups.workspaceGroups")}>
+      <section className={styles.discovery} aria-label={copy.allGroups}>
+        <div className={styles.discoveryHeading}>
+          <nav className={styles.scopeNav} aria-label={copy.scopes}>
+            {(["all", "workspace", "organization"] as const).map((scope) => (
+              <button
+                type="button"
+                key={scope}
+                aria-pressed={filters.scope === scope}
+                disabled={Boolean(busy)}
+                onClick={() => patchFilter("scope", scope)}
+              >
+                {scope === "all" ? copy.allGroups : copy[scope]}
+                <span aria-hidden="true">
+                  {groups.filter((group) => scope === "all" || group.scope === scope).length}
+                </span>
+              </button>
+            ))}
+          </nav>
           <label className={styles.searchField}>
             <span className="sr-only">{t("pages.groups.search")}</span>
             <input
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("pages.groups.search")}
               type="search"
-              value={search}
+              placeholder={t("pages.groups.search")}
+              value={filters.search}
+              onChange={(event) => patchFilter("search", event.target.value)}
+              disabled={Boolean(busy)}
             />
           </label>
-          {loading ? (
-            <div className={styles.railLoading} aria-label={t("pages.groups.loading")} />
-          ) : null}
-          {!loading && visibleGroups.length ? (
-            <div className={styles.groupList}>
-              {visibleGroups.map((group) => (
-                <button
-                  aria-pressed={selectedId === group.id}
-                  className={
-                    selectedId === group.id ? styles.groupButtonActive : styles.groupButton
-                  }
-                  key={group.id}
-                  onClick={() => setSelectedId(group.id)}
-                  type="button"
-                >
-                  <span className={styles.groupMonogram} aria-hidden="true">
-                    {group.name.charAt(0).toUpperCase()}
-                  </span>
-                  <span className={styles.groupButtonCopy}>
-                    <strong lang="">{group.name}</strong>
-                    <small>
-                      {t("pages.groups.memberCount", { count: group.memberCount })} ·{" "}
-                      {t("pages.groups.artifactCount", { count: group.artifactCount })}
-                    </small>
-                  </span>
-                  {group.upcomingCount ? (
-                    <span
-                      className={styles.count}
-                      aria-label={t("pages.groups.upcomingCount", { count: group.upcomingCount })}
-                    >
-                      {group.upcomingCount}
-                    </span>
-                  ) : null}
-                </button>
+        </div>
+        <div className={styles.filters}>
+          <label className={styles.field}>
+            <span>{copy.purpose}</span>
+            <select
+              value={filters.purpose}
+              onChange={(event) =>
+                patchFilter("purpose", event.target.value as GroupFilters["purpose"])
+              }
+              disabled={Boolean(busy)}
+            >
+              <option value="all">{copy.allPurposes}</option>
+              {groupPurposes.map((purpose) => (
+                <option value={purpose} key={purpose}>
+                  {copy[purpose]}
+                </option>
               ))}
-            </div>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>{copy.access}</span>
+            <select
+              value={filters.access}
+              onChange={(event) =>
+                patchFilter("access", event.target.value as GroupFilters["access"])
+              }
+              disabled={Boolean(busy)}
+            >
+              <option value="all">{copy.allAccess}</option>
+              <option value="owner">{copy.ownerAccess}</option>
+              <option value="member">{copy.memberAccess}</option>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>{copy.status}</span>
+            <select
+              value={filters.status}
+              onChange={(event) =>
+                patchFilter("status", event.target.value as GroupFilters["status"])
+              }
+              disabled={Boolean(busy)}
+            >
+              <option value="active">{copy.active}</option>
+              <option value="archived">{copy.archived}</option>
+              <option value="all">{copy.allStatuses}</option>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>{copy.sort}</span>
+            <select
+              value={filters.sort}
+              onChange={(event) => patchFilter("sort", event.target.value as GroupFilters["sort"])}
+              disabled={Boolean(busy)}
+            >
+              <option value="updated">{copy.updated}</option>
+              <option value="name">{copy.nameSort}</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="button-quiet small-button"
+            onClick={() => setFilters(defaultGroupFilters)}
+            disabled={Boolean(busy)}
+          >
+            {copy.clear}
+          </button>
+        </div>
+        <div className={styles.discoveryFooter}>
+          <p>{copy.inviteOnly}</p>
+          <span role="status" aria-live="polite">
+            {loading
+              ? t("pages.groups.loading")
+              : (visibleGroups.length === 1 ? copy.resultOne : copy.results).replace(
+                  "{count}",
+                  String(visibleGroups.length),
+                )}
+          </span>
+        </div>
+      </section>
+      <div className={styles.workspaceGrid}>
+        <aside className={styles.groupRail} aria-label={t("pages.groups.workspaceGroups")}>
+          {loading ? (
+            <div
+              className={styles.railLoading}
+              role="status"
+              aria-label={t("pages.groups.loading")}
+            />
           ) : null}
-          {!loading && groups.length > 0 && visibleGroups.length === 0 ? (
-            <p className={styles.railEmpty}>{t("pages.groups.noMatch")}</p>
-          ) : null}
-          {!loading && groups.length === 0 ? (
+          <div className={styles.groupList}>
+            {visibleGroups.map((group) => (
+              <button
+                type="button"
+                key={group.id}
+                aria-pressed={group.id === selectedId}
+                className={group.id === selectedId ? styles.groupButtonActive : styles.groupButton}
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  if (group.id !== selectedId) {
+                    setDetail(null);
+                    setSelectedId(group.id);
+                  }
+                }}
+              >
+                <span className={styles.groupMonogram} data-scope={group.scope} aria-hidden="true">
+                  {group.name.charAt(0).toUpperCase()}
+                </span>
+                <span className={styles.groupButtonCopy}>
+                  <span className={styles.rowMeta}>
+                    {copy[group.scope]} · {copy[group.purpose]}
+                  </span>
+                  <strong lang="" dir="auto">
+                    {group.name}
+                  </strong>
+                  <small>
+                    {t("pages.groups.members")} · {group.memberCount} · {t("pages.groups.shared")}{" "}
+                    {group.artifactCount}
+                  </small>
+                  <span className={styles.rowBadges}>
+                    <span>{copy[`${group.role}Access`]}</span>
+                    {group.status === "archived" ? <span>{copy.archived}</span> : null}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {!loading && !visibleGroups.length ? (
             <div className={styles.railEmpty}>
-              <strong>{t("pages.groups.emptyRailTitle")}</strong>
-              <span>{t("pages.groups.emptyRailDescription")}</span>
+              <strong>
+                {groups.length ? t("pages.groups.noMatch") : t("pages.groups.emptyRailTitle")}
+              </strong>
+              <span>{groups.length ? copy.noMatchHelp : copy.creationHelp}</span>
             </div>
           ) : null}
         </aside>
-
-        <div className={styles.detailColumn}>
+        <div className={styles.detailColumn} aria-busy={detailLoading || Boolean(busy)}>
           {detailLoading ? (
-            <div className={styles.detailLoading} aria-label={t("pages.groups.loadingOne")} />
+            <div
+              className={styles.detailLoading}
+              role="status"
+              aria-label={t("pages.groups.loadingOne")}
+            />
           ) : null}
-          {!detailLoading && !detail ? (
+          {!detailLoading && !currentSelection && !loading ? (
             <section className={styles.emptyState}>
               <span aria-hidden="true">G</span>
               <h2>
                 {groups.length ? t("pages.groups.chooseTitle") : t("pages.groups.firstTitle")}
               </h2>
-              <p>
-                {groups.length
-                  ? t("pages.groups.chooseDescription")
-                  : t("pages.groups.firstDescription")}
-              </p>
-              {canEdit && !groups.length ? (
-                <button className="button" onClick={() => setShowCreate(true)} type="button">
+              <p>{groups.length ? copy.noMatchHelp : copy.creationHelp}</p>
+              {canCreate && !groups.length ? (
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setDialog("create");
+                  }}
+                >
                   {t("pages.groups.createFirst")}
                 </button>
               ) : null}
             </section>
           ) : null}
-          {!detailLoading && detail ? (
+          {!detailLoading && currentSelection && detail ? (
             <>
-              <GroupOverview detail={detail} />
-              <SharedArtifacts
-                busy={busy}
-                canEdit={canEdit}
-                detail={detail}
-                onRemove={removeArtifact}
-                onShare={shareArtifact}
-                setShareKey={setShareKey}
-                shareCandidates={shareCandidates}
-                shareKey={shareKey}
-                moreIdeaBoards={ideaBoardCursor ? moreIdeaBoards : undefined}
-                ideaBoardLoading={ideaBoardLoading}
-              />
-              {detail.canvasBoards?.length ? (
-                <GroupCanvasBoards boards={detail.canvasBoards} />
+              <section className={styles.groupHero}>
+                <div className={styles.heroHeading}>
+                  <span
+                    className={styles.heroMonogram}
+                    data-scope={detail.scope}
+                    aria-hidden="true"
+                  >
+                    {detail.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div>
+                    <div className={styles.inlineMeta}>
+                      <span>
+                        {copy[detail.scope]} ·{" "}
+                        <span lang="" dir="auto">
+                          {detail.scopeName}
+                        </span>
+                      </span>
+                      <span className={styles.roleBadge}>{copy[`${detail.role}Access`]}</span>
+                      <span>{copy[detail.purpose]}</span>
+                      <span>{copy[detail.status]}</span>
+                    </div>
+                    <h2 lang="" dir="auto">
+                      {detail.name}
+                    </h2>
+                    {detail.description ? (
+                      <p lang="" dir="auto">
+                        {detail.description}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <dl className={styles.stats}>
+                  <div>
+                    <dt>{t("pages.groups.members")}</dt>
+                    <dd>{detail.members.length}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy.content}</dt>
+                    <dd>
+                      {detail.scope === "organization"
+                        ? (detail.sharedLibrary?.length ?? 0)
+                        : detail.artifacts.length + (detail.canvasBoards?.length ?? 0)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className={styles.heroFooter}>
+                  <p>
+                    {detail.status === "archived"
+                      ? copy.archivedHelp
+                      : detail.capabilities.manageGroup
+                        ? copy.manageHelp
+                        : detail.capabilities.postMessage
+                          ? copy.inviteOnly
+                          : copy.readOnly}
+                  </p>
+                  {detail.capabilities.manageGroup ? (
+                    <div className={styles.cardActions}>
+                      {detail.status === "active" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="button-quiet small-button"
+                            disabled={Boolean(busy)}
+                            onClick={() => {
+                              setError("");
+                              setDialog("settings");
+                            }}
+                          >
+                            {copy.settings}
+                          </button>
+                          <button
+                            type="button"
+                            className="button-quiet small-button"
+                            disabled={Boolean(busy)}
+                            onClick={() => void changeGroup("", "PATCH", { status: "archived" })}
+                          >
+                            {copy.archive}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="button small-button"
+                          disabled={Boolean(busy)}
+                          onClick={() => void changeGroup("", "PATCH", { status: "active" })}
+                        >
+                          {copy.restore}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+              <nav className={styles.detailNav} aria-label={copy.viewGroup}>
+                {(
+                  [
+                    "content",
+                    "members",
+                    "discussion",
+                    ...(detail.scope === "workspace" ? ["schedule" as const] : []),
+                  ] as const
+                ).map((value) => (
+                  <button
+                    type="button"
+                    aria-pressed={section === value}
+                    key={value}
+                    onClick={() => setSection(value)}
+                  >
+                    {value === "content"
+                      ? copy.content
+                      : value === "members"
+                        ? t("pages.groups.members")
+                        : value === "discussion"
+                          ? t("pages.groups.discussion.title")
+                          : t("pages.groups.schedule.title")}
+                  </button>
+                ))}
+              </nav>
+              {section === "content" ? (
+                <>
+                  <div className={styles.contentToolbar}>
+                    <label className={styles.field}>
+                      <span>{copy.contentType}</span>
+                      <select
+                        value={contentType}
+                        onChange={(event) => setContentType(event.target.value)}
+                      >
+                        <option value="all">{copy.allContent}</option>
+                        {(detail.scope === "organization"
+                          ? ["round", "presentation", "survey"]
+                          : [
+                              "round",
+                              ...(presentationsEnabled ? ["presentation"] : []),
+                              ...(ideaBoardsEnabled ? ["idea_board"] : []),
+                              "canvas",
+                            ]
+                        ).map((value) => (
+                          <option value={value} key={value}>
+                            {contentLabel(value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p>
+                      {detail.scope === "organization"
+                        ? copy.organizationHelp
+                        : copy.workspaceContentHelp}
+                    </p>
+                  </div>
+                  {detail.scope === "organization" ? (
+                    <section className={styles.panel}>
+                      <SectionHeading
+                        count={detail.sharedLibrary?.length ?? 0}
+                        eyebrow={copy.organization}
+                        title={copy.content}
+                      />
+                      {detail.capabilities.shareContent ? (
+                        <details className={styles.actionDisclosure}>
+                          <summary>{copy.addPublication}</summary>
+                          <form
+                            className={styles.compactForm}
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              if (shareId) void changeGroup("/library-shares", "POST", { shareId });
+                            }}
+                          >
+                            <label className={styles.field}>
+                              <span>{copy.choosePublication}</span>
+                              <select
+                                value={shareId}
+                                onChange={(event) => setShareId(event.target.value)}
+                                disabled={Boolean(busy) || publicationsLoading}
+                              >
+                                <option value="">
+                                  {publicationsLoading
+                                    ? libraryCopy.loading
+                                    : copy.choosePublication}
+                                </option>
+                                {publicationCandidates.map((share) => (
+                                  <option value={share.id} key={share.id}>
+                                    {contentLabel(share.artifactType)} · {share.title}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="submit"
+                              className="button small-button"
+                              disabled={Boolean(busy) || !shareId}
+                            >
+                              {copy.addPublication}
+                            </button>
+                          </form>
+                          <p className={styles.helpText}>{copy.collectionHelp}</p>
+                          {publicationCursor ? (
+                            <button
+                              type="button"
+                              className="button-quiet small-button"
+                              disabled={publicationsLoading}
+                              onClick={() => void morePublications()}
+                            >
+                              {copy.loadMore}
+                            </button>
+                          ) : null}
+                          {publicationError ? (
+                            <p role="alert">
+                              <button
+                                className="button-quiet small-button"
+                                type="button"
+                                onClick={() => setPublicationReload((value) => value + 1)}
+                              >
+                                {copy.retry}
+                              </button>
+                            </p>
+                          ) : null}
+                        </details>
+                      ) : null}
+                      {visiblePublications.length ? (
+                        <div className={styles.artifactGrid}>
+                          {visiblePublications.map((share) => (
+                            <article key={share.id} className={styles.publicationCard}>
+                              <div className={styles.inlineMeta}>
+                                <span>{contentLabel(share.artifactType)}</span>
+                                <span className={styles.roleBadge}>
+                                  {share.permission === "use"
+                                    ? libraryCopy.canUse
+                                    : libraryCopy.canView}
+                                </span>
+                                <span>{libraryCopy[share.progress]}</span>
+                              </div>
+                              <h3 lang="" dir="auto">
+                                {share.title}
+                              </h3>
+                              {share.description ? (
+                                <p lang="" dir="auto">
+                                  {share.description}
+                                </p>
+                              ) : null}
+                              <p className={styles.helpText}>
+                                {libraryCopy.from}:{" "}
+                                <span lang="" dir="auto">
+                                  {share.sourceWorkspaceName}
+                                </span>
+                              </p>
+                              <LibraryShareDue dueAt={share.dueAt} progress={share.progress} />
+                              {detail.status === "archived" ? (
+                                <Link
+                                  className="button-quiet small-button"
+                                  href={`/library/shared/${share.id}`}
+                                >
+                                  {libraryCopy.open}
+                                </Link>
+                              ) : (
+                                <LibraryShareActions
+                                  share={{
+                                    ...share,
+                                    capabilities: {
+                                      ...share.capabilities,
+                                      manage: false,
+                                    },
+                                  }}
+                                  onChange={(next) =>
+                                    setDetail((current) =>
+                                      current?.id === detail.id
+                                        ? {
+                                            ...current,
+                                            sharedLibrary: current.sharedLibrary?.map((row) =>
+                                              row.id === next.id ? next : row,
+                                            ),
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                  onRevoked={() => undefined}
+                                />
+                              )}
+                              {detail.capabilities.shareContent ? (
+                                <button
+                                  type="button"
+                                  className={styles.removeButton}
+                                  disabled={Boolean(busy)}
+                                  onClick={() =>
+                                    void changeGroup(`/library-shares/${share.id}`, "DELETE")
+                                  }
+                                >
+                                  {copy.collectionOnly}
+                                </button>
+                              ) : null}
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <PanelEmpty strong={copy.noContent} text={copy.organizationHelp} />
+                      )}
+                    </section>
+                  ) : (
+                    <>
+                      {contentType !== "canvas" ? (
+                        <SharedArtifacts
+                          busy={busy}
+                          canEdit={detail.capabilities.shareContent}
+                          detail={{
+                            ...detail,
+                            artifacts: detail.artifacts.filter(
+                              (item) => contentType === "all" || item.artifactType === contentType,
+                            ),
+                          }}
+                          onRemove={(artifact: GroupArtifact) =>
+                            changeGroup(`/artifacts/${artifact.id}`, "DELETE")
+                          }
+                          onShare={submitArtifact}
+                          setShareKey={setShareKey}
+                          shareCandidates={shareCandidates}
+                          shareKey={shareKey}
+                          moreIdeaBoards={ideaBoardCursor ? moreIdeaBoards : undefined}
+                          ideaBoardLoading={ideaBoardLoading}
+                        />
+                      ) : null}
+                      {(contentType === "all" || contentType === "canvas") &&
+                      detail.canvasBoards?.length ? (
+                        <GroupCanvasBoards boards={detail.canvasBoards} />
+                      ) : null}
+                    </>
+                  )}
+                </>
               ) : null}
-              <div className={styles.collaborationGrid}>
-                <MembersPanel
-                  busy={busy}
-                  canManageMembers={Boolean(canManageMembers)}
-                  detail={detail}
-                  memberId={memberId}
-                  onAdd={addMember}
-                  setMemberId={setMemberId}
-                />
+              {section === "members" ? (
+                <section className={styles.panel}>
+                  <SectionHeading
+                    count={detail.members.length}
+                    eyebrow={copy[detail.scope]}
+                    title={t("pages.groups.members")}
+                  />
+                  {detail.scope === "organization" ? (
+                    <p className={styles.helpText}>{copy.addMemberHelp}</p>
+                  ) : null}
+                  {detail.capabilities.manageMembers &&
+                  (detail.scope === "organization" || detail.availableMembers.length > 0) ? (
+                    <details className={styles.actionDisclosure}>
+                      <summary>
+                        {t("pages.groups.add")} · {t("pages.groups.members")}
+                      </summary>
+                      <form
+                        className={styles.compactForm}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          if (memberId) void changeGroup("/members", "POST", { userId: memberId });
+                        }}
+                      >
+                        {detail.scope === "organization" ? (
+                          <label className={`${styles.field} ${styles.memberSearch}`}>
+                            <span>{copy.findMember}</span>
+                            <input
+                              type="search"
+                              value={memberSearch}
+                              onChange={(event) => {
+                                setMemberId("");
+                                setMemberOptions([]);
+                                setMemberSearch(event.target.value);
+                              }}
+                              disabled={Boolean(busy)}
+                            />
+                          </label>
+                        ) : null}
+                        <label className={styles.field}>
+                          <span>
+                            {detail.scope === "organization"
+                              ? copy.memberDirectory
+                              : t("pages.groups.workspaceMember")}
+                          </span>
+                          <select
+                            value={memberId}
+                            onChange={(event) => setMemberId(event.target.value)}
+                            disabled={
+                              Boolean(busy) || (detail.scope === "organization" && membersLoading)
+                            }
+                          >
+                            <option value="">
+                              {detail.scope === "organization" && membersLoading
+                                ? libraryCopy.loading
+                                : t("pages.groups.chooseMember")}
+                            </option>
+                            {(detail.scope === "organization"
+                              ? memberOptions
+                              : detail.availableMembers
+                            ).map((member) => (
+                              <option key={member.userId} value={member.userId}>
+                                {member.email}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="submit"
+                          className="button small-button"
+                          disabled={Boolean(busy) || !memberId}
+                        >
+                          {t("pages.groups.add")}
+                        </button>
+                      </form>
+                      {detail.scope === "organization" && membersMore ? (
+                        <p className={styles.helpText}>{copy.moreMembers}</p>
+                      ) : null}
+                      {detail.scope === "organization" && membersError ? (
+                        <div role="alert">
+                          <p className="error">{copy.memberLoadFailed}</p>
+                          <button
+                            className="button-quiet small-button"
+                            type="button"
+                            disabled={membersLoading}
+                            onClick={() => {
+                              setMemberId("");
+                              setMemberOptions([]);
+                              setMembersError(false);
+                              setMembersReload((value) => value + 1);
+                            }}
+                          >
+                            {copy.retry}
+                          </button>
+                        </div>
+                      ) : null}
+                    </details>
+                  ) : null}
+                  {detail.capabilities.manageMembers &&
+                  detail.members.filter((member) => member.role === "owner").length === 1 ? (
+                    <p className={styles.helpText}>{copy.lastOwner}</p>
+                  ) : null}
+                  <ul className={styles.memberList}>
+                    {detail.members.map((member) => {
+                      const lastOwner =
+                        member.role === "owner" &&
+                        detail.members.filter((item) => item.role === "owner").length === 1;
+                      return (
+                        <li key={member.userId}>
+                          <span className={styles.avatar} aria-hidden="true">
+                            {member.email.charAt(0).toUpperCase()}
+                          </span>
+                          <span>
+                            <strong lang="" dir="auto">
+                              {member.email}
+                            </strong>
+                            <small>{copy[`${member.role}Access`]}</small>
+                          </span>
+                          {detail.capabilities.manageMembers ? (
+                            <div className={styles.memberActions}>
+                              <button
+                                className="button-quiet small-button"
+                                type="button"
+                                disabled={Boolean(busy) || lastOwner}
+                                onClick={() =>
+                                  void changeGroup(`/members/${member.userId}`, "PATCH", {
+                                    role: member.role === "owner" ? "member" : "owner",
+                                  })
+                                }
+                              >
+                                {member.role === "owner" ? copy.makeMember : copy.makeOwner}
+                              </button>
+                              <button
+                                className={styles.removeButton}
+                                type="button"
+                                disabled={Boolean(busy) || lastOwner}
+                                onClick={() => {
+                                  if (window.confirm(copy.removeMemberConfirm))
+                                    void changeGroup(`/members/${member.userId}`, "DELETE");
+                                }}
+                              >
+                                {copy.removeMember}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className={styles.roleBadge}>{copy[`${member.role}Access`]}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+              {section === "discussion" ? (
                 <DiscussionPanel
                   busy={busy}
                   detail={detail}
+                  canPost={detail.capabilities.postMessage}
                   messageBody={messageBody}
-                  onPost={postMessage}
                   setMessageBody={setMessageBody}
+                  onPost={(event) => {
+                    event.preventDefault();
+                    return messageBody.trim()
+                      ? changeGroup("/messages", "POST", { body: messageBody.trim() })
+                      : Promise.resolve();
+                  }}
                 />
-              </div>
-              <SchedulePanel
-                busy={busy}
-                canEdit={canEdit}
-                detail={detail}
-                onSchedule={scheduleArtifact}
-                scheduledArtifact={scheduledArtifact}
-                scheduledFor={scheduledFor}
-                scheduleKey={scheduleKey}
-                scheduleKind={scheduleKind}
-                scheduleNote={scheduleNote}
-                setScheduledFor={setScheduledFor}
-                setScheduleKey={setScheduleKey}
-                setScheduleKind={setScheduleKind}
-                setScheduleNote={setScheduleNote}
-              />
+              ) : null}
+              {section === "schedule" && detail.scope === "workspace" ? (
+                <SchedulePanel
+                  busy={busy}
+                  canEdit={detail.capabilities.schedule}
+                  detail={detail}
+                  onSchedule={submitSchedule}
+                  scheduledArtifact={scheduledArtifact}
+                  scheduledFor={scheduledFor}
+                  scheduleKey={scheduleKey}
+                  scheduleKind={scheduleKind}
+                  scheduleNote={scheduleNote}
+                  setScheduledFor={setScheduledFor}
+                  setScheduleKey={setScheduleKey}
+                  setScheduleKind={setScheduleKind}
+                  setScheduleNote={setScheduleNote}
+                />
+              ) : null}
             </>
           ) : null}
         </div>
       </div>
+      {dialog &&
+      (dialog === "create" || (detail?.status === "active" && detail.capabilities.manageGroup)) ? (
+        <GroupDialog
+          key={dialog === "settings" ? detail?.id : "create"}
+          group={dialog === "settings" ? (detail ?? undefined) : undefined}
+          context={context}
+          busy={Boolean(busy)}
+          error={error}
+          onClose={() => {
+            setDialog(null);
+            setError("");
+          }}
+          onSave={saveGroup}
+        />
+      ) : null}
     </WorkspaceShell>
-  );
-}
-
-function GroupOverview({ detail }: { detail: GroupDetail }) {
-  const { t } = useLocale();
-  return (
-    <section className={styles.groupHero}>
-      <div className={styles.heroHeading}>
-        <span className={styles.heroMonogram} aria-hidden="true">
-          {detail.name.charAt(0).toUpperCase()}
-        </span>
-        <div>
-          <div className={styles.inlineMeta}>
-            <span className={styles.roleBadge}>{t(`pages.groups.role.${detail.role}`)}</span>
-            <span>{t("pages.groups.facilitatorGroup")}</span>
-          </div>
-          <h2 lang="">{detail.name}</h2>
-          <p>
-            {detail.description ? (
-              <span lang="">{detail.description}</span>
-            ) : (
-              t("pages.groups.defaultDescription")
-            )}
-          </p>
-        </div>
-      </div>
-      <dl className={styles.stats}>
-        <div>
-          <dt>{t("pages.groups.members")}</dt>
-          <dd>{detail.members.length}</dd>
-        </div>
-        <div>
-          <dt>{t("pages.groups.shared")}</dt>
-          <dd>{detail.artifacts.length + (detail.canvasBoards?.length ?? 0)}</dd>
-        </div>
-        <div>
-          <dt>{t("pages.common.upcoming")}</dt>
-          <dd>
-            {detail.schedule.filter((item) => new Date(item.scheduledFor) >= new Date()).length}
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
-interface SharedArtifactsProps {
-  busy: string;
-  canEdit: boolean;
-  detail: GroupDetail;
-  onRemove: (artifact: GroupArtifact) => Promise<void>;
-  onShare: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  setShareKey: (value: string) => void;
-  shareCandidates: Array<LibraryArtifact & { artifactType: ArtifactType }>;
-  shareKey: string;
-  moreIdeaBoards?: () => Promise<void>;
-  ideaBoardLoading?: boolean;
-}
-
-function SharedArtifacts({
-  busy,
-  canEdit,
-  detail,
-  onRemove,
-  onShare,
-  setShareKey,
-  shareCandidates,
-  shareKey,
-  moreIdeaBoards,
-  ideaBoardLoading,
-}: SharedArtifactsProps) {
-  const { t, locale } = useLocale();
-  const copy = canvasSharingMessages(locale);
-  return (
-    <section className={styles.panel}>
-      <SectionHeading
-        count={detail.artifacts.length}
-        eyebrow={t("pages.groups.artifacts.eyebrow")}
-        title={t("pages.groups.artifacts.title")}
-      />
-      {canEdit ? (
-        <form className={styles.compactForm} onSubmit={onShare}>
-          <label className={styles.field}>
-            <span>{t("pages.groups.artifacts.type")}</span>
-            <select onChange={(event) => setShareKey(event.target.value)} value={shareKey}>
-              <option value="">{t("pages.groups.artifacts.choose")}</option>
-              {shareCandidates.map((artifact) => (
-                <option
-                  key={artifactKey(artifact.artifactType, artifact.id)}
-                  lang=""
-                  value={artifactKey(artifact.artifactType, artifact.id)}
-                >
-                  {artifact.artifactType === "idea_board"
-                    ? copy.ideaBoard
-                    : t(
-                        artifact.artifactType === "round"
-                          ? "pages.common.round"
-                          : "pages.common.presentation",
-                      )}{" "}
-                  · {artifact.title}
-                  {artifact.artifactType === "idea_board" || artifact.currentVersionId
-                    ? ""
-                    : ` (${t("pages.common.status.draft")})`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="button small-button"
-            disabled={busy === "share" || !shareKey}
-            type="submit"
-          >
-            {busy === "share" ? t("pages.groups.artifacts.sharing") : t("pages.groups.share")}
-          </button>
-        </form>
-      ) : null}
-      {moreIdeaBoards ? (
-        <button
-          type="button"
-          className="button-quiet small-button"
-          disabled={ideaBoardLoading}
-          onClick={() => void moreIdeaBoards()}
-        >
-          {t("boards.more")}
-        </button>
-      ) : null}
-      {detail.artifacts.length ? (
-        <div className={styles.artifactGrid}>
-          {detail.artifacts.map((artifact) => (
-            <article className={styles.artifactCard} key={artifact.id}>
-              <div
-                className={styles.artifactType}
-                data-type={artifact.artifactType}
-                aria-hidden="true"
-              >
-                {artifact.artifactType === "round"
-                  ? "R"
-                  : artifact.artifactType === "presentation"
-                    ? "P"
-                    : "B"}
-              </div>
-              <div className={styles.artifactCopy}>
-                <div className={styles.inlineMeta}>
-                  <span>
-                    {artifact.artifactType === "idea_board"
-                      ? copy.ideaBoard
-                      : t(
-                          artifact.artifactType === "round"
-                            ? "pages.common.round"
-                            : "pages.common.presentation",
-                        )}
-                  </span>
-                  <span className={styles.statusBadge} data-status={artifact.status}>
-                    {artifact.artifactType === "idea_board"
-                      ? t(
-                          `boards.${artifact.status as "draft" | "collecting" | "voting" | "closed"}`,
-                        )
-                      : t(
-                          `pages.common.status.${artifact.status as "draft" | "published" | "archived"}`,
-                        )}
-                  </span>
-                </div>
-                <h3 lang="">{artifact.title}</h3>
-                <div className={styles.cardActions}>
-                  <Link className="button-quiet small-button" href={artifact.editHref}>
-                    {canEdit ? t("pages.library.edit") : t("pages.library.view")}
-                  </Link>
-                  {canEdit && artifact.artifactType !== "idea_board" && artifact.published ? (
-                    <Link className="button small-button" href={artifact.hostHref}>
-                      {t("pages.library.host")}
-                    </Link>
-                  ) : null}
-                  {canEdit &&
-                  artifact.artifactType !== "idea_board" &&
-                  artifact.published &&
-                  artifact.assignHref ? (
-                    <Link className="button-quiet small-button" href={artifact.assignHref}>
-                      {t("pages.library.assign")}
-                    </Link>
-                  ) : null}
-                  {canEdit ? (
-                    <button
-                      className={styles.removeButton}
-                      disabled={busy === `remove:${artifact.id}`}
-                      onClick={() => void onRemove(artifact)}
-                      type="button"
-                    >
-                      {t("pages.groups.remove")}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <PanelEmpty
-          strong={t("pages.groups.artifacts.emptyTitle")}
-          text={t("pages.groups.artifacts.emptyDescription")}
-        />
-      )}
-    </section>
-  );
-}
-
-function GroupCanvasBoards({ boards }: { boards: NonNullable<GroupDetail["canvasBoards"]> }) {
-  const { locale, t } = useLocale();
-  const copy = canvasSharingMessages(locale);
-  return (
-    <section className={styles.panel} aria-label={copy.canvasBoards}>
-      <SectionHeading
-        count={boards.length}
-        eyebrow={t("pages.groups.facilitatorGroup")}
-        title={copy.canvasBoards}
-      />
-      <div className={styles.canvasBoardGrid}>
-        {boards.map((board) => (
-          <article key={board.id} className={styles.canvasBoardCard}>
-            <p className={styles.inlineMeta}>
-              <span>{t(board.boardType === "team" ? "canvas.team" : "canvas.workshop")}</span>
-              <span>{t(board.role === "owner" ? "role.owner" : `canvas.${board.role}`)}</span>
-            </p>
-            <h3 lang="">{board.title}</h3>
-            <p className={styles.helpText}>
-              {t("canvas.retention", { date: formatDateTime(locale, board.expiresAt) })}
-            </p>
-            <Link className="button-quiet small-button" href={`/canvas/${board.id}`}>
-              {copy.openBoard}
-            </Link>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MembersPanel({
-  busy,
-  canManageMembers,
-  detail,
-  memberId,
-  onAdd,
-  setMemberId,
-}: {
-  busy: string;
-  canManageMembers: boolean;
-  detail: GroupDetail;
-  memberId: string;
-  onAdd: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  setMemberId: (value: string) => void;
-}) {
-  const { t } = useLocale();
-  return (
-    <section className={styles.panel}>
-      <SectionHeading
-        count={detail.members.length}
-        eyebrow={t("pages.groups.membersEyebrow")}
-        title={t("pages.groups.members")}
-      />
-      {canManageMembers && detail.availableMembers.length ? (
-        <form className={styles.compactForm} onSubmit={onAdd}>
-          <label className={styles.field}>
-            <span>{t("pages.groups.workspaceMember")}</span>
-            <select onChange={(event) => setMemberId(event.target.value)} value={memberId}>
-              <option value="">{t("pages.groups.chooseMember")}</option>
-              {detail.availableMembers.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {member.email} · {member.role}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="button small-button"
-            disabled={busy === "member" || !memberId}
-            type="submit"
-          >
-            {busy === "member" ? t("pages.groups.adding") : t("pages.groups.add")}
-          </button>
-        </form>
-      ) : null}
-      <ul className={styles.memberList}>
-        {detail.members.map((member) => (
-          <li key={member.userId}>
-            <span className={styles.avatar} aria-hidden="true">
-              {member.email.charAt(0).toUpperCase()}
-            </span>
-            <span>
-              <strong>{member.email}</strong>
-              <small>
-                {member.workspaceRole
-                  ? t(`pages.groups.role.${member.workspaceRole}`)
-                  : t("pages.groups.formerMember")}
-              </small>
-            </span>
-            <span className={styles.roleBadge}>{t(`pages.groups.role.${member.role}`)}</span>
-          </li>
-        ))}
-      </ul>
-      {canManageMembers && !detail.availableMembers.length ? (
-        <p className={styles.helpText}>{t("pages.groups.allMembersAdded")}</p>
-      ) : null}
-    </section>
-  );
-}
-
-function DiscussionPanel({
-  busy,
-  detail,
-  messageBody,
-  onPost,
-  setMessageBody,
-}: {
-  busy: string;
-  detail: GroupDetail;
-  messageBody: string;
-  onPost: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  setMessageBody: (value: string) => void;
-}) {
-  const { locale, t } = useLocale();
-  return (
-    <section className={styles.panel}>
-      <SectionHeading
-        count={detail.messages.length}
-        eyebrow={t("pages.groups.discussion.eyebrow")}
-        title={t("pages.groups.discussion.title")}
-      />
-      <form className={styles.messageForm} onSubmit={onPost}>
-        <label className={styles.field}>
-          <span>{t("pages.groups.discussion.postLabel")}</span>
-          <textarea
-            lang={messageBody ? "" : locale}
-            maxLength={2000}
-            onChange={(event) => setMessageBody(event.target.value)}
-            placeholder={t("pages.groups.discussion.placeholder")}
-            rows={3}
-            value={messageBody}
-          />
-        </label>
-        <button
-          className="button small-button"
-          disabled={busy === "message" || !messageBody.trim()}
-          type="submit"
-        >
-          {busy === "message"
-            ? t("pages.groups.discussion.posting")
-            : t("pages.groups.discussion.post")}
-        </button>
-      </form>
-      {detail.messages.length ? (
-        <ol className={styles.messageList}>
-          {detail.messages.map((message) => (
-            <li key={message.id}>
-              <div>
-                <strong>{message.authorEmail}</strong>
-                <time dateTime={message.createdAt} lang={locale}>
-                  {formatDateTime(locale, message.createdAt)}
-                </time>
-              </div>
-              <p lang="">{message.body}</p>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className={styles.helpText}>{t("pages.groups.discussion.empty")}</p>
-      )}
-    </section>
-  );
-}
-
-interface SchedulePanelProps {
-  busy: string;
-  canEdit: boolean;
-  detail: GroupDetail;
-  onSchedule: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  scheduledArtifact: GroupArtifact | undefined;
-  scheduledFor: string;
-  scheduleKey: string;
-  scheduleKind: "live_session" | "round_assignment";
-  scheduleNote: string;
-  setScheduledFor: (value: string) => void;
-  setScheduleKey: (value: string) => void;
-  setScheduleKind: (value: "live_session" | "round_assignment") => void;
-  setScheduleNote: (value: string) => void;
-}
-
-function SchedulePanel({
-  busy,
-  canEdit,
-  detail,
-  onSchedule,
-  scheduledArtifact,
-  scheduledFor,
-  scheduleKey,
-  scheduleKind,
-  scheduleNote,
-  setScheduledFor,
-  setScheduleKey,
-  setScheduleKind,
-  setScheduleNote,
-}: SchedulePanelProps) {
-  const { locale, t } = useLocale();
-  return (
-    <section className={styles.panel}>
-      <SectionHeading
-        count={detail.schedule.length}
-        eyebrow={t("pages.groups.schedule.eyebrow")}
-        title={t("pages.groups.schedule.title")}
-      />
-      {canEdit ? (
-        detail.artifacts.some(
-          (artifact) => artifact.artifactType !== "idea_board" && artifact.published,
-        ) ? (
-          <form className={styles.scheduleForm} onSubmit={onSchedule}>
-            <label className={styles.field}>
-              <span>{t("pages.groups.schedule.publishedArtifact")}</span>
-              <select
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setScheduleKey(next);
-                  if (readArtifactKey(next)?.artifactType === "presentation") {
-                    setScheduleKind("live_session");
-                  }
-                }}
-                value={scheduleKey}
-              >
-                <option value="">{t("pages.groups.schedule.chooseArtifact")}</option>
-                {detail.artifacts
-                  .filter(
-                    (artifact) => artifact.artifactType !== "idea_board" && artifact.published,
-                  )
-                  .map((artifact) => (
-                    <option
-                      key={artifactKey(artifact.artifactType, artifact.artifactId)}
-                      lang=""
-                      value={artifactKey(artifact.artifactType, artifact.artifactId)}
-                    >
-                      {t(
-                        artifact.artifactType === "round"
-                          ? "pages.common.round"
-                          : "pages.common.presentation",
-                      )}{" "}
-                      · {artifact.title}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>{t("pages.groups.schedule.activity")}</span>
-              <select
-                disabled={scheduledArtifact?.artifactType === "presentation"}
-                onChange={(event) =>
-                  setScheduleKind(event.target.value as "live_session" | "round_assignment")
-                }
-                value={
-                  scheduledArtifact?.artifactType === "presentation" ? "live_session" : scheduleKind
-                }
-              >
-                <option value="live_session">{t("pages.common.liveSession")}</option>
-                {scheduledArtifact?.artifactType !== "presentation" ? (
-                  <option value="round_assignment">{t("pages.common.roundAssignment")}</option>
-                ) : null}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>{t("pages.groups.schedule.dateTime")}</span>
-              <input
-                lang={scheduleNote ? "" : locale}
-                onChange={(event) => setScheduledFor(event.target.value)}
-                required
-                type="datetime-local"
-                value={scheduledFor}
-              />
-            </label>
-            <label className={styles.field}>
-              <span>{t("pages.groups.schedule.note")}</span>
-              <input
-                maxLength={500}
-                onChange={(event) => setScheduleNote(event.target.value)}
-                placeholder={t("pages.groups.schedule.notePlaceholder")}
-                value={scheduleNote}
-              />
-            </label>
-            <button
-              className="button small-button"
-              disabled={busy === "schedule" || !scheduleKey || !scheduledFor}
-              type="submit"
-            >
-              {busy === "schedule"
-                ? t("pages.groups.schedule.scheduling")
-                : t("pages.groups.schedule.add")}
-            </button>
-          </form>
-        ) : (
-          <p className={styles.helpText}>{t("pages.groups.schedule.publishFirst")}</p>
-        )
-      ) : null}
-      {detail.schedule.length ? (
-        <div className={styles.scheduleList}>
-          {detail.schedule.map((item) => {
-            const artifact = detail.artifacts.find(
-              (candidate) =>
-                candidate.artifactType === item.artifactType &&
-                candidate.artifactId === item.artifactId,
-            );
-            const actionHref =
-              item.kind === "round_assignment" ? artifact?.assignHref : artifact?.hostHref;
-            return (
-              <article className={styles.scheduleCard} key={item.id}>
-                <time dateTime={item.scheduledFor}>
-                  <strong>{formatDateTime(locale, item.scheduledFor)}</strong>
-                  <span>
-                    {new Date(item.scheduledFor) < new Date()
-                      ? t("pages.groups.schedule.past")
-                      : t("pages.common.upcoming")}
-                  </span>
-                </time>
-                <div>
-                  <p className={styles.inlineMeta}>
-                    <span>
-                      {item.kind === "live_session"
-                        ? t("pages.common.liveSession")
-                        : t("pages.results.assignment")}
-                    </span>
-                    <span>
-                      {t(
-                        item.artifactType === "round"
-                          ? "pages.common.round"
-                          : "pages.common.presentation",
-                      )}
-                    </span>
-                  </p>
-                  <h3 lang="">{item.artifactTitle}</h3>
-                  {item.note ? <p lang="">{item.note}</p> : null}
-                </div>
-                {actionHref && canEdit ? (
-                  <Link className="button-quiet small-button" href={actionHref}>
-                    {item.kind === "live_session"
-                      ? t("pages.groups.schedule.openHost")
-                      : t("pages.groups.schedule.openAssignment")}
-                  </Link>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <PanelEmpty
-          strong={t("pages.groups.schedule.emptyTitle")}
-          text={t("pages.groups.schedule.emptyDescription")}
-        />
-      )}
-    </section>
-  );
-}
-
-function SectionHeading({
-  count,
-  eyebrow,
-  title,
-}: {
-  count: number;
-  eyebrow: string;
-  title: string;
-}) {
-  return (
-    <div className={styles.sectionHeading}>
-      <div>
-        <p className={styles.eyebrow}>{eyebrow}</p>
-        <h2>{title}</h2>
-      </div>
-      <span className={styles.sectionCount}>{count}</span>
-    </div>
-  );
-}
-
-function PanelEmpty({ strong, text }: { strong: string; text: string }) {
-  return (
-    <div className={styles.panelEmpty}>
-      <strong>{strong}</strong>
-      <span>{text}</span>
-    </div>
   );
 }
 
@@ -1230,7 +1369,6 @@ export default function GroupsPage() {
     </WorkspaceProvider>
   );
 }
-
 function GroupsContext() {
   const { creator } = useWorkspace();
   return <GroupsContent key={`${creator?.userId}:${creator?.workspaceId}`} />;

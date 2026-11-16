@@ -249,6 +249,8 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  deleteLibraryShareMetadata?(shareId: string): void;
+  deleteOrganizationGroupMembership?(organizationId: string, userId: string): (() => void) | void;
   activePresentationAssistanceJobs?(workspaceId: string, now: Date): number;
   deleteCollaborationGroupMetadata?(groupId: string): void;
   deleteCanvasBoardMetadata?(boardId: string): void;
@@ -545,6 +547,20 @@ export class MemoryRepository implements Repository {
   deleteCollaborationGroupMetadata(groupId: string) {
     for (const { lifecycle } of this.lifecycleExtensions.values())
       lifecycle.deleteCollaborationGroupMetadata?.(groupId);
+  }
+  deleteOrganizationGroupMembership(organizationId: string, userId: string) {
+    const undo: Array<() => void> = [];
+    for (const { lifecycle } of this.lifecycleExtensions.values()) {
+      const rollback = lifecycle.deleteOrganizationGroupMembership?.(organizationId, userId);
+      if (rollback) undo.push(rollback);
+    }
+    return () => {
+      for (const rollback of undo.reverse()) rollback();
+    };
+  }
+  deleteLibraryShareMetadata(shareId: string) {
+    for (const { lifecycle } of this.lifecycleExtensions.values())
+      lifecycle.deleteLibraryShareMetadata?.(shareId);
   }
   deleteCanvasBoardMetadata(boardId: string) {
     for (const { lifecycle } of this.lifecycleExtensions.values())

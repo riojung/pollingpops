@@ -55,11 +55,19 @@ describe("Groups workspace", () => {
     fixtures.canEdit = true;
   });
 
-  it("presents a professional collaboration workspace with creation and selection", () => {
+  it("presents scope, purpose, role and lifecycle discovery before loading private details", () => {
     const markup = renderToStaticMarkup(withEnglishLocale(<GroupsPage />));
 
     expect(markup).toContain("Groups");
-    expect(markup).toContain("Create group");
+    expect(markup).toContain("All groups");
+    expect(markup).toContain("My workspace");
+    expect(markup).toContain("Organization");
+    expect(markup).toContain("Purpose");
+    expect(markup).toContain("My access");
+    expect(markup).toContain("Status");
+    expect(markup).toContain("Sort by");
+    expect(markup).not.toContain("Create group");
+    expect(markup).not.toContain("<dialog");
     expect(markup).toContain('placeholder="Search groups"');
     expect(markup).toContain('aria-label="Workspace groups"');
     expect(markup).toContain("Loading groups");
@@ -69,7 +77,7 @@ describe("Groups workspace", () => {
     fixtures.canEdit = false;
     const markup = renderToStaticMarkup(withEnglishLocale(<GroupsPage />));
 
-    expect(markup).toContain("Facilitator collaboration");
+    expect(markup).toContain("People &amp; collaboration");
     expect(markup).toContain('placeholder="Search groups"');
     expect(markup).not.toContain("Create group");
   });

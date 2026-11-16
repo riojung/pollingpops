@@ -844,6 +844,7 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
         row.artifactId === artifactId
       ) {
         this.shares.delete(id);
+        this.repository.deleteLibraryShareMetadata(id);
         for (const key of this.statuses.keys())
           if (key.startsWith(`${id}:`)) this.statuses.delete(key);
       }
@@ -872,8 +873,10 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
   }
   deleteAccount({ userId, ownedWorkspaceIds }: MemoryRepositoryLifecycleContext) {
     for (const [id, row] of this.shares) {
-      if (ownedWorkspaceIds.has(row.sourceWorkspaceId)) this.shares.delete(id);
-      else {
+      if (ownedWorkspaceIds.has(row.sourceWorkspaceId)) {
+        this.shares.delete(id);
+        this.repository.deleteLibraryShareMetadata(id);
+      } else {
         if (row.createdBy === userId) row.createdBy = null;
         row.recipientIds = row.recipientIds.filter((id) => id !== userId);
       }

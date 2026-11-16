@@ -25,6 +25,8 @@ function mapGroup(row: QueryResultRow): CollaborationGroupRecord {
     workspaceId: String(row.workspace_id),
     name: String(row.name),
     description: String(row.description),
+    purpose: row.purpose ?? "team",
+    status: row.status ?? "active",
     createdBy: String(row.created_by),
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(String(row.created_at)),
     updatedAt: row.updated_at instanceof Date ? row.updated_at : new Date(String(row.updated_at)),
@@ -206,7 +208,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   async createGroup(group: CollaborationGroupRecord, owner: CollaborationGroupMemberRecord) {
-    this.groups.set(group.id, clone(group));
+    this.groups.set(group.id, clone({ purpose: "team", status: "active", ...group }));
     this.members.set(`${owner.groupId}:${owner.userId}`, clone(owner));
     return clone(group);
   }
@@ -214,6 +216,53 @@ export class MemoryCollaborationGroupRepository
   async getGroup(workspaceId: string, groupId: string) {
     const group = this.groups.get(groupId);
     return group?.workspaceId === workspaceId ? clone(group) : null;
+  }
+
+  async updateGroup(
+    workspaceId: string,
+    groupId: string,
+    update: Partial<Pick<CollaborationGroupRecord, "name" | "description" | "purpose" | "status">>,
+  ) {
+    const group = this.groups.get(groupId);
+    if (!group || group.workspaceId !== workspaceId) return null;
+    if (
+      group.status === "archived" &&
+      !(update.status === "active" && Object.keys(update).length === 1)
+    )
+      throw new Error("Restore this group before making changes");
+    Object.assign(group, update, { updatedAt: new Date() });
+    return clone(group);
+  }
+
+  async changeMember(
+    workspaceId: string,
+    groupId: string,
+    userId: string,
+    role: "owner" | "member" | null,
+  ) {
+    const group = this.groups.get(groupId);
+    if (!group || group.workspaceId !== workspaceId) return false;
+    this.touch(groupId);
+    const key = `${groupId}:${userId}`;
+    const member = this.members.get(key);
+    if (!member) return false;
+    if (
+      member.role === "owner" &&
+      role !== "owner" &&
+      ![...this.members.values()].some(
+        (other) => other.groupId === groupId && other.userId !== userId && other.role === "owner",
+      )
+    )
+      throw new Error("A group must keep at least one owner");
+    if (role === null) this.members.delete(key);
+    else member.role = role;
+    return true;
+  }
+
+  private touch(groupId: string) {
+    const group = this.groups.get(groupId);
+    if (group?.status === "archived") throw new Error("Archived groups are read-only");
+    if (group) group.updatedAt = new Date();
   }
 
   async listMembers(groupId: string) {
@@ -224,6 +273,9 @@ export class MemoryCollaborationGroupRepository
   }
 
   async addMember(member: CollaborationGroupMemberRecord) {
+    this.touch(member.groupId);
+    const existing = this.members.get(`${member.groupId}:${member.userId}`);
+    if (existing) return clone(existing);
     this.members.set(`${member.groupId}:${member.userId}`, clone(member));
     return clone(member);
   }
@@ -236,6 +288,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   async addArtifact(artifact: CollaborationGroupArtifactRecord) {
+    this.touch(artifact.groupId);
     if (
       artifact.artifactType === "idea_board" &&
       this.repository?.isIdeaBoardDeleted?.(artifact.artifactId)
@@ -262,6 +315,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   async removeArtifact(workspaceId: string, groupId: string, artifactId: string) {
+    this.touch(groupId);
     const artifact = this.artifacts.get(artifactId);
     if (!artifact || artifact.workspaceId !== workspaceId || artifact.groupId !== groupId)
       return false;
@@ -277,6 +331,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   async addMessage(message: CollaborationGroupMessageRecord) {
+    this.touch(message.groupId);
     this.messages.set(message.id, clone(message));
     return clone(message);
   }
@@ -289,6 +344,7 @@ export class MemoryCollaborationGroupRepository
   }
 
   async addSchedule(item: CollaborationGroupScheduleRecord) {
+    this.touch(item.groupId);
     if (
       this.repository?.isLibraryArtifactDeleted(
         item.workspaceId,
@@ -345,8 +401,8 @@ export class PostgresCollaborationGroupRepository implements CollaborationGroupR
     return this.transaction(group.workspaceId, async (client) => {
       const created = await client.query(
         `INSERT INTO collaboration_groups
-          (id, workspace_id, name, description, created_by, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          (id, workspace_id, name, description, created_by, created_at, updated_at, purpose, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
         [
           group.id,
           group.workspaceId,
@@ -355,6 +411,8 @@ export class PostgresCollaborationGroupRepository implements CollaborationGroupR
           group.createdBy,
           group.createdAt,
           group.updatedAt,
+          group.purpose ?? "team",
+          group.status ?? "active",
         ],
       );
       await client.query(
@@ -386,12 +444,72 @@ export class PostgresCollaborationGroupRepository implements CollaborationGroupR
     });
   }
 
+  async updateGroup(
+    workspaceId: string,
+    groupId: string,
+    update: Partial<Pick<CollaborationGroupRecord, "name" | "description" | "purpose" | "status">>,
+  ) {
+    return this.transaction(workspaceId, async (client) => {
+      const result = await client.query(
+        `UPDATE collaboration_groups SET name=coalesce($3,name),description=coalesce($4,description),purpose=coalesce($5,purpose),status=coalesce($6,status),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING *`,
+        [
+          workspaceId,
+          groupId,
+          update.name ?? null,
+          update.description ?? null,
+          update.purpose ?? null,
+          update.status ?? null,
+        ],
+      );
+      return result.rows[0] ? mapGroup(result.rows[0]) : null;
+    });
+  }
+
+  async changeMember(
+    workspaceId: string,
+    groupId: string,
+    userId: string,
+    role: "owner" | "member" | null,
+  ) {
+    return this.transaction(workspaceId, async (client) => {
+      const group = await client.query(
+        "SELECT status FROM collaboration_groups WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
+        [workspaceId, groupId],
+      );
+      if (!group.rows[0]) return false;
+      if (group.rows[0].status === "archived") throw new Error("Archived groups are read-only");
+      const members = await client.query(
+        "SELECT user_id,role FROM collaboration_group_members WHERE group_id=$1",
+        [groupId],
+      );
+      const member = members.rows.find((row) => row.user_id === userId);
+      if (!member) return false;
+      if (
+        member.role === "owner" &&
+        role !== "owner" &&
+        !members.rows.some((row) => row.user_id !== userId && row.role === "owner")
+      )
+        throw new Error("A group must keep at least one owner");
+      if (role === null)
+        await client.query(
+          "DELETE FROM collaboration_group_members WHERE group_id=$1 AND user_id=$2",
+          [groupId, userId],
+        );
+      else
+        await client.query(
+          "UPDATE collaboration_group_members SET role=$3 WHERE group_id=$1 AND user_id=$2",
+          [groupId, userId, role],
+        );
+      return true;
+    });
+  }
+
   async addMember(member: CollaborationGroupMemberRecord) {
     return this.transaction(member.workspaceId, async (client) => {
       const result = await client.query(
         `INSERT INTO collaboration_group_members
           (workspace_id, group_id, user_id, role, joined_at) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role RETURNING *`,
+         ON CONFLICT (group_id, user_id) DO UPDATE SET role = collaboration_group_members.role RETURNING *`,
         [member.workspaceId, member.groupId, member.userId, member.role, member.joinedAt],
       );
       return mapMember(result.rows[0]!);

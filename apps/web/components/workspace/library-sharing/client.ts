@@ -64,8 +64,10 @@ export async function listLibraryShares(
   scope: SharedLibraryScope,
   signal?: AbortSignal,
   cursor?: string | null,
+  organizationId?: string,
 ) {
   const query = new URLSearchParams({ scope });
+  if (organizationId) query.set("organizationId", organizationId);
   if (cursor) query.set("cursor", cursor);
   return LibraryShareListSchema.parse(
     await apiFetch(`/v1/library/shares?${query}`, { signal, cache: "no-store" }),

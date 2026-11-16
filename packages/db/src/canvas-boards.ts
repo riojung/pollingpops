@@ -1982,7 +1982,7 @@ export class CanvasBoardRepository {
     notExpired(checked.state.board, instant(clock));
     return CanvasBoardSharingSchema.parse({
       groups,
-      availableGroups: await tx.sharingGroups(checked.state.board.workspaceId, actor.userId),
+      availableGroups: await tx.sharingGroups(checked.state.board.workspaceId, actor.userId, true),
       effectiveGroupIds: effective.map((grant) => grant.groupId),
     });
   }
@@ -2016,7 +2016,9 @@ export class CanvasBoardRepository {
       request,
       async (tx, state) => {
         const available = new Set(
-          (await tx.sharingGroups(state.board.workspaceId, actor.userId)).map((group) => group.id),
+          (await tx.sharingGroups(state.board.workspaceId, actor.userId, true)).map(
+            (group) => group.id,
+          ),
         );
         for (const groupId of request.groupIds)
           if (!available.has(groupId) || !(await tx.sharingGroup(state.board.workspaceId, groupId)))

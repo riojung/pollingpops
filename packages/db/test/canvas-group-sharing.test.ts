@@ -223,6 +223,31 @@ for (const backend of ["memory", "postgres"] as const)
         );
       }
 
+      it("keeps archived-group Canvas access readable and revocable while rejecting new or changed sharing", async () => {
+        const board = await create(),
+          selected = await group();
+        await join(selected.id);
+        await share(board.id, [selected.id], "viewer");
+        await groups.updateGroup(workspaceId, selected.id, { status: "archived" });
+        const sharing = await canvases.sharing(owner, board.id);
+        expect(sharing.groups).toEqual(
+          expect.arrayContaining([expect.objectContaining({ groupId: selected.id })]),
+        );
+        expect(sharing.availableGroups.some((item) => item.id === selected.id)).toBe(false);
+        await expect(share(board.id, [selected.id], "editor")).rejects.toThrow();
+        expect((await canvases.get(editor, board.id)).id).toBe(board.id);
+        expect(
+          (await canvases.groupBoards(editor, workspaceId, selected.id)).some(
+            (item) => item.id === board.id,
+          ),
+        ).toBe(true);
+        await canvases.revokeGroup(owner, board.id, selected.id, randomUUID());
+        await expect(canvases.get(editor, board.id)).rejects.toThrow();
+        await groups.updateGroup(workspaceId, selected.id, { status: "active" });
+        await share(board.id, [selected.id], "viewer");
+        expect((await canvases.get(editor, board.id)).id).toBe(board.id);
+      });
+
       it("counts and orders more than 1000 group-only Home shares before applying the recent limit", async () => {
         const original = await create(),
           selected = await group();

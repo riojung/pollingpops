@@ -11,6 +11,8 @@ import {
 import { roomEntitlements } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
+  SessionActivitySchema,
+  AuthLogoutSchema,
   RoundClientCapabilitiesQuerySchema,
   RoundResponseModerationPageSchema,
   RoundTextResponseResultsSchema,
@@ -1061,6 +1063,21 @@ export async function registerRoutes(
     };
   });
 
+  app.get("/v1/auth/session", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const session = await auth.sessionFromRequest(request);
+    if (!session) return auth.rejectUnauthenticated(request, reply);
+    return { session };
+  });
+
+  app.post("/v1/auth/session/activity", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const { intent } = SessionActivitySchema.parse(request.body);
+    const session = await auth.sessionFromRequest(request, intent);
+    if (!session) return auth.rejectUnauthenticated(request, reply);
+    return { session };
+  });
+
   app.get("/v1/auth/navigation", async (request, reply) => {
     reply.header("cache-control", "private, no-store");
     const user = await auth.userFromRequest(request);
@@ -1677,7 +1694,8 @@ export async function registerRoutes(
   });
 
   app.post("/v1/auth/logout", async (request, reply) => {
-    await auth.logout(request, reply);
+    const { expectedSessionId } = AuthLogoutSchema.parse(request.body ?? {});
+    if (!(await auth.logout(request, reply, expectedSessionId))) return;
     return { ok: true };
   });
 

@@ -34,9 +34,7 @@ export function visibleSettingsSections(
       ? permissions.managePeople
       : section === "appearance"
         ? permissions.manageWorkspace
-        : section === "security"
-          ? permissions.manageIntegrations
-          : true,
+        : true,
   );
 }
 

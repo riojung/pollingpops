@@ -24,6 +24,12 @@ export function librarySearchHref(query: string, pathname: string, search: strin
         : null;
   const params = new URLSearchParams();
   if (type) params.set("type", type);
+  const scope = new URLSearchParams(search).get("scope");
+  if (
+    pathname === "/library" &&
+    (scope === "organization" || scope === "shared" || scope === "managed")
+  )
+    params.set("scope", scope);
   if (query.trim()) params.set("q", query.trim());
   return `${sessions ? "/sessions" : "/library"}${params.size ? `?${params}` : ""}`;
 }

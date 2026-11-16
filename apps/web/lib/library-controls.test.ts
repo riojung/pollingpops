@@ -60,6 +60,26 @@ describe("Library controls", () => {
     );
     expect(librarySearchHref("", "/home", "?type=unknown")).toBe("/library");
   });
+  it("preserves the shared Library surface without forwarding private or unrelated context", () => {
+    expect(
+      librarySearchHref(
+        " workshop ",
+        "/library",
+        "?scope=shared&type=presentations&token=private&folder=hidden",
+      ),
+    ).toBe("/library?type=presentations&scope=shared&q=workshop");
+    expect(librarySearchHref("", "/library", "?scope=organization&type=surveys")).toBe(
+      "/library?type=surveys&scope=organization",
+    );
+    expect(librarySearchHref("", "/library", "?scope=managed")).toBe("/library?scope=managed");
+    expect(librarySearchHref("x", "/library", "?scope=unknown&organizationId=private")).toBe(
+      "/library?q=x",
+    );
+    expect(librarySearchHref("", "/sessions", "?scope=shared&type=presentations")).toBe(
+      "/sessions?type=presentations",
+    );
+    expect(librarySearchHref("", "/home", "?scope=shared")).toBe("/library");
+  });
   it("searches the selected Sessions type without forwarding control credentials or stale filters", () => {
     expect(
       librarySearchHref("  workshop  ", "/sessions", "?type=surveys&source=old&token=secret"),

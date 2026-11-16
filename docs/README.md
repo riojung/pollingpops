@@ -35,6 +35,10 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 | Integrate with REST or realtime interfaces                           | [API and realtime reference](api.md)                                                         |
 | Configure a gated institution pilot                                  | [Institution integration guide](institution-integrations.md)                                 |
 
+The [Organization Library and Shared with me design](organization-shared-library.md) defines
+published company content, direct distribution, access levels, independent copies and recipient
+follow-up without widening private workspace access.
+
 ## Build and operate
 
 - [Hosted business management](business-management.md) covers organization billing, workspace

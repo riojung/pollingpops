@@ -68,3 +68,4 @@ export * from "./presentation-assignments.js";
 
 export * from "./presentation-practice-types.js";
 export * from "./presentation-practice.js";
+export * from "./library-sharing.js";

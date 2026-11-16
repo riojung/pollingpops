@@ -9,6 +9,10 @@ import { PresentationSlideThumbnail } from "../../components/presentation/presen
 import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
 import type { SurveyDraft } from "@openround/contracts/surveys";
 import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
+import { LibraryScopeNavigation } from "../../components/workspace/library-sharing/scope-navigation";
+import { ShareLibraryButton } from "../../components/workspace/library-sharing/share-dialog";
+import { SharedLibrary } from "../../components/workspace/library-sharing/shared-library";
+import { libraryScope } from "../../components/workspace/library-sharing/client";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import {
@@ -113,7 +117,18 @@ function LibraryContent() {
   const flowCopy = workspaceFlowMessages(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canEdit, creator, productFeatures } = useWorkspace();
+  const { canEdit, creator, workspace, management, productFeatures } = useWorkspace();
+  const hasOrganizationLibrary = Boolean(
+    workspace?.organization ||
+    management?.organizations.some((organization) => organization.role !== "billing"),
+  );
+  const canManageShares = Boolean(
+    (workspace?.organization && canEdit) ||
+    management?.organizations.some(
+      (organization) => organization.role === "owner" || organization.role === "admin",
+    ),
+  );
+  const scope = libraryScope(searchParams.get("scope"));
   const workspaceId = creator?.workspaceId ?? "";
   const canDelete = creator?.role === "owner";
   const presentationsEnabled = productFeatures?.presentations === true;
@@ -163,6 +178,11 @@ function LibraryContent() {
   const refresh = useCallback(async () => {
     if (!mounted.current) return;
     const sequence = ++refreshSequence.current;
+    if (scope !== "workspace") {
+      setLoading(false);
+      setLoadedWorkspaceId(workspaceId);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -232,7 +252,7 @@ function LibraryContent() {
     } finally {
       if (sequence === refreshSequence.current) setLoading(false);
     }
-  }, [presentationsEnabled, router, workspaceId]);
+  }, [presentationsEnabled, router, scope, workspaceId]);
   const refreshCurrent = useRef(refresh);
   refreshCurrent.current = refresh;
 
@@ -299,6 +319,12 @@ function LibraryContent() {
     if (!creator?.workspaceId) return;
     setView(readRoundLibraryView(window.localStorage, creator.workspaceId));
   }, [creator?.workspaceId]);
+
+  useEffect(() => {
+    ++selectionSequence.current;
+    setSelectedIds(new Set());
+    setAnnouncement("");
+  }, [scope]);
 
   useEffect(() => {
     const available = new Set(
@@ -669,6 +695,22 @@ function LibraryContent() {
     }
   }
 
+  if (scope !== "workspace") {
+    return (
+      <SharedLibrary
+        scope={scope}
+        query={searchParams.get("q") ?? ""}
+        type={
+          requestedType === "surveys"
+            ? "surveys"
+            : requestedType === "presentations"
+              ? "presentations"
+              : "rounds"
+        }
+      />
+    );
+  }
+
   return (
     <WorkspaceShell
       actions={
@@ -700,6 +742,12 @@ function LibraryContent() {
       title={t("page.library.title")}
       translationLevel="full"
     >
+      <LibraryScopeNavigation
+        scope="workspace"
+        type={type}
+        organization={hasOrganizationLibrary}
+        canManage={canManageShares}
+      />
       <div className={styles.toolbar}>
         <div
           className={styles.tabs}
@@ -1114,6 +1162,19 @@ function LibraryContent() {
                             {t("pages.library.host")}
                           </Link>
                         ) : null}
+                        {round.status === "published" &&
+                        round.currentVersionId &&
+                        canEdit &&
+                        workspace?.organization ? (
+                          <ShareLibraryButton
+                            source={{
+                              artifactType: "round",
+                              artifactId: round.id,
+                              versionId: round.currentVersionId,
+                              title: round.title,
+                            }}
+                          />
+                        ) : null}
                         {round.currentVersionId && canEdit && !archived ? (
                           <Link
                             className={`button-quiet small-button ${signals.action}`}
@@ -1298,6 +1359,19 @@ function LibraryContent() {
                               {t("pages.library.host")}
                             </Link>
                           ) : null}
+                          {presentation.status === "published" &&
+                          presentation.currentVersionId &&
+                          canEdit &&
+                          workspace?.organization ? (
+                            <ShareLibraryButton
+                              source={{
+                                artifactType: "presentation",
+                                artifactId: presentation.id,
+                                versionId: presentation.currentVersionId,
+                                title: presentation.title,
+                              }}
+                            />
+                          ) : null}
                           {canEdit ? (
                             <details className={styles.moreMenu}>
                               <summary>{t("pages.library.more")}</summary>
@@ -1378,6 +1452,23 @@ function LibraryContent() {
                   onSelect={toggleSelection}
                   onFavorite={(id) => void toggleFavorite("survey", id)}
                   onAction={(action, id) => void runArtifactAction(action, [id])}
+                  renderSharingAction={
+                    canEdit && workspace?.organization
+                      ? (id) => {
+                          const survey = visibleSurveys.find((row) => row.id === id);
+                          return survey?.status === "published" && survey.versionId ? (
+                            <ShareLibraryButton
+                              source={{
+                                artifactType: "survey",
+                                artifactId: survey.id,
+                                versionId: survey.versionId,
+                                title: survey.title,
+                              }}
+                            />
+                          ) : null;
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <EmptyLibrary

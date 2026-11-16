@@ -1443,6 +1443,9 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 105, name: "presentation_reading_assignments" },
       { version: 106, name: "presentation_practice_assignments" },
       { version: 107, name: "presentation_motion_backgrounds" },
+      { version: 108, name: "presentation_styled_scenes" },
+      { version: 109, name: "presentation_frame_arithmetic" },
+      { version: 110, name: "workspace_idle_timeout" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -5939,7 +5942,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid({ ...document, schemaVersion: 15 }, 15)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(true);
-    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 19 }, 19)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {

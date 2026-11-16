@@ -5,6 +5,7 @@ import {
   test,
   type Browser,
   type BrowserContext,
+  type Locator,
   type Page,
   type TestInfo,
 } from "@playwright/test";
@@ -22,6 +23,11 @@ import { signInBeta } from "./sign-in";
 test.use({ actionTimeout: 30_000 });
 
 type DeliveryFixture = Awaited<ReturnType<typeof createDeliverySession>>;
+
+async function openStageSetup(controls: Locator) {
+  const summary = controls.locator("summary").filter({ hasText: "Second-screen setup" });
+  if ((await summary.locator("..").getAttribute("open")) === null) await summary.click();
+}
 
 function deliverySlide(title: string, notes: string): ContentSlideDraft {
   return {
@@ -75,7 +81,20 @@ async function createDeliverySession(page: Page) {
       mediaAlt: null,
     },
   };
-  const record = await createE01Deck(page, [slides[0]!, hidden, ...slides.slice(1), question], 6);
+  let record = await createE01Deck(page, [slides[0]!, hidden, ...slides.slice(1), question], 6);
+  const titled = await page.request.put(`${e01ApiUrl}/v1/presentations/${record.id}/draft`, {
+    data: {
+      draft: {
+        ...record.draft,
+        title: "Delivery rehearsal: a clear plan for the next release",
+      },
+      expectedRevision: record.draftRevision,
+      mutationId: randomUUID(),
+      schemaVersion: 2,
+    },
+  });
+  expect(titled.status()).toBe(200);
+  record = (await titled.json()).presentation;
   const published = await page.request.post(`${e01ApiUrl}/v1/presentations/${record.id}/publish`, {
     data: { expectedDraftRevision: record.draftRevision },
   });
@@ -170,6 +189,20 @@ async function expectAudienceSafe(page: Page) {
   ).toHaveCount(0);
 }
 
+async function expectCompactPage(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+    .toBe(true);
+}
+
+async function expectWorkspaceHeading(page: Page, name: string) {
+  const heading = page.getByRole("heading", { name, exact: true, level: 1 });
+  await expect(heading).toBeVisible();
+  expect(
+    await heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+  ).toBeLessThanOrEqual(40);
+}
+
 function annotateDeliveryEmulation(testInfo: TestInfo, description: string) {
   testInfo.annotations.push({
     type: "emulation",
@@ -190,10 +223,36 @@ for (const suffix of ["", " @mobile"]) {
         moderationReads.push(request.method());
     });
     const fixture = await createDeliverySession(page);
+    await page.goto(`/presentation/${fixture.record.id}/host`);
+    await expectWorkspaceHeading(page, fixture.record.draft.title);
+    await expectCompactPage(page);
+    await page.screenshot({ scale: "css", path: testInfo.outputPath("presentation-setup.png") });
     const audienceContext = await deliveryContext(browser, page, testInfo);
     try {
       const audience = await joinDeliveryAudience(audienceContext, fixture);
       await page.goto(`/presentation-session/${fixture.sessionId}/host`);
+      await expect(
+        page.getByRole("button", { name: "Start Presentation", exact: true }),
+      ).toBeInViewport({ ratio: 1 });
+      const joinToggle = page.locator("summary").filter({ hasText: fixture.code });
+      await joinToggle.click();
+      const hostJoin = page.getByRole("region", { name: "Join this Presentation", exact: true });
+      await expect(hostJoin).toBeVisible();
+      expect(
+        await hostJoin.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+      ).toBe(true);
+      const codeBounds = await hostJoin.getByText(fixture.code, { exact: true }).boundingBox();
+      const copyBounds = await hostJoin
+        .getByRole("button", { name: "Copy join link", exact: true })
+        .boundingBox();
+      expect(codeBounds).not.toBeNull();
+      expect(copyBounds).not.toBeNull();
+      expect(
+        codeBounds!.x + codeBounds!.width <= copyBounds!.x + 1 ||
+          codeBounds!.y + codeBounds!.height <= copyBounds!.y + 1 ||
+          copyBounds!.y + copyBounds!.height <= codeBounds!.y + 1,
+      ).toBe(true);
+      await joinToggle.click();
       await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
       const current = page.getByRole("region", { name: "Current slide", exact: true });
       const notes = page.getByRole("region", { name: "Private speaker notes", exact: true });
@@ -210,9 +269,19 @@ for (const suffix of ["", " @mobile"]) {
       await expect(audience.getByText(firstTitle.text, { exact: true })).toBeVisible();
       await expectAudienceSafe(audience);
       await participantSnapshot(audience, fixture);
+      await expectCompactPage(page);
+      await expectCompactPage(audience);
+      await expect(page.getByRole("button", { name: "Next block", exact: true })).toBeInViewport({
+        ratio: 1,
+      });
+      await audience.screenshot({
+        scale: "css",
+        path: testInfo.outputPath("presentation-participant.png"),
+        fullPage: true,
+      });
 
       const stageCreated = page.context().waitForEvent("page");
-      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
       const stage = await stageCreated;
       try {
         await stage.setViewportSize(testInfo.project.use.viewport ?? { width: 1280, height: 720 });
@@ -223,6 +292,7 @@ for (const suffix of ["", " @mobile"]) {
         );
         await expect(stage.getByText(secondTitle.text, { exact: true })).toHaveCount(0);
         await expectAudienceSafe(stage);
+        await expectCompactPage(stage);
         expect(
           await stage.evaluate(() =>
             Object.keys(sessionStorage).some((key) =>
@@ -334,6 +404,37 @@ for (const suffix of ["", " @mobile"]) {
           page.getByRole("region", { name: "Text response moderation", exact: true }),
         ).toHaveCount(0);
         expect(moderationReads).toEqual([]);
+        await page.getByRole("button", { name: "Finish Presentation", exact: true }).click();
+        await page.goto(`/presentation-session/${fixture.sessionId}/report`);
+        await expectWorkspaceHeading(page, fixture.record.draft.title);
+        await expect(
+          page.getByRole("button", { name: "Share summary", exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("region", { name: "Session insights", exact: true }).getByRole("button", {
+            name: "Export coverage CSV",
+            exact: true,
+          }),
+        ).toBeEnabled();
+        await expectCompactPage(page);
+        await page.screenshot({
+          scale: "css",
+          path: testInfo.outputPath("presentation-report.png"),
+          fullPage: true,
+        });
+        await page.getByRole("button", { name: "Share summary", exact: true }).click();
+        const summary = page.getByRole("dialog", { name: "Share summary", exact: true });
+        await expect(summary).toBeVisible();
+        await expect(summary.getByRole("button", { name: "Close", exact: true })).toBeInViewport({
+          ratio: 1,
+        });
+        await expectCompactPage(page);
+        expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+        await page.screenshot({
+          scale: "css",
+          path: testInfo.outputPath("presentation-summary.png"),
+        });
+        await summary.getByRole("button", { name: "Close", exact: true }).click();
       } finally {
         await stage.close();
       }
@@ -604,7 +705,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.evaluate(() => {
       window.open = () => null;
     });
-    await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+    await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
     const controls = page.getByRole("region", { name: "Audience stage controls", exact: true });
     await expect(controls.getByRole("status")).toContainText("blocked");
     const fallback = controls.getByRole("link", {
@@ -613,6 +714,7 @@ for (const suffix of ["", " @mobile"]) {
     });
     await expect(fallback).toHaveAttribute("rel", /noopener/);
     await page.context().addInitScript(() => {
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
       Object.defineProperty(Element.prototype, "requestFullscreen", {
         configurable: true,
         value: () =>
@@ -641,6 +743,7 @@ for (const suffix of ["", " @mobile"]) {
         "continue presenting in this tab",
       );
       await expect(stage.getByText(firstTitle.text, { exact: true })).toBeVisible();
+      await stage.getByRole("button", { name: "Exit slide-only view", exact: true }).click();
       const joinAccess = stage.getByRole("region", { name: "Join this Presentation", exact: true });
       await expect(joinAccess).toContainText(fixture.code);
       await expect(joinAccess).toBeInViewport({ ratio: 1 });
@@ -716,7 +819,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
       );
-      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
       const firstResponse = await firstCreated;
       expect(firstResponse.status()).toBe(201);
       const firstPass = (await firstResponse.json()) as PresentationStagePassResponse;
@@ -728,6 +831,7 @@ for (const suffix of ["", " @mobile"]) {
         name: "Revoke audience stage access",
         exact: true,
       });
+      await openStageSetup(firstControls);
       await expect(firstRevoke).toBeEnabled();
 
       // Reuse the control pass so this test isolates stage rotation from host handoff.
@@ -749,7 +853,9 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-pass`,
       );
-      await otherHost.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await otherHost
+        .getByRole("button", { name: "Present on another screen", exact: true })
+        .click();
       const secondResponse = await secondCreated;
       expect(secondResponse.status()).toBe(201);
       const secondPass = (await secondResponse.json()) as PresentationStagePassResponse;
@@ -761,6 +867,7 @@ for (const suffix of ["", " @mobile"]) {
         name: "Revoke audience stage access",
         exact: true,
       });
+      await openStageSetup(secondControls);
       await expect(secondRevoke).toBeEnabled();
       expect(hostPassRequests).toBe(0);
       expect(
@@ -777,6 +884,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${firstPass.credentialId}`,
       );
+      await openStageSetup(firstControls);
       await firstRevoke.click();
       const staleResponse = await staleRevoked;
       expect(staleResponse.status()).toBe(409);
@@ -816,6 +924,7 @@ for (const suffix of ["", " @mobile"]) {
           new URL(response.url()).pathname ===
             `/v1/presentation-sessions/${fixture.sessionId}/stage-passes/${secondPass.credentialId}`,
       );
+      await openStageSetup(secondControls);
       await secondRevoke.click();
       expect((await currentRevoked).status()).toBe(204);
       await expect(secondRevoke).toHaveCount(0);
@@ -830,6 +939,7 @@ for (const suffix of ["", " @mobile"]) {
           })
         ).status(),
       ).toBe(401);
+      await openStageSetup(firstControls);
       await expect(firstRevoke).toBeEnabled();
       expect(
         await page.evaluate(({ key, id }) => sessionStorage.getItem(key) === id, {

@@ -11,6 +11,7 @@ import type {
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
+import { LanguageMenu } from "../../../../components/workspace/language-menu";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationCompanionLauncher } from "../../../../components/presentation-live/companion-launcher";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
@@ -26,8 +27,10 @@ import {
 } from "../../../../components/workspace/workspace-provider";
 import { recordAuthoringEvent } from "../../../../components/workspace/product-events";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
+import presenter from "../../../../components/presentation-live/presentation-presenter.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
+import { presentationWorkspaceCopy } from "../../../../lib/i18n/presentation-workspace-copy";
 import {
   createPresentationRealtimeController,
   presentationRemainingSeconds,
@@ -99,6 +102,7 @@ function advanceMessageKey(
 
 function PresentationHostContent() {
   const { locale, t } = useLocale();
+  const workspaceCopy = presentationWorkspaceCopy(locale);
   const navigationCopy = branchNavigationCopy(locale);
   const sharedCopy = companionCopy(locale);
   const { productFeatures, canEdit } = useWorkspace();
@@ -497,8 +501,10 @@ function PresentationHostContent() {
       return;
     if (
       presentationPresenterAction(event, {
+        // Language options can temporarily lose focus while their choice is saved.
+        // Keep presenter shortcuts out of the open menu for that entire interval.
         dialogOpen: !!document.querySelector(
-          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]',
+          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"], header details[open]',
         ),
       }) !== "advance"
     )
@@ -513,26 +519,38 @@ function PresentationHostContent() {
   }, []);
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <header className={styles.topbar}>
         <CreatorBrand productFeatures={productFeatures} />
-        <div className="button-row">
+        <div className={`button-row ${presenter.headerActions}`}>
+          <p aria-live="polite" className={presenter.headerStatus} role="status">
+            {connection === "connected"
+              ? workspaceCopy("Connected")
+              : connection === "fallback"
+                ? workspaceCopy("Connected using compatibility mode")
+                : connection === "connecting"
+                  ? t("live.common.connecting")
+                  : workspaceCopy("Reconnecting…")}
+          </p>
           <Link href="/sessions">{t("live.common.sessions")}</Link>
           {snapshot?.phase === "finished" ? (
             <Link className="button small-button" href={`/presentation-session/${id}/report`}>
               {t("live.presentationSession.viewReport")}
             </Link>
           ) : null}
+          <LanguageMenu />
+          {snapshot ? (
+            <PresentationStageLauncher
+              key={id}
+              sessionId={id}
+              canEdit={canEdit}
+              finished={snapshot.phase === "finished"}
+              compact
+            />
+          ) : null}
         </div>
       </header>
       <div className={styles.stage}>
-        <p aria-live="polite" className="muted" role="status">
-          {connection === "connected"
-            ? "Connected"
-            : connection === "fallback"
-              ? "Connected using compatibility mode"
-              : "Reconnecting…"}
-        </p>
         {error ? (
           <p className="error" lang="en-CA" role="alert">
             {error}
@@ -542,10 +560,108 @@ function PresentationHostContent() {
           <section className={styles.canvas}>{t("live.presentationSession.loading")}</section>
         ) : (
           <>
-            <p className={delivery.privateNotice} lang="en-CA">
-              Private presenter workspace. Share the audience stage window with your audience.
+            <p className={delivery.privateNotice}>
+              {workspaceCopy(
+                "Private presenter workspace. Share the audience stage window with your audience.",
+              )}
             </p>
-            <div className={styles.hostGrid}>
+            <section
+              className={presenter.commandBar}
+              aria-label={workspaceCopy("Facilitation controls")}
+            >
+              <div className={presenter.commandRow}>
+                <div className={presenter.commandContext}>
+                  <h1 lang="">{snapshot.title}</h1>
+                  <p>
+                    {t("live.presentationSession.blockProgress", {
+                      current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
+                      total: formatNumber(locale, snapshot.blockCount),
+                    })}
+                  </p>
+                </div>
+                <div className={presenter.commandActions}>
+                  {snapshot.navigation ? (
+                    <button
+                      className="button-quiet full-width"
+                      type="button"
+                      lang={locale}
+                      ref={navigationButtonRef}
+                      aria-haspopup="dialog"
+                      aria-expanded={navigationOpen}
+                      onClick={(event) => {
+                        event.currentTarget.focus({ preventScroll: true });
+                        setNavigationOpen(true);
+                      }}
+                    >
+                      {sharedCopy("Open navigation")}
+                    </button>
+                  ) : null}
+                  {snapshot.phase !== "finished" ? (
+                    <button
+                      className="button full-width"
+                      disabled={
+                        busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
+                      }
+                      onClick={() => void advance()}
+                      type="button"
+                    >
+                      {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {!hasControlPass &&
+              (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
+                <div lang={locale}>
+                  <p className="muted" role="status">
+                    {commandState.pendingCommand
+                      ? navigationCopy(
+                          "Reacquire a host control pass to confirm the pending action.",
+                        )
+                      : navigationCopy(
+                          "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode.",
+                        )}
+                    {controlPassError ? <span lang="en-CA"> {controlPassError}</span> : null}
+                  </p>
+                  <button
+                    className="button-quiet full-width"
+                    disabled={busy}
+                    onClick={() => void retryControlPass()}
+                    type="button"
+                  >
+                    {navigationCopy(
+                      controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass",
+                    )}
+                  </button>
+                </div>
+              ) : null}
+              {commandState.pendingCommand ? (
+                <div lang={locale}>
+                  <p className="muted" role="status" aria-live="polite">
+                    {commandState.busy
+                      ? sharedCopy("Waiting for server confirmation…")
+                      : sharedCopy(
+                          "Action not yet confirmed. Retry to confirm the original action.",
+                        )}
+                  </p>
+                  {!commandState.busy ? (
+                    <button
+                      className="button-quiet full-width"
+                      disabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
+                      onClick={() => void retryCommand()}
+                      type="button"
+                    >
+                      {isPresentationRecoverableCommand(commandState.pendingCommand)
+                        ? branchNavigationRetryLabel(locale, commandState.pendingCommand)
+                        : commandState.pendingCommand.action === "start_recovery_card"
+                          ? sharedCopy("Retry card action acknowledgement")
+                          : sharedCopy("Retry advance acknowledgement")}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+            <div className={`${styles.hostGrid} ${presenter.hostGrid}`}>
               <div className={delivery.presenterColumn}>
                 <PresentationSpatialDelivery
                   spatial={snapshot.spatial}
@@ -561,7 +677,11 @@ function PresentationHostContent() {
                   }
                   onJump={(blockId) => void navigate("jump_to_block", blockId)}
                 />
-                <section className={styles.canvas} aria-live="polite" aria-label="Current slide">
+                <section
+                  className={styles.canvas}
+                  aria-live="polite"
+                  aria-label={workspaceCopy("Current slide")}
+                >
                   <div className={styles.canvasContent}>
                     {snapshot.phase === "lobby" ? (
                       <>
@@ -696,28 +816,35 @@ function PresentationHostContent() {
                     ) : null}
                   </div>
                 </section>
-                <div className={delivery.backstage} lang="en-CA">
-                  <section className={delivery.panel} aria-label="Private speaker notes">
-                    <h2>Private speaker notes</h2>
+                <div className={delivery.backstage}>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Private speaker notes")}
+                  >
+                    <h2>{workspaceCopy("Private speaker notes")}</h2>
                     <div
                       className={delivery.notes}
                       tabIndex={0}
                       role="group"
-                      aria-label="Speaker notes text"
+                      aria-label={workspaceCopy("Speaker notes text")}
                     >
-                      <p lang={snapshot.presenter?.speakerNotes ? "" : "en-CA"}>
-                        {snapshot.presenter?.speakerNotes || "No speaker notes for this slide."}
+                      <p lang={snapshot.presenter?.speakerNotes ? "" : locale}>
+                        {snapshot.presenter?.speakerNotes ||
+                          workspaceCopy("No speaker notes for this slide.")}
                       </p>
                     </div>
                   </section>
-                  <section className={delivery.panel} aria-label="Next slide preview">
-                    <h2>Next slide preview</h2>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Next slide preview")}
+                  >
+                    <h2>{workspaceCopy("Next slide preview")}</h2>
                     {snapshot.presenter?.nextBlock ? (
                       <div
                         className={delivery.nextPreview}
                         tabIndex={0}
                         role="group"
-                        aria-label="Next slide content"
+                        aria-label={workspaceCopy("Next slide content")}
                       >
                         <PresentationDeliveryBlock
                           accessibilityContext="preview"
@@ -741,26 +868,23 @@ function PresentationHostContent() {
                     ) : (
                       <p>
                         {snapshot.phase === "finished"
-                          ? "Presentation complete."
-                          : "No further slides or activities."}
+                          ? workspaceCopy("Presentation complete.")
+                          : workspaceCopy("No further slides or activities.")}
                       </p>
                     )}
                   </section>
                 </div>
               </div>
-              <aside className={styles.sideCard}>
-                <h2 className="sr-only" lang="en-CA">
-                  Facilitation controls
-                </h2>
-                <PresentationDeliveryJoinAccess code={snapshot.code} />
-                <PresentationStageLauncher
-                  key={id}
-                  sessionId={id}
-                  canEdit={canEdit}
-                  finished={snapshot.phase === "finished"}
-                />
+              <aside className={`${styles.sideCard} ${presenter.tools}`}>
+                <details className={presenter.toolGroup}>
+                  <summary>
+                    {t("live.presentationSession.joinCode")}{" "}
+                    <strong lang="">{snapshot.code}</strong>
+                  </summary>
+                  <PresentationDeliveryJoinAccess code={snapshot.code} />
+                </details>
                 <PresenterTimer sessionId={id} />
-                <div className={styles.metricRow}>
+                <div className={`${styles.metricRow} ${presenter.liveMetrics}`}>
                   <div className={styles.metric}>
                     <strong>{formatNumber(locale, snapshot.roomStatus.joinedCount)}</strong>
                     <span>{t("live.common.participants")}</span>
@@ -770,97 +894,15 @@ function PresentationHostContent() {
                     <span>{t("live.presentationSession.responsesNow")}</span>
                   </div>
                 </div>
-                <p className="muted" aria-live="polite">
-                  {formatNumber(locale, snapshot.roomStatus.connectedCount)} connected ·{" "}
-                  {formatNumber(locale, snapshot.roomStatus.notCurrentlyConnectedCount)} not
-                  currently connected
-                </p>
-                <p>
-                  {t("live.presentationSession.blockProgress", {
-                    current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
-                    total: formatNumber(locale, snapshot.blockCount),
+                <p className={presenter.roomStatus} aria-live="polite">
+                  {workspaceCopy("{connected} connected · {disconnected} not currently connected", {
+                    connected: formatNumber(locale, snapshot.roomStatus.connectedCount),
+                    disconnected: formatNumber(
+                      locale,
+                      snapshot.roomStatus.notCurrentlyConnectedCount,
+                    ),
                   })}
                 </p>
-                {snapshot.navigation ? (
-                  <button
-                    className="button-quiet full-width"
-                    type="button"
-                    lang={locale}
-                    ref={navigationButtonRef}
-                    aria-haspopup="dialog"
-                    aria-expanded={navigationOpen}
-                    onClick={(event) => {
-                      event.currentTarget.focus({ preventScroll: true });
-                      setNavigationOpen(true);
-                    }}
-                  >
-                    {sharedCopy("Open navigation")}
-                  </button>
-                ) : null}
-                {snapshot.phase !== "finished" ? (
-                  <button
-                    className="button full-width"
-                    disabled={
-                      busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
-                    }
-                    onClick={() => void advance()}
-                    type="button"
-                  >
-                    {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
-                  </button>
-                ) : null}
-                {!hasControlPass &&
-                (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
-                  <div lang={locale}>
-                    <p className="muted" role="status">
-                      {commandState.pendingCommand
-                        ? navigationCopy(
-                            "Reacquire a host control pass to confirm the pending action.",
-                          )
-                        : navigationCopy(
-                            "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode.",
-                          )}
-                      {controlPassError ? <span lang="en-CA"> {controlPassError}</span> : null}
-                    </p>
-                    <button
-                      className="button-quiet full-width"
-                      disabled={busy}
-                      onClick={() => void retryControlPass()}
-                      type="button"
-                    >
-                      {navigationCopy(
-                        controlPassBusy
-                          ? "Acquiring host control pass…"
-                          : "Retry host control pass",
-                      )}
-                    </button>
-                  </div>
-                ) : null}
-                {commandState.pendingCommand ? (
-                  <div lang={locale}>
-                    <p className="muted" role="status" aria-live="polite">
-                      {commandState.busy
-                        ? sharedCopy("Waiting for server confirmation…")
-                        : sharedCopy(
-                            "Action not yet confirmed. Retry to confirm the original action.",
-                          )}
-                    </p>
-                    {!commandState.busy ? (
-                      <button
-                        className="button-quiet full-width"
-                        disabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
-                        onClick={() => void retryCommand()}
-                        type="button"
-                      >
-                        {isPresentationRecoverableCommand(commandState.pendingCommand)
-                          ? branchNavigationRetryLabel(locale, commandState.pendingCommand)
-                          : commandState.pendingCommand.action === "start_recovery_card"
-                            ? sharedCopy("Retry card action acknowledgement")
-                            : sharedCopy("Retry advance acknowledgement")}
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
                 {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
                   <RecoveryPackCardPicker
                     key={snapshot.currentBlock?.id}
@@ -887,15 +929,18 @@ function PresentationHostContent() {
                     onFollow={(branchId) => void followBranch(branchId)}
                   />
                 ) : null}
-                <p className="muted" lang="en-CA">
-                  Advance with Right Arrow, Page Down or Space when no control or dialog is focused.
-                  Each action waits for server confirmation.
+                <p className={presenter.keyboardHint}>
+                  {workspaceCopy(
+                    "Advance with Right Arrow, Page Down or Space when no control or dialog is focused. Each action waits for server confirmation.",
+                  )}
                 </p>
-                <PresentationCompanionLauncher
-                  sessionId={id}
-                  enabled={productFeatures?.presentationCompanion === true}
-                  canEdit={canEdit}
-                />
+                <div className={presenter.companionTools}>
+                  <PresentationCompanionLauncher
+                    sessionId={id}
+                    enabled={productFeatures?.presentationCompanion === true}
+                    canEdit={canEdit}
+                  />
+                </div>
                 {snapshot.competitionStandings ? (
                   <CompetitionDashboard
                     variant="host"

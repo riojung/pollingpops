@@ -168,7 +168,7 @@ describe("production native Presentation scenes", () => {
       { sourceDisclosure: { sourceName: "Private source" } },
       { artifactType: "presentation_scene_prototype" },
       { id: "prototype-id" },
-      { schemaVersion: 9 },
+      { schemaVersion: 10 },
       { aspectRatio: "4:3" },
     ]) {
       expect(PresentationSceneDraftSchema.safeParse({ ...scene(), ...patch }).success).toBe(false);

@@ -13,12 +13,15 @@ import {
   localizeSectionsSpatialMessage,
 } from "../../lib/i18n/sections-spatial-copy";
 import { formatNumber } from "../../lib/i18n/format";
+import { dismissStagePopupOnEscape } from "./stage-setup-popup";
 
 interface SpatialDeliveryProps {
   spatial?: PresentationSpatialSnapshot;
   currentBlockIndex: number;
   phase: string;
   sourceKey: string;
+  compact?: boolean;
+  placement?: "panel" | "header";
   navigation?: PresentationNavigationSnapshot;
   disabled?: boolean;
   onJump?: (blockId: string) => void;
@@ -37,15 +40,22 @@ function SpatialPath({
   phase,
   navigation,
   disabled = false,
+  compact = false,
+  placement = "panel",
   onJump,
 }: SpatialDeliveryProps & { spatial: PresentationSpatialSnapshot }) {
   const { locale } = useLocale();
   const copy = sectionsSpatialCopy(locale);
+  const header = placement === "header";
+  const compactView = compact || header;
   const [view, setView] = useState<"automatic" | "overview" | "focus">("automatic");
   const [linear, setLinear] = useState(false);
   const [size, setSize] = useState({ width: 800, height: 240 });
   const [selected, setSelected] = useState("");
   const diagram = useRef<HTMLDivElement>(null);
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const measureDiagram = useRef<(() => void) | null>(null);
   const selectId = useId();
   const reasonId = useId();
   const current = spatial.frames.find((frame) => frame.blockIndex === currentBlockIndex);
@@ -85,18 +95,41 @@ function SpatialPath({
             : { width: rect.width, height: rect.height },
         );
     };
+    measureDiagram.current = measure;
     measure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element);
     if (!observer) window.addEventListener("resize", measure);
     return () => {
+      measureDiagram.current = null;
       observer?.disconnect();
       if (!observer) window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [compactView, header]);
+  useEffect(() => {
+    if (compactView && !linear) measureDiagram.current?.();
+  }, [compactView, linear]);
+  useEffect(() => {
+    if (!header) return;
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !panel.current?.contains(event.target) &&
+        disclosure.current
+      )
+        disclosure.current.open = false;
+    };
+    const escape = (event: KeyboardEvent) => dismissStagePopupOnEscape(event, disclosure.current);
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [header]);
 
-  return (
-    <section className={styles.panel} aria-label={copy("Presentation spatial path")} lang={locale}>
+  const content = (
+    <>
       <div className={styles.toolbar}>
         <p className={styles.status} role="status">
           {status}
@@ -218,6 +251,68 @@ function SpatialPath({
           ) : null}
         </div>
       ) : null}
+    </>
+  );
+
+  return (
+    <section
+      ref={panel}
+      className={`${styles.panel}${compactView ? ` ${styles.compact}` : ""}${header ? ` ${styles.header}` : ""}`}
+      aria-label={copy("Presentation spatial path")}
+      data-spatial-compact={compactView ? "true" : undefined}
+      data-spatial-header={header ? "true" : undefined}
+      data-spatial-linear={compactView ? String(linear) : undefined}
+      lang={locale}
+      onKeyDown={(event) => {
+        if (header && event.key === "Escape" && disclosure.current?.open) {
+          event.preventDefault();
+          event.stopPropagation();
+          disclosure.current.open = false;
+          disclosure.current.querySelector("summary")?.focus();
+        }
+      }}
+      onBlur={(event) => {
+        if (
+          header &&
+          event.relatedTarget instanceof Node &&
+          !event.currentTarget.contains(event.relatedTarget) &&
+          disclosure.current
+        )
+          disclosure.current.open = false;
+      }}
+    >
+      {header ? (
+        <p className={styles.headerProgress} role="status">
+          {status}
+        </p>
+      ) : null}
+      {compactView ? (
+        <details
+          ref={disclosure}
+          className={styles.disclosure}
+          onToggle={(event) => {
+            if (event.currentTarget.open) measureDiagram.current?.();
+          }}
+        >
+          <summary aria-label={copy("Presentation spatial path")}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" />
+            </svg>
+            <span>{copy("Presentation spatial path")}</span>
+            <svg
+              className={styles.chevron}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+          <div className={styles.compactBody}>{content}</div>
+        </details>
+      ) : (
+        content
+      )}
     </section>
   );
 }

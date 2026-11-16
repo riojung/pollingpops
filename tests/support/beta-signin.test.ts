@@ -34,7 +34,9 @@ describe("beta sign-in fixture contract", () => {
       "utf8",
     );
     const setup = await readFile(new URL("auth-setup.ts", betaDirectory), "utf8");
-    expect(helper).toContain("if (await validSession(page, apiOrigin, email))");
+    expect(helper).toContain("(await validSession(page, apiOrigin, email)) &&");
+    expect(helper).toContain("(await continueCachedSignIn(page, apiOrigin))");
+    expect(helper).toContain('data: { intent: "continue" }');
     expect(helper).toContain("page.request.get(`${apiOrigin}/v1/auth/me`)");
     expect(helper).toContain(
       'await signInCreator(page, email, { segment: "education", returnTo })',

@@ -47,6 +47,7 @@ describe("customer settings permissions", () => {
       "overview",
       "appearance",
       "plan",
+      "security",
       "data",
     ]);
     expect(accountPermissions(organizationWorkspace, "owner").managePeople).toBe(false);
@@ -55,11 +56,21 @@ describe("customer settings permissions", () => {
     ).toBe("overview");
     expect(
       selectedSettingsSection("#security", visibleSettingsSections(organizationWorkspace, "owner")),
-    ).toBe("overview");
+    ).toBe("security");
   });
   it("keeps legacy viewers read-only and personal owners able to configure their workspace", () => {
-    expect(visibleSettingsSections(null, "viewer")).toEqual(["overview", "plan", "data"]);
-    expect(visibleSettingsSections(null, "editor")).toEqual(["overview", "plan", "data"]);
+    expect(visibleSettingsSections(null, "viewer")).toEqual([
+      "overview",
+      "plan",
+      "security",
+      "data",
+    ]);
+    expect(visibleSettingsSections(null, "editor")).toEqual([
+      "overview",
+      "plan",
+      "security",
+      "data",
+    ]);
     expect(visibleSettingsSections(null, "owner")).toEqual([
       "overview",
       "people",
@@ -75,7 +86,7 @@ describe("customer settings permissions", () => {
       organization: { ...organizationWorkspace.organization!, role: null },
     };
     expect(visibleSettingsSections(workspace, "owner")).not.toContain("people");
-    expect(visibleSettingsSections(workspace, "owner")).not.toContain("security");
+    expect(visibleSettingsSections(workspace, "owner")).toContain("security");
   });
   it("opens management for the selected organization and defaults unsupported fragments to overview", () => {
     expect(organizationSettingsHref(organizationWorkspace, "members")).toBe(

@@ -60,7 +60,7 @@ async function expectReadyDesign(page: Page, narrow: boolean) {
   const inspector = await openE01Inspector(page, "Layout");
   const panel = inspector.getByRole("group", { name: "Design", exact: true });
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
+  await expect(panel.getByRole("combobox", { name: "Base color theme", exact: true })).toHaveValue(
     "paper",
   );
   await expect(panel.getByRole("combobox", { name: "Slide font", exact: true })).toHaveValue(

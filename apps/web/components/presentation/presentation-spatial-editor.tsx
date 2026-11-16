@@ -34,6 +34,9 @@ import styles from "./presentation-spatial-editor.module.css";
 import { useLocale } from "../locale-provider";
 import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { formatNumber } from "../../lib/i18n/format";
+import { resolvePresentationContentDesign } from "../../lib/presentation-activity-design";
+import { EditorIcon, PresentationSlideThumbnail } from "./presentation-editor-chrome";
+import { presentationSpatialEditorCopy } from "./presentation-spatial-editor-copy";
 interface Props {
   draft: PresentationDraft;
   selectedBlockId: string | null;
@@ -61,7 +64,19 @@ interface NumberEdit {
 }
 const key = (id: string) => id.toLowerCase();
 const focusable =
-  'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [tabindex="0"]';
+function focusFrame(
+  frame: PresentationSpatialFrame,
+  size: { width: number; height: number },
+): PresentationSpatialViewport {
+  const fitted = fitPresentationSpatialFrames([frame], size.width, size.height);
+  const zoom = Math.min(fitted.zoom, Math.min(360, size.width * 0.56) / frame.width);
+  return {
+    zoom,
+    x: size.width / 2 - (frame.x + frame.width / 2) * zoom,
+    y: size.height / 2 - (frame.y + frame.height / 2) * zoom,
+  };
+}
 function authoredSpatialBlockTitle(block: PresentationBlockDraft) {
   const title =
     block.kind === "question"
@@ -100,8 +115,10 @@ export function PresentationSpatialEditor({
 }: Props) {
   const { locale } = useLocale();
   const copy = sectionsSpatialCopy(locale);
-  const dialog = useRef<HTMLDivElement>(null),
+  const workspaceCopy = presentationSpatialEditorCopy(locale);
+  const dialog = useRef<HTMLDialogElement>(null),
     stage = useRef<HTMLDivElement>(null),
+    filmstrip = useRef<HTMLOListElement>(null),
     closeButton = useRef<HTMLButtonElement>(null),
     gesture = useRef<Gesture | null>(null),
     numberEditRef = useRef<NumberEdit | null>(null);
@@ -113,14 +130,17 @@ export function PresentationSpatialEditor({
     [viewport, setViewport] = useState<PresentationSpatialViewport | null>(null),
     [numberEdit, setNumberEdit] = useState<NumberEdit | null>(null);
   const current = preview?.base === draft ? preview.draft : draft,
-    frames = useMemo(() => resolvePresentationSpatialFrames(current), [current]),
-    camera = viewport ?? fitPresentationSpatialFrames(frames, size.width, size.height);
+    frames = useMemo(() => resolvePresentationSpatialFrames(current), [current]);
   const selected =
       current.blocks.find((block) => key(block.id) === key(selectedBlockId ?? "")) ??
       current.blocks[0],
     frame = frames.find((frame) => key(frame.blockId) === key(selected?.id ?? "")),
     sections = presentationSpatialSectionBounds(current, frames);
   const activeId = selected?.id ?? null;
+  const previousSelection = useRef(activeId);
+  const overview = fitPresentationSpatialFrames(frames, size.width, size.height),
+    camera =
+      viewport ?? (frame && frame.width * overview.zoom < 200 ? focusFrame(frame, size) : overview);
   function release(active: Gesture) {
     if (stage.current?.hasPointerCapture(active.pointerId))
       stage.current.releasePointerCapture(active.pointerId);
@@ -137,12 +157,15 @@ export function PresentationSpatialEditor({
   }
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
     const stop = startModalInitialFocus({
       dialog: () => dialog.current,
       target: () => closeButton.current,
     });
     return () => {
       stop();
+      if (element?.open) element.close();
       previous?.focus();
     };
   }, []);
@@ -167,6 +190,34 @@ export function PresentationSpatialEditor({
     const edit = numberEditRef.current;
     if (edit && (edit.base !== draft || edit.blockId !== activeId)) cancelNumber();
   }, [draft, activeId]);
+  useEffect(() => {
+    const list = filmstrip.current;
+    const item = list?.querySelector<HTMLElement>("[aria-current]");
+    if (list && item) {
+      const bounds = list.getBoundingClientRect(),
+        selectedBounds = item.getBoundingClientRect(),
+        delta =
+          Math.min(0, selectedBounds.left - bounds.left) +
+          Math.max(0, selectedBounds.right - bounds.right);
+      if (delta) list.scrollBy({ left: delta });
+    }
+    if (previousSelection.current === activeId) return;
+    previousSelection.current = activeId;
+    if (!frame || gesture.current) return;
+    const left = frame.x * camera.zoom + camera.x,
+      top = frame.y * camera.zoom + camera.y,
+      width = frame.width * camera.zoom,
+      height = frame.height * camera.zoom;
+    if (
+      width < 200 ||
+      left < 16 ||
+      top < 16 ||
+      left + width > size.width - 16 ||
+      top + height > size.height - 16
+    )
+      setViewport(focusFrame(frame, size));
+    // Reframe only a new selection; edits and explicit Fit all preserve the camera.
+  }, [activeId, draft.spatial !== undefined]);
   useEffect(
     () => () => {
       const active = gesture.current;
@@ -307,7 +358,7 @@ export function PresentationSpatialEditor({
     else cancelNumber();
   }
   return (
-    <div
+    <dialog
       ref={dialog}
       role="dialog"
       aria-modal="true"
@@ -315,11 +366,18 @@ export function PresentationSpatialEditor({
       className={styles.backdrop}
       tabIndex={-1}
       onKeyDown={keyboard}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       lang={locale}
     >
       <section className={styles.editor}>
         <header className={styles.header}>
-          <div>
+          <span className={styles.headerIcon}>
+            <EditorIcon name="navigation" />
+          </span>
+          <div className={styles.heading}>
             <h2>{copy("Arrange space")}</h2>
             <p>
               {copy(
@@ -327,8 +385,15 @@ export function PresentationSpatialEditor({
               )}
             </p>
           </div>
-          <button ref={closeButton} type="button" onClick={onClose}>
-            {copy("Close arrange space")}
+          <button
+            ref={closeButton}
+            className={styles.iconButton}
+            type="button"
+            onClick={onClose}
+            aria-label={copy("Close arrange space")}
+            title={copy("Close arrange space")}
+          >
+            <EditorIcon name="close" />
           </button>
         </header>
         {!draft.spatial ? (
@@ -345,79 +410,111 @@ export function PresentationSpatialEditor({
         ) : (
           <>
             <div className={styles.toolbar}>
-              <button
-                type="button"
-                onClick={() => {
-                  cancel();
-                  setViewport(fitPresentationSpatialFrames(frames, size.width, size.height));
-                }}
-              >
-                {copy("Fit all")}
-              </button>
-              <button
-                disabled={!frame}
-                type="button"
-                onClick={() => {
-                  cancel();
-                  setViewport(
-                    fitPresentationSpatialFrames(frame ? [frame] : [], size.width, size.height),
-                  );
-                }}
-              >
-                {copy("Fit selected")}
-              </button>
-              <button
-                type="button"
-                aria-label={copy("Zoom out spatial layout")}
-                onClick={() =>
-                  setViewport(
-                    zoomPresentationSpatialAt(
-                      camera,
-                      { x: size.width / 2, y: size.height / 2 },
-                      camera.zoom / 1.5,
-                    ),
-                  )
-                }
-              >
-                −
-              </button>
-              <button
-                type="button"
-                aria-label={copy("Zoom in spatial layout")}
-                onClick={() =>
-                  setViewport(
-                    zoomPresentationSpatialAt(
-                      camera,
-                      { x: size.width / 2, y: size.height / 2 },
-                      camera.zoom * 1.5,
-                    ),
-                  )
-                }
-              >
-                +
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  cancel();
-                  onChange(autoLayoutPresentationSpatial);
-                  setViewport(null);
-                }}
-              >
-                {copy("Auto layout")}
-              </button>
-              <button type="button" onClick={onPreviewPath}>
-                {copy("Preview path")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  cancel();
-                  onChange(disablePresentationSpatial);
-                }}
-              >
-                {copy("Disable spatial layout")}
-              </button>
+              <div className={styles.toolGroup} role="group">
+                <button
+                  type="button"
+                  title={copy("Fit all")}
+                  onClick={() => {
+                    cancel();
+                    setViewport(fitPresentationSpatialFrames(frames, size.width, size.height));
+                  }}
+                >
+                  <EditorIcon name="slides" />
+                  <span>{copy("Fit all")}</span>
+                </button>
+                <button
+                  className={styles.iconButton}
+                  disabled={!frame}
+                  type="button"
+                  aria-label={copy("Fit selected")}
+                  title={copy("Fit selected")}
+                  onClick={() => {
+                    cancel();
+                    setViewport(
+                      fitPresentationSpatialFrames(frame ? [frame] : [], size.width, size.height),
+                    );
+                  }}
+                >
+                  <EditorIcon name="hotspot" />
+                </button>
+              </div>
+              <div className={`${styles.toolGroup} ${styles.zoomGroup}`} role="group">
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={copy("Zoom out spatial layout")}
+                  title={copy("Zoom out spatial layout")}
+                  onClick={() =>
+                    setViewport(
+                      zoomPresentationSpatialAt(
+                        camera,
+                        { x: size.width / 2, y: size.height / 2 },
+                        camera.zoom / 1.5,
+                      ),
+                    )
+                  }
+                >
+                  <span aria-hidden="true">−</span>
+                </button>
+                <output className={styles.zoomReadout}>
+                  {formatNumber(locale, camera.zoom, {
+                    style: "percent",
+                    maximumFractionDigits: camera.zoom < 0.01 ? 1 : 0,
+                  })}
+                </output>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={copy("Zoom in spatial layout")}
+                  title={copy("Zoom in spatial layout")}
+                  onClick={() =>
+                    setViewport(
+                      zoomPresentationSpatialAt(
+                        camera,
+                        { x: size.width / 2, y: size.height / 2 },
+                        camera.zoom * 1.5,
+                      ),
+                    )
+                  }
+                >
+                  <EditorIcon name="plus" />
+                </button>
+              </div>
+              <div className={styles.toolGroup} role="group">
+                <button
+                  type="button"
+                  title={copy("Auto layout")}
+                  onClick={() => {
+                    cancel();
+                    onChange(autoLayoutPresentationSpatial);
+                    setViewport(null);
+                  }}
+                >
+                  <EditorIcon name="layout" />
+                  <span>{copy("Auto layout")}</span>
+                </button>
+                <button type="button" onClick={onPreviewPath} title={copy("Preview path")}>
+                  <EditorIcon name="play" />
+                  <span>{copy("Preview path")}</span>
+                </button>
+              </div>
+              <details className={styles.settings}>
+                <summary aria-label={workspaceCopy.settings} title={workspaceCopy.settings}>
+                  <EditorIcon name="more" />
+                </summary>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cancel();
+                      onChange(disablePresentationSpatial);
+                    }}
+                  >
+                    <EditorIcon name="close" />
+                    <span>{copy("Disable spatial layout")}</span>
+                  </button>
+                </div>
+              </details>
             </div>
             <div className={styles.workspace}>
               <div
@@ -431,6 +528,10 @@ export function PresentationSpatialEditor({
                   if (gesture.current) cancel();
                 }}
               >
+                <span className={styles.stageLabel} aria-hidden="true">
+                  <EditorIcon name="navigation" />
+                  {copy("Spatial frame overview")}
+                </span>
                 <div
                   className={styles.world}
                   style={{
@@ -492,12 +593,25 @@ export function PresentationSpatialEditor({
                         <span className="sr-only">
                           {copy(block.kind === "question" ? "Activity" : "Slide")}{" "}
                         </span>
-                        <strong>{formatNumber(locale, index + 1)}:</strong>{" "}
-                        <span lang={authoredSpatialBlockTitle(block) ? "" : locale}>
+                        <span className={styles.frameHeading} aria-hidden="true">
+                          <EditorIcon
+                            name={block.kind === "question" ? "interaction" : "content"}
+                          />
+                        </span>
+                        <strong className={styles.frameNumber}>
+                          {formatNumber(locale, index + 1)}:
+                        </strong>{" "}
+                        <span
+                          className={styles.frameTitle}
+                          lang={authoredSpatialBlockTitle(block) ? "" : locale}
+                        >
                           {presentationSpatialBlockTitle(block, index, locale)}
                         </span>
                         {block.kind === "content" && block.hidden ? (
-                          <small> {copy("Hidden · excluded from publication")}</small>
+                          <small>
+                            <EditorIcon name="eye-off" />{" "}
+                            {copy("Hidden · excluded from publication")}
+                          </small>
                         ) : null}
                       </button>
                     );
@@ -505,6 +619,10 @@ export function PresentationSpatialEditor({
                 </div>
               </div>
               <aside className={styles.controls} aria-label={copy("Spatial frame controls")}>
+                <div className={styles.inspectorHeading}>
+                  <EditorIcon name="inspector" />
+                  <h3>{copy("Selected frame")}</h3>
+                </div>
                 <label>
                   {copy("Selected frame")}
                   <select
@@ -529,51 +647,48 @@ export function PresentationSpatialEditor({
                 </label>
                 {frame ? (
                   <>
-                    <label>
-                      {copy("Frame X")}
-                      <input
-                        type="number"
-                        min="0"
-                        max={20000 - frame.width}
-                        step="16"
-                        value={numberValue("x")}
-                        onChange={(event) => number("x", event.target.value)}
-                        onBlur={() => commitNumber("x")}
-                        onKeyDown={(event) => numberKey(event, "x")}
-                      />
-                    </label>
-                    <label>
-                      {copy("Frame Y")}
-                      <input
-                        type="number"
-                        min="0"
-                        max={20000 - frame.height}
-                        step="16"
-                        value={numberValue("y")}
-                        onChange={(event) => number("y", event.target.value)}
-                        onBlur={() => commitNumber("y")}
-                        onKeyDown={(event) => numberKey(event, "y")}
-                      />
-                    </label>
-                    <label>
-                      {copy("Frame width")}
-                      <input
-                        type="number"
-                        min="320"
-                        max="3200"
-                        step="16"
-                        value={numberValue("width")}
-                        onChange={(event) => number("width", event.target.value)}
-                        onBlur={() => commitNumber("width")}
-                        onKeyDown={(event) => numberKey(event, "width")}
-                      />
-                    </label>
-                    <p>
-                      {copy(
-                        "Press Enter or leave a numeric field to apply. Escape cancels the edit.",
-                      )}
-                    </p>
-                    <p>
+                    <div className={styles.coordinates}>
+                      <label>
+                        {copy("Frame X")}
+                        <input
+                          type="number"
+                          min="0"
+                          max={20000 - frame.width}
+                          step="16"
+                          value={numberValue("x")}
+                          onChange={(event) => number("x", event.target.value)}
+                          onBlur={() => commitNumber("x")}
+                          onKeyDown={(event) => numberKey(event, "x")}
+                        />
+                      </label>
+                      <label>
+                        {copy("Frame Y")}
+                        <input
+                          type="number"
+                          min="0"
+                          max={20000 - frame.height}
+                          step="16"
+                          value={numberValue("y")}
+                          onChange={(event) => number("y", event.target.value)}
+                          onBlur={() => commitNumber("y")}
+                          onKeyDown={(event) => numberKey(event, "y")}
+                        />
+                      </label>
+                      <label>
+                        {copy("Frame width")}
+                        <input
+                          type="number"
+                          min="320"
+                          max="3200"
+                          step="16"
+                          value={numberValue("width")}
+                          onChange={(event) => number("width", event.target.value)}
+                          onBlur={() => commitNumber("width")}
+                          onKeyDown={(event) => numberKey(event, "width")}
+                        />
+                      </label>
+                    </div>
+                    <p className={styles.dimensions}>
                       {copy("Height: {height}. Frames keep a 16:9 aspect ratio.", {
                         height: formatNumber(locale, frame.height),
                       })}
@@ -587,13 +702,9 @@ export function PresentationSpatialEditor({
                         if (activeId) start(event, activeId, true);
                       }}
                     >
-                      {copy("Move selected frame")}
+                      <EditorIcon name="navigation" />
+                      <span>{copy("Move selected frame")}</span>
                     </button>
-                    <p>
-                      {copy(
-                        "Drag a frame on wide screens. Arrow keys on Move selected frame move by 16; hold Shift for 160. Escape cancels a drag. On a phone, use the numeric controls.",
-                      )}
-                    </p>
                     <button
                       type="button"
                       onClick={() => {
@@ -602,43 +713,99 @@ export function PresentationSpatialEditor({
                           onChange((current) => resetPresentationSpatialFrame(current, activeId));
                       }}
                     >
-                      {copy("Reset selected frame")}
+                      <EditorIcon name="recovery" />
+                      <span>{copy("Reset selected frame")}</span>
                     </button>
+                    <details className={styles.guidance}>
+                      <summary>
+                        <EditorIcon name="accessibility" />
+                        <span>{workspaceCopy.help}</span>
+                        <EditorIcon name="chevron-down" />
+                      </summary>
+                      <div>
+                        <p>
+                          {copy(
+                            "Press Enter or leave a numeric field to apply. Escape cancels the edit.",
+                          )}
+                        </p>
+                        <p>
+                          {copy(
+                            "Drag a frame on wide screens. Arrow keys on Move selected frame move by 16; hold Shift for 160. Escape cancels a drag. On a phone, use the numeric controls.",
+                          )}
+                        </p>
+                      </div>
+                    </details>
                   </>
                 ) : null}
                 {selected ? (
-                  <div className={styles.preview} aria-label={copy("Selected frame preview")}>
-                    {selected.kind === "content" && selected.hidden ? (
-                      <p>{copy("Hidden planning slide. Excluded from published path preview.")}</p>
-                    ) : null}
-                    {renderPreview?.(selected)}
-                  </div>
+                  <details className={styles.preview}>
+                    <summary>
+                      <EditorIcon name="preview" />
+                      <span>{copy("Selected frame preview")}</span>
+                      <EditorIcon name="chevron-down" />
+                    </summary>
+                    <div aria-label={copy("Selected frame preview")}>
+                      {selected.kind === "content" && selected.hidden ? (
+                        <p>
+                          {copy("Hidden planning slide. Excluded from published path preview.")}
+                        </p>
+                      ) : null}
+                      {renderPreview?.(selected)}
+                    </div>
+                  </details>
                 ) : null}
               </aside>
             </div>
-            <ol className={styles.list} aria-label={copy("Spatial frames in playback order")}>
-              {current.blocks.map((block, index) => (
-                <li key={block.id}>
-                  <button
-                    type="button"
-                    aria-current={block.id === activeId ? "step" : undefined}
-                    onClick={() => {
-                      cancel();
-                      onSelect(block.id);
-                    }}
-                  >
-                    {formatNumber(locale, index + 1)}.{" "}
-                    <span lang={authoredSpatialBlockTitle(block) ? "" : locale}>
-                      {presentationSpatialBlockTitle(block, index, locale)}
-                    </span>
-                    {block.kind === "content" && block.hidden ? ` · ${copy("Hidden")}` : ""}
-                  </button>
-                </li>
-              ))}
-            </ol>
+            <div className={styles.filmstrip}>
+              <div className={styles.filmstripHeading}>
+                <span>
+                  <EditorIcon name="slides" />
+                  {workspaceCopy.playbackOrder}
+                </span>
+                <span>{formatNumber(locale, current.blocks.length)}</span>
+              </div>
+              <ol
+                ref={filmstrip}
+                className={styles.list}
+                aria-label={copy("Spatial frames in playback order")}
+              >
+                {current.blocks.map((block, index) => (
+                  <li key={block.id}>
+                    <PresentationSlideThumbnail
+                      block={block}
+                      design={resolvePresentationContentDesign(current.blocks, block.id)}
+                      mediaEnabled={false}
+                    />
+                    <button
+                      type="button"
+                      aria-current={key(block.id) === key(activeId ?? "") ? "step" : undefined}
+                      title={presentationSpatialBlockTitle(block, index, locale)}
+                      onClick={() => {
+                        cancel();
+                        onSelect(block.id);
+                      }}
+                    >
+                      <span className={styles.listNumber}>{formatNumber(locale, index + 1)}</span>{" "}
+                      <span
+                        className={styles.listTitle}
+                        lang={authoredSpatialBlockTitle(block) ? "" : locale}
+                      >
+                        {presentationSpatialBlockTitle(block, index, locale)}
+                      </span>
+                      {block.kind === "content" && block.hidden ? (
+                        <span className={styles.hiddenBadge}>
+                          <EditorIcon name="eye-off" />
+                          <span className="sr-only"> · {copy("Hidden")}</span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </>
         )}
       </section>
-    </div>
+    </dialog>
   );
 }

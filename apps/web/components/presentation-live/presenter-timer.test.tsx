@@ -2,6 +2,8 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SupportedLocale } from "@openround/contracts";
+import { presentationWorkspaceCopy } from "../../lib/i18n/presentation-workspace-copy";
 import {
   elapsedPresentationTime,
   formatPresentationElapsedTime,
@@ -19,7 +21,14 @@ type TimerHooks = {
   effects: Map<number, Effect>;
   pending: Effect[];
 };
-const fixture = vi.hoisted(() => ({ hooks: null as TimerHooks | null }));
+const fixture = vi.hoisted(() => ({
+  hooks: null as TimerHooks | null,
+  locale: "en-CA" as SupportedLocale,
+}));
+
+vi.mock("../locale-provider", () => ({
+  useLocale: () => ({ locale: fixture.locale }),
+}));
 
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
@@ -56,6 +65,7 @@ vi.mock("react", async (importOriginal) => {
 
 afterEach(() => {
   fixture.hooks = null;
+  fixture.locale = "en-CA";
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -114,6 +124,41 @@ function memoryStorage() {
 const empty = { elapsedMs: 0, startedAt: null };
 
 describe("Local presentation timer", () => {
+  it("changes Korean and German chrome without restarting the running or paused timer", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const storage = memoryStorage();
+    vi.stubGlobal("window", { sessionStorage: storage, setInterval, clearInterval });
+    vi.stubGlobal("document", new EventTarget());
+    const timer = timerHarness("localized-session");
+    timer.click("Start");
+    vi.advanceTimersByTime(65_000);
+    const saved = storage.getItem(presenterTimerStorageKey("localized-session"));
+
+    fixture.locale = "ko-KR";
+    const korean = presentationWorkspaceCopy("ko-KR");
+    expect(timer.markup()).toContain("프레젠테이션 타이머");
+    expect(timer.markup()).toContain("실행 중");
+    expect(timer.markup()).toContain("01:05");
+    expect(storage.getItem(presenterTimerStorageKey("localized-session"))).toBe(saved);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(1_000);
+    expect(timer.markup()).toContain("01:06");
+    timer.click(korean("Pause"));
+    const paused = storage.getItem(presenterTimerStorageKey("localized-session"));
+
+    fixture.locale = "de-DE";
+    const german = presentationWorkspaceCopy("de-DE");
+    expect(timer.markup()).toContain("Pausiert");
+    expect(timer.markup()).toContain(german("Reset"));
+    expect(timer.markup()).toContain("01:06");
+    expect(storage.getItem(presenterTimerStorageKey("localized-session"))).toBe(paused);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(5_000);
+    expect(timer.markup()).toContain("01:06");
+    timer.unmount();
+  });
+
   it("wires explicit controls, visibility catch-up and refresh restoration without restarting", () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);
@@ -260,4 +305,22 @@ describe("Local presentation timer", () => {
     expect(markup).toContain(">Reset</button>");
     expect(markup).toContain("Private to this tab. Reset affects only this timer.");
   });
+
+  it.each(["ko-KR", "de-DE"] as const)(
+    "renders %s timer labels and language around the unchanged clock format",
+    (locale) => {
+      fixture.locale = locale;
+      const copy = presentationWorkspaceCopy(locale);
+      const markup = renderToStaticMarkup(<PresenterTimer sessionId="session" />);
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(`aria-label="${copy("Presentation timer")}"`);
+      expect(markup).toContain(`aria-label="${copy("Elapsed presentation time")}"`);
+      expect(markup).toContain(copy("Private to this tab. Reset affects only this timer."));
+      expect(markup).toContain(`>${copy("Start")}</button>`);
+      expect(markup).toContain(`>${copy("Pause")}</button>`);
+      expect(markup).toContain(`>${copy("Reset")}</button>`);
+      expect(markup).toContain("00:00");
+      expect(markup).not.toContain('aria-label="Presentation timer"');
+    },
+  );
 });

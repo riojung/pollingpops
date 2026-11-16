@@ -7,7 +7,7 @@ import {
   presentationRichTextToPlainText,
 } from "./presentation-rich-text";
 
-/** Scene versions opt into Presentation document v4, v5, v7, v8, v11, v13, v16 and v17 respectively. */
+/** Scene versions opt into Presentation document v4, v5, v7, v8, v11, v13, v16, v17 and v18 respectively. */
 export const PRESENTATION_SCENE_SCHEMA_VERSION = 1 as const;
 export const PRESENTATION_RICH_TEXT_SCENE_SCHEMA_VERSION = 2 as const;
 export const PRESENTATION_DESIGN_SCENE_SCHEMA_VERSION = 3 as const;
@@ -17,6 +17,8 @@ export const PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION = 6 as const
 export const PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION = 7 as const;
 export const PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION = 8 as const;
 export const PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION = 17 as const;
+export const PRESENTATION_STYLED_SCENE_SCHEMA_VERSION = 9 as const;
+export const PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION = 18 as const;
 export const PRESENTATION_SCENE_GEOMETRY_EPSILON = 1e-8;
 export const PRESENTATION_SCENE_MAX_NODES = 50;
 export const PRESENTATION_SCENE_MAX_BYTES = 128 * 1024;
@@ -33,16 +35,173 @@ export const PRESENTATION_MOTION_BACKGROUND_PRESETS = [
 export const PresentationMotionBackgroundSchema = z.enum(PRESENTATION_MOTION_BACKGROUND_PRESETS);
 export type PresentationMotionBackground = z.infer<typeof PresentationMotionBackgroundSchema>;
 
+/** Complete, closed contrast palettes. No CSS, font URLs or arbitrary paint strings enter a scene. */
+export const PRESENTATION_DESIGN_PALETTES = {
+  default: {
+    background: "#ffffff",
+    text: "#171717",
+    link: "#174d8c",
+    border: "#b4b4b4",
+    accent: "#171717",
+    accentText: "#ffffff",
+    muted: "#595959",
+    surface: "#ededed",
+  },
+  ink: {
+    background: "#111827",
+    text: "#f8fafc",
+    link: "#b6d7ff",
+    border: "#60718b",
+    accent: "#c7f36b",
+    accentText: "#17200d",
+    muted: "#bec8d8",
+    surface: "#253248",
+  },
+  clay: {
+    background: "#f4e9dd",
+    text: "#38281f",
+    link: "#813820",
+    border: "#b59b85",
+    accent: "#9a422c",
+    accentText: "#fff9f1",
+    muted: "#6e5646",
+    surface: "#e5d3c0",
+  },
+  coral: {
+    background: "#ff634e",
+    text: "#251a19",
+    link: "#351d1a",
+    border: "#843f35",
+    accent: "#251a19",
+    accentText: "#fff7ef",
+    muted: "#47231f",
+    surface: "#ff9989",
+  },
+  forest: {
+    background: "#12392e",
+    text: "#f4f4df",
+    link: "#c6e7aa",
+    border: "#779789",
+    accent: "#e1ee9c",
+    accentText: "#193326",
+    muted: "#c0d2c3",
+    surface: "#285342",
+  },
+  cobalt: {
+    background: "#1847c5",
+    text: "#ffffff",
+    link: "#f4efac",
+    border: "#91a8ed",
+    accent: "#f5ef83",
+    accentText: "#18255b",
+    muted: "#d5e0ff",
+    surface: "#315cd1",
+  },
+  rose: {
+    background: "#f3dce3",
+    text: "#412b39",
+    link: "#71334e",
+    border: "#b68e9d",
+    accent: "#793b57",
+    accentText: "#fff7fa",
+    muted: "#735665",
+    surface: "#e6bfce",
+  },
+  sand: {
+    background: "#f2eee4",
+    text: "#292c27",
+    link: "#47552d",
+    border: "#b1b3a1",
+    accent: "#52633b",
+    accentText: "#ffffff",
+    muted: "#626457",
+    surface: "#e2dfd2",
+  },
+} as const;
+export const PresentationDesignPaletteSchema = z.enum([
+  "default",
+  "ink",
+  "clay",
+  "coral",
+  "forest",
+  "cobalt",
+  "rose",
+  "sand",
+]);
+export type PresentationDesignPalette = z.infer<typeof PresentationDesignPaletteSchema>;
+export type PresentationDesignPaletteColors = {
+  [K in keyof typeof PRESENTATION_DESIGN_PALETTES.default]: string;
+};
+
+export const PresentationSceneTypographySchema = z
+  .object({
+    size: z.number().finite().min(12).max(144).optional(),
+    weight: z
+      .union([
+        z.literal(400),
+        z.literal(500),
+        z.literal(600),
+        z.literal(700),
+        z.literal(800),
+        z.literal(900),
+      ])
+      .optional(),
+    align: z.enum(["left", "center", "right"]).optional(),
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    color: z.enum(["text", "accent", "muted", "background", "accentText"]).optional(),
+    leading: z.number().finite().min(0.85).max(1.8).optional(),
+  })
+  .strict();
+export type PresentationSceneTypography = z.infer<typeof PresentationSceneTypographySchema>;
+export const PresentationSceneShapeAppearanceSchema = z
+  .object({
+    fill: z
+      .enum(["accent", "accentText", "text", "background", "muted", "surface", "none"])
+      .optional(),
+    stroke: z.enum(["accent", "accentText", "text", "background", "muted", "none"]).optional(),
+    strokeWidth: z.number().finite().min(0).max(6).optional(),
+  })
+  .strict();
+export type PresentationSceneShapeAppearance = z.infer<
+  typeof PresentationSceneShapeAppearanceSchema
+>;
+
 /** Named, closed design tokens; omission preserves the scene's established appearance. */
 export const PresentationSceneDesignSchema = z
   .object({
     theme: z.enum(["paper", "midnight", "ocean", "sunset"]),
+    palette: PresentationDesignPaletteSchema.optional(),
     font: z.enum(["sans", "serif", "mono"]),
     spacing: z.enum(["relaxed", "compact"]),
     motionBackground: PresentationMotionBackgroundSchema.optional(),
   })
   .strict();
 export type PresentationSceneDesign = z.infer<typeof PresentationSceneDesignSchema>;
+
+/** Legacy colors remain byte-for-byte stable when a named palette is omitted. */
+export function presentationDesignPalette(
+  design?: PresentationSceneDesign,
+): PresentationDesignPaletteColors {
+  if (design?.palette) return PRESENTATION_DESIGN_PALETTES[design.palette];
+  const theme = design?.theme;
+  const base =
+    theme === "paper"
+      ? { background: "#fffdf7", text: "#172b4d", link: "#174d8c", border: "#a6b0ba" }
+      : theme === "midnight"
+        ? { background: "#111b2e", text: "#f6f8ff", link: "#99d8ff", border: "#657796" }
+        : theme === "ocean"
+          ? { background: "#eaf8fa", text: "#113945", link: "#145678", border: "#78aab2" }
+          : theme === "sunset"
+            ? { background: "#fff0e5", text: "#522a20", link: "#873722", border: "#bc8f7b" }
+            : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
+  return {
+    ...base,
+    accent: base.link,
+    accentText: base.background,
+    muted: base.text,
+    surface: base.background,
+  };
+}
 
 export const PresentationSceneImageFitSchema = z.enum(["contain", "cover"]);
 export type PresentationSceneImageFit = z.infer<typeof PresentationSceneImageFitSchema>;
@@ -157,6 +316,7 @@ const textNode = z
     role: z.enum(["title", "body"]),
     text: plainText(4_000),
     richText: PresentationRichTextSchema.optional(),
+    typography: PresentationSceneTypographySchema.optional(),
     lang: PresentationTextLanguageSchema.optional(),
   })
   .strict()
@@ -216,6 +376,8 @@ const shapeNode = z
     shape: z.enum([...CanvasShapeVariantSchema.options, "ellipse", "diamond", "parallelogram"]),
     color: CanvasColorSchema,
     label: plainText(200),
+    appearance: PresentationSceneShapeAppearanceSchema.optional(),
+    decorative: z.boolean().optional(),
   })
   .strict()
   .superRefine(applyPaintedBounds);
@@ -416,6 +578,7 @@ export const PresentationSceneDraftSchema = z
       z.literal(PRESENTATION_ADVANCED_INTERACTION_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_LANGUAGE_SCENE_SCHEMA_VERSION),
       z.literal(PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION),
+      z.literal(PRESENTATION_STYLED_SCENE_SCHEMA_VERSION),
     ]),
     aspectRatio: z.literal("16:9"),
     design: PresentationSceneDesignSchema.optional(),
@@ -441,6 +604,17 @@ export const PresentationSceneDraftSchema = z
         code: "custom",
         path: ["design", "motionBackground"],
         message: "Motion backgrounds require scene schema version 8",
+      });
+    }
+    if (
+      scene.schemaVersion < PRESENTATION_STYLED_SCENE_SCHEMA_VERSION &&
+      scene.design &&
+      "palette" in scene.design
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["design", "palette"],
+        message: "Named palettes require scene schema version 9",
       });
     }
     const byId = new Map(scene.nodes.map((node) => [node.id, node]));
@@ -497,6 +671,18 @@ export const PresentationSceneDraftSchema = z
       });
     }
     for (const [index, node] of scene.nodes.entries()) {
+      if (
+        scene.schemaVersion < PRESENTATION_STYLED_SCENE_SCHEMA_VERSION &&
+        ((node.type === "text" && "typography" in node) ||
+          (node.type === "shape" && ("appearance" in node || "decorative" in node)))
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["nodes", index],
+          message: "Object styling requires scene schema version 9",
+        });
+      }
+
       if (
         node.type === "text" &&
         node.lang !== undefined &&
@@ -602,8 +788,8 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
           node.type === "image" ||
           (node.type === "table" && node.caption.trim()) ||
           (node.type === "chart" && node.title.trim()) ||
-          ((node.type === "shape" ||
-            node.type === "reveal" ||
+          (node.type === "shape" && !node.decorative && node.label.trim()) ||
+          ((node.type === "reveal" ||
             node.type === "link" ||
             node.type === "hotspot" ||
             node.type === "dialog" ||
@@ -687,7 +873,7 @@ export const PresentationSceneSchema = PresentationSceneDraftSchema.superRefine(
           message: "Describe the image for participants who cannot see it",
         });
       }
-      if (node.type === "shape" && !node.label.trim()) {
+      if (node.type === "shape" && !node.decorative && !node.label.trim()) {
         context.addIssue({
           code: "custom",
           path: ["nodes", index, "label"],

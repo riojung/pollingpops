@@ -60,6 +60,7 @@
   place-items: center;
   overflow: hidden;
   border-radius: 11px 11px 0 0;
+  border-block-end: 1px solid var(--ui-border-subtle);
   color: var(--workspace-kind-ink, var(--ui-text-strong));
   background: var(--workspace-kind-bg, var(--ui-surface-soft));
 }
@@ -83,6 +84,7 @@
   overflow: hidden;
   background: var(--workspace-kind-bg, var(--ui-accent-soft));
   border-radius: 11px 11px 0 0;
+  border-block-end: 1px solid var(--ui-border-subtle);
   color: var(--workspace-kind-ink, var(--ui-text-strong));
 }
 .questionPreview > strong {
@@ -496,7 +498,7 @@
   place-items: center;
   border: 1px solid var(--ui-border-subtle);
   border-radius: 10px;
-  color: var(--ui-warning-text);
+  color: var(--ui-text-muted);
   box-shadow: var(--ui-shadow-sm);
   font-size: 20px;
   background: var(--ui-surface-translucent);

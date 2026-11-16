@@ -367,7 +367,7 @@ describe("reviewed deterministic native layout alternatives", () => {
     const invalid = [
       null,
       {},
-      { ...source, schemaVersion: 9 },
+      { ...source, schemaVersion: 10 },
       { ...source, readingOrder: [titleId, titleId] },
       {
         ...source,

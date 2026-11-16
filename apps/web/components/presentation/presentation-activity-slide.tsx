@@ -2,8 +2,9 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { PresentationSceneDesign, QuestionType, SupportedLocale } from "@openround/contracts";
+import { presentationDesignPalette } from "@openround/contracts";
 import { copyPresentationSceneDesign } from "../../lib/presentation-activity-design";
-import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { TextResponseControl } from "../text-response-control";
 import { useLocale } from "../locale-provider";
 import {
@@ -139,7 +140,7 @@ export function PresentationActivitySlide({
   const numberFormatter = new Intl.NumberFormat(locale);
   const formatNumber = (value: number) => numberFormatter.format(value);
   const design = copyPresentationSceneDesign(suppliedDesign);
-  const palette = NATIVE_DESIGN_THEMES[design.theme];
+  const palette = presentationDesignPalette(design);
   const [readingView, setReadingView] = useState(false);
   const choices = question.choices ?? [];
   const rating = question.rating ?? {

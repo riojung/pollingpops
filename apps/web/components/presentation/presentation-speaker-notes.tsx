@@ -252,9 +252,7 @@ export function PresenterNotesPanel({
   return (
     <section className={styles.presenterPanel} aria-label="Private presenter notes" lang="en-CA">
       <div className={styles.presenterHeading}>
-        <span className={styles.privateBadge}>
-          <EditorIcon name="eye-off" /> Private · Draft rehearsal
-        </span>
+        <h2>Speaker notes</h2>
         {slideNumber !== undefined ? (
           <span className={styles.slideNumber}>
             Slide {slideNumber}
@@ -262,19 +260,32 @@ export function PresenterNotesPanel({
           </span>
         ) : null}
       </div>
-      <h2>Speaker notes</h2>
-      <p className={styles.help}>Only you can see these notes. The audience never sees them.</p>
-      <div className={styles.notesBody} role="group" aria-label="Speaker notes text" tabIndex={0}>
+      <details className={styles.presenterPrivacy}>
+        <summary>
+          <EditorIcon name="eye-off" /> Private · Draft rehearsal
+          <EditorIcon name="chevron-down" />
+        </summary>
+        <div>
+          <p className={styles.help}>Only you can see these notes. The audience never sees them.</p>
+          <p className={styles.rehearsalHelp}>
+            This rehearsal shows your draft notes. Live presenter notes use the published version
+            that started the session.
+          </p>
+        </div>
+      </details>
+      <div
+        className={styles.notesBody}
+        role="group"
+        aria-label="Speaker notes text"
+        tabIndex={0}
+        data-preview-notes-scroll
+      >
         <p lang={notes.trim() ? "" : "en-CA"}>
           {notes.trim()
             ? notes
             : "No speaker notes for this slide yet. Add them in the Notes tab to rehearse your cues."}
         </p>
       </div>
-      <p className={styles.rehearsalHelp}>
-        This rehearsal shows your draft notes. Live presenter notes use the published version that
-        started the session.
-      </p>
     </section>
   );
 }

@@ -115,7 +115,7 @@ async function fixture(page: Page, linked: boolean, info: TestInfo) {
     companion.getByRole("button", { name: "Open navigation", exact: true }),
   ).toBeVisible();
   const stagePopup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+  await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
   const stage = await stagePopup;
   return {
     sessionId,

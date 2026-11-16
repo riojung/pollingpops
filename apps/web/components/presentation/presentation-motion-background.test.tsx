@@ -10,6 +10,7 @@ import { PresentationActivitySlide } from "./presentation-activity-slide";
 import {
   PRESENTATION_MOTION_PAUSE_KEY,
   PresentationMotionBackground,
+  getPresentationMotionReduced,
   getPresentationMotionPaused,
   setPresentationMotionPaused,
 } from "./presentation-motion-background";
@@ -41,6 +42,37 @@ function scene(): PresentationScene {
 }
 
 describe("Presentation background playback", () => {
+  it.each([
+    { system: true, app: "theme", saved: false, expected: true },
+    { system: false, app: "reduced", saved: false, expected: true },
+    { system: false, app: "theme", saved: true, expected: true },
+    { system: false, app: "theme", saved: false, expected: false },
+  ])("honors device and app reduced motion: %j", ({ system, app, saved, expected }) => {
+    vi.stubGlobal("window", {
+      matchMedia: () => ({ matches: system }),
+      localStorage: { getItem: () => JSON.stringify({ reducedMotion: saved }) },
+    });
+    vi.stubGlobal("document", { documentElement: { dataset: { openroundMotion: app } } });
+    expect(getPresentationMotionReduced()).toBe(expected);
+  });
+
+  it.each(["denied", "malformed"])(
+    "keeps normal playback available with %s accessibility storage",
+    (storage) => {
+      vi.stubGlobal("window", {
+        matchMedia: () => ({ matches: false }),
+        localStorage: {
+          getItem: () => {
+            if (storage === "denied") throw new Error("Storage denied");
+            return "{";
+          },
+        },
+      });
+      vi.stubGlobal("document", { documentElement: { dataset: {} } });
+      expect(getPresentationMotionReduced()).toBe(false);
+    },
+  );
+
   it.each(PRESENTATION_MOTION_BACKGROUND_PRESETS)(
     "renders %s as bounded decorative artwork, still before visibility is known",
     (preset) => {

@@ -7,6 +7,7 @@ import {
   type SupportedLocale,
 } from "@openround/contracts";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
 import { toggleNativeRichTextMark } from "../../lib/presentation-rich-text";
 
 const mocked = vi.hoisted(() => ({
@@ -158,7 +159,7 @@ function harness(
     },
     click(label: string) {
       find(
-        (element) => element.type === "button" && element.props.children === label,
+        (element) => element.type === "button" && element.props["aria-label"] === label,
       ).props.onClick();
     },
     beforeInput(inputType: string, cancelable = true) {
@@ -172,6 +173,113 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("native formatting controls", () => {
+  it("retains the selected range and rich content when object typography changes before inline formatting", () => {
+    const editor = harness();
+    editor.select(5, 8);
+    const original = structuredClone(editor.node());
+    const typography = editor.find((element) => element.type === NativeSceneTypographyControls);
+    typography.props.onChange(
+      { ...editor.node(), typography: { font: "serif", size: 48 } },
+      "typography:font",
+    );
+    editor.render();
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().richText).toEqual(original.richText);
+    editor.click("Bold");
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toEqual(
+      toggleNativeRichTextMark(original.richText!, 5, 8, "bold"),
+    );
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([5, 8]);
+    editor.click("Remove formatting");
+    expect(editor.node().text).toBe(original.text);
+    expect(editor.node().typography).toEqual({ font: "serif", size: 48 });
+    expect(editor.node().richText).toBeUndefined();
+  });
+  it("keeps the compact controls named and associates the writing area with its label and localized count", () => {
+    const editor = harness();
+    const textarea = editor.find((element) => element.type === "textarea");
+    expect(textarea.props.maxLength).toBe(4000);
+    expect(textarea.props["data-text-role"]).toBe("body");
+    expect(
+      editor.find(
+        (element) => element.type === "label" && element.props.htmlFor === textarea.props.id,
+      ).props.children,
+    ).toBe("Node text");
+    for (const label of ["Bold", "Italic", "Remove formatting", "Apply link", "Remove link"]) {
+      const button = editor.find(
+        (element) => element.type === "button" && element.props["aria-label"] === label,
+      );
+      expect(button.props.title).toBe(label);
+      expect(button.props.type).toBe("button");
+      expect(button.props.tabIndex).toBeUndefined();
+    }
+    editor.node().text = "X".repeat(1234);
+    editor.node().richText = plainTextToPresentationRichText(editor.node().text);
+    editor.setLocale("de-DE");
+    const count = editor.find((element) => element.props.id === textarea.props["aria-describedby"]);
+    expect(count.props.children.join("")).toBe("1.234 / 4.000");
+    editor.node().role = "title";
+    editor.node().text = "Short title";
+    editor.node().richText = plainTextToPresentationRichText(editor.node().text);
+    editor.render();
+    const title = editor.find((element) => element.type === "textarea");
+    expect(title.props.maxLength).toBe(160);
+    expect(title.props["data-text-role"]).toBe("title");
+  });
+
+  it("shows the current paragraph style and applies a shared style to selected mixed paragraphs", () => {
+    const editor = harness();
+    editor.node().text = "Read the plan\nNext step";
+    editor.node().richText = {
+      paragraphs: [
+        { kind: "paragraph", runs: [{ text: "Read the plan", bold: true }] },
+        { kind: "bullet", runs: [{ text: "Next step", href: "https://example.com/next" }] },
+      ],
+    };
+    editor.render();
+    expect(editor.find((element) => element.type === "select").props.value).toBe("paragraph");
+    editor.select(14, 14);
+    expect(editor.find((element) => element.type === "select").props.value).toBe("bullet");
+    editor.select(0, editor.node().text.length);
+    const selector = editor.find((element) => element.type === "select");
+    expect(selector.props.value).toBe("");
+    editor.focusOther(selector);
+    selector.props.onChange({ target: { value: "numbered" } });
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().richText!.paragraphs).toEqual([
+      { kind: "numbered", runs: [{ text: "Read the plan", bold: true }] },
+      { kind: "numbered", runs: [{ text: "Next step", href: "https://example.com/next" }] },
+    ]);
+    expect(editor.node().text).toBe("Read the plan\nNext step");
+    expect(editor.find((element) => element.type === "select").props.value).toBe("numbered");
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([0, 23]);
+    expect(editor.activeElement()).toBe(editor.element);
+  });
+
+  it("removes a link using the retained text range without removing emphasis", () => {
+    const editor = harness();
+    editor.node().richText!.paragraphs[0]!.runs = [
+      { text: "Read the " },
+      { text: "plan", bold: true, href: "https://example.com/plan" },
+    ];
+    editor.render();
+    editor.select(9, 13);
+    editor.focusOther({});
+    editor.click("Remove link");
+    editor.render();
+    editor.flushRestores();
+    expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
+      { text: "Read the " },
+      { text: "plan", bold: true },
+    ]);
+    expect(editor.node().text).toBe("Read the plan");
+    expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual([9, 13]);
+  });
+
   it("retranslates active feedback without changing a typed link, authored language or selection", () => {
     const editor = harness();
     editor.node().lang = "fr";
@@ -322,8 +430,8 @@ describe("native formatting controls", () => {
     // The mount effect observes the existing DOM range without a select or keyboard event.
     editor.render();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(false);
     editor.click("Bold");
     expect(editor.node().richText!.paragraphs[0]!.runs).toEqual([
@@ -336,14 +444,14 @@ describe("native formatting controls", () => {
   it("synchronizes a DOM-restored selection before applying emphasis and links without another key", () => {
     const editor = harness();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(true);
     editor.restoreSelection(5, 8);
     editor.render();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(false);
     editor.click("Bold");
     editor.render();
@@ -482,8 +590,8 @@ describe("native formatting controls", () => {
   it("uses the remembered textarea selection for emphasis and keeps the canonical fallback", () => {
     const editor = harness();
     expect(
-      editor.find((element) => element.type === "button" && element.props.children === "Bold").props
-        .disabled,
+      editor.find((element) => element.type === "button" && element.props["aria-label"] === "Bold")
+        .props.disabled,
     ).toBe(true);
     editor.select(9, 13);
     editor.click("Bold");
@@ -571,7 +679,7 @@ describe("native formatting controls", () => {
     expect(editor.node()).toEqual(before);
     expect([editor.element.selectionStart, editor.element.selectionEnd]).toEqual(selection);
     const bold = editor.find(
-      (element) => element.type === "button" && element.props.children === "Bold",
+      (element) => element.type === "button" && element.props["aria-label"] === "Bold",
     );
     expect(bold.props.disabled).toBe(false);
     expect(bold.props["aria-pressed"]).toBe(true);

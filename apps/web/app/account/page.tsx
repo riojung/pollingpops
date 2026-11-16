@@ -26,6 +26,7 @@ import {
   type WorkspaceAccountContext,
 } from "../../components/workspace/workspace-provider";
 import { SettingsNavigation } from "./settings-navigation";
+import { IdleTimeoutSettings } from "./idle-timeout-settings";
 import { PersonalInstitutionIdentities } from "./personal-institution-identities";
 import { PersonalSubscriptionOptions } from "./personal-subscription-options";
 import { PersonalBillingNotice } from "./personal-billing-notice";
@@ -802,6 +803,13 @@ export default function AccountPage() {
               ) : null}
             </section>
           ) : null}
+          {selectedSection === "security" ? (
+            <IdleTimeoutSettings
+              workspace={workspace}
+              canManage={permissions.manageWorkspace}
+              onSaved={setWorkspace}
+            />
+          ) : null}
           {selectedSection === "security" && hasInstitutionAccess ? (
             <section className="panel">
               <p className="eyebrow">{t("account.institution.eyebrow")}</p>
@@ -873,7 +881,7 @@ export default function AccountPage() {
               ) : null}
             </section>
           ) : null}
-          {selectedSection === "security" ? (
+          {selectedSection === "security" && permissions.manageIntegrations ? (
             <section className="panel">
               <p className="eyebrow">{t("account.embed.eyebrow")}</p>
               <h2 style={{ fontSize: "1.8rem" }}>{t("account.embed.title")}</h2>

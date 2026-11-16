@@ -11,6 +11,8 @@ import {
   branchNavigationRetryLabel,
   localizeBranchNavigationFeedback,
 } from "../presentation/branch-navigation-copy";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
+import { formatNumber } from "../../lib/i18n/format";
 import styles from "./presentation-navigation.module.css";
 
 type Navigation = NonNullable<PresentationHostSnapshot["navigation"]>;
@@ -72,11 +74,14 @@ export function PresentationNavigationDialog({
         onClose();
       }}
     >
-      <h2>{copy("Presentation navigation")}</h2>
-      <button type="button" className="button-quiet full-width" ref={closeRef} onClick={onClose}>
-        {copy("Close navigation")}
-      </button>
-      <p>
+      <div className={styles.header}>
+        <h2>{copy("Presentation navigation")}</h2>
+        <button type="button" className={styles.close} ref={closeRef} onClick={onClose}>
+          <EditorIcon name="close" />
+          <span className="sr-only">{copy("Close navigation")}</span>
+        </button>
+      </div>
+      <p className={styles.description}>
         {copy(
           "Jump to a slide or activity. Reviewed activities keep their saved results and remain closed.",
         )}
@@ -131,17 +136,27 @@ export function PresentationNavigationDialog({
                 if (!disabled && entry.status !== "current" && entry.canJump) onJump(entry.blockId);
               }}
             >
-              <span lang="">{entry.title}</span>
-              <span className={styles.detail}>
-                {entry.kind === "content" ? copy("Slide") : copy("Activity")} ·{" "}
-                {entry.status === "current"
-                  ? copy("Current")
-                  : entry.status === "visited"
-                    ? copy("Visited")
-                    : copy("Not visited")}
-                {entry.kind === "question" && entry.phase && entry.phase !== "question_open"
-                  ? ` · ${copy("Review")}`
-                  : ""}
+              <span className={styles.ordinal} aria-hidden="true">
+                {formatNumber(locale, index + 1)}
+              </span>
+              <span className={styles.entryContent}>
+                <span className={styles.entryTitle} lang="">
+                  {entry.title}
+                </span>
+                <span className={styles.detail}>
+                  {entry.kind === "content" ? copy("Slide") : copy("Activity")} ·{" "}
+                  {entry.status === "current"
+                    ? copy("Current")
+                    : entry.status === "visited"
+                      ? copy("Visited")
+                      : copy("Not visited")}
+                  {entry.kind === "question" && entry.phase && entry.phase !== "question_open"
+                    ? ` · ${copy("Review")}`
+                    : ""}
+                </span>
+              </span>
+              <span className={styles.kindIcon} aria-hidden="true">
+                <EditorIcon name={entry.kind === "content" ? "content" : "round"} />
               </span>
             </button>
             {entry.blockedReason ? (

@@ -221,7 +221,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await page.context().addInitScript(monitorAudienceCommands);
       await page.goto(`/presentation-session/${id}/host`);
       const popup = page.waitForEvent("popup");
-      await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+      await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
       stage = await popup;
       if (suffix === "@mobile") await stage.setViewportSize({ width: 320, height: 844 });
       await audience.addInitScript(monitorAudienceCommands);

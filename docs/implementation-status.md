@@ -8,6 +8,149 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Expanded presentation designs and full application November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration grows the visual library from eight to
+30 original collections, with 240 coordinated editable layouts. The 22 additions cover
+business strategy, reporting, marketing, roadmaps, technology, research, education, creative
+work, wellbeing, sustainability and community presentations. Ten discovery categories now
+include Corporate, Creative, Academic, Nature, Playful and Geometric alongside the four
+existing visual styles. Collections can belong to more than one useful category.
+
+Eight further Canva sets were inspected at cover and interior level. Their abstract product
+patterns inform original native compositions; competitor artwork and assets are not bundled.
+All 30 collections have distinct example narratives in the existing ten languages, providing
+300 localized decks and 2,400 publication-valid layout recipes. The original eight recipes
+retain their compositions and identifiers.
+
+Applying a design to an existing presentation now defaults to **Full design**: authored
+content moves into the collection's actual composition, with new artwork and typography.
+**Colors and fonts** explicitly retains the previous style-only behavior. Preview and commit
+use the same transformation; apply remains one undo/autosave transaction. Content, meaningful
+object IDs, rich text, notes, citations, motion and activities are preserved. Imported canvases,
+connected diagrams, grouped/interactive/rotated content, or layouts that cannot fit safely retain
+their geometry and show a clear notice. The base-color theme control identifies collection
+palettes as **From presentation design**; explicit base-color overrides keep the applied layout.
+
+The gallery initially shows twelve covers, searches the full catalog and reveals twelve more
+on demand with keyboard focus on the first new collection. Eight-slide preview decks are built
+when opened, avoiding eager construction of all 240 scenes. Typed composition modules and the
+shared composer allow additions without a new contract, migration, subscription or dependency.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,941 tests and 526 existing
+opt-in skips, including formatting, lint, types, all four production build tasks and compiled
+server startup. All 245 focused tests and 4,913 web tests pass. Eight targeted production browser
+checks pass across desktop Chromium/Firefox and phone Chromium/WebKit, including repeat
+application, font changes, retained text layout, preview/apply/undo/reload and base-color overrides.
+The initial complete-catalog browser qualification passed 24 journeys and 960 rendered layout
+checks with no text overflow. The 64 original layout object arrays remain byte-identical to `d82eeab`.
+Captures and receipts are under `artifacts/presentation-expanded-designs/`; the final repository
+checkpoint is `pre-pr-qualification.json`.
+
+Review corrections preserve page markers when moving between footer and header designs,
+including after an intervening font/style change. Full design retains the original slide geometry
+when text still cannot fit at the minimum size; the preview discloses that fallback.
+
+The [additional-template benchmark and original briefs](evidence/presentation-expanded-designs-2026-11.md)
+record inspected sources and scope. Local automated validation does not advance hosted,
+native-language human review or physical-device acceptance gates.
+
+### Authored presentation collections November 13, 2026
+
+The `codex/presentation-designed-collections` iteration replaces the initial design recipes
+with eight original, coordinated visual collections and 64 native layouts. Nine individually
+inspected Canva sets informed the design benchmark; covers and one interior from each were
+reviewed, without copying their assets or claiming a verified popularity ranking.
+
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas now have
+family-specific compositions, typography, decorative geometry, palettes and localized example
+headlines. Business proposals, brand stories, startup pitches, project plans, wellbeing workshops,
+creative briefs, portfolios and team workshops have distinct visual identities. The compact
+gallery emphasizes covers and purposes; full-size preview and a scrollable layout strip expose
+each coordinated set. Existing style application preserves authored content and geometry.
+
+Bounded named palettes, text typography and decorative-shape appearance opt into scene 9 and
+document 18. Migration 108 adds database validation for the new fields and version floors;
+older migrations and stored presentation bytes remain unchanged. Native, ordinary and activity
+views, public sharing and static exports retain the palette. Text and geometry stay editable;
+image areas are clearly labeled placeholders rather than unlicensed stock imagery.
+Switching the collection font clears only conflicting text-font overrides; other typography,
+content and object geometry remain intact.
+Explicit object colors replace collection palette paints while retaining outline and border
+treatments. Formatted text uses readable palette colors in mobile reading and accessible
+outline views; recolored dark placeholders retain contrasting labels in web and static exports.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,774 tests and 526 opt-in
+skips, including formatting, lint, types, all four production build tasks and compiled startup.
+All 80 localized example decks (640 layout recipes) pass publication validation. Twenty
+production browser journeys pass across desktop Chromium/Firefox and phone Chromium/WebKit,
+including all 64 English layouts' text fit, large cover type, layout diversity, German/Korean
+creation, editable save/reload, existing-content preservation, insertion and retry recovery.
+Regressions cover explicit shape colors, contrasting placeholder labels and formatted-text
+contrast in mobile and accessible-outline views, including private sharing.
+Five styled PostgreSQL tests plus 33 PostgreSQL regressions pass on an isolated local cluster;
+strict version/null, field, budget, semantic and privacy fences are retained. The temporary
+cluster was stopped. Independent read-only review has no unresolved actionable findings.
+Captures and a source receipt are under `artifacts/presentation-designed-collections/`.
+
+See the [individual-template benchmark and original design briefs](evidence/presentation-designed-collections-2026-11.md).
+Local automated results do not advance hosted, native-language or physical-device acceptance.
+
+### Presentation design library November 13, 2026
+
+The `codex/presentation-design-library` source adds a separate Presentation design collection
+alongside the existing content templates. Eight original families provide 64 native layouts:
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas. All ten
+creation languages have discovery, preview and illustrative slide copy. Templates → Designs,
+the dedicated design starting point and the editor's Presentation designs control expose the
+same collection. The template library retains its existing Rounds default.
+
+Applying style to a content slide or the whole presentation preserves objects, geometry,
+rich text, language, notes, media references, questions and existing motion. Ordinary content
+slides use the established native adapter. Activities inherit nearby visible content styling;
+image-based imports retain the colors in their artwork. Adding one layout is a separate,
+undoable operation with fresh IDs and its own selected design. New-design creation freezes
+the account-scoped creation and draft requests for idempotent retries, including lost POST
+acknowledgements and gallery remounts. Failed attempts expose a localized Start another action
+that creates a fresh presentation while keeping any previously created draft unchanged.
+Preview includes authenticated images and a complete
+reading alternative. Static exports now retain inherited static palettes/fonts on activities
+as well as native and ordinary pages.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,746 tests and 521 opt-in skips,
+including formatting, lint, types, all four production builds and compiled startup. All 64
+layout recipes pass publication validation. Twelve production browser journeys pass across
+desktop Chromium/Firefox and phone Chromium/WebKit: separate discovery, real layout previews,
+German/Korean copy, keyboard focus, accessibility/reflow, lost creation acknowledgements,
+editable creation, content/motion preservation, undo/redo, scope isolation, layout insertion
+and save/reload. A real revision-conflict scenario verifies safe retries and fresh creation
+without changing the previously edited target. The browser fixture also passes a separate
+TypeScript check. Independent read-only reviews verified the addressed motion, byte-budget,
+creation-lifecycle and retained-attempt recovery issues.
+Local captures and a source receipt are under `artifacts/presentation-designs/`.
+
+See [design research and behavior](evidence/presentation-design-library-2026-11.md). The
+collection adds no dependency, external asset service, per-use AI request or schema migration.
+Hosted, native-language, customer and physical-device acceptance gates remain separate.
+
+### Workspace palette refinement November 13, 2026
+
+The `codex/workspace-muted-colors` source refines the workspace colors below into a
+shared neutral and sage palette across Library, Sessions, Results, Home and Assignments.
+Type previews and icons use neutral surfaces and text, with one sage selected-tab treatment.
+Routine draft and processing badges are neutral; published and active work use soft sage.
+Status icons and translated labels carry the lifecycle meaning, with red reserved for work
+that needs attention. Full-height colored card rails are removed. Host, Resume and report
+actions follow the charcoal primary-button style; Edit and Assign use neutral outlined
+buttons. Unselected favorite stars and Results widget dividers are also neutral.
+
+Validation: 51 focused contrast and signal tests, web lint, formatting and a production beta
+build pass. Four production browser journeys pass across desktop Chromium/Firefox and phone
+Chromium/WebKit, covering both themes, grid/list density, resolved text contrast, action
+eligibility, keyboard focus, forced colors and German labels. Local fixture screenshots and
+metrics are under `artifacts/workspace-colors/`. An independent read-only CSS review found
+no actionable issues. This local styling refinement does not advance release acceptance gates.
+
 ### Workspace type and lifecycle colors November 12, 2026
 
 The `codex/workspace-semantic-colors` source adds shared type, lifecycle and action

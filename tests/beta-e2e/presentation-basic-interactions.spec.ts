@@ -183,7 +183,7 @@ for (const suffix of ["", " @mobile"]) {
     );
     await page.goto(`/presentation-session/${sessionId}/host`);
     const stageCreated = page.waitForEvent("popup");
-    await page.getByRole("button", { name: "Open audience stage", exact: true }).click();
+    await page.getByRole("button", { name: "Present on another screen", exact: true }).click();
     const stage = await stageCreated;
     const companionCreated = page.waitForEvent("popup");
     await page.getByRole("button", { name: "Launch companion", exact: true }).click();

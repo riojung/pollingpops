@@ -13,6 +13,79 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Expanded design collection and application — November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration adds 22 original visual systems to
+the existing eight, reaching 30 collections and 240 editable native layouts. Each addition
+owns its cover and seven coordinated interior compositions. Ten-language discovery and
+example narratives cover business, education, creative and impact needs. Ten overlapping
+categories add Corporate, Creative, Academic, Nature, Playful and Geometric discovery.
+
+The [additional public-template benchmark](evidence/presentation-expanded-designs-2026-11.md)
+records eight more visually inspected covers and interiors. The original eight families and
+their existing identifiers remain stable. Typed composition modules share bounded native
+primitives; no new contract version, migration, dependency or paid asset service is needed.
+
+Existing-deck application defaults to Full design, mapping meaningful authored objects into
+family content regions and replacing only unreferenced decorative artwork. Colors and fonts
+retains the earlier geometry-preserving behavior. Complex connected/grouped/interactive or
+imported canvases retain geometry with an explicit notice. Previews and commits use one
+validated transformation; meaningful IDs, content, reading order, provenance, notes and motion
+must survive with single-step undo. Base color theme controls must identify a collection palette
+honestly and explain their difference from a full layout application.
+
+Discovery initially renders twelve covers and progressively reveals the remaining collections.
+Full-catalog search and category filters apply before pagination; preview decks are constructed
+only on demand. Acceptance covers all 300 localized example decks, 240 English layouts'
+rendered heading/paragraph fit, separate content regions, panel contrast, keyboard browsing,
+localized creation and reload, layout insertion, and full-design preview/apply/undo/reload on
+existing authored work. Results belong in [implementation status](implementation-status.md);
+local checks do not establish hosted, physical-device or native-language human acceptance.
+
+## Authored visual collections — November 13, 2026
+
+The `codex/presentation-designed-collections` follow-up deepens the eight design families into
+complete visual sets. The original names and layout APIs remain stable; each family now has
+its own typography, recurring components, cover composition and eight coordinated interiors.
+Family-specific purposes and illustrative headlines are supplied in all ten creation languages.
+Gallery discovery, full-size previews, new-deck creation and individual-layout insertion use
+the same factories. Existing presentation styling keeps content and native geometry intact.
+
+The [individual-template benchmark](evidence/presentation-designed-collections-2026-11.md)
+records nine inspected public Canva sets and the clean-room design decisions. Implementations
+use editable native vectors and system fonts, with explicit image placeholders. Additional
+families can extend the typed catalog, localized narrative and composition factory.
+
+Named palettes, bounded per-object typography and decorative shape appearance use scene 9 /
+document 18 with additive migration 108. Deploy the migration before enabling new-version
+writes; existing frozen publications are not rewritten. Legacy visuals remain unchanged when
+the optional fields are absent. Browser, live, shared, reading and static-export surfaces must
+honor the same public fields and retain private-data fences. Acceptance results belong in
+[implementation status](implementation-status.md); local automated checks do not qualify hosted,
+physical-device or native-language acceptance gates.
+
+## Presentation design collection — November 13, 2026
+
+The `codex/presentation-design-library` follow-up separates visual designs from the content
+and scenario collection below. Eight original families supply 64 editable native layout recipes
+with ten-locale example copy. Templates → Designs supports visual browsing, filtering, preview
+and new-draft creation. The editor supports applying style to existing content and inserting
+one selected layout through the existing undo/autosave transaction.
+
+Style application retains native geometry and content; ordinary slides use the existing native
+adapter. Activity appearance follows nearby visible content, and imported raster colors remain
+part of the original artwork. Appearance changes and layout insertion are separate actions.
+Existing motion is retained, published source content stays immutable, and complete-document
+budgets are validated before application or spatial insertion. Creation retries preserve their
+original request identity, owner context and initial draft revision.
+
+Public catalog/help evidence, clean-room provenance, implementation boundaries and export
+consistency are recorded in [the design-library evidence](evidence/presentation-design-library-2026-11.md).
+The source uses existing versioned scene primitives and requires no new migration or paid asset
+service. Validation results are recorded in [implementation status](implementation-status.md).
+This closes a specific design-discovery/application gap without treating an original starter
+collection as numerical parity with competitor catalogs or advancing release-acceptance gates.
+
 ## Customer template collection — November 12, 2026
 
 The pre-launch template work prioritizes complete, useful examples and faithful previews.

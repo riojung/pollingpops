@@ -41,14 +41,15 @@
   --ui-danger-border: #fecaca;
   --ui-violet-bg: #efe9ff;
   --ui-violet-text: #6941c6;
-  --ui-kind-round-bg: var(--ui-info-bg);
-  --ui-kind-round-text: var(--ui-info-text);
-  --ui-kind-presentation-bg: var(--ui-violet-bg);
-  --ui-kind-presentation-text: var(--ui-violet-text);
-  --ui-kind-survey-bg: var(--ui-accent-soft);
-  --ui-kind-survey-text: var(--ui-accent-ink);
-  --ui-kind-practice-bg: var(--ui-warning-bg);
-  --ui-kind-practice-text: var(--ui-warning-text);
+  /* Workspace types use their labels and glyphs; large surfaces share one neutral palette. */
+  --ui-kind-round-bg: var(--ui-surface-soft);
+  --ui-kind-round-text: var(--ui-text-strong);
+  --ui-kind-presentation-bg: var(--ui-surface-soft);
+  --ui-kind-presentation-text: var(--ui-text-strong);
+  --ui-kind-survey-bg: var(--ui-surface-soft);
+  --ui-kind-survey-text: var(--ui-text-strong);
+  --ui-kind-practice-bg: var(--ui-surface-soft);
+  --ui-kind-practice-text: var(--ui-text-strong);
   --ui-skeleton-base: #e8eef2;
   --ui-skeleton-highlight: #f6f9fb;
   --ui-hero-start: #242931;

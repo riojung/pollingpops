@@ -75,6 +75,8 @@ export const PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION = 15;
 export const PRESENTATION_TRANSLATION_SCHEMA_VERSION = 16;
 /** Built-in scene8 motion decoration opts into v17 without changing static historical records. */
 export const PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION = 17;
+/** Named palettes, bounded typography and decorative native shapes explicitly opt into v18. */
+export const PRESENTATION_STYLED_SCHEMA_VERSION = 18;
 export const RECOVERY_PACK_DRAFT_SCHEMA_VERSION = 1;
 export const RECOVERY_PACK_CONTENT_SCHEMA_VERSION = 1;
 
@@ -233,6 +235,10 @@ const presentationDraftUpcasters = new Map<number, Upcaster<PresentationDraft>>(
     PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION,
     (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 17)),
   ],
+  [
+    PRESENTATION_STYLED_SCHEMA_VERSION,
+    (value) => PresentationDraftSchema.parse(withPresentationSchemaVersion(value, 18)),
+  ],
 ]);
 
 const presentationContentUpcasters = new Map<number, Upcaster<PresentationContent>>([
@@ -306,6 +312,10 @@ const presentationContentUpcasters = new Map<number, Upcaster<PresentationConten
   [
     PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION,
     (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 17)),
+  ],
+  [
+    PRESENTATION_STYLED_SCHEMA_VERSION,
+    (value) => PresentationContentSchema.parse(withPresentationSchemaVersion(value, 18)),
   ],
 ]);
 
@@ -381,7 +391,7 @@ export function upcastPresentationContent(
  * Legacy live snapshots used draft validation, including partially authored old snapshots.
  * Preserve that read path, but validate session-only metadata with the frozen content contract
  * so it cannot be stripped by the authoring parser or restore invalid live insertion metadata.
- * Versions 6 through 17 always use the publication parser: hidden editable content must never enter a
+ * Versions 6 through 18 always use the publication parser: hidden editable content must never enter a
  * session through the legacy partial-snapshot path.
  */
 export function upcastPresentationSessionContent(
@@ -401,6 +411,7 @@ export function upcastPresentationSessionContent(
     schemaVersion === PRESENTATION_TEXT_ASSISTANCE_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_TRANSLATION_SCHEMA_VERSION ||
     schemaVersion === PRESENTATION_MOTION_BACKGROUND_SCHEMA_VERSION ||
+    schemaVersion === PRESENTATION_STYLED_SCHEMA_VERSION ||
     (value &&
       typeof value === "object" &&
       ("liveQuickCheck" in value || "livePublishedQuestions" in value))

@@ -202,7 +202,7 @@ for (const suffix of ["", " @mobile"]) {
     await openE01Inspector(page, "Layout");
     await expect(selected).toHaveValue(body.id);
     await inspector
-      .getByRole("combobox", { name: "Slide theme", exact: true })
+      .getByRole("combobox", { name: "Base color theme", exact: true })
       .selectOption("midnight");
     await expect
       .poll(async () => firstSlide(await readE01Record(page, record.id)).scene!.design?.theme)

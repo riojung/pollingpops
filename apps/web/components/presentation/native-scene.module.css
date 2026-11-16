@@ -53,17 +53,26 @@
 .node h1 {
   /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
      type and padding scale together, so a smaller editor does not change text fit. */
-  font-size: 3.75cqw;
-  line-height: var(--native-title-leading, 1.08);
+  font-size: var(--native-node-size, 3.75cqw);
+  line-height: var(--native-node-leading, var(--native-title-leading, 1.08));
+  font-weight: var(--native-node-weight, 700);
+}
+.node[data-native-typography] h1,
+.node p,
+.richBody {
+  color: var(--native-node-color, inherit);
+  font-family: var(--native-node-font, inherit);
+  text-align: var(--native-node-align, inherit);
 }
 .stage[data-native-theme] .node h1 {
-  color: inherit;
+  color: var(--native-node-color, inherit);
   max-width: none;
-  font-family: inherit;
+  font-family: var(--native-node-font, inherit);
 }
 .node p {
-  font-size: 2.03125cqw;
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody {
   box-sizing: border-box;
@@ -73,8 +82,9 @@
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: 2.03125cqw;
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody p {
   width: auto;
@@ -118,6 +128,8 @@
   position: relative;
   max-width: 85%;
   font-size: 1.71875cqw;
+  /* Keep fixed-plane label metrics consistent with design-application fit checks. */
+  line-height: 1.35;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -144,6 +156,11 @@
 }
 .canvas {
   min-width: 0;
+}
+.canvas:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 .canvasSurface {
   position: relative;
@@ -184,6 +201,99 @@
 }
 .editableNode {
   cursor: grab;
+}
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.selectionOutline {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 2px solid #1769aa;
+  outline-offset: 0;
+  pointer-events: none;
+}
+.selectionDragBorder {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  background: #1769aa12;
+}
+.selectionDragBorder[data-native-move-border="n"] {
+  inset: -8px 0 auto;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="e"] {
+  inset: 0 -8px 0 auto;
+  width: 8px;
+}
+.selectionDragBorder[data-native-move-border="s"] {
+  inset: auto 0 -8px;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="w"] {
+  inset: 0 auto 0 -8px;
+  width: 8px;
+}
+@media (min-width: 701px) {
+  .stage[data-native-direct-selection="true"] .selected {
+    outline: none;
+  }
+}
+.directResizeHandle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.directResizeHandle::after {
+  content: "";
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #1769aa;
+  background: #fff;
+  transform: rotate(var(--native-handle-angle, 0deg));
+}
+.directResizeHandle[data-native-resize-corner]::after {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+.directResizeHandle[data-native-resize-handle="n"],
+.directResizeHandle[data-native-resize-handle="s"] {
+  cursor: ns-resize;
+}
+.directResizeHandle[data-native-resize-handle="w"],
+.directResizeHandle[data-native-resize-handle="e"] {
+  cursor: ew-resize;
+}
+.directResizeHandle[data-native-resize-handle="nw"],
+.directResizeHandle[data-native-resize-handle="se"] {
+  cursor: nwse-resize;
+}
+.directResizeHandle[data-native-resize-handle="ne"],
+.directResizeHandle[data-native-resize-handle="sw"] {
+  cursor: nesw-resize;
+}
+.directResizeHandle:focus-visible {
+  outline: 3px solid #1769aa;
+  outline-offset: -2px;
+  background: #ffffffcc;
 }
 .handles {
   position: absolute;
@@ -360,7 +470,12 @@
     height: auto !important;
     transform: none !important;
   }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-decorative="true"] {
+    display: none;
+  }
   .groupOutline,
+  .selectionOverlay,
   .snapGuides {
     display: none;
   }
@@ -387,6 +502,19 @@
   }
   .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > :is(h1, p, .richBody) {
+    /* Nested rich paragraphs resolve this token rather than inheriting wrapper color. */
+    --native-node-color: var(--native-text, #102a43);
+    color: var(--native-text, #102a43);
+    line-height: 1.45;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > h1 {
+    line-height: 1.2;
   }
   .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
@@ -617,6 +745,7 @@
   box-sizing: border-box;
   overflow: visible;
 }
+.outline .node[data-decorative="true"],
 .outline .connections {
   display: none;
 }
@@ -645,6 +774,14 @@
 .outline .node p,
 .outline .richBody {
   font-size: 16px;
+}
+.outline .node[data-native-typography] > :is(h1, p, .richBody) {
+  --native-node-color: var(--native-text, #102a43);
+  color: var(--native-text, #102a43);
+  line-height: 1.45;
+}
+.outline .node[data-native-typography] > h1 {
+  line-height: 1.2;
 }
 .outline .shape,
 .outline .image {

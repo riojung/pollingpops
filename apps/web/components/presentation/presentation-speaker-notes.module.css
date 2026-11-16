@@ -195,11 +195,12 @@
 }
 
 .presenterPanel {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  gap: 14px;
-  padding: 22px;
+  min-height: 0;
+  gap: 8px;
+  padding: 14px;
   border: 1px solid var(--ui-border);
   border-radius: 16px;
   color: var(--ui-text);
@@ -211,20 +212,73 @@
   font-size: 1.15rem;
 }
 
+.presenterHeading {
+  flex-shrink: 0;
+}
+
+.presenterPrivacy {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: 50%;
+  overflow: auto;
+  border-bottom: 1px solid var(--ui-border);
+  padding-bottom: 6px;
+}
+
+.presenterPrivacy summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.presenterPrivacy summary::-webkit-details-marker {
+  display: none;
+}
+
+.presenterPrivacy summary svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.presenterPrivacy summary svg:last-child {
+  margin-left: auto;
+}
+
+.presenterPrivacy[open] summary svg:last-child {
+  transform: rotate(180deg);
+}
+
+.presenterPrivacy summary:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -2px;
+}
+
+.presenterPrivacy > div {
+  display: grid;
+  gap: 8px;
+  padding-block: 8px 2px;
+}
+
 .slideNumber {
   color: var(--ui-text-muted);
   font-size: 0.8rem;
 }
 
 .notesBody {
-  min-height: 180px;
-  max-height: min(48dvh, 32rem);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  border-block: 1px solid var(--ui-border);
-  padding-block: 16px;
-  font-size: 1.05rem;
-  line-height: 1.75;
+  padding-block: 2px 8px;
+  font-size: 1rem;
+  line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

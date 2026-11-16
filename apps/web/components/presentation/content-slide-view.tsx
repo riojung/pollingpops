@@ -18,6 +18,7 @@ import {
   fitContentSlideFrameAroundMedia,
   regionForContentSlideFrame,
   resolveContentSlideFrames,
+  presentationDesignPalette,
   type ContentSlideFrame,
   type ContentSlideLayout,
   type ContentSlideRegion,
@@ -28,7 +29,7 @@ import {
 } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import styles from "./content-slide-view.module.css";
-import { NATIVE_DESIGN_THEMES, NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
 import type { NativeSceneInteractionRuntime } from "./native-scene-interaction-view";
 import {
@@ -82,6 +83,8 @@ interface ContentSlideViewProps {
   interactionRuntime?: NativeSceneInteractionRuntime;
   /** Inert fixed-layout artwork; ordinary preview/live retain readable phone flow. */
   staticThumbnail?: boolean;
+  /** Keep the authored slide plane on a dedicated display without disabling its interactions. */
+  fixedLayout?: boolean;
   variant: "editor" | "preview" | "live";
   selectedElementId?: string | null;
   titlePlaceholder?: string;
@@ -302,6 +305,7 @@ export function ContentSlideView(props: ContentSlideViewProps) {
       renderImage={props.renderSceneImage}
       interactionEditing={props.variant === "editor"}
       staticThumbnail={props.staticThumbnail}
+      fixedLayout={props.fixedLayout}
       interactionRuntime={props.interactionRuntime}
       interactionSourceKey={JSON.stringify([props.block.id, props.interactionSourceKey])}
     />
@@ -318,6 +322,7 @@ function LegacyContentSlideView({
   media,
   variant,
   staticThumbnail = false,
+  fixedLayout = false,
   selectedElementId = null,
   titlePlaceholder = "Give this moment a clear title",
   bodyPlaceholder = "Add the context your audience needs",
@@ -604,14 +609,15 @@ function LegacyContentSlideView({
         style={
           designOverride
             ? ({
-                "--content-slide-background": NATIVE_DESIGN_THEMES[designOverride.theme].background,
-                "--content-slide-text": NATIVE_DESIGN_THEMES[designOverride.theme].text,
+                "--content-slide-background": presentationDesignPalette(designOverride).background,
+                "--content-slide-text": presentationDesignPalette(designOverride).text,
                 fontFamily: NATIVE_DESIGN_FONTS[designOverride.font],
               } as CSSProperties)
             : undefined
         }
         data-layout={block.layout}
         data-static-thumbnail={staticThumbnail || undefined}
+        data-content-fixed-layout={fixedLayout || undefined}
         inert={staticThumbnail || undefined}
         aria-hidden={staticThumbnail || undefined}
         lang={contentLocale ?? "en-CA"}

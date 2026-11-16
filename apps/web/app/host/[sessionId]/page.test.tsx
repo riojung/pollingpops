@@ -31,6 +31,8 @@ const fixtures = vi.hoisted(() => ({
   credentials: [] as SessionStaffCredential[],
   allowStaff: true,
   allowCohost: true,
+  syncDenied: false,
+  emissions: [] as { name: string; payload: Record<string, unknown> }[],
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -77,8 +79,18 @@ vi.mock("../../../lib/realtime", async (importOriginal) => ({
     connected: true,
     on: (name: string, callback: (...args: unknown[]) => void) =>
       fixtures.handlers.set(name, callback),
-    emit: (_name: string, _payload: unknown, callback: (response: unknown) => void) =>
-      callback({ data: { snapshot: fixtures.snapshot } }),
+    emit: (
+      name: string,
+      payload: Record<string, unknown>,
+      callback: (response: unknown) => void,
+    ) => {
+      fixtures.emissions.push({ name, payload });
+      callback(
+        fixtures.syncDenied && name === "sync.request"
+          ? { error: { code: "UNAUTHORIZED", message: "Scoped access rejected" } }
+          : { data: { snapshot: fixtures.snapshot } },
+      );
+    },
     connect: () => fixtures.handlers.get("connect")?.(),
     disconnect: vi.fn(),
     removeAllListeners: vi.fn(),
@@ -134,6 +146,8 @@ beforeEach(() => {
   fixtures.credentials = [];
   fixtures.allowStaff = true;
   fixtures.allowCohost = true;
+  fixtures.syncDenied = false;
+  fixtures.emissions = [];
   fixtures.copy.mockReset().mockResolvedValue(undefined);
   fixtures.open.mockReset();
   fixtures.snapshot = SessionSnapshotSchema.parse({
@@ -256,6 +270,31 @@ async function harness() {
 }
 
 describe("Round staff localization and authority", () => {
+  it("connects with a separately stored cohost credential and strips its fragment without creator recovery", async () => {
+    const cohost = "synthetic_cohost_capability_1234567890";
+    window.location.hash = `#cohost=${cohost}`;
+    const page = await harness();
+    expect(storage.get("openround:cohost:room-a")).toBe(cohost);
+    expect(storage.has("openround:host:room-a")).toBe(false);
+    expect(window.history.replaceState).toHaveBeenCalledWith(null, "", "/host/room-a");
+    expect(
+      fixtures.emissions.find((event) => event.name === "sync.request")?.payload.hostToken,
+    ).toBe(cohost);
+    expect(page.render()).not.toContain(cohost);
+    expect(fixtures.apiFetch.mock.calls.some(([path]) => path.endsWith("/control-pass"))).toBe(
+      false,
+    );
+  });
+
+  it("does not upgrade a rejected cohost to an account-backed creator control pass", async () => {
+    window.location.hash = "#cohost=synthetic_cohost_capability_1234567890";
+    fixtures.syncDenied = true;
+    const page = await harness();
+    expect(page.render()).toContain("Scoped access rejected");
+    expect(fixtures.apiFetch.mock.calls.some(([path]) => path.endsWith("/control-pass"))).toBe(
+      false,
+    );
+  });
   it.each(supportedLocales)(
     "provides staff messages and preserves authored placeholders in %s",
     (locale) => {

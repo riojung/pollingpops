@@ -1,7 +1,7 @@
 /* Authoring controls only: audience slide styles remain independent. */
 .toolbar.toolbar {
-  gap: 6px;
-  padding: 10px 16px;
+  gap: 4px;
+  padding: 6px 10px;
 }
 
 .toolbar > div {
@@ -14,7 +14,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 38px;
+  min-height: 34px;
   border-color: transparent;
   border-radius: 7px;
   background: transparent;
@@ -166,10 +166,60 @@
   border-color: var(--ui-focus);
 }
 
-.inspector textarea[data-native-text-input] {
-  min-height: 138px;
+.plainTextEditor {
+  min-width: 0;
 }
 
+.plainTextEditor > label {
+  margin: 0;
+}
+
+.plainTextTools {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 5px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.inspector .plainTextTools button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 11px;
+}
+
+.inspector .plainTextTools button:hover:not(:disabled) {
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.inspector .plainTextEditor textarea {
+  min-height: 300px;
+  overflow: auto;
+  padding: 14px 12px;
+  font-size: 14px;
+  line-height: 1.75;
+  resize: vertical;
+}
+
+.inspector .plainTextEditor textarea[data-text-role="title"] {
+  min-height: 180px;
+}
+
+.textLength {
+  margin: 0;
+  padding: 6px 0 10px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
 .inspector input[type="file"] {
   padding: 5px;
   font-size: 11px;
@@ -364,6 +414,33 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
   gap: 10px;
+}
+
+.positionFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.positionFields label {
+  margin: 0;
+}
+
+.inspector [data-native-inspector-section] > [data-native-inspector-group] {
+  margin-bottom: 10px;
+}
+
+.inspector [data-native-inspector-group="writing-assistance"] {
+  margin-top: 14px;
+}
+.inspector [data-native-inspector-group="writing-assistance"] .assistanceCard {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.inspector [data-native-inspector-group="writing-assistance"] .assistanceHeader {
+  display: none;
 }
 
 .sectionHeader {

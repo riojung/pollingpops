@@ -17,11 +17,12 @@ export function presentationBlockDesign(
   const explicitDesign = (candidate: DesignBlock | undefined) => {
     if (candidate?.kind !== "content" || candidate.hidden || !candidate.scene?.design)
       return undefined;
-    const { theme, font, spacing, motionBackground } = candidate.scene.design;
+    const { theme, font, spacing, motionBackground, palette } = candidate.scene.design;
     return {
       theme,
       font,
       spacing,
+      ...(palette === undefined ? {} : { palette }),
       ...(motionBackground === undefined ? {} : { motionBackground }),
     };
   };

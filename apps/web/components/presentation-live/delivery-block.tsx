@@ -20,6 +20,7 @@ export function PresentationDeliveryBlock({
   interactionSourceKey,
   interactionRuntime,
   accessibilityContext,
+  fixedLayout = false,
 }: {
   block: PresentationParticipantCurrentBlock;
   renderMedia: (mediaId: string | null, altText: string | null) => ReactNode;
@@ -27,6 +28,8 @@ export function PresentationDeliveryBlock({
   interactionSourceKey?: string;
   interactionRuntime?: NativeSceneInteractionRuntime;
   accessibilityContext?: PresentationActivitySlideProps["accessibilityContext"];
+  /** Dedicated audience displays can retain content artwork at phone widths. */
+  fixedLayout?: boolean;
 }) {
   const { locale } = useLocale();
   const copy = presentationActivityCopy(locale);
@@ -38,6 +41,7 @@ export function PresentationDeliveryBlock({
         interactionSourceKey={interactionSourceKey}
         interactionRuntime={interactionRuntime}
         variant="live"
+        fixedLayout={fixedLayout}
         media={renderMedia(block.mediaId, block.mediaAlt)}
         renderSceneImage={(id, alt) => renderMedia(id, alt)}
       />

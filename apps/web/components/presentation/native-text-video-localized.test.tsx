@@ -67,7 +67,7 @@ describe("localized native text and video markup", () => {
     expect(rich).toContain('<input lang=""');
     expect(rich).toContain(encoded(authored.text));
     for (const key of ["Bold", "Italic", "Apply link", "Remove link", "Remove formatting"] as const)
-      expect(rich).toContain(`>${encoded(copy(key))}</button>`);
+      expect(rich).toContain(`aria-label="${encoded(copy(key))}" title="${encoded(copy(key))}"`);
     for (const [value, key] of [
       ["", "Choose for selected paragraphs"],
       ["paragraph", "Paragraph"],

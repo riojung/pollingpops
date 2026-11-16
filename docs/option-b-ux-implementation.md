@@ -5,6 +5,273 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Audience workspace and second-screen presentation — November 15, 2026
+
+Joined audiences now have page progress and a collapsed spatial-path control in the top
+navigation bar. Opening the path reveals a bounded popup; changing its camera or linear view
+stays local. On wide screens, questions and answers sit beside the current slide or activity
+in an independently scrolling sidebar. Closing and reopening Q&A preserves the unfinished
+question and activity response. Phones use a full-height drawer with background isolation,
+keyboard focus containment, Escape and focus restoration. Unavailable Q&A leaves the slide
+the full workspace width. Long content and activities retain their own scrolling area.
+
+The host header now exposes **Present on another screen** with **Second-screen setup**
+instructions. It opens the existing isolated, read-only audience-stage window. Move that
+window to the projector or other monitor, then choose **Enter full screen** there; the host's
+notes, timer and controls remain in the original window. Fullscreen is requested from the
+user's click on the audience stage only. **Slide-only view** also works when browser fullscreen
+is unavailable or denied. Display controls fade after inactivity and return with a pointer,
+tap or keyboard focus; Exit or Escape restores the normal stage. The focus view hides the
+navigation, join footer and app header and fits native slides to the available screen.
+
+Both setup popups clamp to the visible viewport, including translated phone layouts and
+short windows. New audience and display labels cover all ten existing locales. Stage pass
+isolation, revocation, published snapshots, response submission and server authority retain
+their existing boundaries. No automatic monitor selection or physical second-monitor
+qualification is claimed. Browser fullscreen requires user activation and may be refused
+by the browser; see the [Fullscreen API guidance](https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen).
+
+Verification: 130 focused tests across nine suites pass, along with web type checks, lint,
+formatting and fresh production/Docker web builds. Eight new production browser journeys
+pass across Chromium/Firefox desktop and Chromium/WebKit phones. They cover independent
+Q&A scrolling, preserved drafts and quiz selections, exactly-once response submission,
+header popup geometry and keyboard dismissal, isolated audience-stage launch, user-activated
+fullscreen and denied/unsupported fallback, touch control recovery, Korean 320px layouts,
+short windows, unchanged saved records and Axe checks. Visual review corrected phone
+fullscreen proportions; WebKit qualification corrected body-targeted Escape handling.
+Normal phone reading flow remains separate from fixed slide-only artwork, whose live
+links, media and interactions stay enabled. Local captures and source-bound build evidence
+are under `artifacts/presentation-audience-stage/`.
+
+Eight existing production lifecycle journeys also pass on Chromium desktop and WebKit phones,
+with summary sharing enabled in the test configuration. They retain private-note and frozen
+preview checks, read-only stage access, refresh recovery, pass rotation/revocation, blocked
+popup handling, disconnect/fullscreen-denial recovery, expiry and stale-host fences. This is
+16 selected browser journeys in total, rather than a rerun of the full browser matrix. The
+existing local Docker project received a web-only update and is healthy; the Home route
+returns HTTP 200. Existing services, runtime selection and data volumes were preserved.
+
+The review follow-up initializes the compact setup popup when edit access becomes available.
+A delayed-account regression reproduces the previous missing initialization, then verifies
+positioning, body-focused Escape and outside dismissal after the real session snapshot has
+already rendered. The expanded stage journeys pass on production Chromium desktop and
+WebKit phones after the fix, retaining their fullscreen, isolation and privacy checks. All
+130 focused tests, scoped lint, type checks, formatting and fresh production/Docker builds
+also pass.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,229 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Presenter preview layout — November 14, 2026
+
+The editor preview now reserves space explicitly for its header, optional spatial path, slide
+workspace and navigation footer. The path starts collapsed; expanding it reveals a bounded,
+scrollable map and controls. Linear mode removes the map without reserving an empty main row.
+These preferences stay local to preview; live spatial delivery keeps its existing default UI.
+
+Wide previews fit the slide within the available width and height, including short windows.
+Presenter notes have an independent scroll area, with privacy and publication guidance in a
+disclosure. Phones retain readable slide flow and a bounded notes panel. Changing pages resets
+the reading position and notes, and Audience view removes private notes from the DOM. Preview
+uses native modal isolation, keyboard navigation and focus restoration. Source and Round import
+dialogs retain their separate backdrop styles.
+
+Verification: 68 focused tests across four suites pass, along with web type checks, lint,
+formatting and a fresh production build. Twelve selected production browser journeys pass
+across Chromium/Firefox desktop and Chromium/WebKit phones, covering combined spatial preview
+and private notes, 1280×800/1280×500/320px layouts, linear-mode space reclamation, scroll reset,
+native focus/Escape handling, Axe checks and unchanged saved records. Existing notes-authoring
+and live spatial-delivery cases retain their publication, privacy and response checks. Visual
+inspection added actual-slide containment and notes-heading reachability checks; all six phone
+journeys were rerun after the final phone-only reading-flow correction. The Docker web build passes. Local
+captures and source-bound build evidence are under `artifacts/presenter-preview/`.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,188 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Editor delivery dialogs and Arrange space — November 14, 2026
+
+Private review, reading assignment, practice assignment and export dialogs share a scoped visual
+system: compact icon headers, an aligned Close action, bounded scrolling, grouped setup controls
+and a distinct primary action. Publication and privacy context stays near the top. Longer reading,
+practice and export guidance is available in disclosures. Created links, status badges, dates,
+management actions and compact empty states follow the same layout. Export explains the selected
+format before download. Existing request intents, retries, authorization fences, API calls and
+download handling retain their behavior; the readers and standalone insights pages keep their
+existing styles.
+
+Arrange space uses grouped icon controls, a smaller organized inspector and a single-row numbered
+thumbnail filmstrip. Selecting a slide keeps its filmstrip card reachable. The initial view focuses
+the selection when a whole-deck view would make frames unreadably small; Fit all remains available.
+These view changes preserve stored positions and playback order. Filmstrip thumbnails disable media
+fetches and remain separate from selection buttons. Numeric drafts still apply on Enter or blur,
+cancel on Escape, and flow through the existing save and Undo behavior. Help and layout settings
+are collapsible; the three added spatial labels cover the existing ten locales. The canvas can
+shrink in short desktop windows while the inspector scrolls and the filmstrip remains reachable.
+Phone layouts retain the filmstrip while the inspector scrolls internally. Arrange uses the same
+native modal behavior as the delivery dialogs, keeping the background inactive and restoring its
+launcher on close. Native selectors have explicit 40px heights, including in WebKit.
+
+Initial verification: 5,146 web tests across 427 files and 24 production browser cases pass. The browser
+matrix runs Chromium/Firefox desktop and Chromium/WebKit phones in fresh API phases, covering all
+five dialogs, default and populated lists, creation/revocation, HTML download, native focus and
+Escape, 320px layouts, short desktop windows, Axe checks, numeric edits, immutable reading/practice
+and frozen spatial delivery. The spatial fixture now uses the current section navigator and closes
+the restored More menu before Undo. Web and browser-fixture type checks, web lint, formatting,
+production compilation and the Docker web build pass. Captures and source-bound build evidence are under
+`artifacts/presentation-editor-dialogs/`.
+
+The review follow-up keeps Layout settings right-aligned when translated controls wrap on phones,
+so its popup stays inside the viewport. Both production Chromium and WebKit Arrange journeys pass
+at 320px in French, German and Portuguese. They open the full popup, click Disable spatial layout
+and verify Undo restores the exact saved draft, including frame geometry and playback order.
+Fixture type checks, formatting and fresh production/Docker web builds pass after this correction.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,175 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Compact canvas controls — November 14, 2026
+
+The canvas insert toolbar and object-selection area now use tighter spacing. A compact,
+icon-led picker replaces the separate Canvas object heading, Move/Resize buttons and permanent
+instruction paragraph. Group and multiple-selection counts remain visible. Object shortcuts
+are available from a collapsed help control, with labels and instructions in all ten locales.
+The desktop object strip measures 53px high and stays usable at 320px without page overflow.
+
+Selected objects still move and resize directly. Focusing the canvas enables arrow-key nudges
+(1%, or 5% with Shift), with Undo/Redo and the normal save path. Native form controls, links,
+scrollable content, modified key combinations and read-only scenes keep their own behavior.
+Arrange opens Layout, expands Position and size if needed, and focuses the first numeric field
+for precise edits. This replaces the earlier standalone Move/Resize keyboard controls.
+
+Verification: 24 production browser journeys pass across Chromium/Firefox desktop and
+Chromium/WebKit phone layouts. They cover direct editing, canvas versus picker arrow keys,
+Undo, saved geometry, Arrange focus, reload persistence, rich-text recovery/publication,
+toolbar accessibility and page overflow. Focused unit tests, web/browser type checks, web
+lint and formatting pass; the full web suite passes 5,143 tests across 427 files. The local
+Docker web build is deployed and healthy at port 8080. An independent read-only review found
+no actionable issues.
+Captures and browser-build evidence are retained under `artifacts/presentation-canvas-toolbar/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with 9,172 tests and 530
+standard opt-in skips, all four build tasks, and compiled-server startup verification. The first
+run hit the unchanged build-guard test's 250ms child-startup timing limit; the full rerun passed
+without code changes.
+
+## Presentation save precision repair — November 14, 2026
+
+An object dragged or resized to the slide edge could pass the browser's binary64 frame
+calculation and fail PostgreSQL's exact-decimal extent check. The failed transaction preserved
+the pending edit, but every Retry save encountered the same constraint failure.
+
+Forward migration 109 aligns frame extents and image-hotspot containment sums with the contract's
+JavaScript arithmetic. Scalar bounds, rotated-frame checks, content/target validation and stored
+publication bytes retain their existing rules. Existing failed mutations recover through Retry
+save after the migration. The local repair was verified against the original open editor: its
+preserved request saved successfully, and the server reported no further errors.
+
+PostgreSQL 17 Alpine verification passed **233 tests across five suites**. Coverage reproduces
+the constraint failure on migration 108, upgrades to 109, retries the exact failed mutation,
+checks draft/history/publication persistence, preserves existing frozen content, exercises legacy
+scenes and rejects invalid geometry and targets. DB type checks, lint and formatting pass. The
+PostgreSQL CI job now explicitly runs the frame, styled-scene and advanced-interaction suites
+under a restricted runtime account.
+
+## Editor interactions follow-up — November 14, 2026
+
+The `codex/presentation-editor-interactions` slice replaces the detached section forms with
+section headers beside their slides. Authors can create a section at the selected slide,
+rename it, collapse its thumbnails, move a whole contiguous section, or remove its heading
+while preserving the slides. Older noncontiguous memberships remain in their actual playback
+order and show continued headers. Section moves validate paired checks and interaction targets.
+The desktop slide rail has a pointer- and keyboard-operable width separator; its preference
+stays in browser storage. Narrow screens retain the existing drawer and reading-order layout.
+
+Content and Layout tools use independent collapsible groups. Selected text has a persistent
+font-family and font-size toolbar, an expanded writing area, and the existing paragraph,
+emphasis and link controls. Typography uses the existing version-9 scene contract and the
+device's sans, serif and monospace families; it does not rewrite rich-text runs. Staged table
+and chart data has readable column widths, bounded horizontal scrolling and explicit Apply and
+Discard actions. Collapsing a group retains its mounted controls and uncommitted data.
+
+On the wide editing canvas, object bodies can be dragged immediately; selection borders also
+move objects whose interior needs scrolling or links. Border hit areas stay outside the frame
+to preserve native scrollbars. Selected objects have
+eight handles: circular corners and square edge midpoints. Resizing anchors the opposite edge
+or corner; grouped/multiple selections scale together. Rotated geometry remains within the
+slide. Pointer preview stays local, release commits one edit, and cancellation/source changes
+discard the gesture. The normal-flow keyboard Move/Resize controls remain available. Audience,
+preview and static-thumbnail rendering does not gain editing handles.
+
+Interaction references are the documented [PowerPoint section workflow](https://support.microsoft.com/en-us/powerpoint/training/organize-your-powerpoint-slides-into-sections),
+[Google Slides arranging controls](https://support.google.com/docs/answer/1696521?co=GENIE.Platform%3DDesktop&hl=en-gh),
+and [Google's proportional group resizing](https://workspaceupdates.googleblog.com/2025/03/proportional-scaling-objects-in-google-slides.html).
+These inform behavior only. Implementation, icons and layouts are repository-native; no
+competitor assets, copied code, new dependencies or external fonts were added.
+
+Verification: the full web suite passed **5,072 tests across 426 files**. The final border-drag
+refinement also passed **69 canvas/view tests**. **20 production browser journeys** pass across
+Chromium and Firefox desktop and Chromium/WebKit at 320px. They cover direct and border dragging,
+eight anchored handles, multiple selection, preview-versus-save, cancellation and Undo/Redo,
+rail pointer/keyboard resizing and persistence, section creation/rename/reorder/removal,
+last-section reachability, preserved rich text with saved/rendered fonts, mounted staged tables,
+rich-text recovery/publication, panel Axe checks and document overflow. Web and browser-fixture
+type checks, web lint, formatting, production compilation and the local Docker web build pass.
+The refreshed local web service is healthy at port 8080. Captures and the source/artifact-bound
+browser receipt are under `artifacts/presentation-editor-interactions/`. Independent review
+identified the fixed phone selection outline, final-section reachability and scrollbar hit-area
+issues; no outstanding findings remain. This does not replace human or hosted release acceptance.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,101 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. A fresh
+delegated read-only review of the branch diff and staged, unstaged and untracked files found no
+actionable issues.
+
+## Presenter workflow follow-up — November 14, 2026
+
+The `codex/option-b-presenter-localization` slice closes an English-only gap in the refreshed
+private Presentation workspace. Connection status, facilitation landmarks, private notes and
+next-slide guidance, connected counts, timer controls and audience-stage access now use the
+selected language across all ten existing locales. Initial connection is labelled Connecting
+rather than Reconnecting. The clock retains its elapsed-time format and session-local state.
+
+The existing language menu is available in the host header, so a presenter can change language
+without leaving the live session. An open language menu suppresses presentation shortcuts even
+when its focused option becomes disabled during a slow save. Language changes preserve the
+running or paused timer, current slide, stage credential and fragment URL, authored slide text,
+private speaker notes and immutable saved draft. The existing credential, command and retry
+handlers retain their session identities. Raw service diagnostics remain explicitly attributed
+to their original English text; authored notes retain their unknown/original language boundary.
+
+The source-bound native-review workflow now includes the 32 private-workspace phrases. Fresh
+packets contain 590 items for each of the ten locales, including English reference material;
+all 5,900 decisions remain pending. No native-language or release acceptance is inferred from
+these translations or automated checks. Previous human decision files are preserved.
+
+Verification: **4,979 web tests across 422 files**, **32 review-tool tests** and **8 production
+browser cases** pass. Browser journeys cover German and Korean on Chromium/Firefox desktop and
+320px Chromium/WebKit phone emulation. They exercise live language changes, running/paused timer
+and refresh continuity, literal authored text, unchanged room revision and saved draft, delayed
+language persistence with keyboard shortcuts, stage popup recovery/revocation, Axe and document
+overflow. The browser fixture counts both realtime and REST commands without logging credential
+payloads. Web/fixture/review-tool type checks, focused lint, formatting and the production build
+pass. Independent review found and verified the open-menu shortcut guard. Local source/artifact
+provenance and captures are under `artifacts/option-b-presenter-localization/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,008 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. The
+subsequent independent review found no actionable issues in tracked or untracked changes.
+
+This is a local software follow-up. Customer observation, native-language editorial acceptance,
+manual accessibility and physical-device review, exact-candidate hosted qualification and the
+user-deferred public launch content remain release work. No staging environment is selected,
+and the release-readiness ledger remains valid at **0 complete / 15 pending** gates.
+
 ## Scope and implementation
 
 | Concern                         | Source implementation                                                                                                                                                                                                                                                                                                                                          |

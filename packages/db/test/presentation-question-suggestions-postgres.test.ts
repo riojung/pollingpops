@@ -121,11 +121,11 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Presentation question suggestions Po
           [JSON.stringify(value)],
         )
       ).rows[0]!.source;
-    for (const schemaVersion of [1, 2, 3, 4, 5, 6, 7, 8])
+    for (const schemaVersion of [1, 2, 3, 4, 5, 6, 7, 8, 9])
       expect(await project({ ...block, scene: { ...block.scene, schemaVersion } })).toEqual(
         f.source,
       );
-    expect(await project({ ...block, scene: { ...block.scene, schemaVersion: 9 } })).toBeNull();
+    expect(await project({ ...block, scene: { ...block.scene, schemaVersion: 10 } })).toBeNull();
     expect(
       await project({
         ...block,

@@ -17,6 +17,7 @@ import {
   parseCliArguments,
   readStrictJson,
   resolveEnvironmentArgument,
+  resolveWebApiBuildUrl,
   run,
   validateBuildManifest,
   validateDeployConfig,
@@ -139,7 +140,7 @@ function buildArguments({ component, config, buildId, tag, metadataPath, hosted 
     tag,
   ];
   if (component === "web") {
-    args.push("--build-arg", `NEXT_PUBLIC_API_URL=${config.publicApiUrl}`);
+    args.push("--build-arg", `NEXT_PUBLIC_API_URL=${resolveWebApiBuildUrl(config)}`);
   }
   if (hosted) {
     args.push(
@@ -158,17 +159,16 @@ function buildArguments({ component, config, buildId, tag, metadataPath, hosted 
   return args;
 }
 
-async function writeManifest(
-  path,
-  manifest,
-  { requireSigning = manifest.environment === "production" } = {},
-) {
+async function writeManifest(path, manifest, { config, requireSigning = config.requireSigning }) {
   validateBuildManifest(manifest, {
-    environment: manifest.environment,
+    environment: config.environment,
     buildId: manifest.buildId,
-    imageRepository: manifest.images.server.repository.replace(/-server$/, ""),
-    imagePlatform: manifest.imagePlatform,
-    publicApiUrl: manifest.nextPublicApiUrl,
+    imageRepository: config.imageRepository,
+    imagePlatform: config.imagePlatform,
+    deploymentMode: config.deploymentMode,
+    apiRouting: config.apiRouting,
+    publicWebUrl: config.publicWebUrl,
+    publicApiUrl: config.publicApiUrl,
     requireSigning,
   });
   await mkdir(dirname(path), { recursive: true });
@@ -308,6 +308,9 @@ export async function main(argv = process.argv.slice(2)) {
       buildId,
       imageRepository: config.imageRepository,
       imagePlatform: config.imagePlatform,
+      deploymentMode: config.deploymentMode,
+      apiRouting: config.apiRouting,
+      publicWebUrl: config.publicWebUrl,
       publicApiUrl: config.publicApiUrl,
       requireSigning: false,
       requireControl: config.singleVm?.composeFiles.includes("compose.single-vm.business.yaml"),
@@ -318,7 +321,7 @@ export async function main(argv = process.argv.slice(2)) {
       }
     }
     await finalizeImages(manifest.images, { config, shouldSign });
-    await writeManifest(manifestOutputPath, manifest);
+    await writeManifest(manifestOutputPath, manifest, { config });
     process.stdout.write(`Build manifest: ${manifestOutputPath}\n`);
     return;
   }
@@ -337,7 +340,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   await assertCommandAvailable("pnpm", { cwd: repositoryRoot, dryRun });
 
-  const publicApiBuildValue = hosted ? config.publicApiUrl : "";
+  const publicApiBuildValue = hosted ? resolveWebApiBuildUrl(config) : "";
   const buildEnvironment = {
     ...process.env,
     NEXT_PUBLIC_API_URL: publicApiBuildValue,
@@ -411,7 +414,8 @@ export async function main(argv = process.argv.slice(2)) {
         environment,
         buildId,
         createdAt: new Date().toISOString(),
-        nextPublicApiUrl: config.publicApiUrl,
+        nextPublicApiUrl: publicApiBuildValue,
+        ...(config.apiRouting !== undefined ? { apiRouting: config.apiRouting } : {}),
         imagePlatform: config.imagePlatform,
         source: { commit: buildId, dirty: false },
         images: imageRecords,
@@ -419,7 +423,7 @@ export async function main(argv = process.argv.slice(2)) {
       // Preserve both immutable image references before any scan can fail. This
       // provisional manifest cannot be promoted because production images are
       // explicitly recorded as unsigned.
-      await writeManifest(manifestOutputPath, manifest, { requireSigning: false });
+      await writeManifest(manifestOutputPath, manifest, { config, requireSigning: false });
     }
 
     if (prepare && !dryRun) {
@@ -432,7 +436,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     if (hosted && !dryRun) {
-      await writeManifest(manifestOutputPath, manifest);
+      await writeManifest(manifestOutputPath, manifest, { config });
       process.stdout.write(`Build manifest: ${manifestOutputPath}\n`);
     } else if (dryRun) {
       process.stdout.write(

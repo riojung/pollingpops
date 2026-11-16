@@ -1,0 +1,28 @@
+{
+	email {$OPENROUND_ACME_EMAIL}
+}
+
+{$OPENROUND_APP_DOMAIN} {
+	encode zstd gzip
+
+	@operator_paths path /v1/admin /v1/admin/* /api/ops/*
+	respond @operator_paths 404
+
+	@backend path /v1/* /health/* /socket.io/*
+	reverse_proxy @backend server-ingress:4000 {
+		header_up X-Forwarded-For {http.request.remote.host}
+	}
+	reverse_proxy web:3000
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

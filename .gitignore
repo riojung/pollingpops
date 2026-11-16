@@ -17,6 +17,7 @@ playwright-report/
 playwright-report-beta/
 test-results/
 test-results-beta/
+test-results-aws-staging/
 test-results-business/
 playwright-report-business/
 *.tsbuildinfo

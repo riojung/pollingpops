@@ -125,6 +125,7 @@ async function readBuildManifestSnapshot(path, validationOptions) {
   return {
     manifest: validateBuildManifest(parsed, validationOptions),
     sha256: createHash("sha256").update(source).digest("hex"),
+    bytes: source,
   };
 }
 
@@ -1016,11 +1017,64 @@ export async function waitForWebBuild(config, buildId) {
   throw new Error(`Web build ID did not converge before timeout (${lastProblem})`);
 }
 
-export async function waitForMediaHealth(config) {
+export const AWS_MEDIA_HEALTH_CHECK = [
+  'import { S3Client, HeadBucketCommand } from "@aws-sdk/client-s3";',
+  "const client = new S3Client({ region: process.env.S3_REGION, endpoint: process.env.S3_ENDPOINT, forcePathStyle: false });",
+  "try { await client.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET }), { abortSignal: AbortSignal.timeout(Number(process.argv[1])) }); } finally { client.destroy(); }",
+].join("\n");
+
+export const REMOTE_AWS_MEDIA_HEALTH_SCRIPT = [
+  "set -eu",
+  'base="$1"',
+  'project="$2"',
+  'build="$3"',
+  'timeout="$4"',
+  'check="$5"',
+  'current=$(readlink "$base/current" 2>/dev/null || true)',
+  '[ "$current" = "releases/$build" ] || { echo "Active release changed before AWS media verification" >&2; exit 75; }',
+  'release="$base/$current"',
+  'grep -qx compose.aws-production.yaml "$release/.compose-files" || { echo "Active release is missing AWS storage overlay" >&2; exit 66; }',
+  'compose_files=""',
+  "while IFS= read -r relative_file; do",
+  '  [ -n "$relative_file" ] || continue',
+  '  [ -f "$release/$relative_file" ] || exit 66',
+  '  if [ -z "$compose_files" ]; then compose_files="$release/$relative_file"; else compose_files="$compose_files:$release/$relative_file"; fi',
+  'done < "$release/.compose-files"',
+  "COMPOSE_FILE=$compose_files",
+  "COMPOSE_PROJECT_NAME=$project",
+  "export COMPOSE_FILE COMPOSE_PROJECT_NAME",
+  'exec docker compose --env-file "$release/.env" exec -T server node --input-type=module -e "$check" "$timeout"',
+].join("\n");
+
+export async function waitForMediaHealth(config, { knownHostsFile, identityFile, buildId } = {}) {
+  const awsStorage = config.singleVm?.composeFiles.includes("compose.aws-production.yaml");
+  if (awsStorage && (!knownHostsFile || !buildId)) {
+    throw new Error("AWS media verification requires the pinned SSH target and active build ID");
+  }
   const deadline = Date.now() + config.health.timeoutSeconds * 1_000;
   let lastProblem = "no response received";
   while (Date.now() < deadline) {
     try {
+      if (awsStorage) {
+        await sshRun(
+          config,
+          knownHostsFile,
+          identityFile,
+          [
+            "sh",
+            "-c",
+            REMOTE_AWS_MEDIA_HEALTH_SCRIPT,
+            "--",
+            config.singleVm.deployPath,
+            config.singleVm.projectName,
+            buildId,
+            String(config.health.requestTimeoutSeconds * 1_000),
+            AWS_MEDIA_HEALTH_CHECK,
+          ],
+          { capture: true },
+        );
+        return;
+      }
       const response = await request(
         `${config.publicMediaUrl}/minio/health/live`,
         config.health.requestTimeoutSeconds,
@@ -1523,7 +1577,11 @@ export const REMOTE_DEPLOY_SCRIPT = [
   '  [ "$control_build" = "$build" ] || { echo "Control image BUILD_ID does not match release" >&2; exit 67; }',
   "fi",
   "activation_started=1",
-  'docker compose --env-file "$release/.env" up --detach --wait postgres valkey minio clamav',
+  'if grep -qx compose.aws-production.yaml "$release/.compose-files"; then',
+  '  docker compose --env-file "$release/.env" up --detach --wait postgres valkey clamav',
+  "else",
+  '  docker compose --env-file "$release/.env" up --detach --wait postgres valkey minio clamav',
+  "fi",
   'if [ "$rollback" = "0" ]; then',
   '  docker compose --env-file "$release/.env" --env-file "$release/.migration.env" --profile operations run --rm migrate',
   "fi",
@@ -1923,6 +1981,7 @@ function validateHostedHttpsRuntimeUrl(content, key, { allowQuery = false } = {}
 }
 
 export function validateSingleVmRuntimeValues(content, config) {
+  const awsStorage = config.singleVm?.composeFiles.includes("compose.aws-production.yaml");
   const deploymentEnvironment = environmentFileValue(content, "OPENROUND_DEPLOYMENT_ENVIRONMENT");
   if (deploymentEnvironment !== config.environment) {
     throw new Error("OPENROUND_DEPLOYMENT_ENVIRONMENT must match the reviewed deployment target");
@@ -1950,10 +2009,9 @@ export function validateSingleVmRuntimeValues(content, config) {
     "DATABASE_URL",
     "VALKEY_PASSWORD",
     "REDIS_URL",
-    "MINIO_ROOT_USER",
-    "MINIO_ROOT_PASSWORD",
-    "MINIO_APP_ACCESS_KEY",
-    "MINIO_APP_SECRET_KEY",
+    ...(awsStorage
+      ? ["S3_ENDPOINT", "S3_PUBLIC_ENDPOINT", "S3_REGION", "S3_BUCKET"]
+      : ["MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD", "MINIO_APP_ACCESS_KEY", "MINIO_APP_SECRET_KEY"]),
     "SMTP_URL",
     "EMAIL_FROM",
     "METRICS_TOKEN",
@@ -1964,6 +2022,37 @@ export function validateSingleVmRuntimeValues(content, config) {
     if (!value || value.includes("replace-")) {
       throw new Error(`${key} must contain a non-placeholder value`);
     }
+  }
+  if (awsStorage) {
+    if (config.environment !== "production")
+      throw new Error("AWS production storage overlay requires the production target");
+    const region = environmentFileValue(content, "S3_REGION");
+    if (
+      !/^(?:us|ca|eu|ap|sa|me|af|il|mx)-(?:central|east|north|northeast|northwest|south|southeast|southwest|west)-[1-9]$/.test(
+        region ?? "",
+      )
+    ) {
+      throw new Error("S3_REGION must be a commercial AWS region");
+    }
+    const endpoint = `https://s3.${region}.amazonaws.com`;
+    if (
+      environmentFileValue(content, "S3_ENDPOINT") !== endpoint ||
+      environmentFileValue(content, "S3_PUBLIC_ENDPOINT") !== endpoint ||
+      config.publicMediaUrl !== endpoint
+    )
+      throw new Error("AWS storage endpoints must match the reviewed regional HTTPS S3 origin");
+    if (
+      !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(environmentFileValue(content, "S3_BUCKET") ?? "")
+    ) {
+      throw new Error("S3_BUCKET must be the provisioned private AWS media bucket name");
+    }
+    for (const key of ["S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]) {
+      if (environmentFileValue(content, key))
+        throw new Error(`${key} must be omitted for EC2 instance-profile credentials`);
+    }
+    const pathStyle = environmentFileValue(content, "S3_FORCE_PATH_STYLE");
+    if (pathStyle !== undefined && pathStyle !== "false")
+      throw new Error("S3_FORCE_PATH_STYLE must be false for AWS production");
   }
   const configuredBilling = environmentFileValue(content, "BILLING_MODE") ?? "disabled";
   if (configuredBilling !== config.billingMode) {
@@ -2017,15 +2106,33 @@ export function validateSingleVmRuntimeValues(content, config) {
   return true;
 }
 
+export async function readSingleVmRuntimeEnvironment(path, config) {
+  return assertPrivateIgnoredEnvFile(path, "single-vm-runtime", repositoryRoot, {
+    storage: config.singleVm.composeFiles.includes("compose.aws-production.yaml")
+      ? "aws-s3"
+      : "minio",
+  });
+}
+
 async function deploySingleVm({ environment, parsed, dryRun, config }) {
+  const reviewedTarget = { ...config };
+  delete reviewedTarget.operationsRevision;
+  delete reviewedTarget.deploymentInputHashes;
   const manifestPath = resolve(
     repositoryRoot,
     parsed.values.get("manifest") ?? `artifacts/deploy/${environment}/build-manifest.json`,
   );
-  const { manifest, sha256: manifestSha256 } = await readBuildManifestSnapshot(manifestPath, {
+  const {
+    manifest,
+    sha256: manifestSha256,
+    bytes: manifestBytes,
+  } = await readBuildManifestSnapshot(manifestPath, {
     environment,
     imageRepository: config.imageRepository,
     imagePlatform: config.imagePlatform,
+    deploymentMode: config.deploymentMode,
+    apiRouting: config.apiRouting,
+    publicWebUrl: config.publicWebUrl,
     publicApiUrl: config.publicApiUrl,
     requireSigning: config.requireSigning,
   });
@@ -2046,6 +2153,53 @@ async function deploySingleVm({ environment, parsed, dryRun, config }) {
   } else {
     if (rollbackFrom) throw new Error("--rollback-from requires --rollback");
     validateDeploymentConfirmation(parsed.values.get("confirm"), environment, manifest.buildId);
+  }
+  let awsRuntimeTarget;
+  if (config.singleVm.composeFiles.includes("compose.aws-production.yaml")) {
+    if (!parsed.values.has("aws-config"))
+      throw new Error("AWS deployments require --aws-config PATH");
+    const automationFiles = [
+      "scripts/ops/aws-production.mjs",
+      "scripts/ops/aws-staging.mjs",
+      "infra/aws/production.template.json",
+    ];
+    Object.assign(
+      config.deploymentInputHashes,
+      await resolveReviewedDeploymentInputHashes(automationFiles),
+    );
+    const awsConfigPath = await resolveCheckedRepositoryFile(
+      parsed.values.get("aws-config"),
+      repositoryRoot,
+      "AWS account configuration",
+      { requireGitClean: true },
+    );
+    config.deploymentInputHashes[relative(repositoryRoot, awsConfigPath)] =
+      await sha256File(awsConfigPath);
+    const { validateAwsProductionConfig, verifyAwsProduction, awsProductionEnvironment } =
+      await import("./aws-production.mjs");
+    awsProductionEnvironment();
+    const awsConfig = await readStrictJson(awsConfigPath, validateAwsProductionConfig);
+    awsRuntimeTarget = awsConfig;
+    if (!rollback) {
+      const receiptPath = parsed.values.get("local-staging-receipt");
+      if (!receiptPath)
+        throw new Error(
+          "AWS forward deployment requires --local-staging-receipt PATH from the tested production manifest",
+        );
+      const { validateStagingQualification } = await import("./aws-staging.mjs");
+      validateStagingQualification(
+        JSON.parse(await readFile(resolve(repositoryRoot, receiptPath), "utf8")),
+        manifest,
+        manifestBytes,
+      );
+    }
+    if (!dryRun) await verifyAwsProduction(awsConfig, { deployment: reviewedTarget });
+    else
+      process.stdout.write(
+        "AWS foundation verification will run against the reviewed real account before deployment.\n",
+      );
+  } else if (parsed.values.has("aws-config") || parsed.values.has("local-staging-receipt")) {
+    throw new Error("AWS promotion inputs require the reviewed AWS production overlay");
   }
   const publishedRedeployRequested = parsed.flags.has("published-release-redeploy");
   const priorReceiptPath = parsed.values.get("prior-deployment-receipt");
@@ -2112,11 +2266,7 @@ async function deploySingleVm({ environment, parsed, dryRun, config }) {
   if (secretsRoot !== configuredSecretsRoot) {
     throw new Error("Deployment secrets directory must not contain symlinked path components");
   }
-  const runtimeEnv = await assertPrivateIgnoredEnvFile(
-    runtimePath,
-    "single-vm-runtime",
-    repositoryRoot,
-  );
+  const runtimeEnv = await readSingleVmRuntimeEnvironment(runtimePath, config);
   const migrationEnv = migrationPath
     ? await assertPrivateIgnoredEnvFile(migrationPath, "migration", repositoryRoot)
     : undefined;
@@ -2164,6 +2314,10 @@ async function deploySingleVm({ environment, parsed, dryRun, config }) {
 
   const runtimeContent = runtimeEnv.content;
   validateSingleVmRuntimeValues(runtimeContent, config);
+  if (awsRuntimeTarget) {
+    const { validateAwsRuntimeTarget } = await import("./aws-production.mjs");
+    validateAwsRuntimeTarget(runtimeContent, awsRuntimeTarget);
+  }
   const runtimeEnvironmentDigest = runtimeEnvironmentSha256(runtimeContent);
 
   const knownHostsSnapshot = await createPrivateFileSnapshot(knownHostsContent, "known_hosts");
@@ -2280,7 +2434,11 @@ async function deploySingleVm({ environment, parsed, dryRun, config }) {
       try {
         await waitForDeploymentHealth(config, manifest.buildId);
         await waitForWebBuild(config, manifest.buildId);
-        await waitForMediaHealth(config);
+        await waitForMediaHealth(config, {
+          knownHostsFile,
+          identityFile,
+          buildId: manifest.buildId,
+        });
         configCheckSummary = await readRemoteConfigCheckSummary(
           config,
           knownHostsFile,
@@ -2293,7 +2451,11 @@ async function deploySingleVm({ environment, parsed, dryRun, config }) {
             await restorePreviousRemoteBuild(config, knownHostsFile, identityFile, previousBuildId);
             await waitForDeploymentHealth(config, previousBuildId);
             await waitForWebBuild(config, previousBuildId);
-            await waitForMediaHealth(config);
+            await waitForMediaHealth(config, {
+              knownHostsFile,
+              identityFile,
+              buildId: previousBuildId,
+            });
           } catch (restoreError) {
             throw new AggregateError(
               [error, restoreError],
@@ -2386,6 +2548,12 @@ async function deployHosted({ environment, parsed, dryRun }) {
   );
   const config = await readStrictJson(configPath, validateDeployConfig, environment);
   assertConfiguredHostedTarget(config);
+  if (
+    config.deploymentMode !== "single-vm" &&
+    (parsed.values.has("aws-config") || parsed.values.has("local-staging-receipt"))
+  ) {
+    throw new Error("AWS promotion requires a single-VM AWS production target");
+  }
   const reviewedAutomationFiles = [
     ...HOSTED_DEPLOYMENT_AUTOMATION_FILES,
     ...(config.requireReadinessGate ? READINESS_GATE_INPUT_FILES : []),
@@ -2444,6 +2612,9 @@ async function deployHosted({ environment, parsed, dryRun }) {
     environment,
     imageRepository: config.imageRepository,
     imagePlatform: config.imagePlatform,
+    deploymentMode: config.deploymentMode,
+    apiRouting: config.apiRouting,
+    publicWebUrl: config.publicWebUrl,
     publicApiUrl: config.publicApiUrl,
     requireSigning: config.requireSigning,
   });
@@ -2655,6 +2826,8 @@ export async function main(argv = process.argv.slice(2)) {
       "ssh-identity",
       "prior-deployment-receipt",
       "prior-deployment-receipt-sha256",
+      "aws-config",
+      "local-staging-receipt",
     ],
     booleanOptions: [
       "dry-run",
@@ -2683,6 +2856,8 @@ export async function main(argv = process.argv.slice(2)) {
   const dryRun = parsed.flags.has("dry-run");
   if (!isHostedEnvironment(environment)) {
     const hostedOptions = [
+      "aws-config",
+      "local-staging-receipt",
       "config",
       "manifest",
       "runtime-env",

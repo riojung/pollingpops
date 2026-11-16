@@ -1,0 +1,418 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Polling Pops production foundation: one EC2 VM and private S3 media. Deploy application only through signed single-VM release tooling.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "SubnetId": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "Description": "Public subnet in VpcId with an internet-gateway route."
+    },
+    "KeyPairName": {
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "SshIngressCidr": {
+      "Type": "String",
+      "AllowedPattern": "(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32",
+      "Description": "One operator/VPN public IPv4 address; never 0.0.0.0/0."
+    },
+    "AppDomain": {
+      "Type": "String",
+      "AllowedPattern": "[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,63}"
+    },
+    "MediaBucketName": {
+      "Type": "String",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "[a-z0-9][a-z0-9-]*[a-z0-9]"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.xlarge",
+      "AllowedValues": ["t3.xlarge", "m5.xlarge", "m6i.xlarge", "m7i.xlarge", "c6i.xlarge"]
+    },
+    "DataVolumeGiB": {
+      "Type": "Number",
+      "Default": 100,
+      "MinValue": 100,
+      "MaxValue": 2000,
+      "Description": "Encrypted retained root EBS volume; contains Docker/PostgreSQL/Valkey data."
+    },
+    "ImageId": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    }
+  },
+  "Resources": {
+    "MediaBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Ref": "MediaBucketName"
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "CorsConfiguration": {
+          "CorsRules": [
+            {
+              "AllowedOrigins": [
+                {
+                  "Fn::Sub": "https://${AppDomain}"
+                }
+              ],
+              "AllowedMethods": ["GET", "HEAD", "PUT"],
+              "AllowedHeaders": ["*"],
+              "ExposedHeaders": ["ETag"],
+              "MaxAge": 600
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "expire-quarantine",
+              "Status": "Enabled",
+              "Prefix": "quarantine/",
+              "ExpirationInDays": 1,
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            },
+            {
+              "Id": "expire-temporary-finalization",
+              "Status": "Enabled",
+              "Prefix": "media/",
+              "TagFilters": [
+                {
+                  "Key": "openround-finalization-state",
+                  "Value": "temporary"
+                }
+              ],
+              "ExpirationInDays": 7
+            },
+            {
+              "Id": "expire-old-versions",
+              "Status": "Enabled",
+              "Prefix": "",
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 30
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "pollingpops"
+          },
+          {
+            "Key": "Environment",
+            "Value": "production"
+          }
+        ]
+      }
+    },
+    "MediaBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "MediaBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": ["MediaBucket", "Arn"]
+                },
+                {
+                  "Fn::Sub": "${MediaBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ApplicationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "private-application-media",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+                  "Resource": {
+                    "Fn::GetAtt": ["MediaBucket", "Arn"]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:GetObjectTagging",
+                    "s3:PutObjectTagging"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${MediaBucket.Arn}/media/*"
+                    },
+                    {
+                      "Fn::Sub": "${MediaBucket.Arn}/quarantine/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ApplicationProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "ApplicationRole"
+          }
+        ]
+      }
+    },
+    "ApplicationSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Polling Pops HTTPS and restricted operator SSH",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": {
+              "Ref": "SshIngressCidr"
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "udp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "AppInstance": {
+      "Type": "AWS::EC2::Instance",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT20M"
+        }
+      },
+      "Properties": {
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "KeyName": {
+          "Ref": "KeyPairName"
+        },
+        "IamInstanceProfile": {
+          "Ref": "ApplicationProfile"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": true,
+            "DeviceIndex": "0",
+            "GroupSet": [
+              {
+                "Ref": "ApplicationSecurityGroup"
+              }
+            ],
+            "SubnetId": {
+              "Ref": "SubnetId"
+            }
+          }
+        ],
+        "MetadataOptions": {
+          "HttpEndpoint": "enabled",
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 2,
+          "InstanceMetadataTags": "disabled"
+        },
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "Encrypted": true,
+              "VolumeType": "gp3",
+              "VolumeSize": {
+                "Ref": "DataVolumeGiB"
+              },
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": "#!/bin/bash\nset -euo pipefail\ndnf install -y docker aws-cfn-bootstrap curl\ntrap 'status=$?; /opt/aws/bin/cfn-signal -e \"$status\" --stack \"${AWS::StackName}\" --resource AppInstance --region \"${AWS::Region}\"' EXIT\ninstall -d -m 0755 /usr/local/lib/docker/cli-plugins\ncurl --fail --location --retry 3 https://github.com/docker/compose/releases/download/v2.39.4/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose\nprintf '%s  %s\\n' '7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4' /usr/local/lib/docker/cli-plugins/docker-compose | sha256sum --check -\nchmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose\ninstall -d -m 0755 /etc/docker\nprintf '%s\\n' '{\"log-driver\":\"local\",\"log-opts\":{\"max-size\":\"10m\",\"max-file\":\"5\"}}' > /etc/docker/daemon.json\nprintf '%s\\n' 'vm.overcommit_memory=1' > /etc/sysctl.d/90-pollingpops.conf\nsysctl --system\nsystemctl enable --now docker\nid openround >/dev/null 2>&1 || useradd --create-home --shell /bin/bash openround\nusermod -aG docker openround\ninstall -d -m 0700 -o openround -g openround /home/openround/.ssh\ninstall -m 0600 -o openround -g openround /home/ec2-user/.ssh/authorized_keys /home/openround/.ssh/authorized_keys\nprintf '%s\\n' 'PasswordAuthentication no' 'PermitRootLogin no' > /etc/ssh/sshd_config.d/90-pollingpops.conf\nsshd -t\nsystemctl reload sshd\ninstall -d -m 0700 -o openround -g openround /opt/pollingpops/production\ninstall -d -m 0755 /var/lib/pollingpops\ntouch /var/lib/pollingpops/bootstrap-ready\ndocker compose version\n"
+          }
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-app"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": "production"
+          }
+        ]
+      }
+    },
+    "PublicAddress": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "PublicAddressAssociation": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": ["PublicAddress", "AllocationId"]
+        },
+        "InstanceId": {
+          "Ref": "AppInstance"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "AccountId": {
+      "Value": {
+        "Ref": "AWS::AccountId"
+      }
+    },
+    "Region": {
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    },
+    "PublicIp": {
+      "Value": {
+        "Ref": "PublicAddress"
+      }
+    },
+    "InstanceId": {
+      "Value": {
+        "Ref": "AppInstance"
+      }
+    },
+    "MediaBucket": {
+      "Value": {
+        "Ref": "MediaBucket"
+      }
+    },
+    "S3Endpoint": {
+      "Value": {
+        "Fn::Sub": "https://s3.${AWS::Region}.${AWS::URLSuffix}"
+      }
+    },
+    "ApplicationUrl": {
+      "Value": {
+        "Fn::Sub": "https://${AppDomain}"
+      }
+    },
+    "DeploymentUser": {
+      "Value": "openround"
+    },
+    "DeploymentPath": {
+      "Value": "/opt/pollingpops/production"
+    },
+    "ApplicationProfileArn": {
+      "Value": {
+        "Fn::GetAtt": ["ApplicationProfile", "Arn"]
+      }
+    },
+    "SecurityGroupId": {
+      "Value": {
+        "Ref": "ApplicationSecurityGroup"
+      }
+    }
+  }
+}

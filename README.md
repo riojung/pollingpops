@@ -113,6 +113,14 @@ and safe Docker disk cleanup, use the [operations runbook](docs/runbooks/deploym
 Existing clones and hosts should also read the
 [repository rename guide](docs/runbooks/repository-rename.md) before changing deployment paths.
 
+For a separate, disposable rehearsal using official AWS Emulator S3, run
+`pnpm aws:staging build`, `pnpm aws:staging start`, and `pnpm aws:staging verify`, then open
+`http://localhost:19180`. It uses synthetic data and leaves the existing development project
+separate. The [AWS staging and production runbook](docs/runbooks/aws-staging-production.md)
+documents its ports, exact-release evidence, real EC2/EBS/S3 foundation, and production promotion.
+Local emulator verification supplements the hosted security, restore, load, and signed-release
+gates; it does not make a local development image production-ready.
+
 ## Architecture
 
 Polling Pops is a TypeScript monorepo organized as a modular monolith. Runtime-validated contracts and
@@ -176,16 +184,17 @@ the Compose-oriented `.env.example` unchanged.
 
 ## Documentation
 
-| Resource                                                                                | Purpose                                                    |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Quick start](docs/quick-start.md)                                                      | Run a local stack and complete a first Round               |
-| [User guide](docs/user-guide.md)                                                        | Create, publish, host, join, report, export, and delete    |
-| [Architecture](docs/architecture.md) and [API](docs/api.md)                             | Understand internals and integrate with public interfaces  |
-| [Operations runbook](docs/runbooks/deployment.md)                                       | Build, restart, clean up, deploy, and roll back            |
-| [Implementation status](docs/implementation-status.md)                                  | Separate implemented code from unmet evidence gates        |
-| [Market research and staged plan](docs/market-research-and-development-plan-2026-09.md) | Review product evidence and roadmap gates                  |
-| [Future product ideas](docs/future-product-ideas.md)                                    | Keep adding deferred customer enhancement ideas            |
-| [Documentation index](docs/README.md)                                                   | Browse all product, operations, privacy, and decision docs |
+| Resource                                                                                | Purpose                                                           |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Quick start](docs/quick-start.md)                                                      | Run a local stack and complete a first Round                      |
+| [User guide](docs/user-guide.md)                                                        | Create, publish, host, join, report, export, and delete           |
+| [Architecture](docs/architecture.md) and [API](docs/api.md)                             | Understand internals and integrate with public interfaces         |
+| [Operations runbook](docs/runbooks/deployment.md)                                       | Build, restart, clean up, deploy, and roll back                   |
+| [AWS staging and production](docs/runbooks/aws-staging-production.md)                   | Rehearse locally, qualify exact images, and prepare AWS promotion |
+| [Implementation status](docs/implementation-status.md)                                  | Separate implemented code from unmet evidence gates               |
+| [Market research and staged plan](docs/market-research-and-development-plan-2026-09.md) | Review product evidence and roadmap gates                         |
+| [Future product ideas](docs/future-product-ideas.md)                                    | Keep adding deferred customer enhancement ideas                   |
+| [Documentation index](docs/README.md)                                                   | Browse all product, operations, privacy, and decision docs        |
 
 ## Contributing
 

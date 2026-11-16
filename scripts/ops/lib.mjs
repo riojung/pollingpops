@@ -43,6 +43,7 @@ const CONFIG_KEYS = new Set([
   "deploymentMode",
   "publicWebUrl",
   "publicApiUrl",
+  "apiRouting",
   "publicMediaUrl",
   "imageRepository",
   "imagePlatform",
@@ -74,6 +75,7 @@ const MANIFEST_KEYS = new Set([
   "buildId",
   "createdAt",
   "nextPublicApiUrl",
+  "apiRouting",
   "imagePlatform",
   "source",
   "images",
@@ -635,10 +637,29 @@ export function validateSingleVmConfig(input) {
   return input;
 }
 
+export function resolveWebApiBuildUrl(config) {
+  if (config.apiRouting !== undefined && config.apiRouting !== "same-origin") {
+    throw new Error("apiRouting must be same-origin when specified");
+  }
+  if (config.apiRouting === "same-origin") {
+    if (config.deploymentMode !== "single-vm") {
+      throw new Error("same-origin API routing requires a single-vm deployment");
+    }
+    const webOrigin = assertHttpsOrigin(config.publicWebUrl, "publicWebUrl");
+    const apiOrigin = assertHttpsOrigin(config.publicApiUrl, "publicApiUrl");
+    if (webOrigin !== apiOrigin) {
+      throw new Error("same-origin API routing requires equal public web and API origins");
+    }
+    return "";
+  }
+  return assertHttpsOrigin(config.publicApiUrl, "publicApiUrl");
+}
+
 export function validateDeployConfig(input, expectedEnvironment) {
   assertExactKeys(input, CONFIG_KEYS, "deployment config");
   if (input.schemaVersion !== 1) throw new Error("deployment config schemaVersion must be 1");
   const environment = normalizeEnvironment(input.environment);
+  if (input.apiRouting !== undefined) resolveWebApiBuildUrl(input);
   if (expectedEnvironment && environment !== normalizeEnvironment(expectedEnvironment)) {
     throw new Error(`deployment config environment ${environment} does not match target`);
   }
@@ -1008,8 +1029,23 @@ export function validateBuildManifest(input, expected = {}) {
       throw new Error(`images.${component} must be signed for this target`);
     }
   }
-  if (expected.publicApiUrl && input.nextPublicApiUrl !== expected.publicApiUrl) {
-    throw new Error("build manifest NEXT_PUBLIC_API_URL does not match the target config");
+  if (input.apiRouting !== undefined && input.apiRouting !== "same-origin") {
+    throw new Error("build manifest apiRouting must be same-origin when specified");
+  }
+  if (input.apiRouting === "same-origin") {
+    if (input.nextPublicApiUrl !== "") {
+      throw new Error("same-origin build manifest NEXT_PUBLIC_API_URL must be empty");
+    }
+  } else {
+    assertHttpsOrigin(input.nextPublicApiUrl, "build manifest NEXT_PUBLIC_API_URL");
+  }
+  if (expected.publicApiUrl !== undefined || Object.hasOwn(expected, "apiRouting")) {
+    if (input.apiRouting !== expected.apiRouting) {
+      throw new Error("build manifest apiRouting does not match the target config");
+    }
+    if (input.nextPublicApiUrl !== resolveWebApiBuildUrl(expected)) {
+      throw new Error("build manifest NEXT_PUBLIC_API_URL does not match the target config");
+    }
   }
   return input;
 }
@@ -1045,7 +1081,7 @@ export function parseEnvFileKeys(content, label = "environment file") {
   return keys;
 }
 
-export function validateEnvFileKeys(keysOrContent, kind) {
+export function validateEnvFileKeys(keysOrContent, kind, { storage = "minio" } = {}) {
   const keys = Array.isArray(keysOrContent) ? keysOrContent : parseEnvFileKeys(keysOrContent, kind);
   const unique = new Set(keys);
   if (unique.size !== keys.length) throw new Error(`${kind} environment contains duplicate keys`);
@@ -1055,6 +1091,9 @@ export function validateEnvFileKeys(keysOrContent, kind) {
     }
     if (keys.length === 0) throw new Error("runtime environment must not be empty");
   } else if (kind === "single-vm-runtime") {
+    if (!["minio", "aws-s3"].includes(storage)) {
+      throw new Error("single-vm runtime storage must be minio or aws-s3");
+    }
     for (const key of keys) {
       if (!SINGLE_VM_RUNTIME_ENV_KEYS.has(key)) {
         throw new Error(`single-vm runtime environment must not contain ${key}`);
@@ -1074,10 +1113,14 @@ export function validateEnvFileKeys(keysOrContent, kind) {
       "DATABASE_URL",
       "VALKEY_PASSWORD",
       "REDIS_URL",
-      "MINIO_ROOT_USER",
-      "MINIO_ROOT_PASSWORD",
-      "MINIO_APP_ACCESS_KEY",
-      "MINIO_APP_SECRET_KEY",
+      ...(storage === "aws-s3"
+        ? ["S3_ENDPOINT", "S3_PUBLIC_ENDPOINT", "S3_REGION", "S3_BUCKET"]
+        : [
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+            "MINIO_APP_ACCESS_KEY",
+            "MINIO_APP_SECRET_KEY",
+          ]),
       "SMTP_URL",
       "EMAIL_FROM",
       "METRICS_ENABLED",
@@ -1158,7 +1201,7 @@ export async function readStrictJson(path, validator, ...validatorArguments) {
   return validator(parsed, ...validatorArguments);
 }
 
-export async function assertPrivateIgnoredEnvFile(path, kind, repositoryRoot) {
+export async function assertPrivateIgnoredEnvFile(path, kind, repositoryRoot, validationOptions) {
   const absolute = resolve(repositoryRoot, path);
   const relativePath = relative(repositoryRoot, absolute);
   if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") {
@@ -1177,7 +1220,11 @@ export async function assertPrivateIgnoredEnvFile(path, kind, repositoryRoot) {
     throw new Error(`${kind} environment file resolves outside the repository`);
   }
   const content = await readFile(canonicalPath, "utf8");
-  const keys = validateEnvFileKeys(parseEnvFileKeys(content, `${kind} environment`), kind);
+  const keys = validateEnvFileKeys(
+    parseEnvFileKeys(content, `${kind} environment`),
+    kind,
+    validationOptions,
+  );
   return {
     absolute: canonicalPath,
     relative: relative(repositoryRoot, canonicalPath),

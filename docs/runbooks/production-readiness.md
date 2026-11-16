@@ -1,5 +1,12 @@
 # Production readiness checklist
 
+The [AWS staging and production runbook](aws-staging-production.md) provides a disposable local
+emulator rehearsal, an EC2/EBS/private-S3 foundation, and an exact-manifest promotion wrapper.
+Its local qualification receipt supplements this checklist. It cannot establish IAM, network,
+hardware, load, public TLS, real-provider behavior, or recovery on AWS, and it does not replace
+signature verification or independent hosted acceptance. A development-kind local candidate
+cannot satisfy production promotion.
+
 ## Product and legal
 
 - Final name, domain, interface, scoring explanation, comparison claims, and asset register reviewed independently.
@@ -15,7 +22,8 @@
 ## Platform
 
 - Production uses the reviewed remote `compose.single-vm.yaml` profile on one dedicated VM. Caddy,
-  web, API/realtime, PostgreSQL, Valkey, MinIO, and ClamAV share one failure domain. This is not a
+  web, API/realtime, PostgreSQL, Valkey, and ClamAV share one failure domain. The baseline uses
+  MinIO on that VM; the AWS production overlay disables MinIO and uses private AWS S3. This is not a
   high-availability design and carries no SLA; public production remains blocked until every item
   in this checklist and the release ledger has current evidence.
 - The VM meets the measured CPU, memory, disk, IOPS, and network envelope; its supported OS,
@@ -49,11 +57,14 @@
   public Caddy ingress.
 - Application traffic uses a non-owner PostgreSQL role; only the migration job receives the
   owner-level `DATABASE_MIGRATION_URL`, and the production-like forced-RLS test passes.
-- PostgreSQL, Valkey, MinIO, Caddy, web, API/realtime, and ClamAV run on the same production VM.
-  No local volume, VM snapshot, or second path on that host counts as an off-host backup.
+- PostgreSQL, Valkey, Caddy, web, API/realtime, and ClamAV run on the same production VM. Baseline
+  MinIO is also local; the AWS overlay uses a private media bucket. No local volume, VM snapshot,
+  second path on that host, or versioned live-media bucket counts as the independently
+  administered recovery copy required by the backup plan.
 - `AUDIT_RETENTION_DAYS` matches the approved institutional policy, and a scheduled retention run
   has demonstrated that records at the cutoff are purged while newer records remain exportable.
-- Encrypted PostgreSQL and MinIO backups leave the VM on the approved schedule, retain multiple
+- Encrypted PostgreSQL and media backups leave the active deployment on the approved schedule,
+  retain multiple
   verified generations in a separately administered location, and have checksum/age alerting.
   A current timed drill restores them onto a patched, clean replacement VM without relying on the
   original host and demonstrates the approved RPO and RTO.
@@ -64,7 +75,7 @@
   failover, lease-expiry, and rolling-deployment qualification before use.
 - TLS, origin allowlist, rate limits, CSP, private storage, ClamAV signature freshness and failure
   behaviour, email authentication, Stripe signatures, administrator controls, and log redaction
-  are verified. The application and media DNS names both use valid public certificates, HTTP is
+  are verified. The configured application and media origins use valid public certificates, HTTP is
   redirected to HTTPS, certificate-expiry monitoring has an owner, and no database, Valkey, MinIO
   administration, metrics, or Docker socket is exposed publicly.
 - Keep `AUTHORING_AI_MODE=disabled` until the exact endpoint/model passes privacy, DPA,
@@ -108,6 +119,13 @@
   signature for the exact bound annotated tag object and confirms its name and target commit. A
   workstation build, signature, reconstructed manifest, unsigned tag, or recreated tag is not
   accepted.
+- For every forward deployment using the AWS overlay, the successful local release-kind
+  qualification receipt is at most seven days old and matches the exact production manifest hash
+  and both image digests.
+  The reviewed AWS account config is tracked and clean in Git. Real AWS foundation/target
+  verification and every existing production deployment gate also pass; the core deployer
+  enforces these checks for both `pnpm aws:promote` and direct deployment. A local receipt is
+  distinct from the successful production deployment receipt used by published-release redeploys.
 - Database migration succeeds on a production-like copy and has a forward-repair plan.
 - Chromium, WebKit, Firefox, mobile Safari, and mobile Chrome critical flows pass.
 - Recovery interventions/rechecks, cohosting, Q&A moderation, hostile portability imports,

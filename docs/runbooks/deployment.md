@@ -10,11 +10,12 @@ The canonical repository and new checkout/deployment directory names use `pollin
 Existing image/data namespaces and provisioned roots are not migrated automatically. Follow the
 [repository rename guide](repository-rename.md) before operating an existing hosted environment.
 
-| Environment   | Single-host implementation                                     | Image policy                                 |
-| ------------- | -------------------------------------------------------------- | -------------------------------------------- |
-| `development` | Local `compose.yaml` and optional overlays                     | Locally built images                         |
-| `staging`     | Remote single-VM base + observability overlays over pinned SSH | Registry images selected by immutable digest |
-| `production`  | Remote single-VM base + observability overlays after all gates | Signed digest-selected registry images       |
+| Environment         | Single-host implementation                                     | Image policy                                     |
+| ------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| `development`       | Local `compose.yaml` and optional overlays                     | Locally built images                             |
+| Local AWS rehearsal | Dedicated `compose.aws-staging.yaml` on loopback               | Local image IDs or one exact production manifest |
+| `staging`           | Remote single-VM base + observability overlays over pinned SSH | Registry images selected by immutable digest     |
+| `production`        | Remote single-VM base + observability overlays after all gates | Signed digest-selected registry images           |
 
 The hosted stack places Caddy, web, API/realtime, PostgreSQL, Valkey, MinIO, ClamAV, OpenTelemetry
 Collector, Prometheus, and Alertmanager on one VM. Only TCP 80/443 and UDP 443 are public.
@@ -23,6 +24,13 @@ MinIO administration, OTLP, and application metrics ports are not published. Cad
 certificates and routes the application origin to web/API services and the separate media origin
 to MinIO.
 
+The [AWS staging and production runbook](aws-staging-production.md) adds a disposable local
+rehearsal and a real EC2/EBS/S3 foundation. Its production overlay appends
+`compose.aws-production.yaml`, replaces MinIO with private AWS S3, and uses the EC2 instance
+profile for media access. The real application, PostgreSQL, and Valkey still run on the VM.
+Local emulator evidence does not qualify IAM, cloud networking, hardware, load, or hosted release
+readiness; all existing signature, SSH, backup, and independent acceptance gates remain required.
+
 This is an initial alpha/beta topology. A host, disk, kernel, Docker daemon, or availability-zone
 failure can interrupt every service at once. It has no high-availability or SLA claim. Keep
 encrypted database and media backups off the VM, rehearse restoration onto a clean replacement
@@ -30,8 +38,16 @@ host, and do not call the deployment production-ready until the release ledger i
 
 ## Command summary
 
-All wrappers accept the environment as their first positional argument. The explicit
+The product-build, service, and deploy wrappers accept the environment as their first positional
+argument. The explicit
 `--environment development|staging|production` form is equivalent.
+
+For the separate local AWS rehearsal, use `pnpm aws:staging build`, `start [--manifest PATH]`,
+`verify`, `status`, `logs`, and `stop`. Its application is at `http://localhost:19180`, S3 gateway
+at `http://localhost:19181`, and Mailpit at `http://localhost:19182`. It uses private
+`.deploy/aws-staging/` state, disposable synthetic database/cache/media, and a separate Compose
+project. Start with the [complete sequence](aws-staging-production.md), including exact-release
+qualification and `pnpm aws:promote`; `service staging` continues to mean the remote VM.
 
 ### Build product images
 
@@ -321,6 +337,14 @@ backup or recovery anchor; passing a string neither creates a backup nor proves 
 The three published-release options are valid only together for a forward production redeploy.
 They are not needed—and are rejected—while the accepted GitHub release is still a draft.
 
+When the reviewed target includes `compose.aws-production.yaml`, every forward deployment also
+requires `--aws-config infra/aws/production.json` and
+`--local-staging-receipt artifacts/aws-staging/qualification.json`. The AWS config must be a
+tracked, Git-clean repository file. The core deployer checks the matching local receipt and, for
+a live deployment, the actual account and AWS foundation; direct invocation cannot skip these
+checks. `pnpm aws:promote` supplies those inputs using its `--receipt` shorthand. Follow the
+[AWS runbook](aws-staging-production.md) for reviewed config creation and the complete command.
+
 Code-only rollback selects a previously approved, schema-compatible manifest:
 
 ```text
@@ -334,8 +358,17 @@ Code-only rollback selects a previously approved, schema-compatible manifest:
 ```
 
 Rollback omits the migration file and never reverses a database migration.
+An AWS-overlay rollback additionally requires the same tracked, Git-clean `--aws-config` and
+live foundation checks; it does not require a new local forward-qualification receipt. The AWS
+promotion wrapper itself accepts forward deployments only.
 
 ## Provision each hosted VM
+
+For the supported AWS EC2/EBS/S3 foundation, follow
+[AWS provisioning and target binding](aws-staging-production.md#3-prepare-the-real-aws-foundation).
+`pnpm aws:production plan|provision|verify --config PATH` handles the foundation; application
+deployment still uses the reviewed hosted configuration and release gates below. The generic VM
+requirements also apply to that foundation.
 
 Provision staging and production independently. At minimum:
 

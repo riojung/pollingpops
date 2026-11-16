@@ -364,3 +364,20 @@ These programs run as separate containers and are not relicensed by Polling Pops
 Operators distributing a composed appliance or modified service image are responsible for
 the corresponding license obligations. In particular, MinIO's AGPL terms are separate from
 the Apache-2.0 license that applies to Polling Pops’ own source and original bundled assets.
+
+## AWS local staging distribution
+
+The optional local AWS staging profile builds AWS Emulator from its official Linux package;
+it is a separate test container, not an application production dependency. The pinned upstream
+release is [v1.0.385](https://github.com/aws/aws-emulator/releases/tag/v1.0.385), commit
+`813af480bf7f16d5418b64e4f5644a74a7da11c5`. AWS Emulator is licensed under
+[CC0-1.0](https://github.com/aws/aws-emulator/blob/v1.0.385/LICENSE); the vendored framework retains
+its [Apache-2.0 license](https://github.com/aws/aws-emulator/blob/v1.0.385/vendor/LICENSE).
+
+Its Amazon Linux 2023 minimal base comes from
+`public.ecr.aws/amazonlinux/amazonlinux:2023-minimal@sha256:158a9044f9dc0777f098b76c8b54346f6ed4560b9a6a416dec7a5ba3bc483af4`
+and retains its [component licenses and source obligations](https://github.com/amazonlinux/container-images).
+The local gateway uses Caddy under the Apache-2.0 license listed above. The
+[emulator distribution notes](infra/aws-emulator/README.md#pinned-upstream-distribution) record
+both architecture-specific RPM URLs and SHA-256 pins. Complete upstream license/notice files
+remain in the installed package and container image.

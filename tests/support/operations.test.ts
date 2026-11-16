@@ -485,6 +485,8 @@ async function withOperationalStagingGitState<T>(
     config.publicApiUrl = `https://${stagingTarget.appHost}`;
     config.publicMediaUrl = `https://${stagingTarget.mediaHost}`;
     config.singleVm.host = stagingTarget.sshHost;
+    // Keep these deployment fixtures exercising legacy absolute-API manifests.
+    delete config.apiRouting;
     await Promise.all([
       writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`),
       writeFile(knownHostsPath, `${stagingTarget.sshHost} ${publicKey}\n`),
@@ -1609,6 +1611,37 @@ describe("deployment configuration and manifest validation", () => {
     }
   });
 
+  it("requires reviewed HTTPS single-VM origins for explicit same-origin API routing", () => {
+    const config = { ...singleVmConfig(), apiRouting: "same-origin" };
+    expect(validateDeployConfig(structuredClone(config), "staging")).toEqual(config);
+    expect(() => validateDeployConfig({ ...config, apiRouting: "relative" }, "staging")).toThrow(
+      "apiRouting must be same-origin",
+    );
+    expect(() =>
+      validateDeployConfig({ ...stagingConfig(), apiRouting: "same-origin" }, "staging"),
+    ).toThrow("requires a single-vm deployment");
+    expect(() =>
+      validateDeployConfig({ ...config, publicApiUrl: "https://api.openround.ca" }, "staging"),
+    ).toThrow("requires equal public web and API origins");
+    for (const field of ["publicWebUrl", "publicApiUrl"] as const) {
+      expect(() =>
+        validateDeployConfig({ ...config, [field]: "http://staging.openround.ca" }, "staging"),
+      ).toThrow(`${field} must be a credential-free HTTPS URL`);
+      expect(() => validateDeployConfig({ ...config, [field]: "" }, "staging")).toThrow(
+        `${field} must be a valid URL`,
+      );
+    }
+    expect(() =>
+      assertConfiguredHostedTarget(
+        validateDeployConfig({
+          ...config,
+          publicWebUrl: "https://staging.pollingpops.example",
+          publicApiUrl: "https://staging.pollingpops.example",
+        }),
+      ),
+    ).toThrow("must not use a reserved example, placeholder, loopback, or unspecified hostname");
+  });
+
   it("accepts only digest-pinned, internally consistent image manifests", () => {
     const manifest = buildManifest();
     expect(
@@ -1651,6 +1684,50 @@ describe("deployment configuration and manifest validation", () => {
         publicApiUrl: "https://other-api.example.test",
       }),
     ).toThrow("NEXT_PUBLIC_API_URL does not match the target config");
+  });
+
+  it("binds same-origin image manifests to explicit production routing without rewriting them", () => {
+    const config = { ...singleVmConfig("production"), apiRouting: "same-origin" };
+    const manifest = {
+      ...buildManifest("production"),
+      apiRouting: "same-origin",
+      nextPublicApiUrl: "",
+    };
+    const original = JSON.stringify(manifest);
+    expect(validateBuildManifest(manifest, config)).toBe(manifest);
+    expect(JSON.stringify(manifest)).toBe(original);
+    expect(() => validateBuildManifest(manifest, singleVmConfig("production"))).toThrow(
+      "apiRouting does not match the target config",
+    );
+    expect(() => validateBuildManifest(buildManifest("production"), config)).toThrow(
+      "apiRouting does not match the target config",
+    );
+    expect(() =>
+      validateBuildManifest({ ...manifest, nextPublicApiUrl: config.publicApiUrl }, config),
+    ).toThrow("same-origin build manifest NEXT_PUBLIC_API_URL must be empty");
+    expect(() => validateBuildManifest({ ...manifest, apiRouting: "relative" }, config)).toThrow(
+      "build manifest apiRouting must be same-origin",
+    );
+    expect(() => validateBuildManifest(manifest, { ...config, environment: "staging" })).toThrow(
+      "environment production does not match target",
+    );
+    expect(() =>
+      validateBuildManifest(manifest, { ...config, publicApiUrl: "https://other.openround.ca" }),
+    ).toThrow("requires equal public web and API origins");
+    const unsigned = structuredClone(manifest);
+    unsigned.images.web.signed = false;
+    expect(() => validateBuildManifest(unsigned, config)).toThrow("images.web must be signed");
+  });
+
+  it("preserves legacy absolute manifests and rejects empty or insecure API build values", () => {
+    const config = singleVmConfig("production");
+    const manifest = buildManifest("production");
+    expect(validateBuildManifest(manifest, config)).toBe(manifest);
+    for (const nextPublicApiUrl of ["", "http://app.openround.ca", "/v1"]) {
+      expect(() => validateBuildManifest({ ...manifest, nextPublicApiUrl }, config)).toThrow(
+        "build manifest NEXT_PUBLIC_API_URL",
+      );
+    }
   });
 
   it("validates the exact non-secret Fly environments and rejects secret or URL drift", async () => {

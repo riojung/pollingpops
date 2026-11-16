@@ -78,6 +78,10 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 - [Build, service, and deployment](runbooks/deployment.md) is the command reference for product
   images, local service lifecycle, safe Docker cleanup and rebuilds, and digest-pinned remote
   single-VM promotion.
+- [Local AWS staging and production promotion](runbooks/aws-staging-production.md) covers the
+  isolated emulator rehearsal, exact-candidate evidence, real EC2/EBS/private-S3 foundation, and
+  promotion through the existing release gates. [Emulator implementation notes](../infra/aws-emulator/README.md)
+  record pinned upstream packages, licenses, TLS, and the local CORS workaround.
 - [Single-VM staging readiness](runbooks/staging-readiness.md),
   [repository rename compatibility](runbooks/repository-rename.md),
   [Ubuntu 26 runner migration](runbooks/ubuntu-26-runner-migration.md),
@@ -97,8 +101,11 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 
 ## Release boundary
 
-Development uses the local Compose stack. Staging and production use a remote single-VM Compose
-profile with digest-pinned images and separate runtime and migration credentials. This topology
+Development uses the local Compose stack. The disposable local AWS rehearsal uses a separate
+Compose project and synthetic data; its evidence does not qualify IAM, AWS networking/hardware,
+load, or hosted readiness. Hosted staging and production use a remote single-VM Compose
+profile with digest-pinned images and separate runtime and migration credentials. The AWS
+production overlay uses private S3 for live media and an EC2 instance role. This topology
 has one failure domain and provides no high availability or SLA. It remains blocked for public
 production until TLS, strict SSH host-key pinning, encrypted off-host backups, a clean
 replacement-VM restore drill, target-host capacity evidence, and all other readiness gates pass.

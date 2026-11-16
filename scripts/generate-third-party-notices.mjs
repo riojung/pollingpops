@@ -82,6 +82,10 @@ lines.push(
   "",
 );
 
+lines.push(
+  "\n## AWS local staging distribution\n\nThe optional local AWS staging profile builds AWS Emulator from its official Linux package;\nit is a separate test container, not an application production dependency. The pinned upstream\nrelease is [v1.0.385](https://github.com/aws/aws-emulator/releases/tag/v1.0.385), commit\n`813af480bf7f16d5418b64e4f5644a74a7da11c5`. AWS Emulator is licensed under\n[CC0-1.0](https://github.com/aws/aws-emulator/blob/v1.0.385/LICENSE); the vendored framework retains\nits [Apache-2.0 license](https://github.com/aws/aws-emulator/blob/v1.0.385/vendor/LICENSE).\n\nIts Amazon Linux 2023 minimal base comes from\n`public.ecr.aws/amazonlinux/amazonlinux:2023-minimal@sha256:158a9044f9dc0777f098b76c8b54346f6ed4560b9a6a416dec7a5ba3bc483af4`\nand retains its [component licenses and source obligations](https://github.com/amazonlinux/container-images).\nThe local gateway uses Caddy under the Apache-2.0 license listed above. The\n[emulator distribution notes](infra/aws-emulator/README.md#pinned-upstream-distribution) record\nboth architecture-specific RPM URLs and SHA-256 pins. Complete upstream license/notice files\nremain in the installed package and container image.\n",
+);
+
 const outputFile = join(root, "THIRD_PARTY_NOTICES.md");
 writeFileSync(outputFile, `${lines.join("\n")}\n`);
 execFileSync("pnpm", ["exec", "prettier", "--write", outputFile], {

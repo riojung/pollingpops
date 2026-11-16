@@ -1,0 +1,31 @@
+# This HTTP gateway is confined to an isolated local rehearsal network/loopback.
+# The emulator certificate has a localhost SAN, not a Docker service-name SAN.
+:80 {
+	@local_origin header Origin http://localhost:19180
+	header @local_origin {
+		Access-Control-Allow-Origin http://localhost:19180
+		Access-Control-Allow-Methods "GET, HEAD, PUT"
+		Access-Control-Allow-Headers "content-type, x-amz-checksum-crc32, x-amz-sdk-checksum-algorithm"
+		Access-Control-Expose-Headers "ETag"
+		Vary Origin
+	}
+	@preflight method OPTIONS
+	respond @preflight 204
+	# Mirror only presigned metadata queries. Ordinary SDK requests retain their
+	# original (signed) metadata headers.
+	@presigned_metadata query x-amz-meta-mediaid=*
+	request_header @presigned_metadata x-amz-meta-mediaid {http.request.uri.query.x-amz-meta-mediaid}
+	request_header @presigned_metadata x-amz-meta-originalname {http.request.uri.query.x-amz-meta-originalname}
+	request_header @presigned_metadata x-amz-meta-scanstatus {http.request.uri.query.x-amz-meta-scanstatus}
+	reverse_proxy https://aws-emulator:19297 {
+		header_up Host {http.request.hostport}
+		# v1.0.385 rejects presigned S3 requests carrying these unsigned
+		# browser headers. This gateway owns local CORS above.
+		header_up -Origin
+		header_up -Sec-Fetch-Site
+		transport http {
+			tls_server_name localhost
+			tls_trust_pool file /etc/aws-emulator/ca.pem
+		}
+	}
+}

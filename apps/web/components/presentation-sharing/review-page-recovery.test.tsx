@@ -98,6 +98,35 @@ function reviewFixture(): PresentationReview {
     ],
   };
 }
+function contentReviewFixture(): PresentationReview {
+  const review = reviewFixture();
+  review.blocks = [review.blocks[0]!.id, "00000000-0000-4000-8000-000000000005"].map(
+    (id, index) => ({
+      id,
+      kind: "content",
+      layout: "title_body",
+      mediaId: null,
+      mediaAlt: null,
+      textElements: [
+        {
+          id: `${id}:title`,
+          role: "title",
+          text: `Slide ${index + 1}`,
+          region: "top_center",
+          order: 0,
+        },
+        {
+          id: `${id}:body`,
+          role: "body",
+          text: `Readable body ${index + 1}`,
+          region: "middle_center",
+          order: 1,
+        },
+      ],
+    }),
+  );
+  return review;
+}
 function feedbackFixture(viewerKey = "a".repeat(64)): PresentationReviewFeedback {
   return {
     schemaVersion: 1,
@@ -244,7 +273,7 @@ function mount(initialShareId = shareId, includeFeedback = false) {
   render();
   return page;
 }
-function setup() {
+function setup(narrow?: boolean) {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-05T12:00:00.000Z"));
   const location = {
@@ -268,12 +297,14 @@ function setup() {
     }),
   };
   const listeners = new Map<string, Set<() => void>>();
+  const matchMedia = narrow === undefined ? undefined : vi.fn(() => ({ matches: narrow }));
   vi.stubGlobal("sessionStorage", storage);
   vi.stubGlobal("window", {
     location,
     history,
     sessionStorage: storage,
     setTimeout,
+    ...(matchMedia ? { matchMedia } : {}),
     addEventListener: (name: string, listener: () => void) => {
       if (!listeners.has(name)) listeners.set(name, new Set());
       listeners.get(name)!.add(listener);
@@ -291,6 +322,7 @@ function setup() {
     history,
     location,
     listeners,
+    matchMedia,
     dispatch(name: "focus" | "hashchange" | typeof AUTH_CHANGE_EVENT) {
       for (const listener of [...(listeners.get(name) ?? [])]) listener();
     },
@@ -299,6 +331,52 @@ function setup() {
 async function settle(page: ReturnType<typeof mount>) {
   await vi.advanceTimersByTimeAsync(0);
   page.render();
+}
+function pageButton(page: ReturnType<typeof mount>, label: string) {
+  const button = page.render().find(
+    (element) =>
+      element.type === "button" &&
+      String(element.props["aria-label"] ?? text(element.props.children as ReactNode))
+        .trim()
+        .replace(/\s+/g, " ") === label,
+  );
+  expect(button).toBeDefined();
+  return button!;
+}
+function clickPageButton(page: ReturnType<typeof mount>, label: string) {
+  (pageButton(page, label).props.onClick as () => void)();
+}
+function pageOutline(page: ReturnType<typeof mount>) {
+  return page
+    .render()
+    .find(
+      (element) => element.type === "nav" && element.props["aria-label"] === "Presentation pages",
+    )!;
+}
+function currentPage(page: ReturnType<typeof mount>) {
+  return page
+    .render()
+    .find((element) => element.props["aria-label"] === "Current presentation page")!;
+}
+function readableText(page: ReturnType<typeof mount>) {
+  return elements(currentPage(page)).find(
+    (element) =>
+      element.type === "details" &&
+      elements(element).some(
+        (child) =>
+          child.type === "summary" &&
+          text(child.props.children as ReactNode).trim() === "Readable text",
+      ),
+  )!;
+}
+function expectCurrentPage(page: ReturnType<typeof mount>, index: number, count = 2) {
+  expect(text(currentPage(page).props.children as ReactNode)).toContain(
+    `Page ${index + 1} of ${count}`,
+  );
+  const entries = elements(pageOutline(page)).filter((element) => element.type === "button");
+  expect(entries.filter((element) => element.props["aria-current"] === "page")).toEqual([
+    entries[index],
+  ]);
 }
 function feedbackField(page: ReturnType<typeof mount>, label: string) {
   const field = page
@@ -332,6 +410,163 @@ afterEach(() => {
   mocked.hooks = null;
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+describe("private review viewer controls", () => {
+  it.each([false, true])(
+    "toggles the slide outline without changing pages or revalidating access on narrow=%s",
+    async (narrow) => {
+      const environment = setup(narrow);
+      mocked.review.mockResolvedValue(contentReviewFixture());
+      const page = mount();
+      await settle(page);
+      expect(environment.matchMedia).toHaveBeenCalledWith("(max-width: 760px)");
+      expect(pageButton(page, "Slides").props).toMatchObject({
+        "aria-controls": "review-page-outline",
+        "aria-expanded": !narrow,
+      });
+      expect(pageOutline(page).props).toMatchObject({
+        id: "review-page-outline",
+        hidden: narrow,
+      });
+      for (const open of [narrow, !narrow]) {
+        clickPageButton(page, "Slides");
+        expect(pageButton(page, "Slides").props["aria-expanded"]).toBe(open);
+        expect(pageOutline(page).props.hidden).toBe(!open);
+        expectCurrentPage(page, 0);
+      }
+      expect(mocked.review).toHaveBeenCalledOnce();
+      expect(mocked.access).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves unsent discussion replies and edits when the slide outline is collapsed and reopened", async () => {
+    setup();
+    const page = mount(shareId, true);
+    await settle(page);
+    await settle(page);
+    await settle(page);
+    fillFeedbackField(page, "Reply to this thread", "Keep this reply draft");
+    editFeedback(page);
+    fillFeedbackField(page, "Edit comment", "Keep this edit draft");
+    const originalPanel = page
+      .render()
+      .find((element) => element.type === PresentationFeedbackPanel)!;
+    for (const open of [false, true]) {
+      clickPageButton(page, "Slides");
+      expect(pageButton(page, "Slides").props["aria-expanded"]).toBe(open);
+      expect(feedbackField(page, "Reply to this thread")?.props.value).toBe(
+        "Keep this reply draft",
+      );
+      expect(feedbackField(page, "Edit comment")?.props.value).toBe("Keep this edit draft");
+      const panel = page.render().find((element) => element.type === PresentationFeedbackPanel)!;
+      expect(panel.key).toBe(originalPanel.key);
+      expect(panel.props).toMatchObject({ blockId: reviewFixture().blocks[0]!.id, blockIndex: 0 });
+    }
+    expect(mocked.review).toHaveBeenCalledOnce();
+    expect(mocked.access).not.toHaveBeenCalled();
+  });
+
+  it("keeps readable text collapsed by default and retains the reader's choice across verified page changes", async () => {
+    const environment = setup();
+    const fixture = contentReviewFixture();
+    mocked.review.mockResolvedValue(fixture);
+    mocked.access.mockResolvedValue({ versionId, expiresAt: fixture.expiresAt });
+    const page = mount();
+    await settle(page);
+    expect(readableText(page).props.open).toBe(false);
+    expect(text(readableText(page).props.children as ReactNode)).toContain("Readable body 1");
+    (readableText(page).props.onToggle as (event: unknown) => void)({
+      currentTarget: { open: true },
+    });
+    expect(readableText(page).props.open).toBe(true);
+    expect(mocked.access).not.toHaveBeenCalled();
+    clickPageButton(page, "Next page");
+    await settle(page);
+    expectCurrentPage(page, 1);
+    expect(readableText(page).props.open).toBe(true);
+    expect(text(readableText(page).props.children as ReactNode)).toContain("Readable body 2");
+    (readableText(page).props.onToggle as (event: unknown) => void)({
+      currentTarget: { open: false },
+    });
+    expect(readableText(page).props.open).toBe(false);
+    expect(mocked.access).toHaveBeenCalledOnce();
+    clickPageButton(page, "Previous page");
+    await settle(page);
+    expectCurrentPage(page, 0);
+    expect(readableText(page).props.open).toBe(false);
+    environment.dispatch("focus");
+    await settle(page);
+    expect(readableText(page).props.open).toBe(false);
+    expect(mocked.access).toHaveBeenCalledTimes(2);
+  });
+
+  it("updates the active slide and page counter only after access succeeds, retaining the current slide for a retryable failure", async () => {
+    setup();
+    const fixture = contentReviewFixture();
+    mocked.review.mockResolvedValue(fixture);
+    let finish!: (value: { versionId: string; expiresAt: string }) => void;
+    mocked.access.mockImplementationOnce(
+      () =>
+        new Promise<{ versionId: string; expiresAt: string }>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const page = mount();
+    await settle(page);
+    expectCurrentPage(page, 0);
+    expect(pageButton(page, "Previous page").props.disabled).toBe(true);
+    clickPageButton(page, "Next page");
+    expect(mocked.access).toHaveBeenCalledWith(shareId, launchToken, expect.any(AbortSignal));
+    expectCurrentPage(page, 0);
+    expect(pageButton(page, "Next page").props.disabled).toBe(true);
+    finish({ versionId, expiresAt: fixture.expiresAt });
+    await settle(page);
+    expectCurrentPage(page, 1);
+    expect(pageButton(page, "Next page").props.disabled).toBe(true);
+    mocked.access.mockRejectedValueOnce(
+      new ApiClientError("Try later", "TEMPORARILY_UNAVAILABLE", 503),
+    );
+    clickPageButton(page, "Previous page");
+    await settle(page);
+    expectCurrentPage(page, 1);
+    expect(page.text()).toContain("Could not verify access. Retry the page change.");
+    mocked.access.mockResolvedValueOnce({ versionId, expiresAt: fixture.expiresAt });
+    clickPageButton(page, "Retry page change");
+    await settle(page);
+    expectCurrentPage(page, 0);
+    expect(mocked.access).toHaveBeenCalledTimes(3);
+    expect(mocked.review).toHaveBeenCalledOnce();
+  });
+
+  it.each([401, 403, 404, 410])(
+    "removes private content and feedback after page navigation receives access denial %s",
+    async (status) => {
+      const environment = setup();
+      const fixture = contentReviewFixture();
+      mocked.review.mockResolvedValue(fixture);
+      mocked.access.mockRejectedValueOnce(
+        new ApiClientError("Unavailable", "PRESENTATION_UNAVAILABLE", status),
+      );
+      const page = mount();
+      await settle(page);
+      clickPageButton(page, "Next page");
+      await settle(page);
+      expect(mocked.access).toHaveBeenCalledOnce();
+      expect(page.text()).toContain("unavailable or has expired");
+      expect(
+        page
+          .render()
+          .some((element) => element.props["aria-label"] === "Current presentation page"),
+      ).toBe(false);
+      expect(page.render().some((element) => element.type === PresentationFeedbackPanel)).toBe(
+        false,
+      );
+      expect(environment.storage.removeItem).toHaveBeenCalledWith(
+        presentationReviewTokenKey(shareId),
+      );
+    },
+  );
 });
 
 describe("private review recovery without per-tab storage", () => {
@@ -429,13 +664,7 @@ describe("private review recovery without per-tab storage", () => {
     expect(elements(section).some((element) => element.type === PresentationFeedbackPanel)).toBe(
       false,
     );
-    const next = page
-      .render()
-      .find(
-        (element) =>
-          element.type === "button" && text(element.props.children as ReactNode) === "Next page",
-      )!;
-    (next.props.onClick as () => void)();
+    clickPageButton(page, "Next page");
     await settle(page);
     const second = page.render().find((element) => element.type === PresentationFeedbackPanel)!;
     expect(second.key).toBe(first.key);

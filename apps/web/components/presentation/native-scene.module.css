@@ -51,6 +51,7 @@
   outline-offset: -4px;
 }
 .node h1 {
+  color: var(--native-node-color, inherit);
   /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
      type and padding scale together, so a smaller editor does not change text fit. */
   font-size: var(--native-node-size, 3.75cqw);

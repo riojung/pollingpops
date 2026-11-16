@@ -4,11 +4,19 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "../../components/locale-provider";
-import type { QuizDraft } from "@openround/contracts";
+import type { QuizDraft, PresentationBlockDraft } from "@openround/contracts";
+import { PresentationSlideThumbnail } from "../../components/presentation/presentation-editor-chrome";
+import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
 import type { SurveyDraft } from "@openround/contracts/surveys";
 import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
+import {
+  WorkspaceKindIcon,
+  WorkspaceStatus,
+  workspaceStateTone,
+} from "../../components/workspace/workspace-signals";
+import signals from "../../components/workspace/workspace-signals.module.css";
 import { apiFetch, humanError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
 import { clearBuilderRecovery } from "../../lib/builder-recovery";
@@ -53,6 +61,7 @@ interface PresentationRecord {
   folderId: string | null;
   hasUnpublishedChanges: boolean;
   updatedAt: string;
+  previewBlock?: PresentationBlockDraft | null;
 }
 
 interface SurveyRecord {
@@ -101,6 +110,7 @@ function dateLabel(locale: string, value: string) {
 
 function LibraryContent() {
   const { locale, t } = useLocale();
+  const flowCopy = workspaceFlowMessages(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canEdit, creator, productFeatures } = useWorkspace();
@@ -691,40 +701,70 @@ function LibraryContent() {
       translationLevel="full"
     >
       <div className={styles.toolbar}>
-        <div className={styles.tabs} role="tablist" aria-label={t("pages.library.typeLabel")}>
+        <div
+          className={styles.tabs}
+          role="tablist"
+          aria-label={t("pages.library.typeLabel")}
+          onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            const tabs = Array.from(
+              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+            );
+            const current = tabs.indexOf(event.target as HTMLButtonElement);
+            if (current < 0) return;
+            event.preventDefault();
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? tabs.length - 1
+                  : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+            tabs[next]?.click();
+            tabs[next]?.focus();
+          }}
+        >
           <button
             aria-controls="rounds-panel"
             aria-selected={type === "rounds"}
-            className={type === "rounds" ? styles.tabActive : styles.tab}
+            tabIndex={type === "rounds" ? 0 : -1}
+            className={`${signals.kindTab} ${type === "rounds" ? styles.tabActive : styles.tab}`}
+            data-kind="round"
             id="rounds-tab"
             onClick={() => chooseType("rounds")}
             role="tab"
             type="button"
           >
+            <WorkspaceKindIcon kind="round" />
             {t("pages.common.rounds")} <span>{rounds.length}</span>
           </button>
           {presentationsEnabled ? (
             <button
               aria-controls="presentations-panel"
               aria-selected={type === "presentations"}
-              className={type === "presentations" ? styles.tabActive : styles.tab}
+              tabIndex={type === "presentations" ? 0 : -1}
+              className={`${signals.kindTab} ${type === "presentations" ? styles.tabActive : styles.tab}`}
+              data-kind="presentation"
               id="presentations-tab"
               onClick={() => chooseType("presentations")}
               role="tab"
               type="button"
             >
+              <WorkspaceKindIcon kind="presentation" />
               {t("pages.common.presentations")} <span>{presentations.length}</span>
             </button>
           ) : null}
           <button
             aria-controls="surveys-panel"
             aria-selected={type === "surveys"}
-            className={type === "surveys" ? styles.tabActive : styles.tab}
+            tabIndex={type === "surveys" ? 0 : -1}
+            className={`${signals.kindTab} ${type === "surveys" ? styles.tabActive : styles.tab}`}
+            data-kind="survey"
             id="surveys-tab"
             onClick={() => chooseType("surveys")}
             role="tab"
             type="button"
           >
+            <WorkspaceKindIcon kind="survey" />
             {t("pages.common.surveys")} <span>{surveys.length}</span>
           </button>
         </div>
@@ -737,12 +777,6 @@ function LibraryContent() {
             value={search}
           />
         </label>
-        <Link className={styles.manageLink} href={`/library/folders?type=${type}`}>
-          {t("pages.library.manageFolders")}
-        </Link>
-        <Link className={styles.manageLink} href="/recovery-packs" lang="en-CA">
-          Recovery Packs
-        </Link>
       </div>
 
       <section className={styles.filterBar} aria-label={t("pages.library.filtersLabel")}>
@@ -760,41 +794,57 @@ function LibraryContent() {
             <option value="all">{t("pages.library.allStatuses")}</option>
           </select>
         </label>
-        <label className={styles.filterField}>
-          <span>{t("pages.library.folder")}</span>
-          <select
-            aria-label={t("pages.library.filterFolder")}
-            onChange={(event) => setFolderId(event.target.value)}
-            value={folderId}
-          >
-            <option value="all">{t("pages.library.allFolders")}</option>
-            <option value="unfiled">{t("pages.library.unfiled")}</option>
-            {folderOptions.map((folder) => (
-              <option key={folder.id} lang="" value={folder.id}>
-                {folder.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          aria-pressed={favoritesOnly}
-          className={styles.favoriteFilter}
-          onClick={() => setFavoritesOnly((current) => !current)}
-          type="button"
-        >
-          <span aria-hidden="true">★</span> {t("pages.library.favorites")}
-        </button>
-        <label className={styles.filterField}>
-          <span>{t("pages.library.ownership")}</span>
-          <select
-            aria-label={t("pages.library.filterOwnership")}
-            onChange={(event) => setOwnership(event.target.value as LibraryOwnershipFilter)}
-            value={ownership}
-          >
-            <option value="all">{t("pages.library.allOwners")}</option>
-            <option value="workspace">{t("pages.library.workspaceOwned")}</option>
-          </select>
-        </label>
+        <details className={styles.advancedFilters}>
+          <summary>
+            {flowCopy.filters}
+            {folderId !== "all" || ownership !== "all" || favoritesOnly
+              ? ` · ${Number(folderId !== "all") + Number(ownership !== "all") + Number(favoritesOnly)}`
+              : ""}
+          </summary>
+          <div className={styles.advancedFilterPanel}>
+            <label className={styles.filterField}>
+              <span>{t("pages.library.folder")}</span>
+              <select
+                aria-label={t("pages.library.filterFolder")}
+                onChange={(event) => setFolderId(event.target.value)}
+                value={folderId}
+              >
+                <option value="all">{t("pages.library.allFolders")}</option>
+                <option value="unfiled">{t("pages.library.unfiled")}</option>
+                {folderOptions.map((folder) => (
+                  <option key={folder.id} lang="" value={folder.id}>
+                    {folder.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              aria-pressed={favoritesOnly}
+              className={styles.favoriteFilter}
+              onClick={() => setFavoritesOnly((current) => !current)}
+              type="button"
+            >
+              <span aria-hidden="true">★</span> {t("pages.library.favorites")}
+            </button>
+            <label className={styles.filterField}>
+              <span>{t("pages.library.ownership")}</span>
+              <select
+                aria-label={t("pages.library.filterOwnership")}
+                onChange={(event) => setOwnership(event.target.value as LibraryOwnershipFilter)}
+                value={ownership}
+              >
+                <option value="all">{t("pages.library.allOwners")}</option>
+                <option value="workspace">{t("pages.library.workspaceOwned")}</option>
+              </select>
+            </label>
+            <Link className={styles.manageLink} href={`/library/folders?type=${type}`}>
+              {t("pages.library.manageFolders")}
+            </Link>
+            <Link className={styles.manageLink} href="/recovery-packs" lang="en-CA">
+              Recovery Packs
+            </Link>
+          </div>
+        </details>
         <p className={styles.resultSummary} role="status">
           {loading
             ? t("pages.library.loadingContent")
@@ -811,7 +861,7 @@ function LibraryContent() {
             onClick={() => chooseView("grid")}
             type="button"
           >
-            {t("pages.library.grid")}
+            {t("pages.library.gridView")}
           </button>
           <button
             aria-label={t("pages.library.listView")}
@@ -819,10 +869,34 @@ function LibraryContent() {
             onClick={() => chooseView("list")}
             type="button"
           >
-            {t("pages.library.list")}
+            {t("pages.library.listView")}
           </button>
         </div>
       </section>
+
+      {folderId !== "all" || ownership !== "all" || favoritesOnly ? (
+        <div className={styles.appliedFilters}>
+          {folderId !== "all" ? (
+            <button type="button" onClick={() => setFolderId("all")}>
+              {t("pages.library.folder")}:{" "}
+              {folderId === "unfiled"
+                ? t("pages.library.unfiled")
+                : folderPathLabel(foldersByType[type], folderId)}{" "}
+              ×
+            </button>
+          ) : null}
+          {ownership !== "all" ? (
+            <button type="button" onClick={() => setOwnership("all")}>
+              {t("pages.library.workspaceOwned")} ×
+            </button>
+          ) : null}
+          {favoritesOnly ? (
+            <button type="button" onClick={() => setFavoritesOnly(false)}>
+              {t("pages.library.favorites")} ×
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {announcement ? (
         <p className={styles.actionStatus} role="status">
@@ -949,7 +1023,9 @@ function LibraryContent() {
                 const folderName = folderPathLabel(foldersByType.rounds, round.folderId);
                 return (
                   <article
-                    className={`${styles.card} ${selected ? styles.cardSelected : ""}`}
+                    className={`${styles.card} ${signals.surface} ${selected ? styles.cardSelected : ""}`}
+                    data-kind="round"
+                    data-state-tone={workspaceStateTone(round.status)}
                     key={round.id}
                   >
                     {canEdit ? (
@@ -977,16 +1053,23 @@ function LibraryContent() {
                     >
                       <span aria-hidden="true">{round.favorite ? "★" : "☆"}</span>
                     </button>
-                    <div className={`${styles.artwork} ${styles.roundArtwork}`} aria-hidden="true">
-                      <span>R</span>
-                      <div />
-                      <div />
+                    <div className={styles.questionPreview} aria-hidden="true">
+                      <strong lang="">{round.draft.questions[0]?.prompt || round.title}</strong>
+                      {round.draft.questions[0] && "choices" in round.draft.questions[0] ? (
+                        <div>
+                          {round.draft.questions[0].choices?.slice(0, 2).map((choice) => (
+                            <span key={choice.id} lang="">
+                              {choice.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div className={styles.cardBody}>
                       <div className={styles.cardMeta}>
-                        <span className={styles.status} data-status={round.status}>
+                        <WorkspaceStatus status={round.status}>
                           {t(`pages.common.status.${round.status}`)}
-                        </span>
+                        </WorkspaceStatus>
                         <span>
                           {t("pages.common.updated", { date: dateLabel(locale, round.updatedAt) })}
                         </span>
@@ -1016,19 +1099,25 @@ function LibraryContent() {
                       </div>
                       <div className={styles.cardActions}>
                         <Link
-                          className="button-quiet small-button"
+                          className={`button-quiet small-button ${signals.action}`}
+                          data-action={canEdit && !archived ? "edit" : "view"}
                           href={archived ? `/quiz/${round.id}/preview` : `/quiz/${round.id}`}
                         >
                           {canEdit && !archived ? t("pages.library.edit") : t("pages.library.view")}
                         </Link>
                         {round.currentVersionId && canEdit && !archived ? (
-                          <Link className="button small-button" href={`/host/setup/${round.id}`}>
+                          <Link
+                            className={`button small-button ${signals.action}`}
+                            data-action="host"
+                            href={`/host/setup/${round.id}`}
+                          >
                             {t("pages.library.host")}
                           </Link>
                         ) : null}
                         {round.currentVersionId && canEdit && !archived ? (
                           <Link
-                            className="button-quiet small-button"
+                            className={`button-quiet small-button ${signals.action}`}
+                            data-action="assign"
                             href={`/quiz/${round.id}/assign`}
                           >
                             {t("pages.library.assign")}
@@ -1106,7 +1195,9 @@ function LibraryContent() {
                   );
                   return (
                     <article
-                      className={`${styles.card} ${selected ? styles.cardSelected : ""}`}
+                      className={`${styles.card} ${signals.surface} ${selected ? styles.cardSelected : ""}`}
+                      data-kind="presentation"
+                      data-state-tone={workspaceStateTone(presentation.status)}
                       key={presentation.id}
                     >
                       {canEdit ? (
@@ -1136,24 +1227,30 @@ function LibraryContent() {
                       >
                         <span aria-hidden="true">{presentation.favorite ? "★" : "☆"}</span>
                       </button>
-                      <div
-                        className={`${styles.artwork} ${styles.presentationArtwork}`}
-                        aria-hidden="true"
-                      >
-                        <span>P</span>
-                        <div />
-                        <div />
+                      <div className={styles.presentationPreview} aria-hidden="true">
+                        {presentation.previewBlock ? (
+                          <PresentationSlideThumbnail
+                            block={presentation.previewBlock}
+                            mediaEnabled={view === "grid"}
+                            mediaScope={{
+                              actorKey: `${creator?.userId ?? ""}:${workspaceId}`,
+                              presentationId: presentation.id,
+                            }}
+                          />
+                        ) : (
+                          <strong lang="">{presentation.title}</strong>
+                        )}
                       </div>
                       <div className={styles.cardBody}>
                         <div className={styles.cardMeta}>
-                          <span className={styles.status} data-status={presentation.status}>
+                          <WorkspaceStatus status={presentation.status}>
                             {t(`pages.common.status.${presentation.status}`)}
-                          </span>
+                          </WorkspaceStatus>
                           {presentation.hasUnpublishedChanges &&
                           presentation.status === "published" ? (
-                            <span className={styles.changed}>
+                            <WorkspaceStatus status="changed">
                               {t("pages.library.unpublishedChanges")}
-                            </span>
+                            </WorkspaceStatus>
                           ) : (
                             <span>
                               {t("pages.common.updated", {
@@ -1184,7 +1281,8 @@ function LibraryContent() {
                         </div>
                         <div className={styles.cardActions}>
                           <Link
-                            className="button-quiet small-button"
+                            className={`button-quiet small-button ${signals.action}`}
+                            data-action={canEdit && !archived ? "edit" : "view"}
                             href={`/presentation/${presentation.id}`}
                           >
                             {canEdit && !archived
@@ -1193,7 +1291,8 @@ function LibraryContent() {
                           </Link>
                           {presentation.currentVersionId && canEdit && !archived ? (
                             <Link
-                              className="button small-button"
+                              className={`button small-button ${signals.action}`}
+                              data-action="host"
                               href={`/presentation/${presentation.id}/host`}
                             >
                               {t("pages.library.host")}

@@ -563,65 +563,74 @@ describe("Presentation Pack update block adapter", () => {
     expect(updated.blocks[0]).toEqual(content);
   });
 
-  it("retains designed document7 scenes and immutable original Pack snapshots through updates", () => {
-    const { draft, insertion, target } = fixture();
-    draft.schemaVersion = 7;
-    const content = draft.blocks[0]!;
-    if (content.kind !== "content") throw new Error("Expected content slide");
-    content.textElements = [];
-    content.scene = {
-      schemaVersion: 3,
-      aspectRatio: "16:9",
-      design: { theme: "midnight", font: "mono", spacing: "compact" },
-      nodes: [
-        {
-          id: "title",
-          type: "text",
-          role: "title",
-          text: "Retain design",
-          frame: { x: 8, y: 8, width: 84, height: 20 },
-        },
-        {
-          id: "image",
-          type: "image",
-          mediaId: randomUUID(),
-          altText: "Evidence",
-          fit: "cover",
-          focalPoint: { x: 15, y: 85 },
-          frame: { x: 8, y: 35, width: 84, height: 50 },
-        },
-      ],
-      readingOrder: ["title", "image"],
-    };
-    const original = JSON.stringify(insertion.originalContent);
-    const retainedScene = JSON.stringify(PresentationDraftSchema.parse(draft).blocks[0]);
-    target.content.diagnostic.prompt = "Updated source question?";
-    const updated = applyPresentationRecoveryPackUpdate(
-      draft,
-      buildPresentationRecoveryPackUpdatePreview(draft, insertion, target),
-      target,
-      [],
-    );
-    expect(updated.schemaVersion).toBe(7);
-    expect(JSON.stringify(updated.blocks[0])).toBe(retainedScene);
-    expect(JSON.stringify(updated.recoveryPackInsertions![0]!.originalContent)).toBe(original);
-    expect(updated.recoveryPackInsertions![0]!.updateBaseline!.content).toEqual(target.content);
-    const next = { id: randomUUID(), version: 3, content: structuredClone(target.content) };
-    next.content.interventions[0]!.body = "Third immutable facilitator card";
-    const acceptedInsertion = updated.recoveryPackInsertions![0]!;
-    const baseline = JSON.stringify(acceptedInsertion.updateBaseline);
-    const updatedAgain = applyPresentationRecoveryPackUpdate(
-      updated,
-      buildPresentationRecoveryPackUpdatePreview(updated, acceptedInsertion, next),
-      next,
-      [],
-    );
-    expect(updatedAgain.schemaVersion).toBe(7);
-    expect(JSON.stringify(updatedAgain.blocks[0])).toBe(retainedScene);
-    expect(JSON.stringify(updatedAgain.recoveryPackInsertions![0]!.originalContent)).toBe(original);
-    expect(JSON.stringify(acceptedInsertion.updateBaseline)).toBe(baseline);
-    expect(PresentationContentSchema.parse(updatedAgain).schemaVersion).toBe(7);
-  });
+  it.each([7, 8] as const)(
+    "retains document%s scenes and immutable original Pack snapshots through updates",
+    (schemaVersion) => {
+      const { draft, insertion, target } = fixture();
+      draft.schemaVersion = schemaVersion;
+      const content = draft.blocks[0]!;
+      if (content.kind !== "content") throw new Error("Expected content slide");
+      content.textElements = [];
+      content.scene = {
+        schemaVersion: schemaVersion === 8 ? 4 : 3,
+        ...(schemaVersion === 8
+          ? { groups: [{ id: "evidence", nodeIds: ["title", "image"] }] }
+          : {}),
+        aspectRatio: "16:9",
+        design: { theme: "midnight", font: "mono", spacing: "compact" },
+        nodes: [
+          {
+            id: "title",
+            type: "text",
+            role: "title",
+            text: "Retain design",
+            frame: { x: 8, y: 8, width: 84, height: 20 },
+          },
+          {
+            id: "image",
+            type: "image",
+            mediaId: randomUUID(),
+            altText: "Evidence",
+            fit: "cover",
+            focalPoint: { x: 15, y: 85 },
+            ...(schemaVersion === 8 ? { rotation: 10 } : {}),
+            frame: { x: 8, y: 35, width: 84, height: 50 },
+          },
+        ],
+        readingOrder: ["title", "image"],
+      };
+      const original = JSON.stringify(insertion.originalContent);
+      const retainedScene = JSON.stringify(PresentationDraftSchema.parse(draft).blocks[0]);
+      target.content.diagnostic.prompt = "Updated source question?";
+      const updated = applyPresentationRecoveryPackUpdate(
+        draft,
+        buildPresentationRecoveryPackUpdatePreview(draft, insertion, target),
+        target,
+        [],
+      );
+      expect(updated.schemaVersion).toBe(schemaVersion);
+      expect(JSON.stringify(updated.blocks[0])).toBe(retainedScene);
+      expect(JSON.stringify(updated.recoveryPackInsertions![0]!.originalContent)).toBe(original);
+      expect(updated.recoveryPackInsertions![0]!.updateBaseline!.content).toEqual(target.content);
+      const next = { id: randomUUID(), version: 3, content: structuredClone(target.content) };
+      next.content.interventions[0]!.body = "Third immutable facilitator card";
+      const acceptedInsertion = updated.recoveryPackInsertions![0]!;
+      const baseline = JSON.stringify(acceptedInsertion.updateBaseline);
+      const updatedAgain = applyPresentationRecoveryPackUpdate(
+        updated,
+        buildPresentationRecoveryPackUpdatePreview(updated, acceptedInsertion, next),
+        next,
+        [],
+      );
+      expect(updatedAgain.schemaVersion).toBe(schemaVersion);
+      expect(JSON.stringify(updatedAgain.blocks[0])).toBe(retainedScene);
+      expect(JSON.stringify(updatedAgain.recoveryPackInsertions![0]!.originalContent)).toBe(
+        original,
+      );
+      expect(JSON.stringify(acceptedInsertion.updateBaseline)).toBe(baseline);
+      expect(PresentationContentSchema.parse(updatedAgain).schemaVersion).toBe(schemaVersion);
+    },
+  );
 });
 
 describe("Presentation Pack update validation", () => {

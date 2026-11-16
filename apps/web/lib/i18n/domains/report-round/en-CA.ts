@@ -420,6 +420,25 @@ export const reportRoundEnglishMessages = {
   "reportRound.editor.history.questionMoved": "Question moved.",
   "reportRound.editor.recoveredCopy": "{title} — recovered copy",
   "reportRound.editor.describeImage": "Describe the instructional image before uploading it.",
+  "reportRound.clarity.noConceptEvidence": "No concept-level recovery evidence was recorded.",
+  "reportRound.clarity.trackedConcepts": "Concepts with recorded recovery evidence: {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept}: {count} unresolved response(s).",
+  "reportRound.clarity.initialSmallSample":
+    "Fewer than five assessed responses. Interpret the count with care.",
+  "reportRound.clarity.nextPractice": "Create focused practice for the unresolved concepts.",
+  "reportRound.clarity.nextReview":
+    "Review this session’s evidence, then plan a later retention check.",
+  "reportRound.clarity.nextRecheck": "Add a linked recheck next time to collect recovery evidence.",
+  "reportRound.clarity.targetPractice": "Target practice",
+  "reportRound.clarity.reviewEvidence": "Review evidence",
+  "reportRound.clarity.linkedRecheck": "linked recheck",
+  "reportRound.clarity.revote": "revote",
+  "reportRound.clarity.noRecheckEvidence": "No recheck evidence",
+  "reportRound.clarity.sessionReport": "Session report",
+  "reportRound.clarity.backToResults": "Back to Results",
+  "reportRound.clarity.noPairedResponses": "No paired recheck responses",
+  "reportRound.clarity.unresolvedConcepts": "unresolved concepts",
+  "reportRound.clarity.participation": "participation",
 } as const;
 
 export type ReportRoundMessageKey = keyof typeof reportRoundEnglishMessages;

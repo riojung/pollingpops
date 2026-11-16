@@ -1,5 +1,12 @@
 import type { QueryResultRow } from "pg";
-import { PresentationRecoveryPackInterventionSchema } from "@openround/contracts";
+import {
+  PresentationRecoveryPackInterventionSchema,
+  PresentationNavigationStateSchema,
+  PresentationNavigationEventSchema,
+  PresentationInteractionStateSchema,
+  PresentationInteractionEventSchema,
+  PresentationBranchEventSchema,
+} from "@openround/contracts";
 import type {
   PresentationSessionCommandReceiptRecord,
   PresentationSessionCredentialRecord,
@@ -9,7 +16,36 @@ import type {
   PresentationSessionResponseRecord,
   PresentationSessionTimelineRecord,
 } from "./presentation-session-types.js";
+import { upcastPresentationResponse } from "./response-schemas.js";
 import { upcastPresentationSessionContent } from "./artifact-schemas.js";
+
+const presentationResponseFields = [
+  "id",
+  "workspace_id",
+  "session_id",
+  "participant_id",
+  "block_id",
+  "question_id",
+  "response",
+  "correct",
+  "score",
+  "response_ms",
+  "submitted_at",
+  "idempotency_key",
+  "request_hash",
+  "response_schema_version",
+  "moderation_status",
+  "moderation_version",
+  "moderated_at",
+];
+export function presentationResponseMetadataColumns(alias?: string) {
+  return presentationResponseFields
+    .map((field) => (alias ? `${alias}.${field}` : field))
+    .join(", ");
+}
+export function presentationResponseMetadataJson(alias: string) {
+  return `jsonb_build_object(${presentationResponseFields.map((field) => `'${field}', ${alias}.${field}`).join(", ")})`;
+}
 
 // Revision and live child rows are monotonic for the lifetime of a Presentation session. Their
 // sum plus the immutable compatibility offset is therefore a commit-visible, per-session fence:
@@ -20,12 +56,32 @@ import { upcastPresentationSessionContent } from "./artifact-schemas.js";
 export const PRESENTATION_EFFECTIVE_EVENT_SEQ_SQL = `(
   session.event_seq_offset
   + session.revision
+  + session.text_moderation_seq
   + (SELECT count(*)
        FROM presentation_live_participants participant
       WHERE participant.session_id = session.id)
   + (SELECT count(*)
        FROM presentation_live_responses response
       WHERE response.session_id = session.id)
+)`;
+
+/** Match E04 frozen UUID spelling without changing literal legacy acknowledgement semantics. */
+export const PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL = `(
+  CASE WHEN (
+    session.content_snapshot ->> 'schemaVersion' IN ('12','13','14','15','16','17','18')
+    OR session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'ranking'
+    OR (session.content_snapshot ->> 'schemaVersion' IN ('10','11','12','13','14','15','16','17','18') AND session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' IN ('open_text','word_cloud'))
+    OR (
+      session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'type' = 'poll'
+      AND COALESCE(session.content_snapshot -> 'blocks' -> session.current_block_index -> 'question' ->> 'maxSelections', '1')
+        IN ('2', '3', '4', '5', '6')
+    )
+  ) THEN openround_presentation_uuid_equal(
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id',
+    current_response.block_id::text
+  ) ELSE current_response.block_id::text =
+    session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id'
+  END
 )`;
 
 export function mapSession(row: QueryResultRow): PresentationSessionRecord {
@@ -52,6 +108,15 @@ export function mapSession(row: QueryResultRow): PresentationSessionRecord {
       ? PresentationRecoveryPackInterventionSchema.parse(row.recovery_pack_intervention)
       : null,
     eventSeq: Number(row.event_seq ?? 0),
+    ...(row.content_snapshot?.schemaVersion >= 10
+      ? { textModerationSeq: Number(row.text_moderation_seq ?? 0) }
+      : {}),
+    ...(row.content_snapshot?.schemaVersion >= 12
+      ? { navigationState: PresentationNavigationStateSchema.parse(row.navigation_state) }
+      : {}),
+    ...(row.content_snapshot?.schemaVersion >= 13
+      ? { interactionState: PresentationInteractionStateSchema.parse(row.interaction_state) }
+      : {}),
     questionOpenedAt:
       row.question_opened_at == null
         ? null
@@ -105,7 +170,18 @@ export function mapResponse(row: QueryResultRow): PresentationSessionResponseRec
     participantId: String(row.participant_id),
     blockId: String(row.block_id),
     questionId: String(row.question_id),
-    response: row.response,
+    response: upcastPresentationResponse(row.response, row.response_schema_version ?? 1, {
+      moderationStatus: row.moderation_status,
+      moderationVersion: row.moderation_version,
+    }),
+    responseSchemaVersion: row.response_schema_version ?? 1,
+    ...(row.response_schema_version === 3
+      ? {
+          moderationStatus: row.moderation_status,
+          moderationVersion: Number(row.moderation_version),
+          moderatedAt: row.moderated_at ? new Date(row.moderated_at) : null,
+        }
+      : {}),
     correct: row.correct == null ? null : Boolean(row.correct),
     score: Number(row.score ?? 0),
     responseMs: Number(row.response_ms ?? 0),
@@ -144,6 +220,13 @@ export function mapTimeline(row: QueryResultRow): PresentationSessionTimelineRec
     blockIndex: row.block_index == null ? null : Number(row.block_index),
     blockId: row.block_id == null ? null : String(row.block_id),
     revealedParticipantIds: row.revealed_participant_ids ?? null,
+    ...(row.interaction
+      ? { interaction: PresentationInteractionEventSchema.parse(row.interaction) }
+      : {}),
+    ...(row.branch ? { branch: PresentationBranchEventSchema.parse(row.branch) } : {}),
+    ...(row.navigation
+      ? { navigation: PresentationNavigationEventSchema.parse(row.navigation) }
+      : {}),
     recoveryPackIntervention: row.recovery_pack_intervention
       ? PresentationRecoveryPackInterventionSchema.parse(row.recovery_pack_intervention)
       : null,

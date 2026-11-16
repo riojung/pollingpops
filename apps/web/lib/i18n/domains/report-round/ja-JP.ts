@@ -433,6 +433,24 @@ const messages = {
   "reportRound.editor.history.questionMoved": "質問が移動しました。",
   "reportRound.editor.recoveredCopy": "{title} — リカバリーされたコピー",
   "reportRound.editor.describeImage": "教材画像の説明を入力してからアップロードしてください。",
+  "reportRound.clarity.noConceptEvidence": "概念ごとの理解回復データは記録されていません。",
+  "reportRound.clarity.trackedConcepts": "理解回復データが記録された概念：{count}。",
+  "reportRound.clarity.unresolvedEvidence": "{concept}：未解決の回答 {count} 件。",
+  "reportRound.clarity.initialSmallSample":
+    "評価対象の回答は5件未満です。件数の解釈には注意してください。",
+  "reportRound.clarity.nextPractice": "未解決の概念に絞った練習を作成します。",
+  "reportRound.clarity.nextReview": "このセッションのデータを確認し、後日の確認を計画します。",
+  "reportRound.clarity.nextRecheck": "次回は関連する再確認問題を追加して理解回復を測定します。",
+  "reportRound.clarity.targetPractice": "重点練習",
+  "reportRound.clarity.reviewEvidence": "データを確認",
+  "reportRound.clarity.linkedRecheck": "関連する再確認",
+  "reportRound.clarity.revote": "再投票",
+  "reportRound.clarity.noRecheckEvidence": "再確認データなし",
+  "reportRound.clarity.sessionReport": "セッションレポート",
+  "reportRound.clarity.backToResults": "結果に戻る",
+  "reportRound.clarity.noPairedResponses": "対応する再確認の回答なし",
+  "reportRound.clarity.unresolvedConcepts": "未解決の概念",
+  "reportRound.clarity.participation": "参加率",
 } satisfies ReportRoundMessages;
 
 export default messages;

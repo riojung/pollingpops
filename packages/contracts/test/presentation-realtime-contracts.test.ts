@@ -7,6 +7,9 @@ import {
   PresentationControlCommandSchema,
   PresentationCompanionSnapshotSchema,
   PresentationHostSnapshotSchema,
+  PresentationPresenterSnapshotSchema,
+  PresentationStagePassResponseSchema,
+  PresentationStageSnapshotSchema,
   PresentationParticipantCurrentBlockSchema,
   PresentationParticipantSnapshotSchema,
   PresentationRestV1CreateSessionResponseSchema,
@@ -62,6 +65,228 @@ function snapshotBase() {
 }
 
 describe("Presentation realtime contracts", () => {
+  it.each(["content", "question"] as const)(
+    "accepts bounded optional design on every public %s snapshot and presenter preview",
+    (kind) => {
+      const base = snapshotBase();
+      const sourceBlock =
+        kind === "question"
+          ? {
+              id: randomUUID(),
+              kind,
+              question: {
+                id: randomUUID(),
+                type: "numeric",
+                prompt: "How many?",
+                timeLimitSeconds: 30,
+                basePoints: 100,
+                mediaId: null,
+                mediaAlt: null,
+              },
+            }
+          : {
+              id: randomUUID(),
+              kind,
+              layout: "title",
+              textElements: [
+                {
+                  id: "title",
+                  role: "title",
+                  text: "Public slide",
+                  region: "top_center",
+                  order: 0,
+                },
+              ],
+              mediaId: null,
+              mediaAlt: null,
+            };
+      const design = { theme: "sunset", font: "serif", spacing: "compact" };
+      for (const block of [sourceBlock, { ...sourceBlock, design }]) {
+        const host = PresentationHostSnapshotSchema.parse({
+          ...base,
+          projection: "host",
+          currentBlock: kind === "question" ? { ...block, revealedAnswer: null } : block,
+          presenter: { speakerNotes: "Private presenter cue", nextBlock: block },
+          participantCount: 2,
+          responseCount: 1,
+          participants: [],
+          roomStatus: roomStatus(base.sessionId),
+          finishedAt: null,
+        });
+        const participant = PresentationParticipantSnapshotSchema.parse({
+          ...base,
+          projection: "participant",
+          currentBlock: block,
+          participantId: randomUUID(),
+          participantCount: 2,
+          responseSubmitted: false,
+          standing: null,
+          responseResult: null,
+          finishedAt: null,
+        });
+        const publicBlocks = [
+          host.currentBlock,
+          host.presenter?.nextBlock,
+          participant.currentBlock,
+          PresentationStageSnapshotSchema.parse({
+            ...base,
+            projection: "stage",
+            currentBlock: block,
+            revealedAnswer: null,
+            participantCount: 2,
+            responseCount: 1,
+            finishedAt: null,
+          }).currentBlock,
+          PresentationCompanionSnapshotSchema.parse({
+            ...base,
+            projection: "companion",
+            currentBlock: block,
+            roomStatus: roomStatus(base.sessionId),
+            primaryAction: "advance",
+            finishedAt: null,
+          }).currentBlock,
+          PresentationRestV1HostSnapshotSchema.parse({
+            ...host,
+            id: host.sessionId,
+            eventSeq: host.seq,
+            trustMode: host.settings.trustMode,
+            leaderboard: [],
+            createdAt: NOW,
+            updatedAt: NOW,
+          }).currentBlock,
+          PresentationRestV1ParticipantSnapshotSchema.parse({
+            ...participant,
+            id: participant.sessionId,
+            eventSeq: participant.seq,
+            trustMode: participant.settings.trustMode,
+          }).currentBlock,
+        ];
+        for (const projected of publicBlocks) {
+          if ("design" in block) expect(projected?.design).toEqual(design);
+          else expect(projected).not.toHaveProperty("design");
+          if (projected?.kind === "question") expect(projected.question.choices).toEqual([]);
+        }
+      }
+      for (const invalidDesign of [
+        { ...design, theme: "custom" },
+        { ...design, font: "Comic Sans" },
+        { ...design, spacing: "wide" },
+        { ...design, css: "color: red" },
+        { ...design, speakerNotes: "Private cue" },
+      ]) {
+        expect(
+          PresentationParticipantCurrentBlockSchema.safeParse({
+            ...sourceBlock,
+            design: invalidDesign,
+          }).success,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("keeps stage display and host-only presenter aids on separate strict contracts", () => {
+    const base = snapshotBase();
+    const block = {
+      id: randomUUID(),
+      kind: "question",
+      question: {
+        id: randomUUID(),
+        type: "single_select",
+        prompt: "Public question",
+        confidence: "off",
+        choices: [{ id: randomUUID(), label: "Public option" }],
+        timeLimitSeconds: 30,
+        basePoints: 100,
+        mediaId: null,
+        mediaAlt: null,
+      },
+    };
+    const stage = {
+      ...base,
+      projection: "stage",
+      currentBlock: block,
+      revealedAnswer: null,
+      participantCount: 2,
+      responseCount: 1,
+      finishedAt: null,
+    };
+    expect(PresentationStageSnapshotSchema.parse(stage)).toMatchObject({ projection: "stage" });
+    for (const privateField of [
+      "presenter",
+      "speakerNotes",
+      "nextBlock",
+      "participants",
+      "roomStatus",
+      "recoveryPackCards",
+      "resultSummary",
+    ]) {
+      expect(
+        PresentationStageSnapshotSchema.safeParse({ ...stage, [privateField]: {} }).success,
+      ).toBe(false);
+    }
+    expect(
+      JSON.stringify(
+        PresentationStageSnapshotSchema.parse({
+          ...stage,
+          currentBlock: {
+            ...block,
+            question: {
+              ...block.question,
+              choices: [{ ...block.question.choices[0], isCorrect: true }],
+            },
+          },
+        }),
+      ),
+    ).not.toContain("isCorrect");
+    const revealedAnswer = {
+      kind: "choice",
+      correctChoiceIds: [block.question.choices[0]!.id],
+      explanation: "Public after reveal",
+    };
+    expect(PresentationStageSnapshotSchema.safeParse({ ...stage, revealedAnswer }).success).toBe(
+      false,
+    );
+    expect(
+      PresentationStageSnapshotSchema.safeParse({
+        ...stage,
+        phase: "question_reveal",
+        acceptingResponses: false,
+        revealedAnswer,
+      }).success,
+    ).toBe(true);
+    expect(
+      PresentationPresenterSnapshotSchema.parse({ speakerNotes: "Private note", nextBlock: block })
+        .speakerNotes,
+    ).toBe("Private note");
+    expect(
+      PresentationPresenterSnapshotSchema.safeParse({
+        speakerNotes: "Private note",
+        nextBlock: { ...block, speakerNotes: "More private" },
+      }).success,
+    ).toBe(false);
+    const pass = PresentationStagePassResponseSchema.parse({
+      credentialId: randomUUID(),
+      stageToken: "s".repeat(32),
+      expiresAt: NOW,
+    });
+    expect(
+      PresentationSyncRequestSchema.safeParse({
+        sessionId: base.sessionId,
+        projection: "stage",
+        stageToken: pass.stageToken,
+      }).success,
+    ).toBe(false);
+    expect(
+      PresentationControlCommandSchema.safeParse({
+        sessionId: base.sessionId,
+        stageToken: pass.stageToken,
+        expectedRevision: 0,
+        commandId: randomUUID(),
+        action: "advance",
+      }).success,
+    ).toBe(false);
+  });
+
   it.each(["content", "finished"] as const)(
     "already supports content-only %s snapshots without question results or audience standings",
     (phase) => {

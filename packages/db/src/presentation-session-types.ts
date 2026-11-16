@@ -1,5 +1,19 @@
 import type {
+  PresentationInsightsOpinionSelector,
+  PresentationInsightsOpinionCount,
+} from "./presentation-insights-opinions.js";
+import type {
+  PresentationRevealRosterSelector,
+  PresentationRevealRosterCount,
+} from "./presentation-insights-types.js";
+import type { PresentationTextRepository } from "./presentation-text-types.js";
+import type {
   PresentationContent,
+  PresentationInteractionState,
+  PresentationInteractionEvent,
+  PresentationBranchEvent,
+  PresentationNavigationState,
+  PresentationNavigationEvent,
   PresentationRecoveryPackIntervention,
   PresentationSessionPhase,
   PresentationSessionResponse,
@@ -29,6 +43,10 @@ export interface PresentationSessionRecord {
   /** Frozen aggregate attribution for the intervention currently being presented. */
   recoveryPackIntervention?: PresentationRecoveryPackIntervention | null;
   eventSeq: number;
+  textModerationSeq?: number;
+  /** Durable progress exists only for opt-in document 12. */
+  navigationState?: PresentationNavigationState;
+  interactionState?: PresentationInteractionState;
   questionOpenedAt: Date | null;
   questionClosesAt: Date | null;
   createdBy: string;
@@ -96,6 +114,11 @@ export interface PresentationSessionResponseRecord {
   blockId: string;
   questionId: string;
   response: PresentationSessionResponse;
+  /** Explicit response encoding; absent only for legacy in-process callers. */
+  responseSchemaVersion?: 1 | 2 | 3;
+  moderationStatus?: "pending" | "approved" | "removed" | null;
+  moderationVersion?: number | null;
+  moderatedAt?: Date | null;
   correct: boolean | null;
   score: number;
   responseMs: number;
@@ -123,7 +146,7 @@ export interface PresentationResponseAcknowledgementState {
   projection: PresentationParticipantSnapshotProjection;
 }
 
-export type PresentationSessionCredentialRole = "host" | "companion";
+export type PresentationSessionCredentialRole = "host" | "companion" | "stage";
 
 export interface PresentationSessionCredentialRecord {
   id: string;
@@ -135,6 +158,11 @@ export interface PresentationSessionCredentialRecord {
   expiresAt: Date;
   revokedAt: Date | null;
 }
+
+export type PresentationActiveCredentialRevocation =
+  | { status: "revoked"; credential: PresentationSessionCredentialRecord }
+  | { status: "stale" }
+  | { status: "not_found" };
 
 export interface PresentationSessionCommandReceiptRecord {
   id: string;
@@ -160,12 +188,20 @@ export interface PresentationSessionTimelineRecord {
     | "question.launched"
     | "question.revealed"
     | "intervention.presented"
-    | "presentation.finished";
+    | "presentation.finished"
+    | "navigation.jumped"
+    | "navigation.returned"
+    | "navigation.revisited"
+    | "navigation.branched"
+    | "scene.reveal_changed";
   blockIndex: number | null;
   blockId: string | null;
   /** Staff-private roster frozen at reveal; absent/null only on legacy timeline records. */
   revealedParticipantIds?: string[] | null;
   recoveryPackIntervention?: PresentationRecoveryPackIntervention | null;
+  navigation?: PresentationNavigationEvent | null;
+  interaction?: PresentationInteractionEvent | null;
+  branch?: PresentationBranchEvent | null;
   occurredAt: Date;
 }
 
@@ -249,6 +285,9 @@ export interface PresentationSessionTransitionInput {
   recoveryPackIntervention?: PresentationRecoveryPackIntervention | null;
   /** Session-local frozen content replacement, fenced with the command and its receipt. */
   content?: PresentationContent;
+  /** Only anchor changes are caller-controlled; progress is derived under the aggregate lock. */
+  navigationState?: PresentationNavigationState;
+  interactionState?: PresentationInteractionState;
   event: Omit<
     PresentationSessionTimelineRecord,
     "id" | "workspaceId" | "sessionId" | "sequence" | "occurredAt" | "revealedParticipantIds"
@@ -266,7 +305,7 @@ export type PresentationSessionCommandInput = PresentationSessionTransitionInput
   };
 };
 
-export interface PresentationSessionRepository {
+export interface PresentationSessionRepository extends PresentationTextRepository {
   listSessions(
     workspaceId: string,
     now?: Date,
@@ -343,6 +382,19 @@ export interface PresentationSessionRepository {
   ): Promise<PresentationParticipantSnapshotProjection | null>;
   listResponses(sessionId: string): Promise<PresentationSessionResponseRecord[]>;
   listTimeline(sessionId: string): Promise<PresentationSessionTimelineRecord[]>;
+  /** Counts only: private frozen reveal roster IDs never cross this boundary. */
+  getRevealRosterCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationRevealRosterSelector[],
+    now?: Date,
+  ): Promise<PresentationRevealRosterCount[]>;
+  getInsightsOpinionCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationInsightsOpinionSelector[],
+    now?: Date,
+  ): Promise<PresentationInsightsOpinionCount[]>;
   getReport(
     workspaceId: string,
     sessionId: string,
@@ -378,6 +430,14 @@ export interface PresentationSessionRepository {
     revokedAt?: Date,
     role?: PresentationSessionCredentialRole,
   ): Promise<PresentationSessionCredentialRecord | null>;
+  /** Revokes only this exact active, unexpired role-scoped pass; stale passes change nothing. */
+  revokeActiveCredential(
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    revokedAt: Date,
+    role: PresentationSessionCredentialRole,
+  ): Promise<PresentationActiveCredentialRevocation>;
 }
 
 export class PresentationSessionConflictError extends Error {

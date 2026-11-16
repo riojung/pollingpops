@@ -2,12 +2,41 @@ import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
 import { signInBeta } from "./sign-in";
+import { openLibraryFilters } from "./library-controls";
+import {
+  clickNavigatorAction,
+  closeE01Overlays,
+  openE01Navigator,
+} from "./presentation-e01-support";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
+
+function presentationCommandBar(page: Page) {
+  return page
+    .getByRole("textbox", { name: "Presentation title", exact: true, includeHidden: true })
+    .locator("xpath=ancestor::header[1]");
+}
 
 test.afterEach(async ({ page }) => {
   await page.unrouteAll({ behavior: "wait" });
 });
+
+async function openPresentationReferences(page: Page) {
+  const related = page.locator('summary[aria-label="Related content"]');
+  await expect(related).toBeVisible();
+  await closeE01Overlays(page);
+  if ((await related.locator("xpath=ancestor::details[1]").getAttribute("open")) === null)
+    await related.click();
+  const references = page.getByRole("region", {
+    name: "Recovery Pack facilitator references",
+    exact: true,
+  });
+  await expect(references).toBeVisible();
+  const details = references.locator("details").first();
+  if ((await details.getAttribute("open")) === null)
+    await details.locator("summary").first().click();
+  return references;
+}
 
 async function recoveryPackWorkflow(page: Page) {
   test.setTimeout(120_000);
@@ -71,6 +100,7 @@ async function recoveryPackWorkflow(page: Page) {
   const target = (await targetResponse.json()).quiz as { id: string };
 
   await page.goto("/library");
+  await openLibraryFilters(page);
   await page.getByRole("link", { name: "Recovery Packs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recovery Packs", exact: true })).toBeVisible();
   await page.getByLabel("Source Round").selectOption(source.id, { timeout: 10_000 });
@@ -273,14 +303,14 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   expect(created.status()).toBe(201);
   const presentation = (await created.json()).presentation;
   await page.goto(`/presentation/${presentation.id}`);
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
   const presentationTitle = `Saved local edit ${title}`;
   await page.getByLabel("Presentation title", { exact: true }).fill(presentationTitle);
+  await closeE01Overlays(page);
   await page
     .locator("#presentation-canvas")
     .getByLabel("Slide title", { exact: true })
     .fill("Context for linked recovery");
-  await page.getByRole("button", { name: "+ From Recovery Pack", exact: true }).click();
+  await clickNavigatorAction(page, "From Recovery Pack");
   const picker = page.getByRole("dialog", { name: "Insert a published Recovery Pack" });
   await expect(picker).toBeVisible();
   await picker.getByLabel("Published Recovery Pack").selectOption(pack.id);
@@ -303,7 +333,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   );
   await picker.getByRole("button", { name: "Insert Pack checkpoints" }).click();
   await expect(picker.getByRole("button", { name: "Retry Pack insertion" })).toBeEnabled();
-  await expect(page.locator("header")).toHaveAttribute("inert", "");
+  await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
   await expect(picker.getByRole("button", { name: "Cancel" })).toBeDisabled();
   await picker.getByRole("button", { name: "Retry Pack insertion" }).click();
   await expect(picker).toHaveCount(0);
@@ -319,12 +349,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   expect(inserted.draft.recoveryPackInsertions).toHaveLength(1);
   expect(inserted.draft.recoveryPackInsertions[0].packVersionId).toBe(sourceVersion.id);
   const baseline = inserted.draft.recoveryPackInsertions;
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
-  const references = page.getByRole("region", {
-    name: "Recovery Pack facilitator references",
-    exact: true,
-  });
-  await references.locator("summary").click();
+  const references = await openPresentationReferences(page);
   await expect(references).toContainText(cardBody);
   await expect(references).toContainText(citationName);
   await expect(references).toContainText(
@@ -333,7 +358,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
   await expect(references).toContainText(
     "The facilitator explicitly selects a card after revealing the Pack diagnostic.",
   );
-  await page.getByRole("button", { name: "Open inspector", exact: true }).click();
+  await closeE01Overlays(page);
   const editedPrompt = `Edited diagnostic ${randomUUID().slice(0, 8)}`;
   const savedResponse = page.waitForResponse(
     (response) =>
@@ -369,13 +394,17 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
     });
   });
   await page.reload();
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
-  await expect(page.getByRole("button", { name: "+ From Recovery Pack", exact: true })).toHaveCount(
-    0,
-  );
+  const navigator = await openE01Navigator(page);
+  await navigator.locator('summary[aria-label="Insert & import"]').click();
+  await expect(
+    navigator.getByRole("button", {
+      name: "From Recovery Pack",
+      exact: true,
+      includeHidden: true,
+    }),
+  ).toHaveCount(0);
+  await openPresentationReferences(page);
   await expect(references).toBeVisible();
-  await references.locator("summary").click();
   await expect(references).toContainText(cardBody);
   await expect(references).toContainText(citationName);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -413,7 +442,7 @@ async function presentationPackWorkflow(page: Page, browser: Browser, testInfo: 
     );
     await participant.goto(`/join?code=${snapshot.code}`);
     await participant.getByLabel("Nickname", { exact: true }).fill("Pack participant");
-    await participant.getByRole("button", { name: "Join a Presentation", exact: true }).click();
+    await participant.getByRole("button", { name: "Join presentation", exact: true }).click();
     await expect(participant).toHaveURL(`/presentation-session/${sessionId}/play`);
     await page.getByRole("button", { name: "Start Presentation", exact: true }).click();
     await page.getByRole("button", { name: "Next block", exact: true }).click();
@@ -490,14 +519,25 @@ test("Presentation workspace retry and deferred import preparation preserve one 
   });
   try {
     await page.getByLabel("Presentation title", { exact: true }).fill(`${title} — pending edit`);
-    await page.getByRole("button", { name: "+ From trusted source", exact: true }).click();
+    await clickNavigatorAction(page, "From trusted source");
     await saveStarted;
-    await expect(
-      page.getByRole("button", { name: "+ From Recovery Pack", exact: true }),
-    ).toBeDisabled();
-    await expect(
-      page.getByRole("button", { name: "+ From published Round", exact: true }),
-    ).toBeDisabled();
+    for (const name of ["From Recovery Pack", "From published Round"]) {
+      const backgroundAction = page
+        .locator("#presentation-slide-navigator")
+        .getByRole("button", { name, exact: true, includeHidden: true });
+      await expect(backgroundAction).toBeAttached();
+      await expect(backgroundAction.locator("xpath=ancestor::*[@inert][1]")).toHaveAttribute(
+        "inert",
+        "",
+      );
+      await expect(backgroundAction).toBeDisabled();
+      expect(
+        await backgroundAction.evaluate((element) => {
+          (element as HTMLElement).focus();
+          return document.activeElement === element;
+        }),
+      ).toBe(false);
+    }
     await expect(
       page.getByRole("dialog", { name: "Insert a published Recovery Pack" }),
     ).toHaveCount(0);
@@ -507,7 +547,7 @@ test("Presentation workspace retry and deferred import preparation preserve one 
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await source.getByRole("button", { name: "Close", exact: true }).click();
     await expect(source).toHaveCount(0);
-    await page.getByRole("button", { name: "+ From Recovery Pack", exact: true }).click();
+    await clickNavigatorAction(page, "From Recovery Pack");
     const pack = page.getByRole("dialog", { name: "Insert a published Recovery Pack" });
     await expect(pack).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
@@ -655,12 +695,12 @@ async function presentationPackUpdateWorkflow(page: Page) {
   expect(secondPublished.status()).toBe(200);
   const secondVersion = (await secondPublished.json()).version;
   await page.goto(`/presentation/${target.id}`);
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
   const reviews = page.getByRole("region", {
     name: "Presentation Recovery Pack updates",
     exact: true,
   });
+  await expect(reviews).toBeVisible();
+  await closeE01Overlays(page);
   const panel = reviews
     .locator("details")
     .filter({ has: page.locator("summary", { hasText: `Review Pack updates · ${title}` }) })
@@ -684,7 +724,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
     await page.getByLabel("Presentation title", { exact: true }).fill(pendingTitle);
     await panel.getByRole("button", { name: "Review latest Pack version" }).click();
     await expect.poll(() => reviewStarted).toBe(true);
-    await expect(page.locator("header")).toHaveAttribute("inert", "");
+    await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
     const savedBeforeReview = await page.request.get(`${apiUrl}/v1/presentations/${target.id}`);
     expect((await savedBeforeReview.json()).presentation.draft.title).toBe(pendingTitle);
     releaseReview();
@@ -714,11 +754,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
   await comparison.locator("summary").first().click();
   await expect(comparison).toContainText("Original frozen facilitator guidance");
   await expect(comparison).toContainText("Reviewed V2 facilitator guidance");
-  const references = page.getByRole("region", {
-    name: "Recovery Pack facilitator references",
-    exact: true,
-  });
-  await references.locator("summary").click();
+  const references = await openPresentationReferences(page);
   await expect(references).toContainText("Original frozen facilitator guidance");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   // Publish V3 after reviewing V2: apply must remain pinned to the exact reviewed version.
@@ -753,12 +789,13 @@ async function presentationPackUpdateWorkflow(page: Page) {
   await expect(
     panel.getByRole("button", { name: "Retry Pack update acknowledgement" }),
   ).toBeEnabled();
-  await expect(page.locator("header")).toHaveAttribute("inert", "");
+  await expect(presentationCommandBar(page)).toHaveAttribute("inert", "");
   await panel.getByRole("button", { name: "Retry Pack update acknowledgement" }).click();
   await expect(panel.getByRole("button", { name: "Undo this Pack update" })).toBeEnabled();
   expect(updateBodies).toHaveLength(2);
   expect(updateBodies[0]).toBe(updateBodies[1]);
   expect(JSON.parse(updateBodies[0]!).packVersionId).toBe(secondVersion.id);
+  await openPresentationReferences(page);
   await expect(references).toContainText("Reviewed V2 facilitator guidance");
   const afterApply = (
     await (await page.request.get(`${apiUrl}/v1/presentations/${target.id}`)).json()
@@ -797,6 +834,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
   await expect(panel.getByRole("status")).toContainText("Pack update undone");
   expect(undoBodies).toHaveLength(2);
   expect(undoBodies[0]).toBe(undoBodies[1]);
+  await openPresentationReferences(page);
   await expect(references).toContainText("Original frozen facilitator guidance");
   const afterUndo = (
     await (await page.request.get(`${apiUrl}/v1/presentations/${target.id}`)).json()
@@ -811,6 +849,7 @@ async function presentationPackUpdateWorkflow(page: Page) {
   await panel.getByLabel("Recheck update choice").selectOption("use_latest");
   await panel.getByRole("button", { name: "Apply reviewed Pack update" }).click();
   await expect(panel.getByRole("button", { name: "Undo this Pack update" })).toBeEnabled();
+  await openPresentationReferences(page);
   await expect(references).toContainText("Later V3 facilitator guidance");
   await page.getByLabel("Presentation title", { exact: true }).fill(`${title} — later work`);
   await expect(panel.getByRole("button", { name: "Undo this Pack update" })).toBeDisabled();
@@ -847,14 +886,14 @@ async function presentationPackUpdateWorkflow(page: Page) {
     });
   });
   await page.reload();
-  await page.getByRole("button", { name: "Hide inspector", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse map", exact: true }).click();
+  await expect(reviews).toBeVisible();
+  await closeE01Overlays(page);
   await panel.locator("summary").first().click();
   await expect(panel).toContainText("Pack update authoring is disabled");
   await panel.getByRole("button", { name: "Review latest Pack version" }).click();
   await expect(panel).toContainText("already up to date");
   await expect(panel.getByRole("button", { name: "Apply reviewed Pack update" })).toBeDisabled();
-  await references.locator("summary").click();
+  await openPresentationReferences(page);
   await expect(references).toContainText("Later V3 facilitator guidance");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 }

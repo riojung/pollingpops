@@ -1,5 +1,8 @@
 "use client";
 
+import { SupportedLocaleSchema, type SupportedLocale } from "@openround/contracts";
+import { creationContent } from "../../../lib/i18n/creation-content";
+
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -31,6 +34,10 @@ import { BuilderCommandBar } from "../../../components/editor/builder-command-ba
 import { DeliveryScoring } from "../../../components/editor/delivery-scoring";
 import { DiagnosticDetails } from "../../../components/editor/diagnostic-details";
 import { MediaEditor } from "../../../components/editor/media-editor";
+import { authoringWorkflowCopy } from "../../../components/editor/authoring-workflow-copy";
+import { packUpdateFeedback } from "../../../lib/i18n/pack-update-copy";
+import { packInsertionCopy } from "../../../lib/i18n/pack-insertion-copy";
+import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
 import { ParticipantPreview } from "../../../components/editor/participant-preview";
 import {
   QuestionInspector,
@@ -101,11 +108,11 @@ interface EditorProductFeatures {
   wordCloudPolls?: boolean;
 }
 
-function newChoices(type: ChoiceQuestionDraft["type"]): ChoiceDraft[] {
+function newChoices(type: ChoiceQuestionDraft["type"], locale: SupportedLocale): ChoiceDraft[] {
   if (type === "true_false") {
     return [
-      { id: clientUuid(), label: "True", isCorrect: true },
-      { id: clientUuid(), label: "False", isCorrect: false },
+      { id: clientUuid(), label: creationContent(locale)("true"), isCorrect: true },
+      { id: clientUuid(), label: creationContent(locale)("false"), isCorrect: false },
     ];
   }
   return [
@@ -134,20 +141,30 @@ function commonQuestion(type: QuestionType) {
   };
 }
 
-function newQuestion(type: QuestionType): QuestionDraft {
+function newQuestion(type: QuestionType, locale: SupportedLocale = "en-CA"): QuestionDraft {
   const common = commonQuestion(type);
   if (isTextQuestion(type)) return { ...common, type };
   if (type === "numeric") {
     return { ...common, type, correctValue: "", tolerance: "0", unit: null };
   }
   if (type === "rating") {
-    return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
+    return {
+      ...common,
+      type,
+      min: 1,
+      max: 5,
+      minLabel: creationContent(locale)("low"),
+      maxLabel: creationContent(locale)("high"),
+    };
   }
-  return { ...common, type, choices: newChoices(type) };
+  return { ...common, type, choices: newChoices(type, locale) };
 }
 
 export default function QuizEditorPage() {
   const { locale, t } = useLocale();
+  const workflowCopy = creatorWorkflowCopy(locale);
+  const packInsertionUi = packInsertionCopy(locale);
+  const authoringCopy = authoringWorkflowCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -676,7 +693,10 @@ export default function QuizEditorPage() {
       draft.questions.length === 0 &&
       supportedTypes.includes(requestedType as QuestionType)
     ) {
-      const inserted = newQuestion(requestedType as QuestionType);
+      const inserted = newQuestion(
+        requestedType as QuestionType,
+        SupportedLocaleSchema.safeParse(searchParams.get("creationLocale")).data ?? locale,
+      );
       setDraft({ ...draft, questions: [inserted] });
       setSelectedQuestionId(inserted.id);
       initialInsertNeedsFocus.current = true;
@@ -687,6 +707,7 @@ export default function QuizEditorPage() {
     id,
     router,
     searchParams,
+    locale,
     uxBeta,
     productFeatures?.rankingPolls,
     productFeatures?.openTextPolls,
@@ -840,7 +861,7 @@ export default function QuizEditorPage() {
       setErrorIsRaw(false);
       return;
     }
-    const inserted = newQuestion(type);
+    const inserted = newQuestion(type, locale);
     applyStructuralChange({ ...draft, questions: [...draft.questions, inserted] }, inserted.id, {
       draft,
       selectedQuestionId,
@@ -954,7 +975,7 @@ export default function QuizEditorPage() {
     if (!draft) return;
     const source = draft.questions[selectedIndex];
     if (!source || !questionTypeDefinition(source.type).supportsRecovery) return;
-    const recheck = newQuestion(source.type);
+    const recheck = newQuestion(source.type, locale);
     const linked: QuestionDraft = {
       ...recheck,
       delivery: "recheck",
@@ -1268,6 +1289,7 @@ export default function QuizEditorPage() {
   );
   const packUpdatePanels = draft?.recoveryPackInsertions?.map((insertion) => (
     <RecoveryPackUpdatePanel
+      locale={locale}
       key={`${id}:${insertion.id}`}
       quizId={id}
       insertionId={insertion.id}
@@ -1292,14 +1314,20 @@ export default function QuizEditorPage() {
       onUndo={undoRecoveryPackUpdate}
     />
   ));
+  const packFeedback = errorIsRaw
+    ? packUpdateFeedback(locale, error)
+    : { text: error, lang: locale };
   const mutationFieldsetStyle = { border: 0, padding: 0, margin: 0, minWidth: 0 };
   const canvasSnapshotLinks =
     quiz && productFeatures?.canvasBoards ? (
-      <CanvasArtifactLinks
-        target={{ kind: "round", targetId: id }}
-        editable={canEdit}
-        disabled={draftMutationBusy}
-      />
+      <details className={builderStyles.references}>
+        <summary>{workflowCopy.references}</summary>
+        <CanvasArtifactLinks
+          target={{ kind: "round", targetId: id }}
+          editable={canEdit}
+          disabled={draftMutationBusy}
+        />
+      </details>
     ) : null;
 
   if (!uxBeta) {
@@ -1428,8 +1456,8 @@ export default function QuizEditorPage() {
             </section>
           ) : null}
           {error ? (
-            <p className="error" lang={errorIsRaw ? "en-CA" : undefined} role="alert">
-              {error}
+            <p className="error" lang={packFeedback.lang} role="alert">
+              {packFeedback.text}
             </p>
           ) : null}
           {draftGuidance ? (
@@ -1838,8 +1866,8 @@ export default function QuizEditorPage() {
               <section className={builderStyles.canvasColumn}>
                 <div className={builderStyles.alertStack}>
                   {error ? (
-                    <p className="error" lang={errorIsRaw ? "en-CA" : undefined} role="alert">
-                      {error}
+                    <p className="error" lang={packFeedback.lang} role="alert">
+                      {packFeedback.text}
                     </p>
                   ) : null}
                   {publishLimitReached ? (
@@ -1856,61 +1884,75 @@ export default function QuizEditorPage() {
                   issues={readinessIssues}
                   onSelectIssue={focusReadinessIssue}
                 />
-                <QuestionHealthPanel
-                  key={id}
-                  canEdit={canEdit}
-                  currentDraftRevision={serverRevision.current}
-                  draftSaved={
-                    saveState === "saved" &&
-                    !saveConflict &&
-                    JSON.stringify(draft) === lastSavedJson.current
-                  }
-                  featureEnabled={Boolean(productFeatures?.questionHealth)}
-                  onApplySuggestion={applyHealthSuggestion}
-                  onUndoSuggestion={undoHealthSuggestion}
-                  quizId={id}
-                />
-                <PublishedQuestionHealthPanel
-                  key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
-                  canEdit={canEdit}
-                  draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
-                  featureEnabled={Boolean(productFeatures?.questionHealth)}
-                  onOpenDraftQuestion={openPublishedFindingInDraft}
-                  quizId={id}
-                  versionId={quiz?.currentVersionId ?? null}
-                />
+                <details className={builderStyles.reviewTools}>
+                  <summary>{workflowCopy.health}</summary>
+                  <QuestionHealthPanel
+                    key={id}
+                    canEdit={canEdit}
+                    currentDraftRevision={serverRevision.current}
+                    draftSaved={
+                      saveState === "saved" &&
+                      !saveConflict &&
+                      JSON.stringify(draft) === lastSavedJson.current
+                    }
+                    featureEnabled={Boolean(productFeatures?.questionHealth)}
+                    onApplySuggestion={applyHealthSuggestion}
+                    onUndoSuggestion={undoHealthSuggestion}
+                    quizId={id}
+                  />
+                  <PublishedQuestionHealthPanel
+                    key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
+                    canEdit={canEdit}
+                    draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
+                    featureEnabled={Boolean(productFeatures?.questionHealth)}
+                    onOpenDraftQuestion={openPublishedFindingInDraft}
+                    quizId={id}
+                    versionId={quiz?.currentVersionId ?? null}
+                  />
+                </details>
                 {packUpdatePanels}
                 {recoveryPackInsertion && recoveryPackReferenceContent ? (
-                  <details className="notice" lang="en-CA">
+                  <details className="notice" lang={locale}>
                     <summary>
-                      Recovery Pack facilitator references: {recoveryPackReferenceContent.title}
-                      {" · version "}
-                      {recoveryPackInsertion.updateBaseline?.packVersion ??
-                        recoveryPackInsertion.packVersion}
+                      {packInsertionUi("Recovery Pack facilitator references:")}{" "}
+                      <span lang="">{recoveryPackReferenceContent.title}</span>
+                      {" · "}
+                      {packInsertionUi("version {version}", {
+                        version:
+                          recoveryPackInsertion.updateBaseline?.packVersion ??
+                          recoveryPackInsertion.packVersion,
+                      })}
                     </summary>
                     <p>
-                      These cards are frozen references from the accepted source baseline, initially
-                      copied with this Pack. Local checkpoint edits and source Pack changes do not
-                      update them until you accept a Pack update. Live explanation or worked-example
-                      playback is available in eligible new Round sessions when enabled for the
-                      workspace. The facilitator explicitly selects a card after revealing the Pack
-                      diagnostic.
+                      {packInsertionUi(
+                        "These cards are frozen references from the accepted source baseline, initially copied with this Pack. Local checkpoint edits and source Pack changes do not update them until you accept a Pack update.",
+                      )}{" "}
+                      {packInsertionUi(
+                        "Live explanation or worked-example playback is available in eligible new {artifact} sessions when enabled for the workspace. The facilitator explicitly selects a card after revealing the Pack diagnostic.",
+                        { artifact: packInsertionUi("Round") },
+                      )}
                     </p>
                     {recoveryPackReferenceContent.interventions.map((card) => (
                       <section key={card.id}>
-                        <h3>{card.title}</h3>
-                        <p style={{ whiteSpace: "pre-wrap" }}>{card.body}</p>
+                        <h3 lang="">{card.title}</h3>
+                        <p lang="" style={{ whiteSpace: "pre-wrap" }}>
+                          {card.body}
+                        </p>
                         {card.citations.length ? (
                           <p className="muted">
-                            Sources:{" "}
-                            {card.citations
-                              .map((citation) => `${citation.sourceName}, ${citation.locator}`)
-                              .join("; ")}
+                            {packInsertionUi("Sources:")}{" "}
+                            <span lang="">
+                              {card.citations
+                                .map((citation) => `${citation.sourceName}, ${citation.locator}`)
+                                .join("; ")}
+                            </span>
                           </p>
                         ) : null}
                       </section>
                     ))}
-                    <Link href="/recovery-packs">Open Recovery Pack library</Link>
+                    <Link href="/recovery-packs">
+                      {packInsertionUi("Open Recovery Pack library")}
+                    </Link>
                   </details>
                 ) : null}
                 <section
@@ -1992,9 +2034,9 @@ export default function QuizEditorPage() {
                         />
                         <div className={builderStyles.canvasSection}>
                           <div className={builderStyles.canvasSectionHeading}>
-                            <h2 lang="en-CA">Response</h2>
-                            <span className="muted" lang="en-CA">
-                              Mark the correct answer where applicable
+                            <h2 lang={locale}>{authoringCopy.response}</h2>
+                            <span className="muted" lang={locale}>
+                              {authoringCopy.responseInstructions}
                             </span>
                           </div>
                           <ResponseEditor
@@ -2023,9 +2065,9 @@ export default function QuizEditorPage() {
                 build={
                   question ? (
                     <>
-                      <h3 lang="en-CA">Question delivery</h3>
-                      <p className={builderStyles.inspectorIntro} lang="en-CA">
-                        Tune timing, scoring, and the explanation shown after reveal.
+                      <h3 lang={locale}>{authoringCopy.questionDelivery}</h3>
+                      <p className={builderStyles.inspectorIntro} lang={locale}>
+                        {authoringCopy.questionDeliveryHelp}
                       </p>
                       <DeliveryScoring onUpdateQuestion={updateQuestion} question={question} />
                       <details className={builderStyles.settingsDisclosure} lang="en-CA">

@@ -96,7 +96,21 @@ export async function expectLivePollPersistenceConformance(input: {
   ).toMatchObject(limit);
   expect(
     await repository.listPublishedQuizQuestionMetadata(workspaceId, "Choose priorities"),
-  ).toEqual({ questions: [], hasMore: false });
+  ).toEqual({
+    questions: [
+      {
+        sourceQuizId: quiz.id,
+        sourceQuizVersionId: version.id,
+        sourceQuizVersion: 1,
+        sourceQuestionId: question.id,
+        contentHash: version.contentHash,
+        title: extended.title,
+        prompt: question.prompt,
+        type: input.ranking ? "ranking" : "poll",
+      },
+    ],
+    hasMore: false,
+  });
   await repository.updateQuiz(workspaceId, quiz.id, legacy, 1, editorId);
   expect((await repository.getQuiz(workspaceId, quiz.id))?.draftSchemaVersion).toBe(1);
   const restoration = {

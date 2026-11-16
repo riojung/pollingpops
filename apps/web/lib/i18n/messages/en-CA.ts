@@ -163,7 +163,7 @@ export const englishMessages = {
   "create.presentation.eyebrow": "Create presentation",
   "create.presentation.title": "How do you want to start?",
   "create.presentation.description":
-    "Choose the shortest path from existing material to an interactive, Recovery-ready session.",
+    "Create a deck for your talk, pitch or update, with audience activities when you need them.",
   "create.presentation.switchToRound": "Create a Round instead",
   "create.presentation.readOnlyDescription":
     "Viewers can browse presentation starters but cannot create a new draft.",
@@ -175,11 +175,11 @@ export const englishMessages = {
   "create.presentation.method.source.action": "Add material →",
   "create.presentation.method.template.title": "Use a starter",
   "create.presentation.method.template.description":
-    "Begin with a facilitated pattern and adapt the prompts, checks, and rechecks.",
+    "Start with a pitch, proposal, update or learning scenario and make it your own.",
   "create.presentation.method.template.action": "Choose a starter →",
   "create.presentation.method.blank.title": "Start a blank presentation",
   "create.presentation.method.blank.description":
-    "Create a presentation canvas, then add slides and audience interactions.",
+    "Create editable slides, with optional audience interactions.",
   "create.presentation.method.blank.action": "Start blank →",
   "create.presentation.method.blank.creating": "Creating presentation…",
   "create.presentation.source.eyebrow": "Grounded conversion",
@@ -187,7 +187,7 @@ export const englishMessages = {
   "create.presentation.source.description":
     "PDF, DOCX, PPTX, and pasted text become structured Polling Pops blocks. The result is reviewable and responsive—not a promise of pixel-perfect slide reproduction.",
   "create.presentation.templates.eyebrow": "Structured templates",
-  "create.presentation.templates.title": "Choose a facilitation pattern",
+  "create.presentation.templates.title": "Choose a presentation template",
   "create.presentation.templates.use": "Use template →",
   "create.presentation.template.review.title": "Evidence review",
   "create.presentation.template.review.description": "Context followed by a diagnostic question.",

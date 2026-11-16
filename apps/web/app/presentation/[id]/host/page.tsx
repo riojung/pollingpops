@@ -19,6 +19,7 @@ import {
 } from "../../../../components/workspace/workspace-provider";
 import { WorkspaceFeatureGate } from "../../../../components/workspace/workspace-shell";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
+import presenter from "../../../../components/presentation-live/presentation-presenter.module.css";
 import { recordAuthoringEvent } from "../../../../components/workspace/product-events";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { clientUuid } from "../../../../lib/uuid";
@@ -64,7 +65,7 @@ export function PresentationSessionCreationControls({
           {error}
         </p>
       ) : null}
-      <div className="button-row">
+      <div className={`button-row ${presenter.setupActions}`}>
         <button
           className="button"
           disabled={busy || !currentVersionId || !liveCreationAvailable}
@@ -165,23 +166,14 @@ function PresentationHostSetupContent() {
         <CreatorBrand productFeatures={productFeatures} />
         <Link href={`/presentation/${id}`}>{t("live.presentationHost.backEditor")}</Link>
       </div>
-      <section className={styles.setup}>
-        <EventCreditChoice
-          checked={useEventCredit}
-          disabled={busy}
-          onChange={(checked, benefits, features) => {
-            setUseEventCredit(checked);
-            setEventEntitlements(benefits);
-            setEventProductFeatures(features ?? null);
-            if (!(checked ? (features ?? productFeatures) : productFeatures)?.liveFlexMode)
-              setTimeMode("timed");
-          }}
-        />
-        <span className={styles.statusPill}>{t("live.presentationHost.live")}</span>
-        {presentation ? <h1 lang="">{presentation.title}</h1> : <h1>{t("common.loading")}</h1>}
-        <p>{t("live.presentationHost.description")}</p>
+      <section className={`${styles.setup} ${presenter.setup}`}>
+        <header className={presenter.setupHeader}>
+          <span className={styles.statusPill}>{t("live.presentationHost.live")}</span>
+          {presentation ? <h1 lang="">{presentation.title}</h1> : <h1>{t("common.loading")}</h1>}
+          <p>{t("live.presentationHost.description")}</p>
+        </header>
         {presentation ? (
-          <div className={styles.metricRow}>
+          <div className={`${styles.metricRow} ${presenter.setupMetrics}`}>
             <div className={styles.metric}>
               <strong>{formatNumber(locale, presentation.draft.blocks.length)}</strong>
               <span>{t("live.presentationHost.totalBlocks")}</span>
@@ -205,30 +197,43 @@ function PresentationHostSetupContent() {
             {t("live.presentationHost.publishFirst")}
           </p>
         ) : null}
-        {launchFeatures?.liveFlexMode ? (
-          <label className="field" htmlFor="presentation-time-mode">
-            <span>{t("live.common.timeMode")}</span>
-            <select
-              className="select"
-              disabled={busy || !liveCreationAvailable}
-              id="presentation-time-mode"
-              onChange={(event) => setTimeMode(event.target.value as "timed" | "flex")}
-              value={timeMode}
-            >
-              <option value="timed">{t("live.common.timedMode")}</option>
-              <option value="flex">{t("live.common.flexMode")}</option>
-            </select>
-            <small className="muted">{t("live.common.flexSetupHelp")}</small>
-          </label>
-        ) : null}
-        <RoomPasswordOption
-          available={passwordAvailable}
-          enabled={protectRoom}
-          password={joinPassword}
-          disabled={busy || !liveCreationAvailable}
-          onEnabledChange={setProtectRoom}
-          onPasswordChange={setJoinPassword}
-        />
+        <div className={presenter.setupOptions}>
+          <EventCreditChoice
+            checked={useEventCredit}
+            disabled={busy}
+            onChange={(checked, benefits, features) => {
+              setUseEventCredit(checked);
+              setEventEntitlements(benefits);
+              setEventProductFeatures(features ?? null);
+              if (!(checked ? (features ?? productFeatures) : productFeatures)?.liveFlexMode)
+                setTimeMode("timed");
+            }}
+          />
+          {launchFeatures?.liveFlexMode ? (
+            <label className="field" htmlFor="presentation-time-mode">
+              <span>{t("live.common.timeMode")}</span>
+              <select
+                className="select"
+                disabled={busy || !liveCreationAvailable}
+                id="presentation-time-mode"
+                onChange={(event) => setTimeMode(event.target.value as "timed" | "flex")}
+                value={timeMode}
+              >
+                <option value="timed">{t("live.common.timedMode")}</option>
+                <option value="flex">{t("live.common.flexMode")}</option>
+              </select>
+              <small className="muted">{t("live.common.flexSetupHelp")}</small>
+            </label>
+          ) : null}
+          <RoomPasswordOption
+            available={passwordAvailable}
+            enabled={protectRoom}
+            password={joinPassword}
+            disabled={busy || !liveCreationAvailable}
+            onEnabledChange={setProtectRoom}
+            onPasswordChange={setJoinPassword}
+          />
+        </div>
         <PresentationSessionCreationControls
           busy={busy}
           currentVersionId={presentation?.currentVersionId}

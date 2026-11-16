@@ -5,15 +5,17 @@ const betaE2eApiPort = Number(process.env.BETA_E2E_API_PORT ?? 4200);
 const betaWorkspaceId = "00000000-0000-4000-8000-00000000b001";
 const productionWeb = process.env.PLAYWRIGHT_PRODUCTION === "true";
 // Opt-in source-authoring tests own a loopback provider; ordinary beta runs stay disabled.
+const visualImportFixture = process.env.BETA_E2E_VISUAL_IMPORTS === "true";
+const serverCommand = visualImportFixture
+  ? "BETA_E2E_VISUAL_IMPORTS=true pnpm exec tsx scripts/presentation-visual-import-fixture.ts"
+  : "pnpm --filter @openround/server dev";
 const authoringFixture = process.env.BETA_E2E_AUTHORING === "true";
 const authoringPort = Number(process.env.BETA_E2E_AUTHORING_PORT ?? betaE2eApiPort + 2);
 const authoringEnvironment = authoringFixture
   ? `ALLOW_INSECURE_LOCAL_HTTP=true AUTHORING_AI_MODE=openai_compatible AUTHORING_AI_ENDPOINT=http://127.0.0.1:${authoringPort}/chat/completions AUTHORING_AI_PROVIDER_NAME=beta-fixture AUTHORING_AI_MODEL=synthetic-source-fixture`
   : "";
 const audienceEnvironment = `FEATURE_AUDIENCE_SCOPES=true FEATURE_FEEDBACK_ROOMS=true FEATURE_SURVEYS=true FEATURE_IDEA_BOARDS=${process.env.BETA_E2E_IDEA_BOARDS === "true"} FEATURE_SESSION_SUMMARIES=${process.env.BETA_E2E_SESSION_SUMMARIES === "true"} FEATURE_ROUND_CLIENT_PROTOCOL=${process.env.BETA_E2E_ROUND_PROTOCOL === "true"} CORE_PARITY_WORKSPACE_ALLOWLIST=${betaWorkspaceId}`;
-const nextCommand = productionWeb
-  ? `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web build && cp -r apps/web/public apps/web/.next/standalone/apps/web/public && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static && PORT=${betaE2eWebPort} HOSTNAME=127.0.0.1 node apps/web/.next/standalone/apps/web/server.js`
-  : `NEXT_PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} pnpm --filter @openround/web exec next dev -p ${betaE2eWebPort}`;
+const nextCommand = `node scripts/build/browser.mjs ${productionWeb ? "start" : "dev"} beta ${betaE2eWebPort} ${betaE2eApiPort}`;
 
 export default defineConfig({
   testDir: "./tests/beta-e2e",
@@ -66,13 +68,14 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `NODE_ENV=test PORT=${betaE2eApiPort} ALLOW_IN_MEMORY=true COMMUNITY_MODE=false WEB_ORIGIN=http://127.0.0.1:${betaE2eWebPort} PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} FEATURE_UX_BETA=true FEATURE_RECOVERY_REHEARSAL=true FEATURE_PRACTICE_ASSIGNMENTS=true FEATURE_WORKSPACE_SHELL=true FEATURE_BUILDER_V2=true FEATURE_PRESENTATIONS=true FEATURE_PRESENTATION_REALTIME=true FEATURE_PRESENTATION_COMPANION=true FEATURE_LIVE_FLEX_MODE=true FEATURE_GROUPS=true FEATURE_DISCOVER=true FEATURE_QUESTION_HEALTH=true FEATURE_RECOVERY_PACKS=true FEATURE_RECOVERY_PACK_LIVE_CARDS=true UX_BETA_WORKSPACE_ALLOWLIST=${betaWorkspaceId} EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST=${betaWorkspaceId} TEST_INITIAL_WORKSPACE_ID=${betaWorkspaceId} TEST_INITIAL_PLAN=pro LOG_LEVEL=silent ${audienceEnvironment} ${authoringEnvironment} pnpm --filter @openround/server dev`,
+      command: `NODE_ENV=test PORT=${betaE2eApiPort} ALLOW_IN_MEMORY=true COMMUNITY_MODE=false WEB_ORIGIN=http://127.0.0.1:${betaE2eWebPort} PUBLIC_API_URL=http://127.0.0.1:${betaE2eApiPort} FEATURE_UX_BETA=true FEATURE_RECOVERY_REHEARSAL=true FEATURE_PRACTICE_ASSIGNMENTS=true FEATURE_WORKSPACE_SHELL=true FEATURE_BUILDER_V2=true FEATURE_PRESENTATIONS=true FEATURE_PRESENTATION_REALTIME=true FEATURE_PRESENTATION_COMPANION=true FEATURE_LIVE_FLEX_MODE=true FEATURE_GROUPS=true FEATURE_DISCOVER=true FEATURE_QUESTION_HEALTH=true FEATURE_RECOVERY_PACKS=true FEATURE_RECOVERY_PACK_LIVE_CARDS=true UX_BETA_WORKSPACE_ALLOWLIST=${betaWorkspaceId} EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST=${betaWorkspaceId} TEST_INITIAL_WORKSPACE_ID=${betaWorkspaceId} TEST_INITIAL_PLAN=pro LOG_LEVEL=silent ${audienceEnvironment} ${authoringEnvironment} ${serverCommand}`,
       port: betaE2eApiPort,
       reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      command: `node scripts/prepare-playwright-next.mjs && ${nextCommand}`,
+      command: nextCommand,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
       port: betaE2eWebPort,
       reuseExistingServer: false,
       timeout: productionWeb ? 180_000 : 120_000,

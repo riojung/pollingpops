@@ -12,6 +12,8 @@ export * from "./board-invitations.js";
 export * from "./media-references.js";
 export * from "./library-metadata.js";
 export * from "./artifact-schemas.js";
+export * from "./presentation-review-feedback-types.js";
+export { createPresentationReviewFeedbackRepository } from "./presentation-review-feedback.js";
 export * from "./response-schemas.js";
 export * from "./published-question-live-metadata.js";
 export * from "./audience-scope-types.js";
@@ -31,3 +33,38 @@ export * from "./idea-boards.js";
 export * from "./canvas-board-types.js";
 export * from "./canvas-boards.js";
 export * from "./canvas-artifact-links.js";
+
+export * from "./presentation-text-types.js";
+export * from "./presentation-visual-import-types.js";
+export * from "./presentation-visual-imports.js";
+
+export * from "./presentation-navigation.js";
+
+export * from "./presentation-shares.js";
+
+export * from "./presentation-interactions.js";
+
+export * from "./presentation-insights-types.js";
+
+export * from "./presentation-insights-opinions.js";
+
+export * from "./presentation-assistance-types.js";
+export {
+  createPresentationAssistanceRepository,
+  assertMemoryPresentationAssistanceReady,
+} from "./presentation-assistance.js";
+
+export * from "./presentation-text-assistance-types.js";
+export { createPresentationTextAssistanceRepository } from "./presentation-text-assistance.js";
+
+export * from "./presentation-question-suggestions-types.js";
+export {
+  createPresentationQuestionSuggestionsRepository,
+  assertPresentationQuestionSuggestionsSource,
+  buildPresentationQuestionSuggestionsDraft,
+} from "./presentation-question-suggestions.js";
+export * from "./presentation-assignment-types.js";
+export * from "./presentation-assignments.js";
+
+export * from "./presentation-practice-types.js";
+export * from "./presentation-practice.js";

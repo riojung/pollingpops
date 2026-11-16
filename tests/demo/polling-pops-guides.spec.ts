@@ -198,7 +198,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
         page.getByRole("banner").getByRole("button", { name: "Create", exact: true }),
       );
       await click(page, page.getByRole("link", { name: /^Round\b/ }));
-      await click(page, page.getByRole("link", { name: /Start blank/ }));
+      await click(page, page.getByRole("link", { name: /^Check understanding/ }));
       await fill(
         page,
         page.getByLabel("Round title (optional for now)"),

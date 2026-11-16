@@ -5,6 +5,9 @@ education and workplace learning. Use this index to choose the shortest path for
 
 ## Start here
 
+The [Option B UX implementation record](option-b-ux-implementation.md) maps the customer
+workflow refinements and the launch-facing work deferred to release readiness.
+
 The public name is now Polling Pops. The [brand and interface guide](brand.md) includes
 the new logo assets, palette, Candy Pop preset, and the technical names kept for compatibility.
 
@@ -54,6 +57,10 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
   linked-question filmstrip safeguards, durable save recovery and remaining release evidence.
 - [Presentation design foundation](evidence/presentation-design-foundation.md) covers the first
   E02 themes/layouts, arrangement, image fit and compatible-reader requirements.
+- [Presentation E02 acceptance](evidence/presentation-e02-completion.md) covers persistent groups,
+  rotation, snap guides, editable information components, native scenario decks and video links.
+- [Presentation E03 delivery](evidence/presentation-e03-delivery.md) covers the private presenter
+  workspace, local timer, scoped audience stage and matching-reader rollout.
 - [Recent contract and deletion upgrades](runbooks/upgrade.md#recent-content-report-and-deletion-upgrades)
   cover Presentation v2, Report V4, migration 048, and compatible rollback targets.
 - [Release readiness ledger](release-readiness.json) is the machine-validated source of truth for

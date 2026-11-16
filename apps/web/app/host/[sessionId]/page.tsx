@@ -27,8 +27,14 @@ import {
   RecoveryCompass,
 } from "../../../components/host-command-center";
 import { JoinAccess } from "../../../components/join-access";
+import {
+  deliveryPrimaryCopy,
+  deliveryInterventionLabel,
+  localizeDeliveryMessage,
+} from "../../../lib/i18n/delivery-primary-copy";
 import { useLocale } from "../../../components/locale-provider";
 import { confidenceControlCopy } from "../../../lib/i18n/confidence-control-copy";
+import { hostStaffCopy, type HostStaffCopyKey } from "../../../lib/i18n/host-staff-copy";
 import { ParticipantIdentity } from "../../../components/participant-avatar";
 import { QuestionMedia } from "../../../components/question-media";
 import {
@@ -43,7 +49,7 @@ import { QnaPanel } from "../../../components/qna-panel";
 import { apiFetch, humanError } from "../../../lib/api";
 import {
   createHostCredentialRecovery,
-  hostCredentialStorageKey,
+  readHostCredential,
 } from "../../../lib/host-credential-recovery";
 import {
   audienceContextKey,
@@ -66,7 +72,17 @@ import {
   type LegacyHostCommand,
 } from "../../../lib/legacy-host-phase";
 
+import styles from "./host-workspace.module.css";
+import liveTheme from "../../../components/round-live-theme.module.css";
+
 type Ack<T> = { data?: T; error?: { code: string; message: string } };
+type StaffAction = "cohost" | "embed" | "presenter" | "revoke";
+const STAFF_ERROR_KEYS = {
+  cohost: "Could not create the cohost link.",
+  embed: "Could not create the secure embed link.",
+  presenter: "Could not open the presenter view.",
+  revoke: "Could not revoke this staff credential.",
+} as const;
 
 const ACK_TIMEOUT_MS = 10_000;
 const SYNC_GRACE_MS = 5_000;
@@ -102,33 +118,14 @@ const LEGACY_COMMAND_MESSAGE_KEYS = {
   "Recheck by revote": "live.host.command.recheckByRevote",
 } as const;
 
-function hostCredential(sessionId: string) {
-  const storageKey = hostCredentialStorageKey(sessionId);
-  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const cohostToken = fragment.get("cohost");
-  if (cohostToken) {
-    sessionStorage.setItem(storageKey, cohostToken);
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    return cohostToken;
-  }
-  return sessionStorage.getItem(storageKey);
-}
-
 export default function HostPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { locale, t } = useLocale();
+  const copy = deliveryPrimaryCopy(locale);
+  const staffCopy = hostStaffCopy(locale);
   const confidenceCopy = confidenceControlCopy[locale];
   const socket = useMemo(createRealtimeClient, []);
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
-  const timeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
-    [locale],
-  );
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const snapshotRef = useRef<SessionSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
@@ -136,7 +133,19 @@ export default function HostPage() {
   const [pendingConfidence, setPendingConfidence] = useState<boolean | null>(null);
   const [staffPending, setStaffPending] = useState(false);
   const [presenterPending, setPresenterPending] = useState(false);
+  const staffWriteLock = useRef(false);
+  const presenterWriteLock = useRef(false);
+  const [presenterOperation, setPresenterOperation] = useState<"presenter" | "embed" | null>(null);
+  const [pendingStaffCredentialId, setPendingStaffCredentialId] = useState<string | null>(null);
+  const [staffActionError, setStaffActionError] = useState<{
+    action: StaffAction;
+    credentialId?: string;
+    message?: HostStaffCopyKey;
+    detail?: string;
+  } | null>(null);
+  const [staffNotice, setStaffNotice] = useState<"Staff access revoked." | null>(null);
   const [error, setError] = useState("");
+  const errorView = localizeDeliveryMessage(locale, error);
   const [reportId, setReportId] = useState("");
   const [mediaCredential, setMediaCredential] = useState("");
   const [textReadAuthorized, setTextReadAuthorized] = useState(false);
@@ -154,7 +163,8 @@ export default function HostPage() {
   const [cohostLabel, setCohostLabel] = useState("");
   const [cohostLink, setCohostLink] = useState("");
   const [embedLink, setEmbedLink] = useState("");
-  const [embedCopyStatus, setEmbedCopyStatus] = useState("");
+  const [embedCopyStatus, setEmbedCopyStatus] = useState<HostStaffCopyKey | null>(null);
+  const [cohostCopyStatus, setCohostCopyStatus] = useState<HostStaffCopyKey | null>(null);
   const [staffManagementAvailable, setStaffManagementAvailable] = useState(false);
   const [cohostingAvailable, setCohostingAvailable] = useState(false);
   const [creatorHref, setCreatorHref] = useState<"/" | "/home" | "/dashboard">("/");
@@ -201,6 +211,9 @@ export default function HostPage() {
     let disposed = false;
     let activeHostToken = "";
     let sync: () => void = () => undefined;
+    const credential = readHostCredential(sessionStorage, sessionId, window.location.hash, () =>
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`),
+    );
     const recovery = createHostCredentialRecovery(sessionStorage, sessionId);
 
     const missingCredentialMessage =
@@ -235,6 +248,10 @@ export default function HostPage() {
       rejectedToken: string,
     ) => {
       if (disposed || rejectedToken !== activeHostToken) return false;
+      if (credential.kind === "cohost") {
+        setError(syncError.message);
+        return false;
+      }
       if (!recovery.claim(syncError.code, rejectedToken)) {
         setError(syncError.message);
         return false;
@@ -356,7 +373,7 @@ export default function HostPage() {
       socket.connect();
     };
 
-    const existingToken = hostCredential(sessionId);
+    const existingToken = credential.token;
     if (existingToken) {
       connect(existingToken);
     } else {
@@ -479,7 +496,7 @@ export default function HostPage() {
       setError("Wait for the connection to recover before using host controls.");
       return;
     }
-    const hostToken = sessionStorage.getItem(`openround:host:${sessionId}`);
+    const hostToken = mediaCredential;
     if (!hostToken) return;
     setError("");
     const commandId = clientUuid();
@@ -548,7 +565,7 @@ export default function HostPage() {
         method: "POST",
         body: JSON.stringify({
           role: "presenter",
-          label: requireEmbedPolicy ? "Secure presenter embed" : "Presenter popout",
+          label: staffCopy(requireEmbedPolicy ? "Secure presenter embed" : "Presenter popout"),
         }),
       });
       token = created.token;
@@ -568,7 +585,10 @@ export default function HostPage() {
   }
 
   async function presenter() {
-    setError("");
+    if (presenterWriteLock.current) return;
+    presenterWriteLock.current = true;
+    setStaffActionError(null);
+    setPresenterOperation("presenter");
     setPresenterPending(true);
     try {
       await presenterAccess(false);
@@ -578,23 +598,37 @@ export default function HostPage() {
         "popup,width=1440,height=900",
       );
     } catch (caught) {
-      setError(humanError(caught));
+      setStaffFailure("presenter", caught);
     } finally {
+      presenterWriteLock.current = false;
+      setPresenterOperation(null);
       setPresenterPending(false);
     }
   }
 
   async function createEmbedLink() {
-    setError("");
-    setEmbedCopyStatus("");
+    if (presenterWriteLock.current) return;
+    presenterWriteLock.current = true;
+    setStaffActionError(null);
+    setEmbedCopyStatus(null);
+    setPresenterOperation("embed");
     setPresenterPending(true);
     try {
       const access = await presenterAccess(true);
-      if (!access.embedPolicyKey) throw new Error("A secure embed policy could not be created.");
+      if (!access.embedPolicyKey) {
+        setStaffActionError({
+          action: "embed",
+          message: "A secure embed policy could not be created.",
+        });
+        return;
+      }
       if (access.embedAllowedOrigins.length === 0) {
-        throw new Error(
-          "Ask a workspace owner to add at least one HTTPS embed origin in Account settings, then create a new embed link.",
-        );
+        setStaffActionError({
+          action: "embed",
+          message:
+            "Ask a workspace owner to add at least one HTTPS embed origin in Account settings, then create a new embed link.",
+        });
+        return;
       }
       const url = new URL(
         `/embed/present/${sessionId}/${access.embedPolicyKey}`,
@@ -603,24 +637,33 @@ export default function HostPage() {
       url.hash = new URLSearchParams({ credential: access.token }).toString();
       setEmbedLink(url.toString());
     } catch (caught) {
-      setError(humanError(caught));
+      setStaffFailure("embed", caught);
     } finally {
+      presenterWriteLock.current = false;
+      setPresenterOperation(null);
       setPresenterPending(false);
     }
   }
 
-  async function copyEmbedLink() {
-    if (!embedLink) return;
+  async function copyStaffLink(kind: "embed" | "cohost") {
+    const link = kind === "embed" ? embedLink : cohostLink;
+    const setStatus = kind === "embed" ? setEmbedCopyStatus : setCohostCopyStatus;
+    if (!link) return;
     try {
-      await navigator.clipboard.writeText(embedLink);
-      setEmbedCopyStatus("Secure embed link copied.");
+      await navigator.clipboard.writeText(link);
+      setStatus(kind === "embed" ? "Secure embed link copied." : "Cohost link copied.");
     } catch {
-      setEmbedCopyStatus("Copy was blocked. Select and copy the link below.");
+      setStatus("Copy was blocked. Select and copy the shown link.");
     }
   }
 
   async function createCohost() {
-    setError("");
+    if (staffWriteLock.current) return;
+    staffWriteLock.current = true;
+    setStaffActionError(null);
+    setStaffNotice(null);
+    setCohostCopyStatus(null);
+    setPendingStaffCredentialId(null);
     setStaffPending(true);
     try {
       const created = await apiFetch<{ token: string; credential: SessionStaffCredential }>(
@@ -629,7 +672,7 @@ export default function HostPage() {
           method: "POST",
           body: JSON.stringify({
             role: "cohost",
-            label: cohostLabel.trim() || "Cohost",
+            label: cohostLabel.trim() || staffCopy("Cohost"),
             expiresInMinutes: 240,
           }),
         },
@@ -640,23 +683,54 @@ export default function HostPage() {
       setCohostLabel("");
       await loadStaff();
     } catch (caught) {
-      setError(humanError(caught));
+      setStaffFailure("cohost", caught);
     } finally {
+      staffWriteLock.current = false;
       setStaffPending(false);
     }
   }
 
   async function revokeStaff(credentialId: string) {
-    setError("");
+    if (staffWriteLock.current) return;
+    staffWriteLock.current = true;
+    setStaffActionError(null);
+    setStaffNotice(null);
+    setPendingStaffCredentialId(credentialId);
     setStaffPending(true);
     try {
       await apiFetch(`/v1/sessions/${sessionId}/staff/${credentialId}`, { method: "DELETE" });
+      setStaffNotice("Staff access revoked.");
       await loadStaff();
     } catch (caught) {
-      setError(humanError(caught));
+      setStaffFailure("revoke", caught, credentialId);
     } finally {
+      staffWriteLock.current = false;
+      setPendingStaffCredentialId(null);
       setStaffPending(false);
     }
+  }
+
+  function setStaffFailure(action: StaffAction, caught: unknown, credentialId?: string) {
+    setStaffActionError({
+      action,
+      credentialId,
+      ...(caught instanceof Error ? { detail: caught.message } : {}),
+    });
+  }
+
+  function staffError(action: StaffAction) {
+    if (staffActionError?.action !== action) return null;
+    return (
+      <p className="error" id={`staff-${action}-error`} lang={locale} role="alert">
+        {staffCopy(staffActionError.message ?? STAFF_ERROR_KEYS[action])}
+        {staffActionError.detail ? (
+          <>
+            {" "}
+            {staffCopy("Service message")}: <span lang="en-CA">{staffActionError.detail}</span>
+          </>
+        ) : null}
+      </p>
+    );
   }
 
   function sendHostPhaseCommand(item: HostPhaseCommand) {
@@ -738,7 +812,7 @@ export default function HostPage() {
 
   return (
     <div
-      className="live-shell"
+      className={`live-shell ${styles.shell} ${liveTheme.shell}`}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
@@ -746,292 +820,379 @@ export default function HostPage() {
       data-ux-beta={uxBeta}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
-      <header className="shell live-topbar" inert={audienceOpen}>
+      <header className={`shell live-topbar ${styles.topbar}`} inert={audienceOpen}>
         <span lang="">
           <Brand href={creatorHref} inverted name={snapshot?.brandTheme?.organizationName} />
         </span>
         <div className="button-row">
           <ExperiencePreferences />
-          <span
-            className="connection"
-            data-connected={connected}
-            lang={connected ? locale : "en-CA"}
-            role="status"
-          >
+          <span className="connection" data-connected={connected} lang={locale} role="status">
             <span className="connection-dot" aria-hidden="true" />
-            {connected ? t("live.common.connected") : "Reconnecting…"}
+            {connected ? t("live.common.connected") : copy("Reconnecting…")}
           </span>
           <button
-            className="button-quiet small-button"
+            aria-describedby={
+              staffActionError?.action === "presenter" ? "staff-presenter-error" : undefined
+            }
+            className="button-quiet small-button round-presenter-button"
+            aria-label={
+              presenterOperation === "presenter"
+                ? staffCopy("Opening presenter view…")
+                : copy("Presenter view")
+            }
             disabled={presenterPending}
-            lang="en-CA"
+            lang={locale}
             onClick={() => void presenter()}
             type="button"
           >
-            Presenter view
+            <svg
+              aria-hidden="true"
+              className="round-presenter-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+            >
+              <rect x="3" y="4" width="18" height="13" rx="2" />
+              <path d="M8 21h8M12 17v4M8 9h8M8 12h5" />
+            </svg>
+            <span className="round-presenter-label">
+              {presenterOperation === "presenter"
+                ? staffCopy("Opening presenter view…")
+                : copy("Presenter view")}
+            </span>
           </button>
+          {staffError("presenter")}
         </div>
       </header>
       <main
-        className={uxBeta ? "shell host-command-center" : "shell"}
+        className={`shell ${styles.workspace}${uxBeta ? " host-command-center" : ""}`}
         id="main"
         inert={audienceOpen}
-        style={uxBeta ? undefined : { padding: "26px 0 70px" }}
       >
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {phaseView ? (
             <>
-              <span lang="en-CA">Host phase: </span>
+              <span>{copy("Host phase")}: </span>
               <span lang={phaseMessageKey ? locale : "en-CA"}>{localizedPhaseLabel}</span>.
             </>
           ) : (
-            <span lang="en-CA">Connecting host controls.</span>
+            <span>{copy("Connecting host controls.")}</span>
           )}
         </p>
         {error ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
+          <p className="error" lang={locale} role="alert">
+            {!errorView.known ? `${copy("Service message")}: ` : ""}
+            <span lang={errorView.language}>{errorView.text}</span>
           </p>
         ) : null}
         {!snapshot ? (
-          <section className="live-card" lang="en-CA">
-            <p>Synchronizing host controls…</p>
-            <Link href="/dashboard">Return to dashboard</Link>
+          <section className="live-card" lang={locale}>
+            <p>{copy("Synchronizing host controls…")}</p>
+            <Link href="/library">{t("workspace.nav.library")}</Link>
           </section>
         ) : (
           <>
-            {uxBeta && !standingsStage ? (
-              <section aria-label="Room readiness" className="room-readiness" lang="en-CA">
-                <span>
-                  <strong lang={connected ? locale : "en-CA"}>
-                    {connected ? t("live.common.connected") : "Reconnecting"}
-                  </strong>
-                  <small>connection</small>
-                </span>
-                <span>
+            {uxBeta ? (
+              <section
+                aria-label={copy("Room readiness")}
+                className={`round-session-summary ${styles.sessionSummary}`}
+                lang={locale}
+              >
+                <div className={styles.roomCode}>
+                  <span>{copy("Round code")}</span>
                   <strong>{snapshot.code}</strong>
-                  <small>round code</small>
-                </span>
-                <span>
-                  <strong>{numberFormatter.format(snapshot.participants.length)}</strong>
-                  <small lang={locale}>{t("live.host.joined")}</small>
-                </span>
-                <span>
-                  <strong>{numberFormatter.format(snapshot.answerCount)}</strong>
-                  <small lang={locale}>{t("live.host.answered")}</small>
-                </span>
-                <span>
-                  {snapshot.settings.timeMode === "flex" ? (
-                    <>
-                      <strong lang={locale}>{t("live.common.flexMode")}</strong>
-                      <small lang={locale}>{t("live.common.timeMode")}</small>
-                    </>
-                  ) : (
-                    <>
-                      <strong
-                        lang={
-                          snapshot.questionPosition === null ||
-                          snapshot.questionPosition === undefined
-                            ? locale
-                            : undefined
-                        }
-                      >
-                        {snapshot.deadline
-                          ? timeFormatter.format(new Date(snapshot.deadline))
-                          : "None"}
-                      </strong>
-                      <small>deadline</small>
-                    </>
-                  )}
-                </span>
-                <span>
+                </div>
+                <div>
+                  <span>{copy("progress")}</span>
                   <strong>
                     {snapshot.questionPosition === null || snapshot.questionPosition === undefined
                       ? t("live.host.phase.lobby")
-                      : `${numberFormatter.format(snapshot.questionPosition + 1)}/${numberFormatter.format(snapshot.questionCount)}`}
+                      : `${numberFormatter.format(snapshot.questionPosition + 1)} / ${numberFormatter.format(snapshot.questionCount)}`}
                   </strong>
-                  <small>progress</small>
-                </span>
-                <span>
-                  <strong lang={phaseMessageKey ? locale : "en-CA"}>
-                    {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
-                  </strong>
-                  <small>phase</small>
-                </span>
+                </div>
+                <div>
+                  <span>{t("live.host.joined")}</span>
+                  <strong>{numberFormatter.format(snapshot.participants.length)}</strong>
+                </div>
+                <div>
+                  <span>{t("live.host.answered")}</span>
+                  <strong>{numberFormatter.format(snapshot.answerCount)}</strong>
+                </div>
               </section>
             ) : null}
+            {uxBeta && phaseView ? (
+              <HostCommandBar
+                compact
+                context={
+                  <span lang={phaseMessageKey ? locale : "en-CA"}>{localizedPhaseLabel}</span>
+                }
+                busy={commandPending}
+                fallback={
+                  reportId ? (
+                    <Link className="button" href={`/report/${reportId}`} lang={locale}>
+                      {copy("Open report")}
+                    </Link>
+                  ) : null
+                }
+                leading={
+                  <>
+                    {confidenceControl}
+                    {snapshot.phase === "lobby" ? (
+                      <button
+                        className="button-quiet"
+                        disabled={commandPending}
+                        lang={locale}
+                        onClick={() =>
+                          command(snapshot.lobbyLocked ? "unlock_lobby" : "lock_lobby")
+                        }
+                        type="button"
+                      >
+                        {copy(snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby")}
+                      </button>
+                    ) : null}
+                  </>
+                }
+                quickActions={
+                  <button
+                    aria-controls="host-audience-drawer"
+                    aria-expanded={audienceOpen}
+                    className="button-quiet"
+                    lang={locale}
+                    onClick={() => {
+                      if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
+                      setAudienceOpen((open) => !open);
+                    }}
+                    ref={audienceButtonRef}
+                    type="button"
+                  >
+                    {copy("Audience")}
+                  </button>
+                }
+                onCommand={runPhaseCommand}
+                phaseView={phaseView}
+                primaryDisabled={
+                  phaseView.primary?.action === "start" && snapshot.participants.length === 0
+                }
+                trailing={
+                  snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
+                    <button
+                      className="button-danger"
+                      disabled={commandPending}
+                      lang={locale}
+                      onClick={() =>
+                        window.confirm(copy("End this session now?")) && command("end")
+                      }
+                      type="button"
+                    >
+                      {copy("End")}
+                    </button>
+                  ) : null
+                }
+              />
+            ) : null}
             <div
-              className={uxBeta ? "host-grid host-layout" : "host-grid"}
+              className={`host-grid ${styles.workGrid}${uxBeta ? " host-layout" : ""}`}
               data-phase={snapshot.phase}
               data-results-stage={standingsStage || undefined}
               data-testid="host-session"
             >
-              <HostStage enhanced={uxBeta} className={standingsStage ? "host-results-stage" : ""}>
-                {snapshot.phase === "lobby" ? (
-                  <>
-                    <p className="eyebrow" lang="en-CA">
-                      Round code
-                    </p>
-                    <h1 className="live-lobby-heading" lang="en-CA">
-                      Join this round
-                    </h1>
-                    <div
-                      className="session-code"
-                      aria-label={`Round code ${snapshot.code.split("").join(" ")}`}
-                      lang="en-CA"
-                    >
-                      {snapshot.code}
-                    </div>
-                    <p className="lead" lang="en-CA">
-                      Share the code or QR. Start when the room is ready.
-                    </p>
-                    <ul className="roster" aria-label="Participant roster" lang="en-CA">
-                      {snapshot.participants.map((participant) => (
-                        <li key={participant.id}>
-                          <span>
-                            <span lang="">
-                              <ParticipantIdentity
-                                avatarId={participant.avatarId}
-                                nickname={participant.nickname}
-                              />
-                            </span>
-                            {participant.connected ? "" : ` · ${t("live.audience.offline")}`}
-                          </span>
-                          <button
-                            aria-label={`Remove ${participant.nickname}`}
-                            className="roster-kick"
-                            disabled={commandPending}
-                            onClick={() => command("kick", { participantId: participant.id })}
-                            type="button"
-                          >
-                            {t("live.audience.remove")}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
-                {snapshot.question && !standingsStage ? (
-                  <>
-                    <div
-                      className="page-heading"
-                      style={{ alignItems: "center", marginBottom: 18 }}
-                    >
-                      <span className="status-pill" lang={phaseMessageKey ? locale : "en-CA"}>
-                        {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
-                      </span>
-                      {snapshot.phase === "question_open" ? (
-                        snapshot.settings.timeMode === "flex" ? (
-                          <span className="muted" lang={locale} role="status">
-                            {t("live.common.flexOpen")}
-                          </span>
-                        ) : (
-                          <Countdown deadline={snapshot.deadline} />
-                        )
-                      ) : null}
-                    </div>
-                    <h1 className="host-question-prompt" lang="">
-                      {snapshot.question.prompt}
-                    </h1>
-                    <QuestionMedia
-                      altText={snapshot.question.mediaAlt}
-                      credential={mediaCredential}
-                      mediaId={snapshot.question.mediaId}
-                      sessionId={sessionId}
-                    />
-                    {snapshot.question.type === "poll" &&
-                    (snapshot.question.maxSelections ?? 1) > 1 ? (
-                      <p className="muted">
-                        {t("live.roundPlay.pollSelectionInstructions", {
-                          limit: snapshot.question.maxSelections ?? 1,
-                        })}
+              <div className={styles.mainColumn}>
+                <HostStage
+                  enhanced={uxBeta}
+                  className={`${styles.stage}${standingsStage ? ` host-results-stage ${styles.resultsStage}` : ""}`}
+                >
+                  {snapshot.phase === "lobby" ? (
+                    <>
+                      <p className="eyebrow" lang={locale}>
+                        {copy("Round code")}
                       </p>
-                    ) : null}
-                    {snapshot.question.type === "ranking" ? (
-                      <p className="muted">
-                        {t("live.ranking.instructions", {
-                          count: snapshot.question.rankCount ?? snapshot.question.choices.length,
-                          total: snapshot.question.choices.length,
-                        })}
-                      </p>
-                    ) : null}
-                    {snapshot.question.choices.length > 0 ? (
-                      <div className="answer-grid">
-                        {snapshot.question.choices.map((choice, index) => (
-                          <div
-                            className="answer-button"
-                            data-correct={
-                              snapshot.correctResponse?.kind === "choice" &&
-                              snapshot.correctResponse.choiceIds.includes(choice.id)
-                                ? true
-                                : undefined
-                            }
-                            key={choice.id}
-                          >
-                            <span aria-hidden="true">{String.fromCharCode(65 + index)}.</span>{" "}
-                            <span lang="">{choice.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : snapshot.question.type === "numeric" ? (
-                      <p className="notice" lang="en-CA">
-                        Participants enter a numeric response
-                        {snapshot.question.unit ? (
-                          <>
-                            {" "}
-                            in <span lang="">{snapshot.question.unit}</span>
-                          </>
-                        ) : (
-                          ""
-                        )}
-                        .
-                        {snapshot.correctResponse?.kind === "numeric"
-                          ? ` Accepted value: ${snapshot.correctResponse.value}.`
-                          : ""}
-                      </p>
-                    ) : snapshot.question.rating ? (
-                      <p className="notice" lang="en-CA">
-                        Rating {numberFormatter.format(snapshot.question.rating.min)}–
-                        {numberFormatter.format(snapshot.question.rating.max)}:{" "}
-                        <span lang="">{snapshot.question.rating.minLabel}</span> to{" "}
-                        <span lang="">{snapshot.question.rating.maxLabel}</span>.
-                      </p>
-                    ) : null}
-                    {snapshot.explanation ? (
-                      <p className="notice" lang="">
-                        {snapshot.explanation}
-                      </p>
-                    ) : null}
-                    {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
-                      <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
-                    ) : null}
-                  </>
-                ) : null}
-                {snapshot.phase === "finished" && !(uxBeta && snapshot.competitionStandings) ? (
-                  <div className="host-completion-summary">
-                    <div>
-                      <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-                      <h1 className="host-complete-heading" lang="en-CA">
-                        Results are ready.
+                      <h1 className="live-lobby-heading" lang={locale}>
+                        {copy("Join this round")}
                       </h1>
-                      <p className="lead" lang="en-CA">
-                        {numberFormatter.format(snapshot.participants.length)} participants
-                        completed this live round.
+                      <div
+                        className="session-code"
+                        aria-label={`${copy("Round code")} ${snapshot.code.split("").join(" ")}`}
+                        lang={locale}
+                      >
+                        {snapshot.code}
+                      </div>
+                      <p className="lead" lang={locale}>
+                        {copy("Share the code or QR. Start when the room is ready.")}
                       </p>
+                      <ul className="roster" aria-label={copy("Participant roster")} lang={locale}>
+                        {snapshot.participants.map((participant) => (
+                          <li key={participant.id}>
+                            <span>
+                              <span lang="">
+                                <ParticipantIdentity
+                                  avatarId={participant.avatarId}
+                                  nickname={participant.nickname}
+                                />
+                              </span>
+                              {participant.connected ? "" : ` · ${t("live.audience.offline")}`}
+                            </span>
+                            <button
+                              aria-label={`Remove ${participant.nickname}`}
+                              className="roster-kick"
+                              disabled={commandPending}
+                              onClick={() => command("kick", { participantId: participant.id })}
+                              type="button"
+                            >
+                              {t("live.audience.remove")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {snapshot.question && !standingsStage ? (
+                    <>
+                      <div
+                        className="page-heading"
+                        style={{ alignItems: "center", marginBottom: 18 }}
+                      >
+                        <span className="status-pill" lang={phaseMessageKey ? locale : "en-CA"}>
+                          {localizedPhaseLabel ?? snapshot.phase.replaceAll("_", " ")}
+                        </span>
+                        {snapshot.phase === "question_open" ? (
+                          snapshot.settings.timeMode === "flex" ? (
+                            <span className="muted" lang={locale} role="status">
+                              {t("live.common.flexOpen")}
+                            </span>
+                          ) : (
+                            <Countdown deadline={snapshot.deadline} />
+                          )
+                        ) : null}
+                      </div>
+                      <h1 className="host-question-prompt" lang="">
+                        {snapshot.question.prompt}
+                      </h1>
+                      <QuestionMedia
+                        altText={snapshot.question.mediaAlt}
+                        credential={mediaCredential}
+                        mediaId={snapshot.question.mediaId}
+                        sessionId={sessionId}
+                      />
+                      {snapshot.question.type === "poll" &&
+                      (snapshot.question.maxSelections ?? 1) > 1 ? (
+                        <p className="muted">
+                          {t("live.roundPlay.pollSelectionInstructions", {
+                            limit: snapshot.question.maxSelections ?? 1,
+                          })}
+                        </p>
+                      ) : null}
+                      {snapshot.question.type === "ranking" ? (
+                        <p className="muted">
+                          {t("live.ranking.instructions", {
+                            count: snapshot.question.rankCount ?? snapshot.question.choices.length,
+                            total: snapshot.question.choices.length,
+                          })}
+                        </p>
+                      ) : null}
+                      {snapshot.question.choices.length > 0 ? (
+                        <div className="answer-grid">
+                          {snapshot.question.choices.map((choice, index) => (
+                            <div
+                              className="answer-button"
+                              data-correct={
+                                snapshot.correctResponse?.kind === "choice" &&
+                                snapshot.correctResponse.choiceIds.includes(choice.id)
+                                  ? true
+                                  : undefined
+                              }
+                              key={choice.id}
+                            >
+                              <span aria-hidden="true">{String.fromCharCode(65 + index)}.</span>{" "}
+                              <span lang="">{choice.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : snapshot.question.type === "numeric" ? (
+                        <p className="notice" lang={locale}>
+                          {copy("Numeric response")}
+                          {snapshot.question.unit ? (
+                            <>
+                              {" "}
+                              · <span lang="">{snapshot.question.unit}</span>
+                            </>
+                          ) : null}
+                          {snapshot.correctResponse?.kind === "numeric" ? (
+                            <>
+                              {" "}
+                              · {copy("Accepted value")}:{" "}
+                              <span lang="">{snapshot.correctResponse.value}</span>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : snapshot.question.rating ? (
+                        <p className="notice" lang={locale}>
+                          {copy("Rating")} {numberFormatter.format(snapshot.question.rating.min)}–
+                          {numberFormatter.format(snapshot.question.rating.max)}:{" "}
+                          <span lang="">{snapshot.question.rating.minLabel}</span> →{" "}
+                          <span lang="">{snapshot.question.rating.maxLabel}</span>.
+                        </p>
+                      ) : null}
+                      {snapshot.explanation ? (
+                        <p className="notice" lang="">
+                          {snapshot.explanation}
+                        </p>
+                      ) : null}
+                      {snapshot.phase === "intervention" && snapshot.recoveryPackCard ? (
+                        <RecoveryPackLiveCardView card={snapshot.recoveryPackCard} />
+                      ) : null}
+                    </>
+                  ) : null}
+                  {snapshot.phase === "finished" ? (
+                    <div className={`host-completion-summary ${styles.completion}`}>
+                      <div>
+                        <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
+                        <h1 className="host-complete-heading" lang={locale}>
+                          {copy("Results are ready.")}
+                        </h1>
+                        <p className="lead" lang={locale}>
+                          {copy("{count} participants completed this live round.", {
+                            count: numberFormatter.format(snapshot.participants.length),
+                          })}
+                        </p>
+                      </div>
+                      {reportId ? (
+                        !uxBeta ? (
+                          <Link className="button" href={`/report/${reportId}`}>
+                            {copy("Open report")}
+                          </Link>
+                        ) : null
+                      ) : (
+                        <p className="notice">{copy("Finalizing the report…")}</p>
+                      )}
                     </div>
-                    {reportId ? (
-                      <Link className="button" href={`/report/${reportId}`}>
-                        Open report
-                      </Link>
-                    ) : (
-                      <p className="notice">Finalizing the report…</p>
-                    )}
-                  </div>
-                ) : null}
+                  ) : null}
+                  {snapshot.roundProtocol?.requiredCapabilities.some(
+                    (capability) =>
+                      capability === "response.open_text" || capability === "response.word_cloud",
+                  ) ? (
+                    <TextModerationPanel
+                      sessionId={sessionId}
+                      roundId={
+                        snapshot.question && isTextQuestion(snapshot.question.type)
+                          ? snapshot.roundId
+                          : null
+                      }
+                      version={snapshot.version}
+                      phase={snapshot.phase}
+                      credential={textReadAuthorized ? mediaCredential : ""}
+                      freshness={textReadEpoch}
+                      disabled={commandPending || !connected || snapshot.phase === "finished"}
+                      onModerate={(answerId, responseStatus) =>
+                        command("response.moderate", { answerId, responseStatus })
+                      }
+                    />
+                  ) : null}
+                </HostStage>
                 {snapshot.competitionStandings && snapshot.phase !== "lobby" ? (
                   <CompetitionDashboard
                     variant="host"
-                    headingLevel={standingsStage ? 1 : 2}
+                    headingLevel={snapshot.phase === "leaderboard" ? 1 : 2}
                     standings={snapshot.competitionStandings}
                     finished={snapshot.phase === "finished"}
                     compact={!standingsStage}
@@ -1052,29 +1213,9 @@ export default function HostPage() {
                     ))}
                   </ol>
                 ) : null}
-                {snapshot.roundProtocol?.requiredCapabilities.some(
-                  (capability) =>
-                    capability === "response.open_text" || capability === "response.word_cloud",
-                ) ? (
-                  <TextModerationPanel
-                    sessionId={sessionId}
-                    roundId={
-                      snapshot.question && isTextQuestion(snapshot.question.type)
-                        ? snapshot.roundId
-                        : null
-                    }
-                    version={snapshot.version}
-                    phase={snapshot.phase}
-                    credential={textReadAuthorized ? mediaCredential : ""}
-                    freshness={textReadEpoch}
-                    disabled={commandPending || !connected || snapshot.phase === "finished"}
-                    onModerate={(answerId, responseStatus) =>
-                      command("response.moderate", { answerId, responseStatus })
-                    }
-                  />
-                ) : null}
-              </HostStage>
+              </div>
               <RecoveryCompass
+                showCounts={!uxBeta}
                 collapsible={uxBeta && standingsStage}
                 phaseView={phaseView!}
                 showSteps={uxBeta}
@@ -1113,11 +1254,11 @@ export default function HostPage() {
                   <ResponseDistributionView distribution={snapshot.responseDistribution} />
                 ) : null}
                 {!uxBeta && legacyRecoveryActions.length > 0 ? (
-                  <div className="host-controls" lang="en-CA" style={{ marginBottom: 18 }}>
+                  <div className="host-controls" lang={locale} style={{ marginBottom: 18 }}>
                     <strong>
                       {snapshot.phase === "question_locked"
-                        ? "Recover understanding"
-                        : "Intervene and verify"}
+                        ? copy("Recover understanding")
+                        : copy("Intervene and verify")}
                     </strong>
                     {legacyRecoveryActions.map((item) => (
                       <button
@@ -1133,13 +1274,15 @@ export default function HostPage() {
                   </div>
                 ) : null}
                 {snapshot.phase === "intervention" && snapshot.intervention ? (
-                  <p className="notice" lang="en-CA">
-                    Active intervention: {snapshot.intervention.type.replaceAll("_", " ")}. Finish
-                    it before revealing or rechecking.
+                  <p className="notice" lang={locale}>
+                    {copy(
+                      "Active intervention: {type}. Finish it before revealing or rechecking.",
+                      { type: deliveryInterventionLabel(locale, snapshot.intervention.type) },
+                    )}
                   </p>
                 ) : null}
                 {!uxBeta ? (
-                  <div className="host-controls" lang="en-CA">
+                  <div className="host-controls" lang={locale}>
                     {confidenceControl}
                     {legacyPhaseActions.map((item) => (
                       <button
@@ -1164,90 +1307,139 @@ export default function HostPage() {
                         }
                         type="button"
                       >
-                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
+                        {copy(snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby")}
                       </button>
                     ) : null}
                     {snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
                       <button
                         className="button-danger"
                         disabled={commandPending}
-                        onClick={() => window.confirm("End this session now?") && command("end")}
+                        onClick={() =>
+                          window.confirm(copy("End this session now?")) && command("end")
+                        }
                         type="button"
                       >
-                        End session
+                        {copy("End session")}
                       </button>
                     ) : null}
                   </div>
                 ) : null}
                 {staffManagementAvailable ? (
-                  <details className="staff-management" lang="en-CA">
-                    <summary>Round staff</summary>
+                  <details className="staff-management" lang={locale}>
+                    <summary>{staffCopy("Round staff")}</summary>
                     <p className="muted">
-                      Cohosts can run this round. Presenter credentials remain read-only. Links
-                      expire automatically and can be revoked here.
+                      {staffCopy(
+                        "Cohosts can run this round. Presenter credentials remain read-only. Links expire automatically and can be revoked here.",
+                      )}
                     </p>
                     {cohostingAvailable ? (
                       <>
                         <label className="field" htmlFor="cohost-label">
-                          <span>Co-host label</span>
+                          <span>{staffCopy("Co-host label")}</span>
                           <input
                             className="input"
                             id="cohost-label"
                             lang=""
                             maxLength={80}
                             onChange={(event) => setCohostLabel(event.target.value)}
-                            placeholder="Teaching assistant"
+                            placeholder={staffCopy("Teaching assistant")}
                             value={cohostLabel}
                           />
                         </label>
                         <button
+                          aria-describedby={
+                            staffActionError?.action === "cohost" ? "staff-cohost-error" : undefined
+                          }
                           className="button-quiet small-button"
                           disabled={staffPending}
                           onClick={() => void createCohost()}
                           type="button"
                         >
-                          Create cohost link
+                          {staffCopy(
+                            staffPending && pendingStaffCredentialId === null
+                              ? "Creating cohost link…"
+                              : "Create cohost link",
+                          )}
                         </button>
+                        {staffError("cohost")}
                         {cohostLink ? (
-                          <div className="notice staff-share-link" role="status">
-                            <strong>Share this link once</strong>
-                            <a href={cohostLink}>{cohostLink}</a>
+                          <div className="notice staff-share-link">
+                            <strong role="status">{staffCopy("Share this link once")}</strong>
+                            <p>
+                              {staffCopy(
+                                "Save it before leaving this tab. Anyone with this link can run this round until it expires or is revoked.",
+                              )}
+                            </p>
+                            <a href={cohostLink} lang="" rel="noreferrer">
+                              {cohostLink}
+                            </a>
+                            <button
+                              className="button-quiet small-button"
+                              onClick={() => void copyStaffLink("cohost")}
+                              type="button"
+                            >
+                              {staffCopy("Copy cohost link")}
+                            </button>
+                            {cohostCopyStatus ? (
+                              <span role="status">{staffCopy(cohostCopyStatus)}</span>
+                            ) : null}
                           </div>
                         ) : null}
                       </>
                     ) : (
                       <p className="notice">
-                        Shareable cohost links are available on Pro, Team, and Community plans.{" "}
-                        <Link href="/pricing">Compare plans</Link>.
+                        {staffCopy(
+                          "Shareable cohost links are available on Pro, Team, and Community plans.",
+                        )}{" "}
+                        <Link href="/pricing">{staffCopy("Compare plans")}</Link>.
                       </p>
                     )}
                     <hr className="staff-divider" />
-                    <h3>Presenter embed</h3>
+                    <h3>{staffCopy("Presenter embed")}</h3>
                     <p className="muted">
-                      Creates a read-only presenter link restricted to the workspace&apos;s
-                      configured HTTPS origins. The credential is carried in the URL fragment and
-                      removed after opening.
+                      {staffCopy(
+                        "Creates a read-only presenter link restricted to the workspace's configured HTTPS origins. The credential is carried in the URL fragment and removed after opening.",
+                      )}
                     </p>
                     <button
+                      aria-describedby={
+                        staffActionError?.action === "embed" ? "staff-embed-error" : undefined
+                      }
                       className="button-quiet small-button"
                       disabled={presenterPending}
                       onClick={() => void createEmbedLink()}
                       type="button"
                     >
-                      Create secure embed link
+                      {staffCopy(
+                        presenterOperation === "embed"
+                          ? "Creating secure embed link…"
+                          : "Create secure embed link",
+                      )}
                     </button>
+                    {staffError("embed")}
                     {embedLink ? (
-                      <div className="notice staff-share-link" role="status">
-                        <strong>Embed this read-only presenter URL</strong>
-                        <a href={embedLink}>{embedLink}</a>
+                      <div className="notice staff-share-link">
+                        <strong role="status">
+                          {staffCopy("Embed this read-only presenter URL")}
+                        </strong>
+                        <p>
+                          {staffCopy(
+                            "Save this read-only link before leaving this tab. It can be used on the configured origins until it expires or is revoked.",
+                          )}
+                        </p>
+                        <a href={embedLink} lang="" rel="noreferrer">
+                          {embedLink}
+                        </a>
                         <button
                           className="button-quiet small-button"
-                          onClick={() => void copyEmbedLink()}
+                          onClick={() => void copyStaffLink("embed")}
                           type="button"
                         >
-                          Copy embed link
+                          {staffCopy("Copy embed link")}
                         </button>
-                        {embedCopyStatus ? <span>{embedCopyStatus}</span> : null}
+                        {embedCopyStatus ? (
+                          <span role="status">{staffCopy(embedCopyStatus)}</span>
+                        ) : null}
                       </div>
                     ) : null}
                     {staffCredentials.length > 0 ? (
@@ -1255,24 +1447,47 @@ export default function HostPage() {
                         {staffCredentials.map((credential) => (
                           <li key={credential.id}>
                             <span>
-                              <strong lang="">{credential.label || credential.role}</strong> ·{" "}
-                              {credential.role}
-                              {credential.revokedAt ? " · revoked" : ""}
+                              <strong lang={credential.label ? "" : locale}>
+                                {credential.label || staffCopy(credential.role)}
+                              </strong>{" "}
+                              · {staffCopy(credential.role)}
+                              {credential.revokedAt ? ` · ${staffCopy("revoked")}` : ""}
                             </span>
                             {!credential.revokedAt ? (
                               <button
+                                aria-describedby={
+                                  staffActionError?.action === "revoke" &&
+                                  staffActionError.credentialId === credential.id
+                                    ? "staff-revoke-error"
+                                    : undefined
+                                }
+                                aria-label={
+                                  pendingStaffCredentialId === credential.id
+                                    ? `${staffCopy("Revoking…")} ${credential.label || staffCopy(credential.role)}`
+                                    : staffCopy("Revoke access for {label}", {
+                                        label: credential.label || staffCopy(credential.role),
+                                      })
+                                }
                                 className="button-danger small-button"
                                 disabled={staffPending}
                                 onClick={() => void revokeStaff(credential.id)}
                                 type="button"
                               >
-                                Revoke
+                                {staffCopy(
+                                  pendingStaffCredentialId === credential.id
+                                    ? "Revoking…"
+                                    : "Revoke",
+                                )}
                               </button>
                             ) : null}
                           </li>
                         ))}
                       </ul>
-                    ) : null}
+                    ) : (
+                      <p className="muted">{staffCopy("No staff credentials yet.")}</p>
+                    )}
+                    {staffError("revoke")}
+                    {staffNotice ? <p role="status">{staffCopy(staffNotice)}</p> : null}
                   </details>
                 ) : null}
               </RecoveryCompass>
@@ -1298,68 +1513,6 @@ export default function HostPage() {
                 />
               </>
             ) : null}
-            {uxBeta && phaseView ? (
-              <HostCommandBar
-                busy={commandPending}
-                fallback={
-                  reportId ? (
-                    <Link className="button" href={`/report/${reportId}`} lang="en-CA">
-                      Open report
-                    </Link>
-                  ) : null
-                }
-                leading={
-                  <>
-                    {confidenceControl}
-                    <button
-                      aria-controls="host-audience-drawer"
-                      aria-expanded={audienceOpen}
-                      className="button-quiet"
-                      lang="en-CA"
-                      onClick={() => {
-                        if (!audienceOpen) setAudienceSyncRevision((current) => current + 1);
-                        setAudienceOpen((open) => !open);
-                      }}
-                      ref={audienceButtonRef}
-                      type="button"
-                    >
-                      Audience
-                    </button>
-                    {snapshot.phase === "lobby" ? (
-                      <button
-                        className="button-quiet"
-                        disabled={commandPending}
-                        lang="en-CA"
-                        onClick={() =>
-                          command(snapshot.lobbyLocked ? "unlock_lobby" : "lock_lobby")
-                        }
-                        type="button"
-                      >
-                        {snapshot.lobbyLocked ? "Unlock lobby" : "Lock lobby"}
-                      </button>
-                    ) : null}
-                  </>
-                }
-                onCommand={runPhaseCommand}
-                phaseView={phaseView}
-                primaryDisabled={
-                  phaseView.primary?.action === "start" && snapshot.participants.length === 0
-                }
-                trailing={
-                  snapshot.phase !== "lobby" && snapshot.phase !== "finished" ? (
-                    <button
-                      className="button-danger"
-                      disabled={commandPending}
-                      lang="en-CA"
-                      onClick={() => window.confirm("End this session now?") && command("end")}
-                      type="button"
-                    >
-                      End
-                    </button>
-                  ) : null
-                }
-              />
-            ) : null}
           </>
         )}
       </main>
@@ -1378,15 +1531,15 @@ export default function HostPage() {
         >
           <div className="audience-drawer-heading">
             <div>
-              <p className="eyebrow" lang="en-CA">
-                Audience
+              <p className="eyebrow" lang={locale}>
+                {copy("Audience")}
               </p>
-              <h2 id="audience-drawer-title" lang="en-CA">
-                Participants and conversation
+              <h2 id="audience-drawer-title" lang={locale}>
+                {copy("Participants and conversation")}
               </h2>
             </div>
             <button
-              aria-label="Close audience tools"
+              aria-label={copy("Close audience tools")}
               className="button-quiet small-button"
               onClick={() => {
                 setAudienceOpen(false);
@@ -1399,9 +1552,9 @@ export default function HostPage() {
             </button>
           </div>
           <div
-            aria-label="Audience views"
+            aria-label={copy("Audience views")}
             className="audience-tabs"
-            lang="en-CA"
+            lang={locale}
             onKeyDown={(event) => {
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
               event.preventDefault();
@@ -1480,8 +1633,8 @@ export default function HostPage() {
                 view={audienceTab === "qna" ? "participants" : audienceTab}
               />
             ) : (
-              <p className="muted" lang="en-CA">
-                Audience controls close when the round finishes.
+              <p className="muted" lang={locale}>
+                {copy("Audience controls close when the round finishes.")}
               </p>
             )}
           </div>

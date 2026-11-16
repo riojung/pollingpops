@@ -1,0 +1,90 @@
+.joinAccess {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  text-align: left;
+}
+
+.qrCode {
+  display: block;
+  width: 88px;
+  height: 88px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.details {
+  min-width: 0;
+  flex: 1 1 150px;
+}
+
+.codeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+}
+
+.codeRow > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.joinCode {
+  color: var(--ui-text-strong);
+  font-size: clamp(1.4rem, 2.5vw, 1.9rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.linkRow {
+  margin: 5px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.linkRow a {
+  color: var(--ui-link);
+}
+
+.copyButton {
+  min-height: 44px;
+  max-width: 100%;
+  flex: 0 1 auto;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.copyButton:hover {
+  background: var(--ui-surface-soft);
+}
+
+.feedback {
+  margin: 5px 0 0;
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

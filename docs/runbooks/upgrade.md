@@ -18,6 +18,312 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Presentation review feedback compatibility
+
+Apply `099_presentation_review_feedback.sql` before deploying E11 feedback readers/writers. It
+adds per-share review cycles, threads, messages and compact operation receipts with forced RLS,
+source/version guards and account-body erasure. Preserve migrations001–098 and their checksums.
+Document14, scene6, immutable publications, live responses and Report V1–V7 retain their meanings.
+
+Deploy the matching API, database adapter and web. Existing E08 share/access/ReviewV1 endpoints
+stay unchanged, and existing links remain view-only until an owner/editor explicitly enables
+comments. Reviewers use an active share bearer plus the existing free UserPrincipal sign-in;
+never create a membership or paid creator seat in the source workspace to permit comments.
+Identity-only users can return from sign-in to a canonical review path. Keep link credentials in
+the per-tab review store, outside sign-in return paths, verification email URLs and logs.
+
+Verify enablement, signed-in external review, page/version anchors, exact retries, conflict
+preservation, resolve/reopen and approval staleness under the restricted runtime role. Revocation,
+expiry, publisher-role removal, account deletion and source deletion must fence future operations
+and receipt recovery. Account exports and erasure include the reviewer's own comments in other
+workspaces. Existing share cleanup removes sidecars after its seven-day expiry retention window.
+
+Approval belongs to one link's review of one immutable publication and feedback sequence.
+Publishing continues to use the existing creator permissions. A later comment or reopen makes
+the prior sign-off stale; it does not change a draft, existing live session or another review.
+
+During rollback, hide/disable the new feedback entry points and retain migration099 and review
+sidecars. Earlier readers can continue using E08 without decoding feedback. Keep the E10
+document14 reader floor; do not drop review history or rewrite publication bytes to fit a rollback.
+No new provider, hosted service, license or model call is required. See the
+[E11 evidence record](../evidence/presentation-e11-review-feedback.md).
+
+## Presentation spatial layout compatibility
+
+Apply `098_presentation_spatial.sql` before admitting E10 document14 writers. It adds opt-in bounded
+spatial geometry checks and extends the existing content, response and live-session guards to
+document14. Keep migrations 001–097 byte-for-byte and verify their checksums. There is no new scene,
+response or report format: scene6 and Report V1–V7 retain their meanings. Classic API creation
+remains document2, blank native creation remains document7 and the mutation envelope remains v2.
+
+Deploy matching contracts, database readers, API/workers and web before exposing the new writer.
+Use a coordinated reader-first cutover; existing room grants can outlive creation flags, so an
+old pool must not receive a document14 snapshot or attempt to decode its frozen session. Exercise
+a document14 draft/history/publish/reload, private linear review/static export and live linked
+diagnostic/recheck before rollout. Verify original question windows, accepted response retries,
+stage/participant/Companion projections, Report V7 and E09 insights with the restricted database
+role and forced RLS.
+
+Layout frames refer to existing block UUIDs and never replace the canonical block sequence.
+Publication removes hidden planning frames; audience snapshots carry only bounded geometry and
+ordinals, with no future titles, prompts, media, keys or notes. Existing navigation permissions
+remain authoritative. Local overview/focus/linear controls do not write live state or open/reveal
+activities. Current content stays mounted; reduced motion disables diagram transitions.
+
+Stored spatial JSON is frozen during live insertions. Sparse/missing frames resolve through the
+bounded deterministic fallback without writing defaults. Current layout, bounds and path are
+derived from the same accepted frozen content, including authorized session additions. Existing
+private review and static export allowlists keep their linear projections.
+
+Disabling spatial layout removes the layout field but retains document14. Once any document14
+draft, history, publication or session exists, rollback requires a document14-capable reader or
+forward repair. Keep migration098; do not rewrite old JSON/hashes, downgrade frozen content or
+rebuild accepted intents to make an older binary accept them. No paid SDK/service, model call,
+camera event queue or additional entitlement is introduced. Local verification and remaining
+hosted/device/manual/cost qualification are in the
+[E10 evidence record](../evidence/presentation-e10-spatial.md).
+
+## Presentation session insights compatibility
+
+E09 adds the creator-authorized `GET /v1/presentation-sessions/:id/insights` reader and the
+matching web report panel/downloads. Deploy the matching contracts, API and web together. No
+migration, persisted insights document, stored report version, response format or new entitlement
+is introduced. Leave migrations 001–097 and all immutable content/report payloads unchanged.
+
+Only finished, retained sessions with a ready compatible report produce insights. Current creator
+authentication, workspace membership, source identity and retention are checked again before
+delivery; disabling creation does not hide previously accepted retained evidence. Pending/failed
+reports stay pending/failed and are not regenerated by this route. Source and output are limited
+to 1 MiB; at most 200 activity/reveal selectors and 60 actor reads per minute are allowed.
+An oversized source returns `INSIGHTS_LIMIT` without changing the original report reader.
+
+Verify the original reveal-roster count (including legacy missing versus explicit empty), current
+public Q&A moderation counts, ordinary poll/rating fallback and version pinning with the restricted
+database role before rollout. Aggregate queries return counts, never participant rows or text.
+Q&A freshness is fenced separately from frozen report evidence; a changing/unavailable Q&A
+snapshot must not invent a zero or invalidate the remaining report. Positive samples below five
+remain suppressed in the UI and both private downloads.
+
+Monitor `openround_presentation_insights_reads_total`,
+`openround_presentation_insights_read_duration_seconds` and
+`openround_presentation_insights_output_bytes` with existing database/resource telemetry.
+Do not add principal, workspace, session or participant labels. No AI call, provider or per-view
+job is required. Private E08 review-link views remain untracked.
+
+Rollback may remove the additive endpoint/panel while retaining existing report/public-summary
+readers. Do not regenerate Report V1–V7 or change AggregateSummary V1 to backfill insights.
+CSV/HTML files are downloaded private copies and cannot be recalled. Local verification and
+remaining hosted/capacity/manual qualification are in the
+[E09 evidence record](../evidence/presentation-e09-session-insights.md).
+
+## Presentation static export compatibility
+
+E13 static export adds creator-authorized source metadata and PDF/PNG/HTML download endpoints.
+It requires no migration, new stored-content version or paid provider. Deploy the matching web,
+server and `presentation-static-renderer` worker entry points together; keep the server image's
+existing `assets/summary-fonts` directory. Verify a compiled-worker PDF/PNG/HTML render in the
+release image, including Unicode, image crop, safe HTML and resource limits, before enabling it
+for production creators.
+
+Existing Presentation feature, workspace membership and editing authority apply. The server
+rechecks source, actor and media authority before returning completed output. Do not replace
+these downloads with public object URLs or serialize creator documents into recipient files.
+Exports are deliberate copies: revocation can prevent a new download but cannot erase a file
+already delivered. The accessible HTML companion remains necessary; the visual PDF is not tagged.
+
+The change does not rewrite immutable versions, hashes, history, receipts or live state. Rolling
+back the export routes/controls leaves these records intact. Hosted load, physical-device,
+manual accessibility and cost qualification are recorded separately from local checks in the
+[E13 evidence record](../evidence/presentation-e13-static-export.md).
+
+## Presentation offline interactive HTML compatibility
+
+The bounded E13 extension adds `offline_html` to the existing published-version export
+request. Its physical extension is `.html`, MIME type is `text/html`, and fixed download name
+is `polling-pops-presentation-offline.html`. Deploy matching contracts, HTTP routes, renderer
+worker entry points and web controls together before exposing this option. An older server
+rejects the new format; existing PDF, PNG and readable HTML requests keep their meanings.
+No migration, persisted-content version, job queue, entitlement or provider change is required.
+
+The existing recipient-safe projection, media reauthorization, worker cancellation and resource
+limits apply. Verify a compiled-worker offline render and open the result with networking and
+JavaScript disabled. Public reveal/detail bodies become local native disclosures; page and
+section navigation uses internal anchors. The file includes all public bodies, stores no
+progress, creates no learner attempts and cannot submit responses or claim scoring/completion.
+Do not add share credentials, source documents, remote media URLs or arbitrary authored HTML.
+
+The output blocks scripts, forms, embedding and network resources through its content policy
+and contains no application JavaScript. Explicit safe external hyperlinks leave the file.
+This is a portable readable companion, not an operating-system or browser isolation guarantee.
+Downloaded copies cannot be recalled. Rollback may remove the option and API format support
+without rewriting stored content; already downloaded files remain usable. Verification and
+remaining release qualification are in the
+[offline export record](../evidence/presentation-offline-export.md).
+
+## Presentation stage credential compatibility
+
+Apply `090_presentation_stage_credentials.sql` before enabling the E03 delivery server/web
+build. It adds the distinct `stage` role to the existing credential check without changing
+host/Companion credentials, published JSON, immutable hashes, response fingerprints or command
+receipts. It introduces no entitlement, service or additional feature flag. Stage issuance uses
+the existing Presentation realtime room grant; issued passes remain readable through a rollout
+rollback until their own one-hour/session-capped expiry, explicit revocation or session deletion.
+
+Before the first stage pass is minted, fence stage-pass issuance at ingress and deploy matching
+server, jobs and web readers to every process. Verify the entire serving pool has the explicit
+host/Companion role filters in audience-scope and Q&A authorization, then reopen stage issuance.
+Migration 090 alone does not make a mixed pool safe: old audience code accepts every credential
+role and must never receive a newly created stage bearer. Use a coordinated rollout rather than
+relying on the existing realtime flag, because accepted room grants can survive flag changes.
+
+Host snapshots now carry private `presenter` notes
+and next-block previews from the live session's frozen published content. Keep these fields out
+of shared displays. The clean stage uses its own bearer-only REST snapshot/media endpoints;
+stage passes cannot authenticate host, participant, Companion, audience-scope or Q&A APIs.
+Stage media is limited to the current frozen block; signed-in creator preview media additionally
+permits the next block. A stage pass grants no creator authority. An independently signed-in
+owner/editor retains their cookie-based creator authority.
+
+Stage-pass rotation revokes only the previous stage pass. Host control-pass creation continues
+to rotate host credentials and invalidate the previous controller; it does not rotate stage or
+Companion credentials. Finished rooms reject new stage passes, while an existing valid pass may
+display the finished state until expiry. Revoke stage access before stopping the display when
+needed. Stage refresh retains only its tab-scoped bearer; expired/revoked access must fail closed.
+
+Keep migration 090 during rollback. Old audience/Q&A code that treats every credential role as
+host/Companion is unsafe after a stage pass exists. Fence stage issuance/reads and revoke active
+stage credentials before any rollback to such a binary, or retain the E03 role filters in every
+serving process. Never relabel a stage credential as Companion or host to force compatibility.
+Actual screen sharing, physical-device/clicker and managed-browser popup behavior still require
+manual qualification; software tests do not establish those results.
+
+## Presentation opinion formats compatibility
+
+The first E04 family adds **Presentation document v9**, explicit ordered ranking responses and
+**Presentation Report V4** for multiple-selection opinion polls and rankings. Apply
+`091_presentation_opinion_formats.sql` after migrations 089–090 using the restricted migration
+job before enabling these writes. It adds `response_schema_version` (legacy default 1, new-format
+responses 2), new-write document checks and frozen-question response validation. The document
+checks are `NOT VALID` to avoid scanning or rewriting historical snapshots; new writes still
+must pass. UUID comparisons account for case without changing stored immutable JSON or hashes.
+Keep RLS, tenant ownership, session/receipt locks and media retention controls in place.
+
+Use a coordinated cutover:
+
+1. Fence Presentation draft mutations, publication, history restore, session creation and new
+   published-question/Companion insertion at ingress. Drain accepted operations while preserving
+   their original envelopes and idempotency identities. Account for any already running rooms;
+   they continue to require compatible response and report readers/writers.
+2. Apply the complete migration sequence through 091. Deploy matching v9/response-v2/report-V4
+   API, job/report-worker, artifact/history/account-export, retention and web readers/writers to
+   every serving process. A compatible web editor alone does not make an older worker or API
+   safe. Refresh open browsers before they submit these formats.
+3. Verify the reader floor and rehearse author/save/publish, independent Round copy, session
+   freeze, participant response acknowledgement/reconnect, current-block reveal, stage/Companion
+   privacy and explicit V4 report retrieval/CSV. Include restricted PostgreSQL writes and exact
+   receipt replay. Record executed results in the [first-family evidence record](../evidence/presentation-e04-opinion-formats.md).
+4. Reopen new writes only after those checks pass. Existing Presentation feature/room policy
+   still governs eligibility. This is separate from Live Round protocol rollout; enabling a
+   Round writer is neither required for reading an existing Presentation nor a substitute for
+   the Presentation reader floor. A new published Round source may require its own authoring gate.
+
+Only a ranking or poll with `maxSelections > 1` opts a document into v9. Keep the existing API
+v2 starter, native blank v7/scene3, scenario-template v8/scene4, and mutation-envelope v2 defaults.
+Do not eagerly promote old content or change v1–v8 JSON, published hashes, frozen baselines or
+accepted response/command fingerprints. Later edits, history operations and copies retain an
+existing v9 floor. New opinion responses have no correctness, confidence or participant score;
+this does not redefine legacy assessment or opinion-purpose behavior.
+
+V4 reports require `includeOpinionResults=true`; older report requests receive a validation
+error rather than a lossy legacy projection. Existing V1–V3 report contracts, including the V3
+Quick Check compatibility projection, remain supported for reports without the new evidence.
+Pausing new authoring or a feature flag does not remove v9 drafts/history/publications, live
+response-v2 rows or V4 reports. After these exist, rollback requires a compatible full
+reader/writer set or a reviewed forward repair. Keep migration 091 and its constraints/column;
+never strip opinion results, sort ranking order, rewrite immutable content/hashes, or regenerate
+retry envelopes to fit an older binary. Do not send existing E04 rooms to a legacy response writer.
+
+Moderated open text and word clouds use the separate boundary below; migration 091 alone
+does not enable them in Presentation authoring, insertion, responses or reports.
+
+## Presentation moderated text compatibility
+
+The second E04 family adds **Presentation document v10**, **response storage v3** and
+**Presentation Report V5**. Apply `092_presentation_text_opinions.sql` after the complete earlier
+sequence. Coordinate API, job/report worker, artifact/history/account-export, retention and web
+readers/writers before reopening text authoring or live insertion. Existing v1–v9 content, old
+hashes and default creation versions stay unchanged. Any existing v10 document keeps its floor
+through edits, copies and history; disabling new writes does not make it safe for older readers.
+
+The migration adds private text bodies, moderation metadata, a session moderation sequence and
+forced-RLS moderation receipts. Raw response records retain `{}` rather than a body; generic
+account exports strip the private field. Removed bodies are erased and cannot be restored by an
+old approval retry. Ordinary and moderation command identifiers share a session namespace.
+Host-only moderation changes event sequence, per-response version and receipt atomically, while
+preserving host revision and the response window. Finishing closes new moderation.
+
+Before accepting writes, rehearse author/save/publish, Round copying and live insertion, six
+independent participants, saved-status reload, a lost response acknowledgement, a lost moderation
+acknowledgement, exact retries, wrong-role/cross-session credentials, reveal and minimum-five
+approval suppression, removal/erasure, stage/Companion and stale result reads. Verify the 250
+participant cap, 10 text blocks, 2,500 entries and 5,000 moderation receipts under session locks.
+Run restricted PostgreSQL conformance and direct SQL guards, then verify deletion/retention.
+Record actual runs in the [moderated-text evidence record](../evidence/presentation-e04-moderated-text.md).
+
+Report V5 requires `includeTextResults=true`; mixed opinion summaries additionally require
+`includeOpinionResults=true`. Quick Check attribution remains an independent opt-in. Only actual
+revealed blocks with five approved respondents carry anonymous text evidence. Raw pending and
+removed bodies never enter reports or CSV. Aggregate summaries suppress participant text.
+
+After accepting these meanings, rollback requires a compatible full reader/writer set or a
+reviewed forward repair. Keep migration 092 and its private-column/receipt/erasure constraints.
+Do not downgrade stored reports, rewrite immutable content or regenerate accepted retry intents
+for an older binary. This source change does not change deployed flags or upgrade a running app.
+
+## Presentation visual import compatibility
+
+E05 adds `093_presentation_visual_imports.sql`, a private workspace/presentation-scoped conversion
+queue, usage limits and temporary media-reference ownership. Apply the complete migration
+sequence before deploying API/jobs/retention readers. Existing native slide fields express the
+visual and reviewed reading pair, so no new Presentation document version or default is required.
+The existing draft mutation receipt is reused, with a ready-job fence that serializes insertion
+against cancellation and expiry. Retain the new table/readers for pending receipts and cleanup;
+do not roll back by deleting referenced media or rewriting published content.
+
+The server runtime image uses Node 26 for the converter's `--permission` network denial. Node
+runtimes without network permission support fail closed for visual import; the rest of the app's
+engine range is unchanged. Keep malware scanning, object storage, media uploads and the authoring
+job/retention schedules operational. Both in-process and dedicated jobs run visual conversion
+without an AI assistant or AI credit reservation. Existing media-upload operational controls stop
+new conversion work while allowing authorized reads/cancellation and exact creation receipts.
+Visual conversion has its own scheduled slot, sharing the existing authoring pause control,
+so queued AI proposals do not block PDF/image conversion.
+
+The converter is a separate child with network, child process, worker and filesystem-write
+permissions denied, evaluation disabled, a 192 MiB V8 heap and a monitored 384 MiB RSS limit.
+Native canvas remains trusted code: Node permissions and RSS sampling are not an OS/native-code
+sandbox or a hard RSS cap. Deploy the worker in a container with an operator-set memory limit;
+reserve headroom for the parent, bounded IPC/input/output buffers and native allocations. The
+current container policy remains the hard process-family memory boundary.
+
+Budgets include 40 pages, 1,600-pixel longest edge, two million output pixels per page, sixty
+million per job and forty MiB encoded output. Standalone images are checked before decoding
+(sixteen million source pixels/16,000-pixel edge). PDF stream preflight conservatively rejects
+oversized embedded images and unsupported filter chains; single Flate expansion is capped at
+16 MiB and aggregate expansion at 64 MiB. Canvas allocations are bounded separately. Each child
+has a 45-second timeout and the conversion loop has a 120-second budget; claimed jobs have a
+ten-minute lease and at most three processing attempts. Some otherwise readable PDFs will need a
+simpler/fresh export. These limits do not promise pixel-identical rendering or preservation of
+fonts, interactive objects, animation or media.
+
+Original source files are not exported or retained as a permanent asset. They are cleared on
+success/terminal failure/cancellation; pending sources and previews expire after 24 hours and the
+retention sweep removes expired jobs/references. All generated page assets are registered before
+object writes and pass through existing quarantine/scan/promotion. Released assets keep normal
+deletion/retention handling, including history/publication protection and tombstones. Exercise
+lost acknowledgements, expired/reclaimed leases, cancel/insert races, partial storage failures,
+tenant/role isolation, account/presentation deletion and retained-publication media before rollout.
+
 ## Content-only Presentation compatibility
 
 Content-only publication expands validation for existing Presentation content versions 2 and 3;
@@ -160,6 +466,338 @@ text-fit feedback and complete images in the narrow reading column. See the
 [verification record](../evidence/presentation-design-foundation.md) for executed checks and
 remaining manual/device/production qualification. This slice adds no commercial entitlement.
 
+## Presentation basic interactions compatibility
+
+Local reveal panels and safe external links opt into **Presentation document v11 and scene v5**.
+Apply `094_presentation_basic_interactions.sql` before enabling these writes, and deploy matching
+API, jobs, artifact/history/session readers and web/live clients. Refresh existing browser assets
+before reopening authoring, publication, history restore and session creation. An older strict
+reader cannot safely discard the new nodes. Existing mutation envelopes, defaults, stored JSON
+and immutable hashes remain unchanged.
+
+Migration 094 admits the new document version alongside existing opinion/text formats and adds
+raw interaction validation for drafts, history, publications and session content. Response storage
+versions, moderation, scoring and host commands retain their existing meanings. Keep the existing
+native-media migration and collectors: new controls contain text and external links, not media IDs.
+The serving image set still requires E05's Node 26 runtime where visual import is enabled.
+
+No new flag, AI provider, model call, service or subscription entitlement is introduced. A reveal
+is public audience text with state held on one screen; it is neither a host-broadcast command nor
+an assessment answer. Collapsing the UI does not make delivered text confidential. Continue using
+private speaker notes and the normal activity answer-reveal policy for their respective purposes.
+
+Verify save/retry/reload/history/duplicate/reorder and design changes with scene5 mixed with
+earlier scenes and all supported activity types. Check unsafe URLs and unknown actions fail,
+incomplete labels/body/URL block publication, and hidden/private fields stay absent from audience
+projections. Test keyboard/touch controls, readable outline, focus visibility, reduced motion and
+independent stage/participant/Companion reveals without shared revisions or response mutations.
+
+Once v11 data exists, rollback requires compatible readers/writers or a forward repair. Retain
+migration 094 and its checksum; never strip actions, downgrade documents, rewrite immutable hashes
+or change accepted mutation receipts to make an old binary read the new format. Hotspots, dialogs,
+internal navigation and answer-based branches require the advanced interaction upgrade below.
+
+## Presentation sections and navigation compatibility
+
+Sections and live navigation opt into **Presentation document v12**; scene versions stay at v1–v5
+and ordinary creation defaults remain unchanged. Apply `095_presentation_navigation.sql` before
+accepting v12 drafts, publication or session creation. Deploy matching contracts, API/jobs,
+artifact/history/session/report readers and web host/Companion assets together. Refresh old browser
+assets before reopening authoring and restore operations. Do not rewrite retained JSON or hashes.
+
+Migration095 adds optional durable navigation state and timeline metadata, plus strict document,
+state, transition and receipt guards. Old sessions retain SQL NULL navigation state. New sessions
+track actually visited stable block IDs, saved phases, original question windows and frozen Pack
+interventions. Live insertion may add blocks while preserving existing block JSON/order and
+section membership. Receipt fingerprints include the canonical UUID target; accepted command and
+response receipts remain recoverable after the cursor advances. Existing response storage versions
+and legacy receipt fingerprints retain their meanings.
+
+The private host/Companion map supplies server-authorized targets. The first detour stores its
+current block as the return anchor, or the first published block when leaving the lobby; further
+jumps retain that anchor. Returning restores its saved phase, and an unvisited anchor opens
+normally. Open activities must close/reveal first. Pending diagnostic/recheck pairs prohibit
+navigation, direct recheck jumps and entry into an unstarted pair's middle. Returning to a saved,
+closed recheck is safe. Ordinary Next follows numbered order and restores closed activities
+without new windows, roster freezes, responses or points. Audience projections contain no map,
+section membership or progress state.
+
+Finished v12 sessions produce **ReportV6**, requiring `includeNavigation=true`. Existing text,
+opinion and Quick Check opt-ins still control their own report fields. New reports identify each
+block as presented/skipped and retain jump/return/revisit events. A skipped question has no
+responses or assessment result. Old ReportV1–V5 event enums are unchanged.
+
+Verify editor Undo/Redo, pending-save recovery, duplication/removal, hidden section pruning,
+publication/history, host/Companion reconnect and exact uncertain-command retry. Check concurrent
+cohost commands, closed-window/score preservation, intervention/recheck guards, audience privacy
+and skipped report/CSV semantics. See the [E07 evidence record](../evidence/presentation-e07-navigation.md).
+
+Once v12 data exists, retain migration095 and compatible readers/writers or use a forward repair.
+Never strip sections/progress, downgrade frozen content, change hashes or discard receipts to make
+an older binary accept it. No flag, paid service, model call or entitlement is added by this change.
+
+## Presentation advanced interactions and private sharing compatibility
+
+Deploy **document13/scene6/report7** readers and migration096 before enabling advanced interaction
+writes. Migration095/E07 remains a prerequisite and must retain its checksum. Migrations096 and097
+are additive source increments; do not edit or remove earlier migrations. Ordinary document
+creation defaults and old frozen hashes/receipts remain unchanged.
+
+Migration096 extends raw document gates to 13, validates hotspot/image and slide/branch targets,
+and adds separate nullable `interaction_state` plus typed timeline metadata. Old session state
+stays unchanged. Broadcast state and accepted branch aggregates commit atomically under the room
+lock with the command receipt, revision and timeline. Shared reveal commands are absolute; new-ID
+no-ops are rejected, while accepted exact retries recover their existing receipt. Navigation,
+deadlines, attempts, reveals and points preserve their established monotonic rules.
+
+Audience serializers must redact closed broadcast bodies and internal target graphs before JSON,
+not merely hide markup. Private staff projections retain authored controls and eligibility; only
+host/Companion credentials can change shared state. ReportV7 additionally requires
+`includeInteractions=true`, alongside existing navigation/result opt-ins. Keep strict old report
+readers rather than forwarding new events as ReportV6.
+
+Migration097 adds hash-only, version-bound private review capabilities with forced RLS, immutable
+intent metadata, tenant/version/actor foreign keys and controlled retention. Deploy its repository,
+account/source lifecycle hooks, routes and recipient web page together. The token travels through
+a scrubbed URL fragment and Bearer headers. Creation must retain its original token, request ID,
+version and absolute expiry before sending; never mint a new secret/expiry for a retry.
+
+Recipient pages use an explicit safe projection. Recheck current access/authority/feature policy
+before page transitions and media reads; recheck after bounded storage reads before sending bytes.
+Use the private media proxy rather than revocation-insensitive signed URLs. Preserve four-server/
+two-client image admission and 10 MiB bounds. Expired metadata is retained for seven days, then the
+existing system-access lifecycle transaction purges it. Export metadata without credential hashes.
+
+Verify save/recovery/Undo, image-anchor transformations, copying, target deletion/hiding, old
+scenes/activities, private body withholding across HTTP/socket/ACK paths, exact uncertain-command
+recovery, cohost takeover, closed-question branches, media role isolation and ReportV7/CSV. For
+sharing, verify lost-create ACK/reload, exact immutable version pinning, anonymous cookie-free
+reads, revocation on open-page navigation, expiry/authority/feature changes, media allowlists and
+deletion/account cleanup. See the [E06](../evidence/presentation-e06-completion.md) and
+[E08](../evidence/presentation-e08-private-sharing.md) evidence records.
+
+Rollback after these formats exist requires compatible readers/writers or a forward repair.
+Do not strip nodes, branch rules, state, capability records or receipts to fit an older binary.
+This change adds no commercial entitlement, required AI provider or new hosted service. Private
+review does not provide self-paced attempts.
+
+## Presentation outline assistance compatibility
+
+Apply migration `100_presentation_assistance.sql` before deploying E12 assistance admission,
+worker and insertion readers/writers. It adds separate private jobs and shared authoring admission
+receipts; existing `AuthoringDraft` v1 output/hash and queue contracts retain their meanings.
+For a mixed-version upgrade, set `AUTHORING_AI_MODE=disabled` on all HTTP instances first.
+Worker pause controls alone do not stop HTTP admission. Upgrade HTTP and dedicated jobs runtimes
+together, then re-enable the approved provider once all admission paths use the shared ledger.
+Both legacy and outline admission count the same monthly receipts under the workspace lock. Retain compact
+usage receipts through the billing month even after job/deck deletion or private-data erasure.
+
+The new worker reuses the approved `AUTHORING_AI_*` configuration and authoring pause controls.
+Bounds are 3–8 text slides, 12,000 input characters, 4,096 output tokens, 128KiB response, a
+45-second provider deadline, two active workspace jobs and three claims per job. The configured
+provider/model identity must fit the existing provenance limits. No new service, dependency or
+subscription allowance is introduced. Only explicit outlines enter the model request.
+
+Verify quota races across old/new admission, exact request/apply retries, source/actor loss,
+expiry/lease fences, stale draft preservation and native insertion. Raw outlines clear on terminal
+processing; private proposals expire after 24 hours. Keep migration100 and compact receipts during
+rollback, and pause new assistance and legacy AI admission before returning to older runtimes. Never rewrite existing
+published content or source-output hashes to fit an older reader. See the
+[E12 evidence record](../evidence/presentation-e12-outline-assistance.md).
+
+### Outline-first Presentation creation
+
+Apply `101_presentation_creation_receipts.sql` before upgrading the HTTP creation endpoints,
+then deploy the matching web launcher. The new `POST /v1/presentations/outline-drafts` requires
+an account/workspace-bound stable creation identity and native starter mode. Older HTTP servers
+return an unavailable route rather than silently treating a retry as an ordinary new deck.
+Do not route this request through the unkeyed creation path as a fallback.
+
+Exact retries return the existing current draft, including later edits; changed intents conflict.
+Compact forced-RLS receipts retain consumed identities after deck or account erasure so a retry
+cannot recreate deleted content. Receipts contain no outline, title, generated text or actor ID;
+whole-workspace erasure removes them. Retain migration101 and receipts during code rollback;
+use a rollback release that includes the applied migration file, since migration verification
+rejects bundles missing an applied version. Do not drop the receipt table to fit an older bundle.
+Creating the saved draft consumes no AI allowance; explicit proposal admission retains all E12
+limits, rollout requirements and shared authoring usage above. No document or scene version changes.
+
+### Selected-text assistance and document15
+
+Set `AUTHORING_AI_MODE=disabled` across HTTP instances before a mixed-version upgrade. Apply
+`102_presentation_text_assistance.sql`, upgrade HTTP and dedicated jobs runtimes plus the web
+editor, then re-enable the approved provider. Fence document15 writes at ingress until every
+reader is upgraded, and reload active editor assets. Disabling AI admission does not block
+applying an already-ready proposal; pausing workers alone does not stop admission.
+Both Presentation queues must count the combined two-active-job limit and shared monthly ledger.
+Existing legacy authoring and outline contracts/hashes remain unchanged.
+
+Document15 retains the latest accepted AI text-edit metadata separately from original citations
+and source disclosure. Scene6 and response/report formats retain their meanings. All authoring,
+publication, live-content, history and recovery readers must understand document15; do not
+strip metadata or rewrite immutable publications for rollback. Use a document15-capable rollback
+release containing the applied migration102 file and retain compact admission receipts.
+
+The separate text queue uses the current `AUTHORING_AI_*` configuration. Bounds are one plain
+native object, title160/body4000 UTF-16 characters, 2,048 output tokens, 64KiB response bytes,
+a 45-second provider deadline, three claims and 24-hour private review retention. Only selected
+plain text, role and operation enter its prompt. Original input columns clear on completion;
+the private proposal retains original/proposed wording for review until expiry or source erasure.
+The persisted latest-edit record contains digests and provider identity, not the original text.
+Participant, review and static-export projections omit this creator metadata.
+
+Verify combined capacity/quota races, unchanged-source/revision fencing, accepted retry recovery
+after expiry, erasure and all existing document15 response/scoring semantics before rollout.
+No new paid provider, service or commercial allowance is introduced.
+
+### Selected-text translation and document16
+
+Coordinate the HTTP, jobs, web, history/publication, private-review, static-export and live reader
+upgrade. Disable AI admission and drain/stop assistance workers before applying
+`103_presentation_text_translation.sql` after102. Deploy matching operation/language-capable
+readers and writers, refresh active editors, then re-enable admission. Translation jobs need the
+new readers even before Apply creates scene7/document16 content; disabled admission alone does
+not prevent an old worker from claiming an existing translation job.
+
+Migration103 retains all prior migration bytes and old rewrite/shorten canonical hashes. New
+translation intents bind exact source/target languages; fresh Apply checks the original node's
+wording, role, annotation and revision. Scene7 stores per-text `lang`; document16 permits the
+new scene and private translation provenance. Keep all corresponding SQL guards and optimized
+response readers together. Rehearse original-language-only source changes, unchanged proper
+nouns with changed language, exact lost creation/Apply acknowledgements, Undo/Redo, privacy
+projections, erasure and mixed document16 live questions alongside older document15 fixtures.
+
+After translated jobs or content exist, rollback images must retain operation/language and
+scene7/document16 support and migration103. An older strict job parser cannot list those rows;
+an older document reader cannot read their history or immutable publications. Use a compatible
+image set or forward repair. Do not remove language/provenance, change receipt identities or
+rewrite immutable versions to fit an older binary. See the
+[translation record](../evidence/presentation-e12-translation.md) for the bounded language scope
+and software qualification.
+
+### Reviewed AI discussion suggestions
+
+Apply `104_presentation_question_suggestions.sql` after103 with AI admission disabled and
+assistance workers drained/stopped. Deploy matching HTTP/jobs, queue readers, shared admission
+and cleanup/erasure handlers before enabling new discussion-suggestion generation. Refresh web
+clients so exact source bindings and insertion recovery use the matching contracts. Keep the
+approved `AUTHORING_AI_*` configuration and existing commercial allowance unchanged.
+
+The new private queue shares monthly admissions and the combined two-active-job cap with
+outline and selected-text assistance. All three repositories, worker image sets and SQL guards
+must use matching accounting. Validate source language/list/order changes, concurrent final-slot
+admission, canonical JSONB proposals, raw SQL guards, permission loss, private retention/erasure
+and exact creation/insertion retries, including recovery after job expiry.
+
+No Presentation document or scene version changes. Inserted questions use the existing
+open-text opinion contract and private citations/disclosure. After jobs exist, rollback images
+must retain migration104, its queue readers, accounting and erasure behavior; disable new
+admission and drain or preserve the queue before rollback. Do not drop private jobs or compact
+admission/mutation receipts to make an older binary appear compatible. Free local starters and
+manual editing remain available without the AI provider. See the
+[discussion-suggestion record](../evidence/presentation-question-suggestions.md).
+
+## Self-paced Presentation reading assignments
+
+Apply migration105 after104 before enabling new reading-assignment writes. Deploy matching HTTP,
+jobs/retention, account lifecycle and web readers together. The migration adds independent
+assignment, attempt and operation-receipt state; existing Presentation document/scene formats,
+live sessions, private review links and reports keep their current meanings.
+
+Verify forced tenant RLS, published-version binding, revocation and deadlines, source/account
+deletion and expiry cleanup. Test concurrent starts and page acknowledgements, exact retries after
+lost responses, stale revisions, early completion rejection and completion replay. Preview requests
+must not start attempts. Assignment credentials must not read private attempt progress. Verify
+private images again after storage reads and keep capabilities out of account exports and logs.
+
+Recipients must explicitly retain their personal resume links: active credentials and uncertain
+mutations stay in memory, and shared assignment links never automatically load another reader.
+Reading completion is a self-report and must not be presented as an assessment result or verified
+identity. Activity response collection remains outside this slice.
+
+After assignment records exist, rollback must retain migration105 and compatible retention,
+erasure and receipt readers. Fence new assignment writes before rollback; preserve accepted
+operations and frozen publications rather than dropping the new tables. Existing unrelated
+Presentation delivery can remain on its established gates. See the
+[reading-assignment record](../evidence/presentation-e08-reading-assignments.md).
+
+Reading insights adds a current-owner/editor-only aggregate endpoint and an explicit report/CSV
+panel in Assign reading. It requires migration105 but adds no migration or stored report format.
+Deploy matching HTTP and web readers; existing lifecycle/retention readers remain required.
+Check frozen-version page coverage, exact retry counts, direct/complementary small-group
+suppression and current-authority/cross-tenant denial. Revoked/expired assignments remain
+reportable until expiry plus seven days; delayed cleanup must not extend report access. Verify
+identity/source changes fence late results and clear export state. See the
+[reading-insights record](../evidence/presentation-reading-insights.md).
+
+## Self-paced Presentation choice practice
+
+Apply additive migration106 after105 before enabling practice writes. Deploy matching HTTP, web,
+retention and account-lifecycle readers. Separate practice tables/routes preserve existing reading
+and live delivery; no document or scene version changes.
+
+Check supported-publication eligibility, forced assignment-scoped RLS, preview without attempts,
+no keys/feedback before an accepted personal answer, immutable answers, CAS and exact historical
+receipt replay. Test private resume/clear and late requests, current permission/source/deletion
+fences after lock waits, media reauthorization, explicit completion and small-group reports.
+Verify erasure/export and expiry-plus-seven-day cleanup/access boundaries.
+
+After records exist, rollback retains106 and compatible source/lifecycle/receipt readers. Disable
+new practice admission first; preserve accepted progress and frozen publications. This slice adds
+no service/provider and does not enable timers, points, verified assessment or mastery claims.
+See the [practice record](../evidence/presentation-self-paced-practice.md).
+
+## Native Presentation composition compatibility
+
+Composition introduces **Presentation draft/content v8 and scene v4** for optional flat groups,
+rotation and table/chart nodes. Scene-v4 fields are rejected by older document contracts rather
+than stripped. Document v8 accepts older scene versions, and retained document v1–v7 JSON,
+canonical hashes, retry identities and frozen Pack baselines remain unchanged. Draft mutation
+envelopes stay v2. API creation without `initialSlide`, or with `classic`, still starts at v2;
+the blank web launcher's `initialSlide: "native"` still starts at document7/scene3. New native
+scenario templates explicitly create document8/scene4, and composition actions promote only the
+edited content when required. There is no automatic rewrite of existing decks.
+
+Before accepting any v8 writes:
+
+1. Fence Presentation creation/mutation, publication, history restore and session creation at
+   ingress; drain accepted operations and preserve pending receipt identities.
+2. Deploy matching **v8-capable server, jobs, artifact/history/export readers, web clients and
+   live host/participant/Companion projections**. Report/retention/cleanup paths must also read
+   the new scenes. Reload active browser assets before reopening writers; a text fallback does
+   not make a strict older scene reader compatible.
+3. Verify the complete serving/worker image set and effective workspace feature policy. Keep the
+   existing private-image scan, ownership, tenant and lifecycle rules. No additional flag,
+   subscription entitlement or service is introduced by composition.
+4. Reopen writers only after the reader floor is satisfied and the release-specific acceptance
+   checks below have been recorded.
+
+No new SQL migration is required. Keep `089_presentation_native_scene_media.sql` and its existing
+checksum: image references remain image nodes at the same field paths. Group IDs, rotation,
+inline data and rich-text external links introduce no private-media collector path. Table/chart
+limits remain within the existing 50-node, 128 KiB scene and 3 MiB native-document budgets.
+
+Once v8 drafts, history, publications or sessions exist, rollback requires **v8-compatible readers
+and writers or a forward repair**. Turning off controls or removing templates cannot make an old
+binary safe. Never strip new nodes/groups/rotation, rewrite immutable JSON or hashes, replace
+frozen baselines, or regenerate accepted retry envelopes to force a downgrade. Retain compatible
+media/cleanup workers and applied migrations throughout rollback.
+
+Verify save/retry/conflict/reload/history/export/cleanup with groups, physical-16:9 rotation,
+raw/painted bounds and mixed legacy scenes. Exercise whole-group movement, proportional resize,
+alignment/layers, snap bypass/cancel, reading-order preservation and duplicate-ID remapping.
+Check staged CSV/TSV preview, Apply/Discard, one-step Undo/Redo, table/series bounds, malformed
+input and complete visible data alternatives. Verify immutable content and private-field exclusion
+through host/participant/Companion and live Pack insertion. V8 sessions use strict publication
+validation rather than the old partial-draft read path.
+
+Exercise all 12 native scenario factories, the nine retained v2 templates, read-only shared
+preview and template creation/retry with literal envelope2. External video remains a user-followed
+HTTPS link with a captions/transcript fallback; preserve `frame-src 'none'` and `media-src 'self'`
+and verify that preview performs no provider request. Record executed outcomes separately from
+human assistive-technology, physical-device, native-browser zoom, capacity/cost and hosted
+deployment qualifications; this runbook does not mark those qualifications passed.
+
 ## Live response format compatibility
 
 Migration 067 keeps extended opinion-poll artifacts and responses outside legacy version meanings.
@@ -189,7 +827,7 @@ Text rooms are capped at ten text checkpoints, 250 participants and 250 accepted
 ## Recent content, report, and deletion upgrades
 
 The current feature code includes migrations through
-`089_presentation_native_scene_media.sql`. Apply the complete ordered migration set with the restricted
+`090_presentation_stage_credentials.sql`. Apply the complete ordered migration set with the restricted
 one-shot migration job before starting the new server; do not grant the runtime role ownership or
 direct mutation privileges on published Presentation versions.
 

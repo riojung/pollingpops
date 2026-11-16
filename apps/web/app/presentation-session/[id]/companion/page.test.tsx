@@ -1,16 +1,20 @@
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationCompanionSnapshotSchema,
   type PresentationCompanionSnapshot,
+  type SupportedLocale,
 } from "@openround/contracts";
 import { ApiClientError } from "../../../../lib/api";
 import type * as ApiModule from "../../../../lib/api";
 import { translate, type MessageKey } from "../../../../lib/i18n/catalog";
-import { liveDeliveryEnglishMessages } from "../../../../lib/i18n/domains/live-delivery";
 import type { PresentationRealtimeControllerOptions } from "../../../../lib/presentation-realtime";
 import { CompanionOverlay } from "../../../../components/presentation-live/companion-overlay";
+import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
 import { CompanionQuickCheckForm } from "../../../../components/presentation-live/companion-quick-check";
 import { CompanionPublishedQuestionPicker } from "../../../../components/presentation-live/companion-published-questions";
 import {
@@ -36,6 +40,7 @@ const fixtures = vi.hoisted(() => ({
   execute: vi.fn(),
   apiFetch: vi.fn(),
   reconcile: vi.fn(),
+  locale: "en-CA" as SupportedLocale,
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -80,13 +85,25 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "11111111-1111-4111-8111-111111111111" }),
 }));
-vi.mock("../../../../components/locale-provider", () => ({
-  useLocale: () => ({
-    locale: "en-CA",
-    t: (key: MessageKey, values?: Record<string, string | number>) =>
-      translate(liveDeliveryEnglishMessages, key, values),
-  }),
-}));
+vi.mock("../../../../components/locale-provider", async () => {
+  const { loadMessages } = await import("../../../../lib/i18n/catalog");
+  const { supportedLocales } = await import("@openround/contracts");
+  const messages = Object.fromEntries(
+    await Promise.all(
+      supportedLocales.map(async (locale) => [
+        locale,
+        await loadMessages(locale, ["live-delivery"]),
+      ]),
+    ),
+  );
+  return {
+    useLocale: () => ({
+      locale: fixtures.locale,
+      t: (key: MessageKey, values?: Record<string, string | number>) =>
+        translate(messages[fixtures.locale]!, key, values),
+    }),
+  };
+});
 vi.mock("../../../../lib/presentation-companion-pass", () => ({
   capturePresentationCompanionPass: () => "companion-pass",
   rejectPresentationCompanionPass: vi.fn(),
@@ -151,6 +168,7 @@ function initialSnapshot() {
 }
 
 beforeEach(() => {
+  fixtures.locale = "en-CA";
   fixtures.hooks = null;
   fixtures.snapshot = initialSnapshot();
   fixtures.controllerOptions = null;
@@ -203,6 +221,9 @@ function propsFor<
   T extends
     | typeof CompanionQuickCheckForm
     | typeof CompanionOverlay
+    | typeof PresentationNavigationDialog
+    | typeof ContentSlideView
+    | typeof PresentationBranches
     | typeof CompanionPublishedQuestionPicker,
 >(tree: ReactNode, type: T): ComponentProps<T> {
   const element = elements(tree).find((candidate) => candidate.type === type);
@@ -211,9 +232,9 @@ function propsFor<
 }
 
 function click(tree: ReactNode, name: string) {
-  button(tree, name).onClick?.(
-    {} as Parameters<NonNullable<ComponentProps<"button">["onClick"]>>[0],
-  );
+  button(tree, name).onClick?.({ currentTarget: { focus: vi.fn() } } as unknown as Parameters<
+    NonNullable<ComponentProps<"button">["onClick"]>
+  >[0]);
 }
 
 // The harness runs the page's capture/controller setup once and exercises the real
@@ -257,6 +278,262 @@ const authoredDraft = {
   timeLimitSeconds: "120",
 };
 const quickCheck = { ...authoredDraft, timeLimitSeconds: 120 };
+
+describe("Companion selected-language shell and recovery", () => {
+  it("localizes connection and pass rejection while removing the rejected projection", () => {
+    fixtures.locale = "ko-KR";
+    fixtures.snapshot = null;
+    const harness = pageHarness();
+    const connecting = renderToStaticMarkup(harness.render());
+    expect(connecting).toContain("프레젠테이션에 연결 중…");
+    fixtures.controllerOptions?.onCredentialRejected?.("companion-pass");
+    const rejected = renderToStaticMarkup(harness.render());
+    expect(rejected).toContain("이 Companion 패스가 만료되었거나 취소되었습니다.");
+    expect(rejected).toContain("연결 끊김");
+    expect(rejected).not.toContain("A facilitated discussion");
+    expect(rejected).not.toContain("companion-pass");
+  });
+
+  it("renders Korean shell and join overlay while leaving the room title and URL untouched", () => {
+    fixtures.locale = "ko-KR";
+    const harness = pageHarness();
+    const initial = renderToStaticMarkup(harness.render());
+    expect(initial).toContain("프레젠테이션 Companion");
+    expect(initial).toContain("참여 정보 표시");
+    expect(initial).not.toContain("서버 확인 대기 중");
+    expect(initial).toContain("A facilitated discussion");
+    expect(initial).not.toContain("companion-pass");
+    click(harness.render(), "참여 정보 표시");
+    const overlay = propsFor(harness.render(), CompanionOverlay);
+    expect(overlay.title).toBe("이 프레젠테이션에 참여");
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain("프레젠테이션으로 돌아가기");
+    expect(markup).toContain("https://discussion.example.test/join?code=1234567");
+    expect(markup).not.toContain("Return to deck");
+  });
+
+  it("changes a pending Quick Check to Korean without changing its authored draft or retained command", async () => {
+    fixtures.execute
+      .mockRejectedValueOnce(
+        new Error("The server did not confirm that action. Retry its acknowledgement."),
+      )
+      .mockResolvedValueOnce(initialSnapshot());
+    const harness = pageHarness();
+    harness.open();
+    propsFor(harness.render(), CompanionQuickCheckForm).onChange(authoredDraft);
+    propsFor(harness.render(), CompanionQuickCheckForm).onInsert(quickCheck);
+    await settle();
+    const original = fixtures.execute.mock.calls[0]![0];
+    fixtures.locale = "ko-KR";
+    const localized = renderToStaticMarkup(harness.render());
+    expect(localized).toContain("Quick Check 확인 응답 재시도");
+    expect(localized).toContain("서버가 작업을 확인하지 않았습니다. 확인 응답을 재시도하세요.");
+    expect(localized).toContain(authoredDraft.prompt);
+    expect(localized).toContain('lang=""');
+    expect(propsFor(harness.render(), CompanionQuickCheckForm).draft).toEqual(authoredDraft);
+    expect(fixtures.execute).toHaveBeenCalledTimes(1);
+    click(harness.render(), "Quick Check 확인 응답 재시도");
+    await settle();
+    expect(fixtures.execute).toHaveBeenCalledTimes(2);
+    expect(fixtures.execute.mock.calls[1]![0]).toBe(original);
+    expect(original).toMatchObject({
+      action: "insert_quick_check",
+      expectedRevision: 2,
+      quickCheck,
+    });
+  });
+});
+
+describe("Companion navigation commands", () => {
+  const targetBlockId = "66666666-6666-4666-8666-666666666666";
+  function navigationSnapshot(canJump = true): PresentationCompanionSnapshot {
+    return {
+      ...initialSnapshot(),
+      navigation: {
+        entries: [
+          {
+            blockId: targetBlockId,
+            title: "Saved activity",
+            kind: "question",
+            sectionId: null,
+            sectionTitle: null,
+            status: "visited",
+            phase: "question_reveal",
+            canJump,
+            blockedReason: canJump ? null : "Close the current activity first.",
+          },
+        ],
+        returnTarget: { blockId: targetBlockId, title: "Original path" },
+        canReturn: canJump,
+        blockedReason: canJump ? null : "Close the current activity first.",
+      },
+    };
+  }
+
+  it("sends an explicit block ID and preserves that request through a lost acknowledgement and phase change", async () => {
+    fixtures.execute
+      .mockRejectedValueOnce(new Error("Lost acknowledgement"))
+      .mockResolvedValueOnce(initialSnapshot());
+    const harness = pageHarness();
+    harness.broadcast(navigationSnapshot());
+    click(harness.render(), "Open navigation");
+    propsFor(harness.render(), PresentationNavigationDialog).onJump(targetBlockId);
+    await settle();
+    const original = fixtures.execute.mock.calls[0]?.[0];
+    expect(original).toMatchObject({
+      action: "jump_to_block",
+      targetBlockId,
+      expectedRevision: 2,
+      companionToken: "companion-pass",
+    });
+    expect(original).not.toHaveProperty("targetIndex");
+    harness.broadcast({ ...navigationSnapshot(false), revision: 9, seq: 9 });
+    expect(propsFor(harness.render(), PresentationNavigationDialog).disabled).toBe(true);
+    propsFor(harness.render(), PresentationNavigationDialog).onJump(
+      "77777777-7777-4777-8777-777777777777",
+    );
+    propsFor(harness.render(), PresentationNavigationDialog).onClose();
+    click(harness.render(), "Retry jump acknowledgement");
+    await settle();
+    expect(fixtures.execute).toHaveBeenCalledTimes(2);
+    expect(fixtures.execute.mock.calls[1]?.[0]).toBe(original);
+  });
+
+  it("sends return_to_path without an invented target and guards disabled server capabilities", async () => {
+    const harness = pageHarness();
+    harness.broadcast(navigationSnapshot(false));
+    click(harness.render(), "Open navigation");
+    propsFor(harness.render(), PresentationNavigationDialog).onReturn();
+    propsFor(harness.render(), PresentationNavigationDialog).onJump(targetBlockId);
+    await settle();
+    expect(fixtures.execute).not.toHaveBeenCalled();
+    harness.broadcast(navigationSnapshot());
+    propsFor(harness.render(), PresentationNavigationDialog).onReturn();
+    await settle();
+    expect(fixtures.execute.mock.calls[0]?.[0]).toMatchObject({
+      action: "return_to_path",
+      expectedRevision: 2,
+    });
+    expect(fixtures.execute.mock.calls[0]?.[0]).not.toHaveProperty("targetBlockId");
+  });
+});
+
+describe("Companion advanced interaction commands", () => {
+  it("keeps the absolute broadcast reveal request after a newer authoritative state", async () => {
+    fixtures.execute
+      .mockRejectedValueOnce(new Error("Lost acknowledgement"))
+      .mockResolvedValueOnce(initialSnapshot());
+    const harness = pageHarness();
+    const blockId = "66666666-6666-4666-8666-666666666666";
+    harness.broadcast({
+      ...initialSnapshot(),
+      phase: "content",
+      currentBlockIndex: 0,
+      currentBlock: {
+        id: blockId,
+        kind: "content",
+        layout: "title_body",
+        textElements: [],
+        mediaId: null,
+        mediaAlt: null,
+        scene: {
+          schemaVersion: 6,
+          aspectRatio: "16:9",
+          nodes: [
+            {
+              id: "title",
+              type: "text",
+              role: "title",
+              text: "Evidence",
+              frame: { x: 8, y: 5, width: 84, height: 20 },
+            },
+            {
+              id: "reveal",
+              type: "reveal",
+              scope: "broadcast",
+              label: "Show evidence",
+              body: "Audience evidence",
+              frame: { x: 8, y: 35, width: 60, height: 30 },
+            },
+          ],
+          readingOrder: ["title", "reveal"],
+        },
+      },
+      interactionState: { reveals: [{ blockId, nodeId: "reveal", revealed: false }] },
+    });
+    propsFor(harness.render(), ContentSlideView).interactionRuntime!.onSetReveal!("reveal", true);
+    await settle();
+    const original = fixtures.execute.mock.calls[0]?.[0];
+    expect(original).toMatchObject({
+      action: "set_reveal",
+      blockId,
+      nodeId: "reveal",
+      revealed: true,
+      expectedRevision: 2,
+    });
+    harness.broadcast({ ...initialSnapshot(), revision: 9, seq: 9 });
+    click(harness.render(), "Retry broadcast reveal acknowledgement");
+    await settle();
+    expect(fixtures.execute.mock.calls[1]?.[0]).toBe(original);
+  });
+  it("dispatches only eligible server-owned branch IDs without sending target or condition data", async () => {
+    const harness = pageHarness();
+    const blockId = "66666666-6666-4666-8666-666666666666";
+    const branchId = "77777777-7777-4777-8777-777777777777";
+    harness.broadcast({
+      ...initialSnapshot(),
+      phase: "question_reveal",
+      currentBlock: {
+        id: blockId,
+        kind: "question",
+        question: {
+          id: "88888888-8888-4888-8888-888888888888",
+          type: "poll",
+          prompt: "Choose",
+          choices: [
+            { id: "99999999-9999-4999-8999-999999999999", label: "A" },
+            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", label: "B" },
+          ],
+          confidence: "off",
+          timeLimitSeconds: 120,
+          basePoints: 0,
+          mediaId: null,
+          mediaAlt: null,
+        },
+      },
+      branches: [
+        {
+          id: branchId,
+          label: "Review",
+          targetBlockId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          targetTitle: "Review slide",
+          available: false,
+          blockedReason: "Close the current activity.",
+        },
+      ],
+    });
+    propsFor(harness.render(), PresentationBranches).onFollow(branchId);
+    await settle();
+    expect(fixtures.execute).not.toHaveBeenCalled();
+    harness.broadcast({
+      ...fixtures.snapshot!,
+      branches: fixtures.snapshot!.branches!.map((branch) => ({
+        ...branch,
+        available: true,
+        blockedReason: null,
+      })),
+    });
+    propsFor(harness.render(), PresentationBranches).onFollow(branchId);
+    await settle();
+    expect(fixtures.execute.mock.calls[0]?.[0]).toMatchObject({
+      action: "follow_branch",
+      blockId,
+      branchId,
+    });
+    expect(fixtures.execute.mock.calls[0]?.[0]).not.toHaveProperty("targetBlockId");
+    expect(fixtures.execute.mock.calls[0]?.[0]).not.toHaveProperty("condition");
+  });
+});
 
 describe("Companion published question page state", () => {
   it("uses scoped metadata and inserts independently of Recovery Pack availability", async () => {

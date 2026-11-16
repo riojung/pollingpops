@@ -19,6 +19,10 @@ import {
   type NativeImageAttachment,
   createNativeContentBlock,
   createDesignedNativeContentBlock,
+  createNativeLinkNode,
+  createNativeRevealNode,
+  duplicateNativeScene,
+  nativeNodeLabel,
   removeNativeNode,
   reorderNativeNode,
   updateNativeNode,
@@ -77,6 +81,50 @@ function draft(): PresentationDraft {
 }
 
 describe("native Presentation authoring operations", () => {
+  it("preserves reveal and link content through document 11 recovery, duplication and reading-order changes", () => {
+    const input = draft();
+    input.schemaVersion = 11;
+    const block = input.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("fixture");
+    const reveal = {
+      ...createNativeRevealNode(),
+      label: "Show the explanation",
+      body: "Audience explanation\nwith detail",
+    };
+    const link = {
+      ...createNativeLinkNode(),
+      label: "Read more",
+      href: "https://example.com/details",
+    };
+    expect(nativeNodeLabel(createNativeRevealNode())).toBe("Reveal panel");
+    expect(nativeNodeLabel(createNativeLinkNode())).toBe("External link");
+    expect(createNativeLinkNode().id).not.toBe(link.id);
+    block.scene = {
+      ...block.scene,
+      schemaVersion: 5,
+      nodes: [...block.scene.nodes, reveal, link],
+      readingOrder: [...block.scene.readingOrder, reveal.id, link.id],
+    };
+    const restored = normalizePresentationRecoveryDraft(JSON.parse(JSON.stringify(input)));
+    expect(restored).toEqual(input);
+    expect(PresentationDraftSchema.parse(restored).schemaVersion).toBe(11);
+    const copied = duplicateNativeScene(block.scene);
+    expect(copied.schemaVersion).toBe(5);
+    const copiedReveal = copied.nodes.find((node) => node.type === "reveal")!;
+    const copiedLink = copied.nodes.find((node) => node.type === "link")!;
+    expect(copiedReveal).toEqual({ ...reveal, id: copiedReveal.id });
+    expect(copiedLink).toEqual({ ...link, id: copiedLink.id });
+    expect(copiedReveal.id).not.toBe(reveal.id);
+    expect(copiedLink.id).not.toBe(link.id);
+    const reordered = reorderNativeNode(copied, copiedLink.id, -1);
+    expect(reordered.readingOrder.slice(-2)).toEqual([copiedLink.id, copiedReveal.id]);
+    const removed = removeNativeNode(reordered, copiedLink.id);
+    expect(removed.nodes.find((node) => node.id === copiedReveal.id)).toEqual(copiedReveal);
+    expect(removed.nodes.some((node) => node.id === copiedLink.id)).toBe(false);
+    expect(removed.schemaVersion).toBe(5);
+    expect(PresentationSceneDraftSchema.parse(removed)).toEqual(removed);
+  });
+
   it("starts the visible New slide action with independent designed title and body objects", () => {
     const first = createDesignedNativeContentBlock();
     const second = createDesignedNativeContentBlock();

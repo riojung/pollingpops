@@ -252,6 +252,18 @@ describe("closed native Presentation design contract", () => {
 });
 
 describe("Presentation design document v7 compatibility", () => {
+  it("retains the prior document7 canonical hash without groups or rotation defaults", () => {
+    // Generated against the merged scene3 contracts before scene4 support.
+    const parsed = PresentationContentSchema.parse(deck());
+    expect(createHash("sha256").update(JSON.stringify(parsed)).digest("hex")).toBe(
+      "3ede11dfe3e02562db1ae715d083b87476ddcbde43f37e1e4a352a0c6fac49ea",
+    );
+    const block = parsed.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected native slide");
+    expect(block.scene).not.toHaveProperty("groups");
+    for (const node of block.scene.nodes) expect(node).not.toHaveProperty("rotation");
+  });
+
   it.each([2, 3, 4, 5, 6])("rejects scene3 under old document v%s", (schemaVersion) => {
     expect(PresentationDraftSchema.safeParse(deck(schemaVersion)).success).toBe(false);
     expect(PresentationContentSchema.safeParse(deck(schemaVersion)).success).toBe(false);

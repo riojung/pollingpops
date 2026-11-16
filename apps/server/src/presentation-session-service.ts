@@ -8,11 +8,20 @@ import {
   PresentationReportEnvelopeSchema,
   PresentationReportSchema,
   PresentationReportWithSessionContextEnvelopeSchema,
+  PresentationTextModerationAckSchema,
+  PresentationTextModerationPageSchema,
+  PresentationTextResponseResultsSchema,
+  requiresPresentationTextOpinions,
+  TEXT_RESPONSE_MAX_PER_ROUND,
+  type PresentationTextModerationRequest,
+  type PresentationTextModerationQuery,
+  type PresentationTextResultsQuery,
   type PresentationCommand,
   type PresentationCompanionCommand,
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
+  type PresentationStageSnapshot,
   type PresentationResponseAck,
   type PresentationResponseSubmit,
   type PresentationRoleSnapshot,
@@ -27,11 +36,14 @@ import {
   WorkspaceDeletionInProgressError,
   createPlatformRepository,
   PlatformError,
+  PresentationTextReadError,
   type PresentationRepository,
   type PresentationSessionRecord,
   type PresentationSessionRepository,
+  type PresentationSessionCredentialRole,
   type RecoveryPackRepository,
   type Repository,
+  type PresentationTextReadActor,
 } from "@openround/db";
 import { retentionExpiry } from "./entitlements.js";
 import {
@@ -59,6 +71,7 @@ import {
   buildPresentationHostSnapshot,
   buildPresentationListSnapshot,
   buildPresentationParticipantSnapshot,
+  buildPresentationStageSnapshot,
   buildPresentationProjectionData,
   presentationCurrentBlock,
   type PresentationProjectionData,
@@ -67,11 +80,14 @@ import type { StorageService } from "./storage.js";
 import { presentationCanInsertRecoveryPack } from "./presentation-live-recovery-packs.js";
 import { presentationCanInsertQuickCheck } from "./presentation-live-quick-checks.js";
 import { presentationCanInsertPublishedQuestion } from "./presentation-live-published-questions.js";
+import { presentationOpinionSummary } from "./presentation-opinion-results.js";
+import { presentationResponsesForContent } from "./presentation-response-identifiers.js";
 
 import { hashRoomPassword, verifyRoomPassword } from "./room-password.js";
 
 const PRESENTATION_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 const PRESENTATION_COMPANION_PASS_LIFETIME_MS = 60 * 60 * 1_000;
+const PRESENTATION_STAGE_PASS_LIFETIME_MS = 60 * 60 * 1_000;
 
 export {
   presentationCurrentBlock,
@@ -190,6 +206,22 @@ export class PresentationSessionService {
       realtimeHostSnapshot: (session) => this.realtimeHostSnapshot(session),
       realtimeCompanionSnapshot: (session) => this.realtimeCompanionSnapshot(session),
       restHostSnapshot: (session) => this.restHostSnapshot(session),
+      closedOpinionSummary: async (session) => {
+        // Only the rare closed E04 receipt replay requests this aggregate. Keep normal/legacy
+        // acknowledgements on their existing row-level read path, and do not attach a result if
+        // the host moved the room while the aggregate was read.
+        const responses = await this.sessions.listResponses(session.id);
+        const confirmed = await this.sessions.getSessionById(session.id);
+        if (
+          !confirmed ||
+          confirmed.revision !== session.revision ||
+          confirmed.eventSeq !== session.eventSeq ||
+          confirmed.phase !== session.phase ||
+          presentationCurrentBlock(confirmed)?.id !== presentationCurrentBlock(session)?.id
+        )
+          return undefined;
+        return presentationOpinionSummary(presentationCurrentBlock(confirmed), responses);
+      },
       recordProductEvents: (workspaceId, events) => this.recordProductEvents(workspaceId, events),
     });
   }
@@ -653,6 +685,111 @@ export class PresentationSessionService {
     };
   }
 
+  async createStagePass(input: {
+    workspaceId: string;
+    userId: string;
+    sessionId: string;
+    requestId: string;
+  }) {
+    const session = await this.sessions.getSessionForWorkspace(input.workspaceId, input.sessionId);
+    if (!session) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
+    }
+    const now = new Date();
+    if (session.status === "finished" || presentationLiveSessionExpired(session, now)) {
+      throw new PresentationSessionServiceError(
+        409,
+        "PHASE_CLOSED",
+        "This Presentation session is no longer accepting stage passes",
+      );
+    }
+    const stageToken = presentationCredentialToken();
+    const credential = await this.sessions.rotateCredential({
+      id: randomUUID(),
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      role: "stage",
+      tokenHash: presentationParticipantTokenHash(stageToken),
+      createdAt: now,
+      expiresAt: new Date(
+        Math.min(
+          now.getTime() + PRESENTATION_STAGE_PASS_LIFETIME_MS,
+          session.liveExpiresAt.getTime(),
+        ),
+      ),
+      revokedAt: null,
+    });
+    // Rotation is durable; an audit outage must not lose the replacement credential.
+    await this.dependencies.repository
+      .recordAudit({
+        workspaceId: input.workspaceId,
+        actorId: input.userId,
+        action: "presentation.session.stage_pass.create",
+        targetType: "presentation_live_session",
+        targetId: session.id,
+        requestId: input.requestId,
+        metadata: { credentialId: credential.id },
+      })
+      .catch(() => undefined);
+    return {
+      credentialId: credential.id,
+      stageToken,
+      expiresAt: credential.expiresAt.toISOString(),
+    };
+  }
+
+  async revokeStagePass(input: {
+    workspaceId: string;
+    userId: string;
+    sessionId: string;
+    credentialId: string;
+    requestId: string;
+  }) {
+    const session = await this.sessions.getSessionForWorkspace(input.workspaceId, input.sessionId);
+    if (!session) {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Presentation session not found");
+    }
+    const result = await this.sessions.revokeActiveCredential(
+      input.workspaceId,
+      input.sessionId,
+      input.credentialId,
+      new Date(),
+      "stage",
+    );
+    if (result.status === "not_found") {
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Stage pass not found");
+    }
+    if (result.status === "stale") {
+      throw new PresentationSessionServiceError(
+        409,
+        "CONFLICT",
+        "This stage pass is no longer current. No current stage access was revoked; a newer stage may still be open.",
+        { reason: "STALE_STAGE_PASS" },
+      );
+    }
+    await this.dependencies.repository.recordAudit({
+      workspaceId: input.workspaceId,
+      actorId: input.userId,
+      action: "presentation.session.stage_pass.revoke",
+      targetType: "presentation_live_session",
+      targetId: input.sessionId,
+      requestId: input.requestId,
+      metadata: { credentialId: result.credential.id },
+    });
+  }
+
+  async getStageSnapshot(
+    sessionId: string,
+    stageToken: string,
+  ): Promise<PresentationStageSnapshot> {
+    const authorized = await this.authorizeCredential(sessionId, stageToken, "stage");
+    const projection = await this.consistentProjection(authorized);
+    if (!projection) {
+      throw new PresentationSessionServiceError(401, "UNAUTHORIZED", "Stage credential is invalid");
+    }
+    return buildPresentationStageSnapshot(projection.session, projection.data);
+  }
+
   async revokeCompanionPass(input: {
     workspaceId: string;
     userId: string;
@@ -797,7 +934,7 @@ export class PresentationSessionService {
     }
     const participantToken = `${randomUUID()}.${randomBytes(24).toString("base64url")}`;
     const now = new Date();
-    const participantLimit = (
+    const planParticipantLimit = (
       await roomEntitlements(
         this.dependencies.repository,
         this.dependencies.config,
@@ -806,6 +943,9 @@ export class PresentationSessionService {
         session.workspaceId,
       )
     ).maxParticipants;
+    const participantLimit = requiresPresentationTextOpinions(session.content)
+      ? Math.min(planParticipantLimit, TEXT_RESPONSE_MAX_PER_ROUND)
+      : planParticipantLimit;
     const joined = await this.sessions
       .joinParticipantWithinLimit(
         {
@@ -875,17 +1015,33 @@ export class PresentationSessionService {
     if (!session || presentationLiveSessionExpired(session)) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Media not found");
     }
+    return this.getCurrentMedia(session, mediaId, true);
+  }
+
+  async getStageMedia(sessionId: string, mediaId: string, stageToken: string) {
+    const session = await this.authorizeCredential(sessionId, stageToken, "stage");
     return this.getCurrentMedia(session, mediaId);
   }
 
-  private async getCurrentMedia(session: PresentationSessionRecord, mediaId: string) {
-    const block = presentationCurrentBlock(session);
-    const referenced =
+  async getCompanionMedia(sessionId: string, mediaId: string, companionToken: string) {
+    const session = await this.authorizeCredential(sessionId, companionToken, "companion");
+    return this.getCurrentMedia(session, mediaId);
+  }
+
+  private async getCurrentMedia(
+    session: PresentationSessionRecord,
+    mediaId: string,
+    includeNext = false,
+  ) {
+    const blocks = [presentationCurrentBlock(session)];
+    if (includeNext && session.status !== "finished") {
+      blocks.push(session.content.blocks[session.currentBlockIndex + 1] ?? null);
+    }
+    const referenced = blocks.some((block) =>
       block?.kind === "content"
         ? presentationContentBlockMediaIds(block).includes(mediaId)
-        : block?.kind === "question"
-          ? block.question.mediaId === mediaId
-          : false;
+        : block?.kind === "question" && block.question.mediaId === mediaId,
+    );
     if (!referenced) {
       throw new PresentationSessionServiceError(404, "NOT_FOUND", "Media not found");
     }
@@ -1046,11 +1202,229 @@ export class PresentationSessionService {
     return this.liveMutations.submitLegacyResponse(input);
   }
 
+  /** A private queue always requires a live host pass, including when a creator cookie exists. */
+  async getTextModerationPage(
+    sessionId: string,
+    token: string,
+    query: PresentationTextModerationQuery,
+  ) {
+    const { session, credentialId } = await this.authorizeTextHost(sessionId, token);
+    try {
+      return PresentationTextModerationPageSchema.parse(
+        await this.sessions.getTextModerationPage({
+          ...query,
+          workspaceId: session.workspaceId,
+          sessionId,
+          hostCredentialId: credentialId,
+        }),
+      );
+    } catch (error) {
+      this.textReadError(error);
+    }
+  }
+
+  async moderateTextResponse(
+    sessionId: string,
+    token: string,
+    responseId: string,
+    input: PresentationTextModerationRequest,
+  ) {
+    const { session, credentialId } = await this.authorizeTextHost(sessionId, token);
+    const requestHash = createHash("sha256")
+      .update(
+        JSON.stringify({
+          sessionId,
+          responseId: responseId.toLowerCase(),
+          hostCredentialId: credentialId,
+          expectedRevision: input.expectedRevision,
+          expectedModerationVersion: input.expectedModerationVersion,
+          status: input.status,
+        }),
+      )
+      .digest("hex");
+    const result = await this.sessions.moderateTextResponse({
+      ...input,
+      sessionId,
+      responseId,
+      workspaceId: session.workspaceId,
+      hostCredentialId: credentialId,
+      requestHash,
+      occurredAt: new Date(),
+    });
+    if (result.status === "stale")
+      throw new PresentationSessionServiceError(
+        409,
+        "STALE_SESSION",
+        "This response changed. Refresh the moderation queue before continuing.",
+        {
+          expectedRevision: input.expectedRevision,
+          currentRevision: result.session.revision,
+          expectedModerationVersion: input.expectedModerationVersion,
+          currentModerationVersion: result.actualModerationVersion,
+        },
+      );
+    if (result.status === "idempotency_conflict")
+      throw new PresentationSessionServiceError(
+        409,
+        "IDEMPOTENCY_CONFLICT",
+        "This command key was already used for a different request",
+      );
+    if (result.status === "phase_closed")
+      throw new PresentationSessionServiceError(
+        409,
+        "PHASE_CLOSED",
+        "Text moderation is closed for this session or response",
+      );
+    if (result.status === "unauthorized")
+      throw new PresentationSessionServiceError(
+        401,
+        "UNAUTHORIZED",
+        "Presentation control credential is invalid",
+      );
+    if (result.status === "not_found")
+      throw new PresentationSessionServiceError(404, "NOT_FOUND", "Text response not found");
+    if (result.status === "limit_reached")
+      throw new PresentationSessionServiceError(
+        422,
+        "VALIDATION_ERROR",
+        "Text moderation command limit reached",
+      );
+    if (result.status !== "accepted" && result.status !== "duplicate")
+      throw new Error("Unexpected moderation outcome");
+    const { receipt } = result;
+    // PostgreSQL UUID columns fold case; retain the frozen authored spelling on the wire.
+    // The original receipt, stored response, and request fingerprint remain unchanged.
+    const response = presentationResponsesForContent(result.session.content, [result.response])[0]!;
+    const ack = PresentationTextModerationAckSchema.parse({
+      sessionId,
+      revision: result.session.revision,
+      seq: result.session.eventSeq,
+      accepted: true,
+      duplicate: result.status === "duplicate",
+      receipt: {
+        commandId: receipt.commandId,
+        responseId: receipt.responseId,
+        blockId: response.blockId,
+        previousStatus: receipt.previousStatus,
+        status: receipt.status,
+        expectedRevision: receipt.expectedRevision,
+        expectedModerationVersion: receipt.expectedModerationVersion,
+        resultingModerationVersion: receipt.resultingModerationVersion,
+        acceptedAt: receipt.acceptedAt.toISOString(),
+      },
+      response: {
+        responseId: response.id,
+        blockId: response.blockId,
+        status: response.moderationStatus,
+        moderationVersion: response.moderationVersion,
+      },
+    });
+    if (result.status === "accepted") this.sessionUpdatedHandler?.(sessionId);
+    return ack;
+  }
+
+  async getTextResponseResults(input: {
+    sessionId: string;
+    query: PresentationTextResultsQuery;
+    token?: string;
+    creator?: { workspaceId: string; userId: string };
+  }) {
+    const { sessionId, query } = input;
+    let session: PresentationSessionRecord;
+    let actor: PresentationTextReadActor;
+    if (query.role === "creator") {
+      if (!input.creator)
+        throw new PresentationSessionServiceError(
+          401,
+          "UNAUTHORIZED",
+          "Creator authentication is required",
+        );
+      const found = await this.sessions.getSessionForWorkspace(
+        input.creator.workspaceId,
+        sessionId,
+      );
+      if (!found || presentationLiveSessionExpired(found))
+        throw new PresentationSessionServiceError(
+          404,
+          "NOT_FOUND",
+          "Presentation session not found",
+        );
+      session = found;
+      actor = { role: "creator", userId: input.creator.userId };
+    } else if (query.role === "participant") {
+      const authorized = await this.authorizeParticipant(sessionId, input.token ?? "");
+      session = authorized.session;
+      actor = { role: "participant", participantId: authorized.participantId };
+    } else {
+      session = await this.authorizeCredential(sessionId, input.token ?? "", query.role);
+      const credential = await this.sessions.findValidCredential(
+        sessionId,
+        presentationParticipantTokenHash(input.token ?? ""),
+        query.role,
+        new Date(),
+      );
+      if (!credential)
+        throw new PresentationSessionServiceError(
+          401,
+          "UNAUTHORIZED",
+          "Presentation control credential is invalid",
+        );
+      actor = { role: query.role, credentialId: credential.id };
+    }
+    try {
+      return PresentationTextResponseResultsSchema.parse(
+        await this.sessions.getTextResponseResults({
+          ...query,
+          workspaceId: session.workspaceId,
+          sessionId,
+          actor,
+        }),
+      );
+    } catch (error) {
+      this.textReadError(error);
+    }
+  }
+
+  private async authorizeTextHost(sessionId: string, token: string) {
+    const session = await this.authorizeCredential(sessionId, token, "host");
+    const credential = await this.sessions.findValidCredential(
+      sessionId,
+      presentationParticipantTokenHash(token),
+      "host",
+      new Date(),
+    );
+    if (!credential || credential.workspaceId !== session.workspaceId)
+      throw new PresentationSessionServiceError(
+        401,
+        "UNAUTHORIZED",
+        "Presentation control credential is invalid",
+      );
+    return { session, credentialId: credential.id };
+  }
+
+  private textReadError(error: unknown): never {
+    if (error instanceof PresentationTextReadError) {
+      const status = error.code === "UNAUTHORIZED" ? 401 : error.code === "NOT_FOUND" ? 404 : 409;
+      throw new PresentationSessionServiceError(
+        status,
+        error.code,
+        error.code === "CONFLICT"
+          ? "The room changed. Refresh this page of results."
+          : "Text responses are unavailable",
+      );
+    }
+    throw error;
+  }
+
   async getReport(
     workspaceId: string,
     sessionId: string,
     includeSessionContext = false,
     includeQuickChecks = false,
+    includeOpinionResults = false,
+    includeTextResults = false,
+    includeNavigation = false,
+    includeInteractions = false,
   ) {
     const session = await this.sessions.getSessionForWorkspace(workspaceId, sessionId);
     if (!session) {
@@ -1078,16 +1452,34 @@ export class PresentationSessionService {
       // Keep the original `/v1` response useful immediately after finish while the durable worker
       // reconciles the same immutable inputs in the background. Existing clients can continue to
       // read `report`; newer clients can also observe `reportStatus`.
-      const [participants, responses, timeline] = await Promise.all([
+      const [participants, responses, timeline, textEvidence] = await Promise.all([
         this.sessions.listParticipants(sessionId),
         this.sessions.listResponses(sessionId),
         this.sessions.listTimeline(sessionId),
+        requiresPresentationTextOpinions(session.content)
+          ? this.sessions.getTextReportEvidence({ workspaceId, sessionId })
+          : Promise.resolve([]),
       ]);
-      report = generatePresentationReport({ session, participants, responses, timeline });
+      report = generatePresentationReport({
+        session,
+        participants,
+        responses,
+        timeline,
+        textEvidence,
+      });
     }
     const envelope = PresentationReportEnvelopeSchema.parse({
       reportStatus: stored.status,
-      report: report ? presentationReportRestProjection(report, includeQuickChecks) : null,
+      report: report
+        ? presentationReportRestProjection(
+            report,
+            includeQuickChecks,
+            includeOpinionResults,
+            includeTextResults,
+            includeNavigation,
+            includeInteractions,
+          )
+        : null,
     });
     return includeSessionContext
       ? PresentationReportWithSessionContextEnvelopeSchema.parse({
@@ -1128,14 +1520,18 @@ export class PresentationSessionService {
     return { session, participantId: participant.id };
   }
 
-  private async authorizeCredential(sessionId: string, token: string, role: "host" | "companion") {
+  private async authorizeCredential(
+    sessionId: string,
+    token: string,
+    role: PresentationSessionCredentialRole,
+  ) {
     return this.authorizeCredentialHash(sessionId, presentationParticipantTokenHash(token), role);
   }
 
   private async authorizeCredentialHash(
     sessionId: string,
     tokenHash: string,
-    role: "host" | "companion",
+    role: PresentationSessionCredentialRole,
   ) {
     const session = await this.sessions.getSessionById(sessionId);
     if (!session || presentationLiveSessionExpired(session)) {

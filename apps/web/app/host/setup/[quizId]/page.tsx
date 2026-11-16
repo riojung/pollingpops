@@ -16,6 +16,7 @@ import {
   type SessionSnapshot,
   type WorkspaceProductFeatures,
 } from "@openround/contracts";
+import styles from "./setup.module.css";
 import { CreatorBrand } from "../../../../components/brand";
 import { EventCreditChoice } from "../../../../components/event-credit-choice";
 import { ExperiencePicker } from "../../../../components/experience-picker";
@@ -27,6 +28,7 @@ import {
 } from "../../../../lib/room-password";
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
+import { saveCreatorHostCredential } from "../../../../lib/host-credential-recovery";
 import { clientUuid } from "../../../../lib/uuid";
 import { confidenceControlCopy } from "../../../../lib/i18n/confidence-control-copy";
 import {
@@ -331,7 +333,7 @@ export default function HostSetupPage() {
         headers: { "x-idempotency-key": creationIntent.current.key },
         body,
       });
-      sessionStorage.setItem(`openround:host:${session.sessionId}`, session.hostToken);
+      saveCreatorHostCredential(sessionStorage, session.sessionId, session.hostToken);
       sessionStorage.setItem(`openround:code:${session.sessionId}`, session.code);
       router.push(`/host/${session.sessionId}`);
     } catch (caught) {
@@ -351,12 +353,12 @@ export default function HostSetupPage() {
               {uxBeta ? t("live.roundSetup.previewRound") : t("live.roundSetup.previewCheckpoint")}
             </Link>
           ) : null}
-          <Link className="button-quiet small-button" href="/dashboard">
-            {t("live.common.dashboard")}
+          <Link className="button-quiet small-button" href="/library">
+            {t("workspace.nav.library")}
           </Link>
         </div>
       </header>
-      <main className="shell page-main" id="main">
+      <main className={`shell page-main ${styles.setup}`} id="main">
         <div className="page-heading">
           <div>
             <p className="eyebrow">{t("live.roundSetup.sessionSetup")}</p>
@@ -375,8 +377,20 @@ export default function HostSetupPage() {
           ) : null
         ) : (
           <form onSubmit={createSession}>
+            <section className={styles.launchBar}>
+              <h2>{t("live.roundSetup.readyTitle")}</h2>
+              <p className="muted">{t("live.roundSetup.readyDescription")}</p>
+              <div className="button-row">
+                <button className="button" disabled={busy} type="submit">
+                  {busy ? t("live.roundSetup.creating") : t("live.roundSetup.create")}
+                </button>
+                <Link className="button-quiet" href="/library">
+                  {t("live.common.cancel")}
+                </Link>
+              </div>
+            </section>
             {publishedContent && hasTextOpinionQuestions(publishedContent) ? (
-              <p className="muted" lang="en-CA">
+              <p className="muted" lang={locale}>
                 {t("live.text.roomCapacity", { limit: TEXT_RESPONSE_MAX_PER_ROUND })}
               </p>
             ) : null}
@@ -429,53 +443,55 @@ export default function HostSetupPage() {
                 </div>
               </section>
             ) : null}
-            <section className="panel" style={{ marginBottom: 24 }}>
-              <label className="field" htmlFor="nickname-policy">
-                <span>{t("live.roundSetup.names")}</span>
-                <select
-                  aria-describedby="nickname-policy-help"
-                  className="select"
-                  disabled={busy}
-                  id="nickname-policy"
-                  onChange={(event) => {
-                    setRecipe("custom");
-                    setSettings({
-                      ...settings,
-                      nicknamePolicy: event.target.value as SessionSettings["nicknamePolicy"],
-                    });
-                  }}
-                  value={settings.nicknamePolicy}
-                >
-                  <option value="custom">{t("live.roundSetup.customNames")}</option>
-                  <option value="friendly_only">{t("live.roundSetup.friendlyNames")}</option>
-                </select>
-                <small className="muted" id="nickname-policy-help">
-                  {t(
-                    settings.nicknamePolicy === "custom"
-                      ? "live.roundSetup.customNamesHelp"
-                      : "live.roundSetup.friendlyNamesHelp",
-                  )}
-                </small>
-              </label>
-            </section>
-            <section className="panel" style={{ marginBottom: 24 }}>
-              <label className="checkbox-field">
-                <input
-                  aria-describedby="setup-confidence-help"
-                  checked={settings.confidenceEnabled === true}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setRecipe("custom");
-                    setSettings({ ...settings, confidenceEnabled: event.target.checked });
-                  }}
-                  type="checkbox"
-                />
-                {confidenceCopy.label}
-              </label>
-              <p className="muted" id="setup-confidence-help">
-                {confidenceCopy.help}
-              </p>
-            </section>
+            <div className={styles.quickSettings}>
+              <section className="panel">
+                <label className="field" htmlFor="nickname-policy">
+                  <span>{t("live.roundSetup.names")}</span>
+                  <select
+                    aria-describedby="nickname-policy-help"
+                    className="select"
+                    disabled={busy}
+                    id="nickname-policy"
+                    onChange={(event) => {
+                      setRecipe("custom");
+                      setSettings({
+                        ...settings,
+                        nicknamePolicy: event.target.value as SessionSettings["nicknamePolicy"],
+                      });
+                    }}
+                    value={settings.nicknamePolicy}
+                  >
+                    <option value="custom">{t("live.roundSetup.customNames")}</option>
+                    <option value="friendly_only">{t("live.roundSetup.friendlyNames")}</option>
+                  </select>
+                  <small className="muted" id="nickname-policy-help">
+                    {t(
+                      settings.nicknamePolicy === "custom"
+                        ? "live.roundSetup.customNamesHelp"
+                        : "live.roundSetup.friendlyNamesHelp",
+                    )}
+                  </small>
+                </label>
+              </section>
+              <section className="panel">
+                <label className="checkbox-field">
+                  <input
+                    aria-describedby="setup-confidence-help"
+                    checked={settings.confidenceEnabled === true}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setRecipe("custom");
+                      setSettings({ ...settings, confidenceEnabled: event.target.checked });
+                    }}
+                    type="checkbox"
+                  />
+                  {confidenceCopy.label}
+                </label>
+                <p className="muted" id="setup-confidence-help">
+                  {confidenceCopy.help}
+                </p>
+              </section>
+            </div>
             <SetupReview uxBeta={uxBeta}>
               <EventCreditChoice
                 checked={useEventCredit}
@@ -650,18 +666,6 @@ export default function HostSetupPage() {
                 </section>
               </div>
             </SetupReview>
-            <section className="panel" style={{ marginTop: 24 }}>
-              <h2 style={{ fontSize: "1.6rem" }}>{t("live.roundSetup.readyTitle")}</h2>
-              <p className="muted">{t("live.roundSetup.readyDescription")}</p>
-              <div className="button-row">
-                <button className="button" disabled={busy} type="submit">
-                  {busy ? t("live.roundSetup.creating") : t("live.roundSetup.create")}
-                </button>
-                <Link className="button-quiet" href="/dashboard">
-                  {t("live.common.cancel")}
-                </Link>
-              </div>
-            </section>
           </form>
         )}
       </main>

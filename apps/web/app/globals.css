@@ -32,6 +32,8 @@
   --ui-shadow-lg: 0 20px 56px rgba(24, 29, 36, 0.12);
   --ui-success-bg: #dcfce7;
   --ui-success-text: #166534;
+  --ui-info-bg: #e6f0ff;
+  --ui-info-text: #2058a5;
   --ui-warning-bg: #fff3c4;
   --ui-warning-text: #8a4b08;
   --ui-danger-bg: #fff1f0;
@@ -39,6 +41,15 @@
   --ui-danger-border: #fecaca;
   --ui-violet-bg: #efe9ff;
   --ui-violet-text: #6941c6;
+  /* Workspace types use their labels and glyphs; large surfaces share one neutral palette. */
+  --ui-kind-round-bg: var(--ui-surface-soft);
+  --ui-kind-round-text: var(--ui-text-strong);
+  --ui-kind-presentation-bg: var(--ui-surface-soft);
+  --ui-kind-presentation-text: var(--ui-text-strong);
+  --ui-kind-survey-bg: var(--ui-surface-soft);
+  --ui-kind-survey-text: var(--ui-text-strong);
+  --ui-kind-practice-bg: var(--ui-surface-soft);
+  --ui-kind-practice-text: var(--ui-text-strong);
   --ui-skeleton-base: #e8eef2;
   --ui-skeleton-highlight: #f6f9fb;
   --ui-hero-start: #242931;
@@ -116,6 +127,8 @@ html[data-color-mode="dark"] {
   --ui-shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.36);
   --ui-success-bg: #133b31;
   --ui-success-text: #8ae1bf;
+  --ui-info-bg: #203655;
+  --ui-info-text: #a5c8ff;
   --ui-warning-bg: #412f16;
   --ui-warning-text: #f4c66d;
   --ui-danger-bg: #45201f;
@@ -3383,6 +3396,12 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 @media (forced-colors: active) {
+  .button {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
   .avatar-option > input:checked + .avatar-option-surface,
   .avatar-option > input:focus-visible + .avatar-option-surface,
   .participant-avatar {
@@ -4192,6 +4211,11 @@ html[data-openround-motion="reduced"] *::after {
 .recovery-story h2,
 .recovery-story .eyebrow {
   color: white;
+}
+
+.recovery-story-evidence-note {
+  color: var(--ui-on-hero-muted);
+  line-height: 1.58;
 }
 
 .recovery-story > .notice {

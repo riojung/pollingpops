@@ -22,6 +22,10 @@ const {
   reportWorker,
   presentationReportWorker,
   authoringWorker,
+  presentationAssistanceWorker,
+  presentationTextAssistanceWorker,
+  presentationQuestionSuggestionsWorker,
+  presentationVisualImportWorker,
   metrics,
   cache,
   presentationService,
@@ -90,6 +94,26 @@ const jobs =
             run: () => authoringWorker.runUntilIdle(),
           },
           {
+            name: "visual-imports",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationVisualImportWorker.runUntilIdle(1),
+          },
+          {
+            name: "presentation-assistance",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationAssistanceWorker.runUntilIdle(1),
+          },
+          {
+            name: "presentation-text-assistance",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationTextAssistanceWorker.runUntilIdle(1),
+          },
+          {
+            name: "presentation-question-suggestions",
+            intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+            run: () => presentationQuestionSuggestionsWorker.runUntilIdle(1),
+          },
+          {
             name: "billing",
             intervalMs: config.BUSINESS_BILLING_WORKER_INTERVAL_MS,
             run: () => platformBillingWorker.runUntilIdle(),
@@ -137,11 +161,16 @@ const jobs =
           ),
         async (name) => {
           const controlId =
-            name === "integrations"
-              ? "business-integrations"
-              : name === "billing"
-                ? "billing-reconciliation"
-                : name;
+            name === "visual-imports" ||
+            name === "presentation-assistance" ||
+            name === "presentation-text-assistance" ||
+            name === "presentation-question-suggestions"
+              ? "authoring"
+              : name === "integrations"
+                ? "business-integrations"
+                : name === "billing"
+                  ? "billing-reconciliation"
+                  : name;
           return !(await platform.getWorkerControl(controlId))?.paused;
         },
       )

@@ -158,6 +158,71 @@ export async function expectPublishedQuestionLiveMetadataConformance(input: {
   expect(
     await repository.listPublishedQuizQuestionMetadata(workspaceId, "Bounded checkpoint 100"),
   ).toMatchObject({ questions: [{ prompt: "Bounded checkpoint 100" }], hasMore: false });
+  const opinionFields = {
+    purpose: "opinion" as const,
+    confidence: "off" as const,
+    basePoints: 0,
+    timeLimitSeconds: 30,
+    explanation: "",
+    mediaId: null,
+    mediaAlt: null,
+  };
+  const ranking = {
+    ...opinionFields,
+    id: randomUUID(),
+    type: "ranking" as const,
+    prompt: "Rank the options",
+    choices: ["One", "Two", "Three"].map((label) => ({
+      id: randomUUID(),
+      label,
+      isCorrect: false,
+    })),
+    rankCount: 2,
+  };
+  const poll = {
+    ...opinionFields,
+    id: randomUUID(),
+    type: "poll" as const,
+    prompt: "Select priorities",
+    choices: ["One", "Two", "Three"].map((label) => ({
+      id: randomUUID(),
+      label,
+      isCorrect: false,
+    })),
+    maxSelections: 2,
+  };
+  const opinionVersion = await publish({
+    title: "Opinion catalog",
+    description: "",
+    questions: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        ...opinionFields,
+        id: randomUUID(),
+        type: "open_text" as const,
+        prompt: `Unsupported text ${index}`,
+      })),
+      ranking,
+      poll,
+    ],
+  });
+  // All supported opinion types remain safely bounded before pagination.
+  expect(
+    await repository.listPublishedQuizQuestionMetadata(workspaceId, "Opinion catalog", 1),
+  ).toMatchObject({
+    questions: [{ sourceQuizVersionId: opinionVersion.version.id, type: "open_text" }],
+    hasMore: true,
+  });
+  const textCatalog = await repository.listPublishedQuizQuestionMetadata(
+    workspaceId,
+    "Opinion catalog",
+    12,
+  );
+  expect(textCatalog.questions.map((entry) => entry.type)).toEqual([
+    ...Array.from({ length: 10 }, () => "open_text"),
+    "ranking",
+    "poll",
+  ]);
+  expect(textCatalog.hasMore).toBe(false);
 }
 
 /** Unsupported current versions fail before JSON interpretation, filtering, or pagination. */

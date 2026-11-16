@@ -3,6 +3,7 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ApiModule from "../../lib/api";
+import type { SupportedLocale } from "@openround/contracts";
 
 interface Hooks {
   cursor: number;
@@ -16,6 +17,7 @@ const fixtures = vi.hoisted(() => ({
   artifact: "round" as "round" | "presentation" | "feedback_room",
   protected: true,
   nicknamePolicy: "custom" as "custom" | "friendly_only",
+  locale: "en-CA" as SupportedLocale,
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
@@ -55,9 +57,20 @@ vi.mock("../../lib/api", async (importOriginal) => ({
 }));
 vi.mock("../../components/locale-provider", async () => {
   const { loadMessages, translate } = await import("../../lib/i18n/catalog");
-  const messages = await loadMessages("en-CA", ["live-delivery", "delivery-authoring"]);
+  const { supportedLocales } = await import("@openround/contracts");
+  const messages = Object.fromEntries(
+    await Promise.all(
+      supportedLocales.map(async (locale) => [
+        locale,
+        await loadMessages(locale, ["live-delivery", "delivery-authoring"]),
+      ]),
+    ),
+  );
   return {
-    useLocale: () => ({ t: (key: Parameters<typeof translate>[1]) => translate(messages, key) }),
+    useLocale: () => ({
+      locale: fixtures.locale,
+      t: (key: Parameters<typeof translate>[1]) => translate(messages[fixtures.locale]!, key),
+    }),
   };
 });
 
@@ -115,6 +128,7 @@ function harness() {
 const storage = new Map<string, string>();
 const writes: string[] = [];
 beforeEach(() => {
+  fixtures.locale = "en-CA";
   storage.clear();
   writes.length = 0;
   const browserStorage = {
@@ -211,6 +225,48 @@ describe("participant nickname choice", () => {
 });
 
 describe("unified password admission", () => {
+  it("localizes failed preflight guidance while attributing the untranslated service message", async () => {
+    fixtures.locale = "fr-FR";
+    const ui = harness();
+    fixtures.apiFetch.mockRejectedValueOnce(
+      new ApiClientError("Synthetic service detail", "UNAVAILABLE", 503),
+    );
+    const markup = await ui.submit();
+    expect(markup).toContain("Vous pouvez tout de même essayer de rejoindre la salle.");
+    expect(markup).toContain('lang="en-CA">Synthetic service detail');
+    expect(markup).not.toContain("You can still try joining.");
+  });
+  it("keeps optional avatar choices behind a closed disclosure", async () => {
+    const ui = harness();
+    await ui.submit();
+    const details = find(fixtures.tree, (node) => node.type === "details")!;
+    expect(details).not.toBeNull();
+    expect(details.props.open).not.toBe(true);
+    expect(ui.render()).toContain("Change avatar");
+  });
+
+  it("identifies an invalid code at its field, while keeping network failures global", async () => {
+    const ui = harness();
+    fixtures.apiFetch.mockRejectedValueOnce(
+      new ApiClientError("Check the code", "INVALID_CODE", 404),
+    );
+    await ui.submit();
+    const code = find(fixtures.tree, (node) => node.props.id === "join-code")!;
+    expect(code.props["aria-invalid"]).toBe(true);
+    expect(code.props["aria-describedby"]).toBe("join-code-error");
+    fixtures.apiFetch.mockRejectedValueOnce(new Error("Network unavailable"));
+    expect(await ui.submit()).toContain("Network unavailable");
+    expect(
+      find(fixtures.tree, (node) => node.props.id === "join-code")!.props["aria-invalid"],
+    ).toBeUndefined();
+  });
+
+  it("uses an action label when a Survey code is recognized", async () => {
+    fixtures.artifact = "feedback_room";
+    const ui = harness();
+    expect(await ui.submit()).toContain("Open survey");
+  });
+
   it.each(["round", "presentation", "feedback_room"] as const)(
     "preflights and sends the exact %s password only in the POST body",
     async (artifact) => {

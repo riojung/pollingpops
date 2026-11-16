@@ -10,6 +10,7 @@ import {
   PresentationReportV1Schema,
   PresentationReportV2Schema,
   PresentationReportV3Schema,
+  PresentationReportV4Schema,
   type PresentationCompanionCommand,
   type PresentationCommand,
   type PresentationContent,
@@ -112,6 +113,7 @@ async function fixture(
     timeMode?: "timed" | "flex";
     linkedPurpose?: "diagnostic" | "practice";
     contentOnly?: boolean;
+    content?: PresentationContent;
   } = {},
 ) {
   const workspaceId = randomUUID();
@@ -137,7 +139,7 @@ async function fixture(
   const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
   apps.push(built.app);
   const presentations = createPresentationRepository(repository);
-  const prepared = publishedContent(options.linkedPurpose);
+  const prepared = options.content ?? publishedContent(options.linkedPurpose);
   const content = PresentationContentSchema.parse({
     ...prepared,
     blocks: options.contentOnly
@@ -154,7 +156,7 @@ async function fixture(
     status: "draft",
     draft,
     draftRevision: 0,
-    draftSchemaVersion: 2,
+    draftSchemaVersion: draft.schemaVersion,
     currentVersionId: null,
     folderId: null,
     publishedDraftRevision: null,
@@ -169,7 +171,7 @@ async function fixture(
       presentationId: presentation.id,
       version: 1,
       content,
-      contentSchemaVersion: 2,
+      contentSchemaVersion: content.schemaVersion,
       contentHash: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
       sourceDraftRevision: 0,
       publishedAt: now,
@@ -842,6 +844,189 @@ describe("Companion session-only Quick Checks", () => {
     );
     expect(presentationReportRestProjection(old, false)).toBe(old);
     expect(presentationReportRestProjection(old, true)).toBe(old);
+  });
+
+  it("negotiates Quick Check attribution independently from V4 opinion results and session context", async () => {
+    const content = PresentationContentSchema.parse({
+      title: "Mixed opinion and Quick Check report",
+      schemaVersion: 9,
+      blocks: (["poll", "ranking"] as const).map((type) => ({
+        id: randomUUID(),
+        kind: "question",
+        question: {
+          id: randomUUID(),
+          type,
+          prompt: `Prepared ${type} opinion`,
+          purpose: "opinion",
+          confidence: "off",
+          delivery: "main",
+          conceptKeys: [],
+          linkedRecheckQuestionId: null,
+          timeLimitSeconds: 30,
+          basePoints: 0,
+          explanation: "",
+          mediaId: null,
+          mediaAlt: null,
+          choices: Array.from({ length: 3 }, (_, index) => ({
+            id: randomUUID(),
+            label: `Priority ${index + 1}`,
+            isCorrect: false,
+          })),
+          ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 2 }),
+        },
+      })),
+    });
+    const f = await fixture({ content, timeMode: "flex" });
+    await f.service.companionCommand(f.command());
+    const quickBlockId = (await f.current()).content.liveQuickCheck!.blockId;
+    while ((await f.current()).status === "active") {
+      const session = await f.current();
+      const block = session.content.blocks[session.currentBlockIndex];
+      if (
+        session.phase === "question_open" &&
+        block?.kind === "question" &&
+        "choices" in block.question
+      ) {
+        const response =
+          block.question.type === "ranking"
+            ? { orderedChoiceIds: block.question.choices.slice(0, 2).map(({ id }) => id) }
+            : {
+                choiceIds: block.question.choices
+                  .slice(0, block.id === quickBlockId ? 1 : 2)
+                  .map(({ id }) => id),
+              };
+        await f.service.submitResponse({
+          sessionId: f.sessionId,
+          participantToken: f.joined.participantToken,
+          blockId: block.id,
+          expectedRevision: session.revision,
+          idempotencyKey: randomUUID(),
+          response,
+        });
+      }
+      await f.advance();
+    }
+    const canonical = PresentationReportV4Schema.parse(
+      generatePresentationReport({
+        session: await f.current(),
+        participants: await f.sessions.listParticipants(f.sessionId),
+        responses: await f.sessions.listResponses(f.sessionId),
+        timeline: await f.sessions.listTimeline(f.sessionId),
+      }),
+    );
+    const originalJson = JSON.stringify(canonical);
+    const originalHash = createHash("sha256").update(originalJson).digest("hex");
+    const quickEvidence = canonical.evidence.find((entry) => entry.blockId === quickBlockId);
+    if (quickEvidence?.kind !== "question") throw new Error("Quick Check evidence required");
+    expect(quickEvidence.sessionOnly).toBe("quick_check");
+    const opinionEvidence = canonical.evidence.filter(
+      (entry) => entry.kind === "question" && entry.opinionSummary,
+    );
+    expect(opinionEvidence).toHaveLength(2);
+    expect(opinionEvidence).toMatchObject([
+      { opinionSummary: { kind: "poll", responseCount: 1 } },
+      { opinionSummary: { kind: "ranking", responseCount: 1 } },
+    ]);
+    expect(JSON.stringify(opinionEvidence)).not.toContain(f.joined.snapshot.participantId);
+    expect(JSON.stringify(opinionEvidence)).not.toContain("Synthetic learner");
+
+    const magic = await f.app.inject({
+      method: "POST",
+      url: "/v1/auth/magic-link",
+      payload: {
+        email: "mixed-opinion-report@example.com",
+        segment: "workplace",
+        acceptPolicies: true,
+      },
+    });
+    const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
+    const verified = await verifyEmailAndSignIn(
+      f.app,
+      `/v1/auth/verify?token=${token}`,
+      "mixed-opinion-report@example.com",
+    );
+    const cookies = verified.headers["set-cookie"]!;
+    const cookie = (Array.isArray(cookies) ? cookies[0]! : cookies).split(";")[0]!;
+    const base = `/v1/presentation-sessions/${f.sessionId}/report`;
+    for (const reportStatus of ["pending", "ready"] as const) {
+      if (reportStatus === "ready")
+        expect(await new PresentationReportWorker(f.sessions, 60_000).runOnce()).toBe("completed");
+      const stored = structuredClone(await f.sessions.getReport(f.workspaceId, f.sessionId));
+      const storedHash = createHash("sha256").update(JSON.stringify(stored)).digest("hex");
+      for (const includeOpinionResults of [false, true]) {
+        for (const includeQuickChecks of [false, true]) {
+          for (const includeSessionContext of [false, true]) {
+            const query = new URLSearchParams();
+            if (includeOpinionResults) query.set("includeOpinionResults", "true");
+            if (includeQuickChecks) query.set("includeQuickChecks", "true");
+            if (includeSessionContext) query.set("includeSessionContext", "true");
+            const response = await f.app.inject({
+              method: "GET",
+              url: `${base}?${query}`,
+              headers: { cookie },
+            });
+            if (!includeOpinionResults) {
+              expect(response.statusCode, response.body).toBe(422);
+              expect(response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+              expect(() =>
+                presentationReportRestProjection(canonical, includeQuickChecks, false),
+              ).toThrow("includeOpinionResults=true");
+            } else {
+              expect(response.statusCode, response.body).toBe(200);
+              const body = response.json();
+              expect(body.reportStatus).toBe(reportStatus);
+              const report = PresentationReportV4Schema.parse(body.report);
+              const projected = presentationReportRestProjection(
+                canonical,
+                includeQuickChecks,
+                true,
+              );
+              expect(report).toEqual(projected);
+              expect(
+                report.evidence.filter(
+                  (entry) => entry.kind === "question" && entry.opinionSummary,
+                ),
+              ).toEqual(opinionEvidence);
+              const quick = report.evidence.find((entry) => entry.blockId === quickBlockId);
+              if (includeQuickChecks) {
+                expect(quick).toEqual(quickEvidence);
+                expect(report).toEqual(canonical);
+              } else {
+                expect(quick).not.toHaveProperty("sessionOnly");
+                expect(quick).toEqual({
+                  blockId: quickEvidence.blockId,
+                  blockIndex: quickEvidence.blockIndex,
+                  kind: "question",
+                  questionId: quickEvidence.questionId,
+                  prompt: quickEvidence.prompt,
+                  questionType: "poll",
+                  questionTypeLabel: quickEvidence.questionTypeLabel,
+                  delivery: "main",
+                  respondents: 1,
+                  correct: null,
+                  accuracyPercent: null,
+                  totalScore: 0,
+                  averageResponseMs: quickEvidence.averageResponseMs,
+                });
+              }
+              if (includeSessionContext) expect(body.sessionContext).toEqual({ timeMode: "flex" });
+              else expect(body).not.toHaveProperty("sessionContext");
+            }
+            expect(JSON.stringify(canonical)).toBe(originalJson);
+            expect(createHash("sha256").update(JSON.stringify(canonical)).digest("hex")).toBe(
+              originalHash,
+            );
+            const unchanged = await f.sessions.getReport(f.workspaceId, f.sessionId);
+            expect(unchanged).toEqual(stored);
+            expect(createHash("sha256").update(JSON.stringify(unchanged)).digest("hex")).toBe(
+              storedHash,
+            );
+          }
+        }
+      }
+      if (reportStatus === "ready")
+        expect(stored).toMatchObject({ schemaVersion: 4, payload: canonical });
+    }
   });
 
   it("checks rollout, block and encoded content bounds before writes", async () => {

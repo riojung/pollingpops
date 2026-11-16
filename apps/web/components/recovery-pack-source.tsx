@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { AuthoringJob, QuestionDraft, RecoveryPackDraft } from "@openround/contracts";
+import type {
+  AuthoringJob,
+  QuestionDraft,
+  RecoveryPackDraft,
+  SupportedLocale,
+} from "@openround/contracts";
 import {
   createRecoveryPackSourceAuthoring,
   recoveryPackSourceApproved,
@@ -10,81 +15,162 @@ import {
   type RecoveryPackRecord,
 } from "../lib/recovery-pack-source";
 
-export function PackSourceCitations({ citations }: { citations: RecoveryPackDraft["citations"] }) {
+import {
+  packSourceCopy,
+  packSourceFeedback,
+  packSourceQuestionType,
+  packSourcePurpose,
+  packSourceDelivery,
+  packSourceConfidence,
+} from "../lib/i18n/pack-source-copy";
+
+export function PackSourceCitations({
+  citations,
+  locale = "en-CA",
+}: {
+  citations: RecoveryPackDraft["citations"];
+  locale?: SupportedLocale;
+}) {
+  const t = packSourceCopy(locale);
   return citations.length ? (
-    <ul aria-label="Source citation details">
+    <ul
+      lang={locale}
+      aria-label={t("Source citation details")}
+      style={{ minWidth: 0, overflowWrap: "anywhere" }}
+    >
       {citations.map((citation, index) => (
         <li key={index}>
-          <strong>{citation.sourceName}</strong> · {citation.locator}
-          <p>{citation.excerpt}</p>
+          <strong lang="">{citation.sourceName}</strong> · <span lang="">{citation.locator}</span>
+          <p lang="">{citation.excerpt}</p>
           <small>
-            Source digest: <code>{citation.sourceDigest}</code>
+            {t("Source digest:")} <code lang="">{citation.sourceDigest}</code>
           </small>
         </li>
       ))}
     </ul>
   ) : (
-    <p className="muted">No citations on this item.</p>
+    <p lang={locale} className="muted">
+      {t("No citations on this item.")}
+    </p>
   );
 }
 
-function PackSourceCheckpoint({ label, question }: { label: string; question: QuestionDraft }) {
+function PackSourceCheckpoint({
+  label,
+  question,
+  locale,
+}: {
+  label: string;
+  question: QuestionDraft;
+  locale: SupportedLocale;
+}) {
+  const t = packSourceCopy(locale);
   return (
-    <section role="group" aria-label={label}>
+    <section lang={locale} role="group" aria-label={label}>
       <h4>{label}</h4>
-      <p>{question.prompt}</p>
-      <p>{question.explanation}</p>
+      <p lang="">{question.prompt}</p>
+      <p lang="">{question.explanation}</p>
       <p className="muted">
-        {question.type} · {question.purpose ?? "diagnostic"} · {question.delivery ?? "main"} ·
-        confidence {question.confidence ?? "off"} · {question.timeLimitSeconds}s ·{" "}
-        {question.basePoints} points
+        {packSourceQuestionType(locale, question.type)} ·{" "}
+        {packSourcePurpose(locale, question.purpose)} ·{" "}
+        {packSourceDelivery(locale, question.delivery)} · {t("confidence")}{" "}
+        {packSourceConfidence(locale, question.confidence)} · {question.timeLimitSeconds}s ·{" "}
+        {t("{points} points", { points: question.basePoints })}
       </p>
-      <p>Concepts: {(question.conceptKeys ?? []).join(", ") || "None"}</p>
+      <p>
+        {t("Concepts:")}{" "}
+        {question.conceptKeys?.length ? (
+          <span lang="">{question.conceptKeys.join(", ")}</span>
+        ) : (
+          t("None")
+        )}
+      </p>
       {"choices" in question ? (
-        <ul aria-label={`${label} response options`}>
+        <ul aria-label={t("{label} response options", { label })}>
           {question.choices.map((choice) => (
             <li key={choice.id}>
-              {choice.label}
-              {choice.isCorrect ? " (correct)" : " (incorrect)"}
-              {choice.feedback ? <p>Rationale: {choice.feedback}</p> : null}
-              {choice.misconceptionKey ? <p>Misconception: {choice.misconceptionKey}</p> : null}
+              <span lang="">{choice.label}</span>
+              {t(choice.isCorrect ? " (correct)" : " (incorrect)")}
+              {choice.feedback ? (
+                <p>
+                  {t("Rationale:")} <span lang="">{choice.feedback}</span>
+                </p>
+              ) : null}
+              {choice.misconceptionKey ? (
+                <p>
+                  {t("Misconception:")} <span lang="">{choice.misconceptionKey}</span>
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>
       ) : question.type === "numeric" ? (
         <p>
-          Accepted value: {question.correctValue} · tolerance {question.tolerance}
-          {question.unit ? ` ${question.unit}` : ""}
+          {t("Accepted value:")} <span lang="">{question.correctValue}</span> · {t("tolerance")}{" "}
+          <span lang="">{question.tolerance}</span>
+          {question.unit ? <span lang="">{` ${question.unit}`}</span> : null}
         </p>
       ) : null}
-      <PackSourceCitations citations={question.sourceCitations ?? []} />
+      <PackSourceCitations citations={question.sourceCitations ?? []} locale={locale} />
     </section>
   );
 }
 
-export function PackSourceContentView({ draft }: { draft: RecoveryPackDraft }) {
+export function PackSourceContentView({
+  draft,
+  locale = "en-CA",
+}: {
+  draft: RecoveryPackDraft;
+  locale?: SupportedLocale;
+}) {
+  const t = packSourceCopy(locale);
   return (
-    <div style={{ minWidth: 0, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
-      <h4>{draft.title}</h4>
-      <p>{draft.description}</p>
-      <p>Shared concepts: {draft.conceptKeys.join(", ")}</p>
-      <p>Misconceptions: {draft.misconceptionKeys.join(", ") || "None"}</p>
-      <PackSourceCheckpoint label="Source diagnostic" question={draft.diagnostic} />
+    <div lang={locale} style={{ minWidth: 0, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+      <h4 lang="">{draft.title}</h4>
+      <p lang="">{draft.description}</p>
+      <p>
+        {t("Shared concepts:")} <span lang="">{draft.conceptKeys.join(", ")}</span>
+      </p>
+      <p>
+        {t("Misconceptions:")}{" "}
+        {draft.misconceptionKeys.length ? (
+          <span lang="">{draft.misconceptionKeys.join(", ")}</span>
+        ) : (
+          t("None")
+        )}
+      </p>
+      <PackSourceCheckpoint
+        locale={locale}
+        label={t("Source diagnostic")}
+        question={draft.diagnostic}
+      />
       {draft.interventions.map((card, index) => (
-        <section role="group" aria-label={`Source intervention card ${index + 1}`} key={card.id}>
+        <section
+          role="group"
+          aria-label={t("Source intervention card {number}", { number: index + 1 })}
+          key={card.id}
+        >
           <h4>
-            Card {index + 1}: {card.title}
+            {t("Card {number}:", { number: index + 1 })} <span lang="">{card.title}</span>
           </h4>
-          <p>{card.body}</p>
-          <PackSourceCitations citations={card.citations} />
+          <p lang="">{card.body}</p>
+          <PackSourceCitations citations={card.citations} locale={locale} />
         </section>
       ))}
-      <PackSourceCheckpoint label="Source linked recheck" question={draft.recheck} />
+      <PackSourceCheckpoint
+        locale={locale}
+        label={t("Source linked recheck")}
+        question={draft.recheck}
+      />
       {draft.delayedProbe ? (
-        <PackSourceCheckpoint label="Source delayed probe" question={draft.delayedProbe} />
+        <PackSourceCheckpoint
+          locale={locale}
+          label={t("Source delayed probe")}
+          question={draft.delayedProbe}
+        />
       ) : null}
-      <h4>Global Pack citations</h4>
-      <PackSourceCitations citations={draft.citations} />
+      <h4>{t("Global Pack citations")}</h4>
+      <PackSourceCitations citations={draft.citations} locale={locale} />
     </div>
   );
 }
@@ -101,11 +187,14 @@ export function RecoveryPackSourceProposalPanel({
   job,
   canEdit,
   target,
+  locale = "en-CA",
 }: {
   job: AuthoringJob;
   canEdit: boolean;
   target: RecoveryPackSourceTarget;
+  locale?: SupportedLocale;
 }) {
+  const t = packSourceCopy(locale);
   const [state, setState] = useState<PackSourceAuthoringState>({
     proposal: null,
     busy: null,
@@ -145,66 +234,79 @@ export function RecoveryPackSourceProposalPanel({
   }, [state.error, state.proposal]);
   return (
     <section
-      aria-label={`Pack source proposal: ${job.sourceName}`}
+      lang={locale}
+      aria-label={t("Pack source proposal: {source}", { source: job.sourceName })}
       style={{ minWidth: 0, overflowWrap: "anywhere" }}
     >
       <p className="muted">
-        Source conversion proposes a diagnostic, linked recheck, and cited facilitator card. Create
-        a draft to edit; saved content and citations require your explicit review before
-        publication.
+        {t(
+          "Source conversion proposes a diagnostic, linked recheck, and cited facilitator card. Create a draft to edit; saved content and citations require your explicit review before publication.",
+        )}
       </p>
       <button
         className="button-quiet"
+        style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
         type="button"
         disabled={Boolean(state.busy) || target.disabled}
         onClick={() => void manager.current?.preview()}
       >
         {state.error && !state.proposal
-          ? "Retry Pack source proposal"
-          : "Review Pack source proposal"}
+          ? t("Retry Pack source proposal")
+          : t("Review Pack source proposal")}
       </button>
-      <p role="status" aria-live="polite">
-        {state.status}
+      <p role="status" aria-live="polite" lang={packSourceFeedback(locale, state.status).lang}>
+        {packSourceFeedback(locale, state.status).text}
       </p>
       {state.error ? (
-        <p className="error" role="alert" tabIndex={-1} ref={error}>
-          {state.error}
+        <p
+          className="error"
+          role="alert"
+          tabIndex={-1}
+          ref={error}
+          lang={packSourceFeedback(locale, state.error).lang}
+        >
+          {packSourceFeedback(locale, state.error).text}
         </p>
       ) : null}
       {state.proposal ? (
         <>
           <h4 tabIndex={-1} ref={heading}>
-            Source Pack proposal
+            {t("Source Pack proposal")}
           </h4>
-          <p>Source: {state.proposal.sourceName}</p>
           <p>
-            Source digest: <code>{state.proposal.sourceDigest}</code>
+            {t("Source:")} <span lang="">{state.proposal.sourceName}</span>
           </p>
           <p>
-            Content hash: <code>{state.proposal.contentHash}</code>
+            {t("Source digest:")} <code lang="">{state.proposal.sourceDigest}</code>
           </p>
-          <PackSourceContentView draft={state.proposal.draft} />
+          <p>
+            {t("Content hash:")} <code lang="">{state.proposal.contentHash}</code>
+          </p>
+          <PackSourceContentView draft={state.proposal.draft} locale={locale} />
           {state.proposal.conversionNotes.length ? (
             <div className="notice">
-              <strong>Conversion review</strong>
+              <strong>{t("Conversion review")}</strong>
               <ul>
                 {state.proposal.conversionNotes.map((note, index) => (
-                  <li key={index}>{note}</li>
+                  <li key={index} lang="">
+                    {note}
+                  </li>
                 ))}
               </ul>
             </div>
           ) : null}
           <button
             className="button"
+            style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
             type="button"
             disabled={!canEdit || target.disabled || Boolean(state.busy)}
             onClick={() => void manager.current?.create()}
           >
             {state.busy === "create"
-              ? "Creating source Pack draft…"
+              ? t("Creating source Pack draft…")
               : state.error
-                ? "Retry creating source Pack draft"
-                : "Create source Pack draft"}
+                ? t("Retry creating source Pack draft")
+                : t("Create source Pack draft")}
           </button>
         </>
       ) : null}
@@ -224,6 +326,7 @@ export function RecoveryPackSourceReviewPanel({
   onContentChecked,
   onCitationsChecked,
   onApprove,
+  locale = "en-CA",
 }: {
   pack: RecoveryPackRecord;
   draft: RecoveryPackDraft;
@@ -236,45 +339,58 @@ export function RecoveryPackSourceReviewPanel({
   onContentChecked: (checked: boolean) => void;
   onCitationsChecked: (checked: boolean) => void;
   onApprove: () => void;
+  locale?: SupportedLocale;
 }) {
+  const t = packSourceCopy(locale);
   const headingId = useId();
   if (!pack.sourceReview) return null;
   const approved = !dirty && !invalidated && recoveryPackSourceApproved(pack);
   return (
     <section
+      lang={locale}
       aria-labelledby={headingId}
       style={{ minWidth: 0, overflowWrap: "anywhere", marginTop: 24 }}
     >
-      <h3 id={headingId}>Source content and citation review</h3>
-      <p>Source: {pack.sourceReview.sourceName}</p>
+      <h3 id={headingId}>{t("Source content and citation review")}</h3>
       <p>
-        Source digest: <code>{pack.sourceReview.sourceDigest}</code>
+        {t("Source:")} <span lang="">{pack.sourceReview.sourceName}</span>
+      </p>
+      <p>
+        {t("Source digest:")} <code lang="">{pack.sourceReview.sourceDigest}</code>
       </p>
       <p role="status" aria-live="polite">
         {dirty
-          ? "Save your edits before reviewing and approving this revision."
+          ? t("Save your edits before reviewing and approving this revision.")
           : approved
-            ? `Saved revision ${pack.draftRevision} has content and citation approval. Publishing is a separate action.`
-            : `Saved revision ${pack.draftRevision} needs content and citation approval before publishing.`}
+            ? t(
+                "Saved revision {revision} has content and citation approval. Publishing is a separate action.",
+                { revision: pack.draftRevision },
+              )
+            : t(
+                "Saved revision {revision} needs content and citation approval before publishing.",
+                { revision: pack.draftRevision },
+              )}
       </p>
       {!canEdit ? (
         <p className="notice">
-          Source review is readable. Your workspace role or paused Pack authoring prevents approval.
+          {t(
+            "Source review is readable. Your workspace role or paused Pack authoring prevents approval.",
+          )}
         </p>
       ) : null}
       <details>
-        <summary>Review complete Pack content and every citation</summary>
-        <PackSourceContentView draft={draft} />
+        <summary>{t("Review complete Pack content and every citation")}</summary>
+        <PackSourceContentView draft={draft} locale={locale} />
       </details>
       <fieldset disabled={!canEdit || busy || dirty} style={{ minWidth: 0 }}>
-        <legend>Explicit approval of the saved revision</legend>
+        <legend>{t("Explicit approval of the saved revision")}</legend>
         <label className="checkbox-field">
           <input
             type="checkbox"
             checked={contentChecked}
             onChange={(event) => onContentChecked(event.target.checked)}
           />
-          I reviewed the full saved content, answer keys, and facilitator guidance.
+          {t("I reviewed the full saved content, answer keys, and facilitator guidance.")}
         </label>
         <label className="checkbox-field">
           <input
@@ -282,15 +398,16 @@ export function RecoveryPackSourceReviewPanel({
             checked={citationsChecked}
             onChange={(event) => onCitationsChecked(event.target.checked)}
           />
-          I verified every citation and excerpt against the source.
+          {t("I verified every citation and excerpt against the source.")}
         </label>
         <button
           className="button-quiet"
+          style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
           type="button"
           disabled={!contentChecked || !citationsChecked}
           onClick={onApprove}
         >
-          Approve saved content and citations
+          {t("Approve saved content and citations")}
         </button>
       </fieldset>
     </section>

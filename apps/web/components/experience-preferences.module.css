@@ -1,0 +1,127 @@
+.preferences {
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+}
+
+.preferences.preferences > .trigger {
+  align-items: center;
+  background: rgb(255 255 255 / 9%);
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 10px;
+  color: var(--round-header-text, #fff);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  gap: 8px;
+  justify-content: center;
+  line-height: 1.25;
+  list-style: none;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.trigger::marker,
+.trigger::-webkit-details-marker {
+  display: none;
+}
+
+.preferences > .trigger:hover,
+.preferences[open] > .trigger {
+  background: rgb(255 255 255 / 16%);
+  border-color: rgb(255 255 255 / 40%);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--round-header-focus, #fff);
+  outline-offset: 3px;
+}
+
+.icon {
+  display: block;
+  flex: 0 0 16px;
+  height: 16px;
+  width: 16px;
+}
+
+.label {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.preferences.preferences > .panel {
+  background: var(
+    --round-surface-raised,
+    var(--round-surface, var(--experience-surface, var(--ui-surface)))
+  );
+  border: 1px solid
+    var(--round-border, color-mix(in srgb, var(--experience-text, var(--ui-text)) 18%, transparent));
+  border-radius: 14px;
+  box-shadow: 0 16px 42px rgb(0 0 0 / 18%);
+  color: var(--round-text, var(--experience-text, var(--ui-text)));
+  display: grid;
+  gap: 2px;
+  inset-inline-end: 0;
+  max-width: calc(100vw - 24px);
+  min-width: min(210px, calc(100vw - 24px));
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 8px);
+  width: max-content;
+  z-index: 20;
+}
+
+.panel :global(.checkbox-field) {
+  align-items: center;
+  color: inherit;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 550;
+  gap: 10px;
+  line-height: 1.4;
+  margin: 0;
+  min-height: 44px;
+  padding: 8px;
+}
+
+.panel :global(.checkbox-field) > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.panel :global(.checkbox-field) input {
+  accent-color: var(--round-accent, var(--experience-accent, var(--ui-accent)));
+  flex: 0 0 20px;
+  margin: 0;
+}
+
+.panel input:focus-visible {
+  outline: 2px solid var(--round-focus, var(--experience-primary, var(--ui-focus)));
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  .preferences.preferences {
+    position: static;
+  }
+
+  .preferences.preferences > .panel {
+    width: min(280px, calc(100vw - 24px));
+  }
+}
+
+@media (forced-colors: active) {
+  .preferences > .trigger {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+
+  .trigger:focus-visible,
+  .panel input:focus-visible {
+    outline-color: Highlight;
+  }
+}

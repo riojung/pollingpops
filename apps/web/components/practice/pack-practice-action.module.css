@@ -1,0 +1,11 @@
+.entry {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.action {
+  max-width: 100%;
+  padding-block: 10px;
+  white-space: normal;
+  text-align: center;
+}

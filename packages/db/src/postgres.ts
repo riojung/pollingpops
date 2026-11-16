@@ -15,7 +15,10 @@ import { PlatformService } from "./platform-service.js";
 import { PlatformError } from "./platform-types.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
+import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import {
+  DEFAULT_SESSION_POLICY,
+  SessionPolicySchema,
   MAX_SESSION_DECISION_EVENTS,
   QUESTION_HEALTH_POST_USE_MAX_REPORTS,
   RecoveryPackCardReferenceSchema,
@@ -35,6 +38,7 @@ import {
   type QuizDraft,
   type Report,
   type SupportedLocale,
+  type SessionPolicy,
 } from "@openround/contracts";
 import {
   AudienceStoreError,
@@ -94,6 +98,7 @@ import type {
   ChatReactionRecord,
   ChatReactionSummaryRecord,
   CreatorContext,
+  CreatorSessionRecord,
   EmailPinChallengeRecord,
   EmailPinIdentityResult,
   MagicLinkIdentity,
@@ -710,8 +715,7 @@ function mapReportHistory(row: QueryResultRow): ReportHistoryRecord {
     title: String(row.quiz_title),
     status: report.status,
     participantCount: report.metrics.participantCount,
-    initialAccuracyPercent:
-      "initialAccuracy" in report ? report.initialAccuracy.percent : report.metrics.accuracyPercent,
+    initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
     recovery: {
       recovered,
       eligible,
@@ -1699,12 +1703,167 @@ export class PostgresRepository implements Repository {
     tokenHash: string;
     expiresAt: Date;
     activeWorkspaceId?: string;
+    createdAt?: Date;
   }) {
-    await this.systemQuery(
-      `INSERT INTO creator_sessions
-         (id, user_id, token_hash, expires_at, active_workspace_id)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [input.id, input.userId, input.tokenHash, input.expiresAt, input.activeWorkspaceId ?? null],
+    await this.transaction(
+      async (client) => {
+        const selected = await client.query(
+          `SELECT w.id, w.idle_timeout_minutes FROM workspaces w
+         JOIN workspace_members wm ON wm.workspace_id = w.id
+         WHERE wm.user_id = $1 AND ($2::uuid IS NULL OR w.id = $2)
+         ORDER BY w.created_at, w.id LIMIT 1 FOR SHARE OF w`,
+          [input.userId, input.activeWorkspaceId ?? null],
+        );
+        const workspace = selected.rows[0];
+        const timeout = Number(
+          workspace?.idle_timeout_minutes ?? DEFAULT_SESSION_POLICY.idleTimeoutMinutes,
+        );
+        const now = input.createdAt ?? new Date();
+        await client.query(
+          `INSERT INTO creator_sessions
+           (id, user_id, token_hash, expires_at, active_workspace_id, last_activity_at, idle_timeout_minutes, idle_expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            input.id,
+            input.userId,
+            input.tokenHash,
+            input.expiresAt,
+            workspace?.id ?? null,
+            now,
+            timeout,
+            new Date(
+              Math.min(input.expiresAt.getTime(), now.getTime() + (timeout * 60 + 60) * 1_000),
+            ),
+          ],
+        );
+      },
+      { system: true },
+    );
+  }
+
+  private creatorSessionRecord(row: QueryResultRow): CreatorSessionRecord {
+    const activeWorkspaceId = row.active_workspace_id ? String(row.active_workspace_id) : null;
+    const lastActivityAt = date(row.last_activity_at);
+    return {
+      id: String(row.id),
+      userId: String(row.user_id),
+      activeWorkspaceId,
+      lastActivityAt,
+      // ON DELETE SET NULL changes this to an identity-only session. Explicit
+      // selection is required, and its default timeout cannot revive old authority.
+      idleExpiresAt: new Date(
+        Math.min(
+          date(row.idle_expires_at).getTime(),
+          activeWorkspaceId ? Infinity : lastActivityAt.getTime() + 360_000,
+        ),
+      ),
+      expiresAt: date(row.expires_at),
+      idleTimeoutMinutes: activeWorkspaceId
+        ? Number(row.idle_timeout_minutes)
+        : DEFAULT_SESSION_POLICY.idleTimeoutMinutes,
+    };
+  }
+
+  async getCreatorSession(tokenHash: string, now: Date): Promise<CreatorSessionRecord | null> {
+    const result = await this.systemQuery(
+      `SELECT cs.* FROM creator_sessions cs JOIN users u ON u.id = cs.user_id
+       WHERE cs.token_hash = $1 AND cs.revoked_at IS NULL AND cs.expires_at > $2
+         AND cs.idle_expires_at > $2 AND u.deleted_at IS NULL`,
+      [tokenHash, now],
+    );
+    const session = result.rows[0] ? this.creatorSessionRecord(result.rows[0]) : null;
+    return session && session.idleExpiresAt > now ? session : null;
+  }
+
+  async creatorSessionExists(tokenHash: string) {
+    const result = await this.systemQuery(
+      "SELECT EXISTS (SELECT 1 FROM creator_sessions WHERE token_hash = $1) AS present",
+      [tokenHash],
+    );
+    return Boolean(result.rows[0]?.present);
+  }
+
+  async renewCreatorSession(tokenHash: string, now: Date, intent: "activity" | "continue") {
+    return this.transaction(
+      async (client) => {
+        // Serialize renewal with revocation, policy reductions and workspace switching.
+        // Read the policy after acquiring the session lock so a completed reduction is visible.
+        const result = await client.query(
+          `SELECT cs.* FROM creator_sessions cs JOIN users u ON u.id = cs.user_id
+         WHERE cs.token_hash = $1 AND cs.revoked_at IS NULL AND cs.expires_at > $2
+           AND cs.idle_expires_at > $2 AND u.deleted_at IS NULL FOR UPDATE OF cs`,
+          [tokenHash, now],
+        );
+        const row = result.rows[0];
+        if (!row) return null;
+        const session = this.creatorSessionRecord(row);
+        // Waiting for this row lock may consume all remaining grace. Use a fresh
+        // application clock after the wait, never PostgreSQL transaction-start now().
+        const checkedAt = new Date(Math.max(now.getTime(), Date.now()));
+        if (session.idleExpiresAt <= checkedAt || session.expiresAt <= checkedAt) return null;
+        const warningAt =
+          Math.min(session.idleExpiresAt.getTime(), session.expiresAt.getTime()) - 60_000;
+        if (intent === "activity" && checkedAt.getTime() >= warningAt) return session;
+        const workspace = session.activeWorkspaceId
+          ? (
+              await client.query("SELECT idle_timeout_minutes FROM workspaces WHERE id = $1", [
+                session.activeWorkspaceId,
+              ])
+            ).rows[0]
+          : null;
+        const timeout = Number(
+          workspace?.idle_timeout_minutes ?? DEFAULT_SESSION_POLICY.idleTimeoutMinutes,
+        );
+        const updated = await client.query(
+          `UPDATE creator_sessions SET last_activity_at = $2, idle_timeout_minutes = $3, idle_expires_at = $4
+         WHERE token_hash = $1 RETURNING *`,
+          [
+            tokenHash,
+            checkedAt,
+            timeout,
+            new Date(
+              Math.min(
+                session.expiresAt.getTime(),
+                checkedAt.getTime() + (timeout * 60 + 60) * 1_000,
+              ),
+            ),
+          ],
+        );
+        return this.creatorSessionRecord(updated.rows[0]!);
+      },
+      { system: true },
+    );
+  }
+
+  async getWorkspaceSessionPolicy(workspaceId: string): Promise<SessionPolicy> {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      "SELECT idle_timeout_minutes FROM workspaces WHERE id = $1",
+      [workspaceId],
+    );
+    return {
+      idleTimeoutMinutes: Number(result.rows[0]?.idle_timeout_minutes ?? 5),
+      warningDurationSeconds: 60,
+    };
+  }
+
+  async updateWorkspaceSessionPolicy(workspaceId: string, input: SessionPolicy) {
+    const policy = SessionPolicySchema.parse(input);
+    await this.transaction(
+      async (client) => {
+        const result = await client.query(
+          "UPDATE workspaces SET idle_timeout_minutes = $2 WHERE id = $1 RETURNING id",
+          [workspaceId, policy.idleTimeoutMinutes],
+        );
+        if (!result.rowCount) throw new PlatformError("NOT_FOUND", "Workspace not found");
+        await client.query(
+          `UPDATE creator_sessions SET idle_timeout_minutes = $2,
+           idle_expires_at = LEAST(idle_expires_at, last_activity_at + make_interval(mins => $2) + interval '60 seconds')
+         WHERE active_workspace_id = $1 AND revoked_at IS NULL`,
+          [workspaceId, policy.idleTimeoutMinutes],
+        );
+      },
+      { system: true },
     );
   }
 
@@ -1715,19 +1874,10 @@ export class PostgresRepository implements Repository {
               COALESCE(s.plan, 'free') AS plan
        FROM creator_sessions cs
        JOIN users u ON u.id = cs.user_id
-       JOIN workspace_members wm ON wm.user_id = u.id
-         AND wm.workspace_id = COALESCE(
-           cs.active_workspace_id,
-           (SELECT first_membership.workspace_id
-            FROM workspace_members AS first_membership
-            JOIN workspaces AS first_workspace ON first_workspace.id = first_membership.workspace_id
-            WHERE first_membership.user_id = u.id
-            ORDER BY first_workspace.created_at, first_workspace.id
-            LIMIT 1)
-         )
+       JOIN workspace_members wm ON wm.user_id = u.id AND wm.workspace_id = cs.active_workspace_id
        JOIN workspaces w ON w.id = wm.workspace_id
        LEFT JOIN subscriptions s ON s.workspace_id = w.id
-       WHERE cs.token_hash = $1 AND cs.revoked_at IS NULL AND cs.expires_at > $2
+       WHERE cs.token_hash = $1 AND cs.revoked_at IS NULL AND cs.expires_at > $2 AND cs.idle_expires_at > $2
          AND u.deleted_at IS NULL
        LIMIT 1`,
       [tokenHash, now],
@@ -1750,7 +1900,9 @@ export class PostgresRepository implements Repository {
     const result = await this.systemQuery(
       `SELECT u.id,u.email,u.locale,u.locale_explicit
       FROM creator_sessions session JOIN users u ON u.id=session.user_id
-      WHERE session.token_hash=$1 AND session.revoked_at IS NULL AND session.expires_at>$2 AND u.deleted_at IS NULL`,
+      WHERE session.token_hash=$1 AND session.revoked_at IS NULL AND session.expires_at>$2 AND session.idle_expires_at>$2
+        AND (session.active_workspace_id IS NOT NULL OR session.last_activity_at + interval '6 minutes' > $2)
+        AND u.deleted_at IS NULL`,
       [tokenHash, now],
     );
     const user = result.rows[0];
@@ -1807,19 +1959,42 @@ export class PostgresRepository implements Repository {
     }));
   }
 
-  async setCreatorSessionWorkspace(tokenHash: string, userId: string, workspaceId: string) {
-    const result = await this.systemQuery(
-      `UPDATE creator_sessions AS session SET active_workspace_id = $3
-       WHERE session.token_hash = $1 AND session.user_id = $2
-         AND session.revoked_at IS NULL
-         AND EXISTS (
-           SELECT 1 FROM workspace_members
-           WHERE workspace_id = $3 AND user_id = $2
-         )
-       RETURNING session.id`,
-      [tokenHash, userId, workspaceId],
+  async setCreatorSessionWorkspace(
+    tokenHash: string,
+    userId: string,
+    workspaceId: string,
+    now = new Date(),
+  ) {
+    return this.transaction(
+      async (client) => {
+        // Match policy updates' lock order to prevent switching past a concurrent reduction.
+        const workspace = await client.query(
+          `SELECT w.idle_timeout_minutes FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
+           WHERE w.id = $1 AND wm.user_id = $2 FOR SHARE OF w`,
+          [workspaceId, userId],
+        );
+        if (!workspace.rows[0]) return false;
+        const result = await client.query(
+          `SELECT cs.* FROM creator_sessions cs JOIN users u ON u.id = cs.user_id
+         WHERE cs.token_hash = $1 AND cs.user_id = $2 AND cs.revoked_at IS NULL
+           AND cs.expires_at > $3 AND cs.idle_expires_at > $3 AND u.deleted_at IS NULL FOR UPDATE OF cs`,
+          [tokenHash, userId, now],
+        );
+        if (!result.rows[0]) return false;
+        const checkedAt = new Date(Math.max(now.getTime(), Date.now()));
+        const session = this.creatorSessionRecord(result.rows[0]);
+        if (session.idleExpiresAt <= checkedAt || session.expiresAt <= checkedAt) return false;
+        const timeout = Number(workspace.rows[0].idle_timeout_minutes);
+        await client.query(
+          `UPDATE creator_sessions SET active_workspace_id = $2, idle_timeout_minutes = $3,
+           idle_expires_at = LEAST(idle_expires_at, $4::timestamptz, last_activity_at + make_interval(mins => $3) + interval '60 seconds')
+         WHERE token_hash = $1`,
+          [tokenHash, workspaceId, timeout, session.idleExpiresAt],
+        );
+        return true;
+      },
+      { system: true },
     );
-    return result.rowCount === 1;
   }
 
   async listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberRecord[]> {
@@ -1870,12 +2045,16 @@ export class PostgresRepository implements Repository {
         );
         if (removed.rowCount !== 1) return false;
         await client.query(
-          `UPDATE creator_sessions SET active_workspace_id = (
-             SELECT member.workspace_id FROM workspace_members AS member
+          `WITH fallback AS MATERIALIZED (
+             SELECT workspaces.id, workspaces.idle_timeout_minutes FROM workspace_members AS member
              JOIN workspaces ON workspaces.id = member.workspace_id
              WHERE member.user_id = $2
-             ORDER BY workspaces.created_at, workspaces.id LIMIT 1
+             ORDER BY workspaces.created_at, workspaces.id LIMIT 1 FOR SHARE OF workspaces
            )
+           UPDATE creator_sessions SET active_workspace_id = (SELECT id FROM fallback),
+             idle_timeout_minutes = COALESCE((SELECT idle_timeout_minutes FROM fallback), 5),
+             idle_expires_at = LEAST(idle_expires_at, last_activity_at +
+               make_interval(mins => COALESCE((SELECT idle_timeout_minutes FROM fallback), 5)) + interval '60 seconds')
            WHERE user_id = $2 AND active_workspace_id = $1`,
           [workspaceId, userId],
         );
@@ -2025,10 +2204,11 @@ export class PostgresRepository implements Repository {
     );
   }
 
-  async revokeCreatorSession(tokenHash: string) {
-    await this.systemQuery("UPDATE creator_sessions SET revoked_at = now() WHERE token_hash = $1", [
-      tokenHash,
-    ]);
+  async revokeCreatorSession(tokenHash: string, expectedSessionId?: string) {
+    await this.systemQuery(
+      "UPDATE creator_sessions SET revoked_at = now() WHERE token_hash = $1 AND ($2::uuid IS NULL OR id = $2)",
+      [tokenHash, expectedSessionId ?? null],
+    );
   }
 
   async getCreatorByUserId(userId: string, workspaceId: string): Promise<CreatorContext | null> {
@@ -2111,6 +2291,7 @@ export class PostgresRepository implements Repository {
          WITH ORDINALITY AS source(question, ordinal)
        WHERE quiz.workspace_id = $1 AND quiz.status <> 'archived'
          AND source.question ->> 'mediaId' IS NULL
+         AND source.question ->> 'type' IN ('single_select', 'true_false', 'multi_select', 'poll', 'numeric', 'rating', 'ranking', 'open_text', 'word_cloud')
          AND COALESCE(source.question ->> 'delivery', 'main') = 'main'
          AND source.question ->> 'linkedRecheckQuestionId' IS NULL
          AND source.question ->> 'recoveryPackSource' IS NULL
@@ -7111,7 +7292,7 @@ export class PostgresRepository implements Repository {
         ]);
         if (monthlyLimit !== null) {
           const usage = await client.query(
-            `SELECT count(*)::integer AS count FROM authoring_jobs
+            `SELECT count(*)::integer AS count FROM authoring_admission_receipts
              WHERE workspace_id = $1 AND created_at >= $2`,
             [input.workspaceId, since],
           );
@@ -7153,7 +7334,7 @@ export class PostgresRepository implements Repository {
   async countAuthoringJobsSince(workspaceId: string, since: Date) {
     const result = await this.workspaceQuery(
       workspaceId,
-      `SELECT count(*)::integer AS count FROM authoring_jobs
+      `SELECT count(*)::integer AS count FROM authoring_admission_receipts
        WHERE workspace_id = $1 AND created_at >= $2`,
       [workspaceId, since],
     );
@@ -7712,6 +7893,45 @@ export class PostgresRepository implements Repository {
            FROM session_summary_shares WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
+        const presentationShares = await queryWorkspaceData(
+          `SELECT id, workspace_id AS "workspaceId", presentation_id AS "presentationId",
+                  version_id AS "versionId", actor_id AS "actorId", request_id AS "requestId",
+                  created_at AS "createdAt", expires_at AS "expiresAt", revoked_at AS "revokedAt"
+           FROM presentation_shares WHERE workspace_id = ANY($1::uuid[])
+           ORDER BY created_at, id`,
+        );
+        const presentationAssignments = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",presentation_id AS "presentationId",version_id AS "versionId",
+                  actor_id AS "actorId",request_id AS "requestId",created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt"
+           FROM presentation_assignments WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
+        const presentationPracticeAssignments = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",presentation_id AS "presentationId",version_id AS "versionId",
+                  actor_id AS "actorId",request_id AS "requestId",created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt"
+           FROM presentation_practice_assignments WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
+        const presentationReadingAttempts = await queryWorkspaceData(
+          `SELECT id,workspace_id AS "workspaceId",assignment_id AS "assignmentId",revision::integer AS revision,
+                  read_block_ids AS "readBlockIds",current_block_id AS "currentBlockId",
+                  started_at AS "startedAt",updated_at AS "updatedAt",completed_at AS "completedAt"
+           FROM presentation_reading_attempts WHERE workspace_id=ANY($1::uuid[]) ORDER BY started_at,id`,
+        );
+        // Feedback can belong to a reviewer's account even when the publication is in another workspace.
+        await client.query("SELECT set_config('app.presentation_review_lifecycle','on',true)");
+        const presentationReviewCycles = await queryWorkspaceData(
+          `SELECT workspace_id AS "workspaceId",presentation_id AS "presentationId",share_id AS "shareId",
+                  review_seq AS "reviewSeq",approved_at AS "approvedAt"
+           FROM presentation_review_cycles WHERE workspace_id=ANY($1::uuid[]) ORDER BY share_id`,
+        );
+        const presentationReviewMessages = await client.query(
+          `SELECT workspace_id AS "workspaceId",share_id AS "shareId",id,thread_id AS "threadId",
+                  actor_id AS "actorId",author_role AS role,reviewer_ordinal AS ordinal,body AS text,
+                  version,deleted,created_at AS "createdAt",updated_at AS "updatedAt",created_seq AS "createdSeq"
+           FROM presentation_review_messages WHERE workspace_id=ANY($1::uuid[]) OR actor_id=$2
+           ORDER BY share_id,created_seq,id`,
+          [workspaceIds, userId],
+        );
+        await client.query("SELECT set_config('app.presentation_review_lifecycle','',true)");
         const quizDraftHistory = await queryWorkspaceData(
           `SELECT id, workspace_id, quiz_id, revision, draft, draft_schema_version,
                   saved_by, mutation_id, created_at
@@ -7863,9 +8083,17 @@ export class PostgresRepository implements Repository {
           : { rows: [] };
         const presentationSessionResponses = await queryWorkspaceData(
           `SELECT id, workspace_id, session_id, participant_id, block_id, question_id,
-                  response, correct, score, response_ms, idempotency_key, submitted_at
+                  CASE WHEN response_schema_version=3 THEN '{}'::jsonb ELSE response-'textValue' END AS response, correct, score, response_ms, idempotency_key, submitted_at
            FROM presentation_live_responses WHERE workspace_id = ANY($1::uuid[])
            ORDER BY submitted_at, id`,
+        );
+        const presentationVisualImports = await queryWorkspaceData(
+          `SELECT id,workspace_id,presentation_id,created_by,request_id,source_digest,source_type,source_name,file_count,status,attempts,pages,warnings,error,created_at,updated_at,expires_at
+           FROM presentation_visual_imports WHERE workspace_id=ANY($1::uuid[]) ORDER BY created_at,id`,
+        );
+        const presentationTextModerationReceipts = await queryWorkspaceData(
+          `SELECT id,workspace_id,session_id,command_id,response_id,block_id,host_credential_id,request_hash,previous_status,status,expected_revision,expected_moderation_version,resulting_moderation_version,accepted_at
+           FROM presentation_text_moderation_receipts WHERE workspace_id=ANY($1::uuid[]) ORDER BY session_id,accepted_at,id`,
         );
         const presentationSessionTimeline = await queryWorkspaceData(
           `SELECT id, workspace_id, session_id, sequence, event_type, block_index, block_id,
@@ -7993,6 +8221,27 @@ export class PostgresRepository implements Repository {
            FROM authoring_jobs WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
+        const presentationAssistanceJobs = await client.query(
+          `SELECT id,workspace_id,presentation_id,created_by,source_name,source_digest,slide_count,
+                  status,attempts,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
+           FROM presentation_assistance_jobs
+           WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
+          [workspaceIds, userId],
+        );
+        const presentationTextAssistanceJobs = await client.query(
+          `SELECT id,workspace_id,presentation_id,created_by,block_id,node_id,operation,role,source_revision,source_digest,target_language,source_language,
+                  status,attempts,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
+           FROM presentation_text_assistance_jobs
+           WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
+          [workspaceIds, userId],
+        );
+        const presentationQuestionSuggestionsJobs = await client.query(
+          `SELECT id,workspace_id,presentation_id,created_by,block_id,source_revision,source_digest,output_language,
+                  status,attempts,source_snapshot,proposal,proposal_hash,error_code,created_at,updated_at,expires_at
+           FROM presentation_question_suggestions_jobs
+           WHERE workspace_id=ANY($1::uuid[]) OR created_by=$2 ORDER BY created_at,id`,
+          [workspaceIds, userId],
+        );
         const institutionPolicies = await queryWorkspaceData(
           `SELECT * FROM workspace_institution_policies
            WHERE workspace_id = ANY($1::uuid[]) ORDER BY workspace_id`,
@@ -8093,6 +8342,12 @@ export class PostgresRepository implements Repository {
           surveyRooms: surveyRooms.rows.map((row) => row.data),
           sessionSummarySnapshots: sessionSummarySnapshots.rows,
           sessionSummaryShares: sessionSummaryShares.rows,
+          presentationShares: presentationShares.rows,
+          presentationAssignments: presentationAssignments.rows,
+          presentationPracticeAssignments: presentationPracticeAssignments.rows,
+          presentationReadingAttempts: presentationReadingAttempts.rows,
+          presentationReviewCycles: presentationReviewCycles.rows,
+          presentationReviewMessages: presentationReviewMessages.rows,
           quizzes: quizzes.rows.map((row) => ({
             ...row,
             draft: upcastRoundDraft(
@@ -8184,6 +8439,8 @@ export class PostgresRepository implements Repository {
           scopedQnaAudit: scopedQnaAudit.rows,
           presentationSessionParticipants: presentationSessionParticipants.rows,
           presentationSessionResponses: presentationSessionResponses.rows,
+          presentationVisualImports: presentationVisualImports.rows,
+          presentationTextModerationReceipts: presentationTextModerationReceipts.rows,
           presentationSessionTimeline: presentationSessionTimeline.rows,
           presentationSessionCommandReceipts: presentationSessionCommandReceipts.rows,
           presentationSessionCredentials: presentationSessionCredentials.rows,
@@ -8209,6 +8466,9 @@ export class PostgresRepository implements Repository {
           followupAttempts: followupAttempts.rows,
           followupAnswers: followupAnswers.rows,
           authoringJobs: authoringJobs.rows,
+          presentationAssistanceJobs: presentationAssistanceJobs.rows,
+          presentationTextAssistanceJobs: presentationTextAssistanceJobs.rows,
+          presentationQuestionSuggestionsJobs: presentationQuestionSuggestionsJobs.rows,
           institutionPolicies: institutionPolicies.rows,
           externalIdentities: externalIdentities.rows,
           ltiRegistrations: ltiRegistrations.rows,
@@ -8279,6 +8539,11 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM library_favorites WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM session_summary_shares WHERE actor_id=$1", [userId]);
+        await client.query("DELETE FROM presentation_shares WHERE actor_id=$1", [userId]);
+        await client.query("DELETE FROM presentation_assignments WHERE actor_id=$1", [userId]);
+        await client.query("DELETE FROM presentation_practice_assignments WHERE actor_id=$1", [
+          userId,
+        ]);
         await client.query("DELETE FROM consent_records WHERE user_id=$1", [userId]);
         await client.query(
           "UPDATE session_staff_credentials SET revoked_at=now() WHERE created_by=$1 AND revoked_at IS NULL",
@@ -8329,6 +8594,11 @@ export class PostgresRepository implements Repository {
         await client.query("DELETE FROM library_favorites WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM beta_feedback WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM session_summary_shares WHERE actor_id = $1", [userId]);
+        await client.query("DELETE FROM presentation_shares WHERE actor_id = $1", [userId]);
+        await client.query("DELETE FROM presentation_assignments WHERE actor_id = $1", [userId]);
+        await client.query("DELETE FROM presentation_practice_assignments WHERE actor_id = $1", [
+          userId,
+        ]);
         await client.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM workspace_members WHERE user_id = $1", [userId]);
         await client.query("DELETE FROM consent_records WHERE user_id = $1", [userId]);
@@ -8414,10 +8684,25 @@ export class PostgresRepository implements Repository {
         );
         await client.query("DELETE FROM canvas_board_outbox WHERE expires_at<=$1", [now]);
         await client.query("DELETE FROM session_summary_snapshots WHERE expires_at <= $1", [now]);
+        await client.query(
+          "DELETE FROM presentation_shares WHERE expires_at <= $1::timestamptz - interval '7 days'",
+          [now],
+        );
+        await client.query(
+          "DELETE FROM presentation_assignments WHERE expires_at <= $1::timestamptz - interval '7 days'",
+          [now],
+        );
+        await client.query(
+          "DELETE FROM presentation_practice_assignments WHERE expires_at <= $1::timestamptz - interval '7 days'",
+          [now],
+        );
         await client.query("DELETE FROM auth_magic_tokens WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM auth_email_pin_challenges WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM creator_sessions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM authoring_jobs WHERE expires_at <= $1", [now]);
+        await client.query("SELECT erase_expired_presentation_assistance($1)", [now]);
+        await client.query("SELECT erase_expired_presentation_text_assistance($1)", [now]);
+        await client.query("SELECT erase_expired_presentation_question_suggestions($1)", [now]);
         await client.query("DELETE FROM federated_auth_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_login_transactions WHERE expires_at <= $1", [now]);
         await client.query("DELETE FROM lti_launches WHERE expires_at <= $1", [now]);

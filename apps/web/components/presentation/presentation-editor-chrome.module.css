@@ -1,0 +1,302 @@
+.disclosure {
+  position: relative;
+  min-width: 0;
+}
+.disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  cursor: pointer;
+  list-style: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure > summary:hover,
+.disclosure[open] > summary {
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-border-strong);
+}
+.disclosure > summary:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.compact > summary {
+  min-width: 42px;
+  padding-inline: 8px;
+}
+.compact .chevron {
+  display: none;
+}
+.chevron {
+  display: inline-flex;
+  margin-left: auto;
+  opacity: 0.55;
+}
+.chevron svg {
+  width: 13px;
+  height: 13px;
+}
+.disclosure[open] > summary .chevron {
+  transform: rotate(180deg);
+}
+.disclosureBody {
+  position: fixed;
+  z-index: 100;
+  inset: auto;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: min(570px, calc(100dvh - 24px));
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 11px;
+  box-shadow: var(--ui-shadow-lg);
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+}
+.disclosure:not([open]) > .disclosureBody {
+  display: none;
+}
+.disclosureBody[data-suspended] {
+  /* Existing custom modal backdrops start at 60. */
+  z-index: 50;
+}
+.disclosureBody::backdrop {
+  background: transparent;
+}
+.disclosureBody:where([popover], [data-suspended]) button:not(:where(dialog *, [role="dialog"] *)) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
+  background: var(--ui-surface-hover);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *)):disabled {
+  color: var(--ui-text-muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *))
+  > svg {
+  flex: 0 0 18px;
+  color: var(--ui-text-muted);
+}
+.disclosureBody:where([popover], [data-suspended])
+  button:not(:where(dialog *, [role="dialog"] *))
+  > span {
+  flex: 1;
+  min-width: 0;
+}
+.disclosureBody > hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  margin: 4px 0;
+}
+.menuSection {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-block: 3px;
+}
+.menuSection + .menuSection {
+  border-top: 1px solid var(--ui-border);
+  margin-top: 3px;
+  padding-top: 7px;
+}
+.menuSectionLabel {
+  padding: 5px 10px 4px;
+  color: var(--ui-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inline > .disclosureBody {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin-top: 8px;
+}
+.thumbnail {
+  position: absolute;
+  z-index: 1;
+  inset: 9px 10px auto;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--ui-surface);
+  pointer-events: none;
+}
+.thumbnailScene {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 960px;
+  height: 540px;
+  transform-origin: top left;
+  overflow: hidden;
+}
+.thumbnailScene > article {
+  min-height: 540px;
+}
+.imagePlaceholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 80px;
+  color: var(--ui-text-muted);
+  background: var(--ui-surface-soft);
+}
+.imagePlaceholder svg {
+  width: 20%;
+  height: 20%;
+}
+.thumbnailPlaceholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--ui-surface) 55%, var(--ui-surface-soft) 55%);
+}
+.activityThumbnail {
+  position: relative;
+  width: 960px;
+  height: 540px;
+  box-sizing: border-box;
+  padding: 55px 65px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+.activityThumbnail > span {
+  display: block;
+  margin-bottom: 20px;
+  font-size: 24px;
+  color: var(--ui-text-muted);
+}
+.activityThumbnail > strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 30px;
+  font-size: 42px;
+  line-height: 1.15;
+}
+.activityThumbnail > div {
+  padding: 10px 18px;
+  margin-top: 10px;
+  border: 2px solid var(--ui-border);
+  border-radius: 10px;
+  font-size: 25px;
+  line-height: 1.2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure > summary {
+    transition: none;
+  }
+}
+
+.activityThumbnail[data-has-media="true"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  grid-template-rows: auto minmax(140px, auto);
+  column-gap: 40px;
+  row-gap: 10px;
+  align-content: start;
+}
+.activityThumbnail[data-has-media="true"] > span {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+.activityThumbnail[data-has-media="true"] > strong {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  margin: 0;
+}
+.activityThumbnail[data-has-media="true"] > div:not(.activityMedia),
+.activityThumbnail[data-has-media="true"] > p {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+.activityThumbnail[data-has-media="true"] > div:not(.activityMedia) {
+  padding-block: 8px;
+}
+.activityThumbnail > .activityMedia {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  width: 210px;
+  height: 180px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+}
+.activityMedia > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.imagePlaceholder[data-thumbnail-image-state="unavailable"] {
+  opacity: 0.65;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--ui-surface-soft) 0 18px,
+    var(--ui-surface) 18px 36px
+  );
+}
+
+@media (max-width: 700px) {
+  .disclosureBody:where([popover], [data-suspended])
+    button:not(:where(dialog *, [role="dialog"] *)) {
+    min-height: 44px;
+  }
+}

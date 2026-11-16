@@ -60,9 +60,8 @@ test("Question Health previews a draft diff, applies one revision, and undoes it
   expect(prepared.ok()).toBeTruthy();
 
   await page.goto(`/quiz/${quiz.id}`);
-  const panel = page.locator("details").filter({
-    has: page.locator("summary", { hasText: "Question Health · advisory" }),
-  });
+  await page.getByText("Question review", { exact: true }).click();
+  const panel = page.getByText("Question Health · advisory", { exact: true }).locator("..");
   await expect(panel).toBeVisible();
   await panel.locator("summary").first().click();
   const review = panel.getByRole("button", { name: "Review saved draft" });
@@ -156,18 +155,18 @@ test("Question Health reviews the immutable published version after draft edits 
   expect(firstPublish.status()).toBe(200);
 
   const publishedPanel = () =>
-    page.locator("details").filter({
-      has: page.locator("summary", {
-        hasText: "Question Health · published version (read-only)",
-      }),
-    });
+    page
+      .getByText("Question Health · published version (read-only)", { exact: true })
+      .locator("..");
   async function reviewPublishedVersion() {
+    const reviewTools = page.getByText("Question review", { exact: true }).locator("..");
+    if (!(await reviewTools.evaluate((node) => (node as HTMLDetailsElement).open)))
+      await reviewTools.locator(":scope > summary").click();
     await publishedPanel().locator("summary").first().click();
     await publishedPanel().getByRole("button", { name: "Review published version" }).click();
   }
 
   await page.goto(`/quiz/${quiz.id}`);
-  await expect(publishedPanel()).toBeVisible();
   await reviewPublishedVersion();
   await expect(publishedPanel()).toContainText("published v1");
   await expect(publishedPanel()).toContainText("Explanation missing");

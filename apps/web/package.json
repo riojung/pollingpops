@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node ../../scripts/build/next.mjs web",
     "dev": "next dev",
     "lint": "eslint app components lib next.config.ts proxy.ts",
     "start": "next start",

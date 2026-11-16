@@ -12,6 +12,9 @@ normal path takes about ten minutes after container images are available.
 Core-parity includes Presentation Q&A, a gated self-paced Survey beta, and gated Live Round
 multiple-selection polls, ranking, moderated open text and word clouds. Standalone Q&A feedback
 rooms and advanced feedback exports remain pending.
+The first Presentation opinion-format increment adds multiple-selection polls and full/top-N
+rankings after migration 091 and the matching reader/writer release. Moderated Presentation text
+and word clouds additionally require migration 092 and document-v10/response-v3/report-V5 readers.
 
 ## Try the new creation workflows
 
@@ -44,7 +47,8 @@ In a Survey poll, **Maximum selections** controls single-choice radios or multi-
 up to the number of available options. Live Round polls offer the same bounded setting when
 `FEATURE_ROUND_CLIENT_PROTOCOL=true` and the workspace UUID is in
 `CORE_PARITY_WORKSPACE_ALLOWLIST`. Their multiple-selection player uses explicit submission;
-polls remain unscored, and Presentation/practice delivery of this setting remains unsupported.
+polls remain unscored. Practice delivery remains unsupported; Presentation delivery uses the
+separate document-v9/migration-091 boundary described below rather than the Round protocol.
 The same gate enables Ranking, Open text and Word cloud in Live Round builders. Text responses
 start in a private moderation queue; approve at least five responses and reveal results before
 they appear publicly. Review responses before ending the session. See
@@ -399,8 +403,54 @@ native slide with Design controls above the canvas; **New slide** adds another d
 Existing ordinary slides offer **Convert to native slide** in the toolbar above the canvas.
 Ordinary slides retain their six structured layouts and eight-element limit. Native slides add
 bounded text, images, shapes, connectors and design tools without requiring an activity.
-The preview and live views share the arrangement. See
+**Templates → Presentations** offers 21 entries: 12 native, eight-slide scenario decks alongside the nine
+retained facilitated templates. Search by workflow, choose **Preview structure**, then use
+**Previous slide**/**Next slide** or Left/Right, Home and End; Escape closes the preview.
+**Use presentation template** creates an independent draft. The sample stories and data are
+illustrative, with adaptation guidance in the speaker notes.
+
+On a native slide, **Group selected objects** keeps a selection together; use **Group and rotate**
+for proportional resizing and bounded rotation. Moving near an edge or centre shows local snap
+guides; hold Alt to move freely and Escape to cancel the drag. **Add table** and **Add bar chart**,
+**Add line chart** or **Add pie chart** provide editable inline data. Use **Preview pasted data**
+before **Apply table changes**/**Apply chart changes**; **Discard staged changes** leaves the
+saved object unchanged. Tables support 20 data rows × six columns; charts support 20 categories
+and four series, with a full data table and description. Pie charts use one nonnegative series.
+
+**External video** adds an explicit HTTPS destination plus a captions/transcript fallback. It opens
+on the external site only when followed; it does not embed or upload video. The preview and live
+views share the slide renderers. Operators must deploy the
+[scene4/document8-compatible reader set](runbooks/upgrade.md#native-presentation-composition-compatibility)
+before accepting the new composition/template writes. Existing feature policies and entitlements
+are unchanged. See
 [the Presentation walkthrough](user-guide.md#create-and-host-a-presentation).
+
+For an opinion activity, choose **Poll** and set **Maximum selections**, or choose **Ranking** and
+set **Choices to rank** to all choices or an exact top-N. These formats have no correct answer,
+confidence or participant points. Participants explicitly submit their selected options or ordered
+ranking, then wait for **Saved**. **Reveal and close question** shows anonymous current-question
+results: poll percentages count respondents; ranking weights decrease from the number of available
+choices and give zero to unranked options. The report offers **Export evidence CSV**. A published
+Round's multiple-selection poll or ranking can also be copied into an independent Presentation.
+Operators must complete the [migration-091/document-v9 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+before these writes; older content/default creation versions remain unchanged. See the
+[poll/ranking walkthrough](user-guide.md#collect-presentation-polls-and-rankings).
+
+For written feedback, choose **Open text** (1,000 characters) or **Word cloud** (80 characters).
+Participants submit once and wait for **Saved**. The host uses **Text response moderation** to
+approve or remove each response. **Reveal and close question** displays only approved responses,
+with a minimum of five approved respondents. Removing a response erases its body; fewer than
+five approvals hide all text results. **Export evidence CSV** includes qualified approved
+results. See the [text walkthrough](user-guide.md#collect-moderated-presentation-text) and
+[migration-092 rollout](runbooks/upgrade.md#presentation-moderated-text-compatibility).
+
+In an eligible live Presentation, **Open audience stage** creates a separate read-only window for
+screen sharing; use its new-tab link when popups are blocked. Keep the presenter workspace for
+private notes, next-slide preview and the local **Presentation timer**. The audience stage keeps
+the join code/address/QR visible. Right Arrow, Page Down and Space advance when controls/dialogs
+are not focused and the previous action is confirmed. Operators must apply migration 090 and
+complete the [coordinated stage-reader rollout](runbooks/upgrade.md#presentation-stage-credential-compatibility)
+before minting stage passes. See [delivery guidance](user-guide.md#present-with-private-notes-and-an-audience-stage).
 
 In an eligible live Presentation host, select **Launch companion** to open the compact sidecar.
 Its dedicated pass expires within one hour; launching a replacement revokes the old companion
@@ -457,6 +507,15 @@ retained sessions or practice assignments prevent source-content deletion. See
 this with synthetic data. Existing slide documents are read as the v2 structured model without a
 database migration; permanent Library deletion uses migration
 `048_library_artifact_deletion.sql`, applied through the normal database migration workflow.
+
+## Optional: enable visual Presentation import
+
+Use the current server image (Node 26), apply migration 093 and configure the existing private
+object storage, malware scanning and media-upload feature. Keep the jobs and retention processes
+running. The Builder's **Import visual slides** accepts one PDF or an image set, presents a loss
+report and requires author-reviewed reading text. It does not require an AI provider. See the
+[user flow](user-guide.md#import-a-pdf-or-a-set-of-slide-images) and
+[conversion limits/rollout](runbooks/upgrade.md#presentation-visual-import-compatibility).
 
 ## Optional: enable source-grounded authoring
 

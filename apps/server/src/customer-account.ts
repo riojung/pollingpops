@@ -30,10 +30,11 @@ export async function workspaceAccountContext(
   creator: CreatorContext,
 ): Promise<WorkspaceAccountContext> {
   const platform = createPlatformRepository(repository);
-  const [workspaces, organization, organizations] = await Promise.all([
+  const [workspaces, organization, organizations, sessionPolicy] = await Promise.all([
     repository.listWorkspaces(creator.userId),
     platform.getOrganizationForWorkspace(creator.workspaceId),
     platform.listOrganizations(creator.userId),
+    repository.getWorkspaceSessionPolicy(creator.workspaceId),
   ]);
   const workspace = workspaces.find((candidate) => candidate.id === creator.workspaceId);
   if (!workspace)
@@ -48,6 +49,7 @@ export async function workspaceAccountContext(
     id: workspace.id,
     name: workspace.name,
     accountType,
+    sessionPolicy,
     licenseUnit: organization?.licenseUnit ?? "workspace",
     planSource: config.COMMUNITY_MODE
       ? "community"
@@ -75,8 +77,14 @@ export function registerCustomerAccountRoutes(
   app.patch("/v1/workspace/settings", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
-    const { name } = UpdateWorkspaceSettingsSchema.parse(request.body);
-    await platform.renameWorkspace(creator.workspaceId, creator.userId, name);
+    const { name, sessionPolicy } = UpdateWorkspaceSettingsSchema.parse(request.body);
+    const context = await workspaceAccountContext(repository, config, creator);
+    if (!context.permissions.manageWorkspace)
+      throw new PlatformError("FORBIDDEN", "Workspace administration is required");
+    if (name !== undefined)
+      await platform.renameWorkspace(creator.workspaceId, creator.userId, name);
+    if (sessionPolicy !== undefined)
+      await repository.updateWorkspaceSessionPolicy(creator.workspaceId, sessionPolicy);
     await repository.recordAudit({
       workspaceId: creator.workspaceId,
       actorId: creator.userId,
@@ -84,7 +92,12 @@ export function registerCustomerAccountRoutes(
       targetType: "workspace",
       targetId: creator.workspaceId,
       requestId: request.id,
-      metadata: { name },
+      metadata: {
+        ...(name !== undefined ? { name } : {}),
+        ...(sessionPolicy
+          ? { idleTimeoutMinutes: sessionPolicy.idleTimeoutMinutes, warningDurationSeconds: 60 }
+          : {}),
+      },
     });
     return { workspace: await workspaceAccountContext(repository, config, creator) };
   });

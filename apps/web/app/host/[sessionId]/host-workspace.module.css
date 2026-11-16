@@ -1,0 +1,287 @@
+.shell.shell {
+  --host-gap: 20px;
+  --host-border: color-mix(in srgb, var(--experience-text) 16%, transparent);
+  --host-radius: 18px;
+  --ui-shadow-sm: 0 2px 10px rgb(0 0 0 / 5%);
+  --ui-shadow-md: 0 8px 24px rgb(0 0 0 / 8%);
+  background-color: color-mix(in srgb, var(--experience-surface) 78%, var(--experience-canvas));
+  background-image: none;
+}
+
+.topbar.topbar {
+  gap: 20px;
+  min-height: 72px;
+  padding-block: 10px;
+}
+
+.topbar > :global(.button-row) {
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.workspace.workspace {
+  gap: 0;
+  padding-block: 24px 48px;
+}
+
+.sessionSummary {
+  align-items: center;
+  background: var(--experience-surface);
+  border: 1px solid var(--host-border);
+  border-radius: var(--host-radius);
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) repeat(3, minmax(0, 1fr));
+  margin-bottom: 16px;
+  padding: 16px 20px;
+}
+
+.sessionSummary > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding-inline: 20px;
+}
+
+.sessionSummary > div + div {
+  border-inline-start: 1px solid var(--host-border);
+}
+
+.sessionSummary > div:first-child {
+  padding-inline-start: 0;
+}
+
+.sessionSummary span {
+  color: var(--experience-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sessionSummary strong {
+  color: var(--experience-text);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sessionSummary .roomCode strong {
+  font-size: 1.45rem;
+  letter-spacing: 0.12em;
+}
+
+.workGrid.workGrid {
+  gap: var(--host-gap);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 320px);
+}
+
+.workGrid.workGrid[data-results-stage] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mainColumn {
+  display: grid;
+  gap: var(--host-gap);
+  min-width: 0;
+}
+
+.mainColumn > [data-variant="host"] {
+  border-color: var(--host-border);
+  border-radius: var(--host-radius);
+  box-shadow: var(--ui-shadow-sm);
+  margin-top: 0;
+}
+
+.shell .workGrid .stage {
+  border: 1px solid var(--host-border);
+  border-radius: var(--host-radius);
+  box-shadow: var(--ui-shadow-sm);
+  min-width: 0;
+  padding: clamp(20px, 2.5vw, 32px);
+}
+
+.stage:empty {
+  display: none;
+}
+
+.stage :global(.host-question-prompt) {
+  font-size: clamp(1.7rem, 2.8vw, 2.4rem);
+  font-weight: 750;
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.stage :global(.answer-grid) {
+  gap: 12px;
+  margin-block: 24px 0;
+}
+
+.stage :global(.answer-button) {
+  align-content: center;
+  border-radius: 12px;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 64px;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+}
+
+.stage :global(.status-pill) {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.stage :global(.live-lobby-heading) {
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  line-height: 1.25;
+  margin-bottom: 8px;
+}
+
+.stage :global(.session-code) {
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  margin-block: 16px;
+  overflow-wrap: anywhere;
+}
+
+.shell .workGrid > :global(.recovery-rail),
+.shell .workGrid > :global(.panel) {
+  border: 1px solid var(--host-border);
+  border-radius: var(--host-radius);
+  box-shadow: var(--ui-shadow-sm);
+  padding: 22px;
+}
+
+.workGrid > :global(.recovery-rail) > h2 {
+  font-size: 1.15rem;
+  line-height: 1.4;
+  margin-block: 8px 16px;
+}
+
+.workGrid :global(.recovery-guidance) {
+  background: color-mix(in srgb, var(--experience-surface-strong) 48%, var(--experience-surface));
+  border: 1px solid var(--host-border);
+  border-inline-start: 3px solid var(--experience-primary);
+  border-radius: 12px;
+  color: var(--experience-text);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  padding: 16px;
+}
+
+.workGrid :global(.recovery-guidance) small {
+  color: var(--experience-muted);
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+.workGrid :global(.staff-management) {
+  border-color: var(--host-border);
+  font-size: 0.85rem;
+}
+
+.workGrid :global(.staff-management) summary {
+  color: var(--experience-muted);
+  min-height: 44px;
+}
+
+.workGrid .resultsStage {
+  background: var(--experience-surface);
+  padding: 20px 24px;
+}
+
+.workGrid .completion {
+  background: none;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.workGrid .completion :global(.host-complete-heading) {
+  font-size: 1.5rem;
+  line-height: 1.3;
+}
+
+.workGrid .completion :global(.lead) {
+  color: var(--experience-muted);
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+@media (max-width: 1023px) {
+  .workGrid.workGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topbar.topbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .sessionSummary {
+    grid-template-columns: minmax(10rem, 1.3fr) repeat(3, minmax(0, 1fr));
+  }
+
+  .sessionSummary > div {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .shell.shell {
+    --host-gap: 16px;
+  }
+
+  .workspace.workspace {
+    padding-block: 16px 32px;
+  }
+
+  .topbar > :global(.button-row) {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .sessionSummary {
+    gap: 16px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 16px;
+  }
+
+  .sessionSummary > div {
+    padding-inline: 12px;
+  }
+
+  .sessionSummary > div:nth-child(odd) {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+  }
+
+  .sessionSummary strong {
+    font-size: 1.1rem;
+  }
+
+  .sessionSummary .roomCode strong {
+    font-size: 1.25rem;
+    letter-spacing: 0.08em;
+  }
+
+  .workGrid .stage,
+  .workGrid > :global(.recovery-rail),
+  .workGrid > :global(.panel) {
+    padding: 20px;
+  }
+
+  .stage :global(.answer-grid) {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 20px;
+  }
+}

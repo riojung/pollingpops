@@ -1,0 +1,63 @@
+.dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: 85vh;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0;
+}
+
+.controls h2 {
+  margin: 0;
+}
+
+.dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.dialog select,
+.dialog button {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  background: var(--ui-surface-raised);
+  font: inherit;
+}
+
+.dialog button {
+  cursor: pointer;
+}
+
+.dialog button:disabled,
+.dialog select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .dialog {
+    padding: 14px;
+  }
+}

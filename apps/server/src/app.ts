@@ -1,3 +1,4 @@
+import { registerPresentationInsightsRoutes } from "./presentation-insights-routes.js";
 import type { Plan } from "@openround/contracts";
 import type { Socket } from "node:net";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
@@ -21,6 +22,10 @@ import {
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
   createPresentationRepository,
+  createPresentationShareRepository,
+  createPresentationAssignmentRepository,
+  createPresentationPracticeAssignmentRepository,
+  createPresentationReviewFeedbackRepository,
   createRecoveryPackRepository,
   createPresentationSessionRepository,
   createPlatformRepository,
@@ -40,6 +45,33 @@ import {
 } from "./authoring-assistant.js";
 import { AuthoringService } from "./authoring-service.js";
 import { AuthoringWorker } from "./authoring-worker.js";
+import {
+  OpenAiCompatiblePresentationAssistanceProvider,
+  presentationAssistanceProviderAvailable,
+  type PresentationAssistanceProvider,
+} from "./presentation-assistance-provider.js";
+import { PresentationAssistanceService } from "./presentation-assistance-service.js";
+import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
+import { registerPresentationAssistanceRoutes } from "./presentation-assistance-routes.js";
+import {
+  OpenAiCompatiblePresentationTextAssistanceProvider,
+  presentationTextAssistanceProviderAvailable,
+  type PresentationTextAssistanceProvider,
+} from "./presentation-text-assistance-provider.js";
+import { PresentationTextAssistanceService } from "./presentation-text-assistance-service.js";
+import { PresentationTextAssistanceWorker } from "./presentation-text-assistance-worker.js";
+import {
+  OpenAiCompatiblePresentationQuestionSuggestionsProvider,
+  presentationQuestionSuggestionsProviderAvailable,
+  type PresentationQuestionSuggestionsProvider,
+} from "./presentation-question-suggestions-provider.js";
+import { PresentationQuestionSuggestionsService } from "./presentation-question-suggestions-service.js";
+import { PresentationQuestionSuggestionsWorker } from "./presentation-question-suggestions-worker.js";
+import { registerPresentationQuestionSuggestionsRoutes } from "./presentation-question-suggestions-routes.js";
+import { registerPresentationTextAssistanceRoutes } from "./presentation-text-assistance-routes.js";
+import { PresentationVisualImportService } from "./presentation-visual-import-service.js";
+import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
+import { registerPresentationVisualImportRoutes } from "./presentation-visual-import-routes.js";
 import { MemorySessionCache, RedisSessionCache, type SessionCache } from "./cache.js";
 import { isLocalProductAdminDevelopment, type AppConfig } from "./config.js";
 import { ConsoleMailer, SmtpMailer, type Mailer } from "./mailer.js";
@@ -61,6 +93,11 @@ import { SessionService } from "./session-service.js";
 import { StorageService } from "./storage.js";
 import { ProductEventDispatcher } from "./product-events.js";
 import { registerPresentationRoutes } from "./presentation-routes.js";
+import { registerPresentationSharingRoutes } from "./presentation-sharing-routes.js";
+import { registerPresentationAssignmentRoutes } from "./presentation-assignment-routes.js";
+import { registerPresentationPracticeRoutes } from "./presentation-practice-routes.js";
+import { registerPresentationReviewFeedbackRoutes } from "./presentation-review-feedback-routes.js";
+import { registerPresentationStaticExportRoutes } from "./presentation-static-export-routes.js";
 import { registerPresentationSessionRoutes } from "./presentation-session-routes.js";
 import { PresentationSessionService } from "./presentation-session-service.js";
 import { registerGroupRoutes } from "./group-routes.js";
@@ -92,6 +129,9 @@ export async function buildApp(
     stripe?: Stripe | null;
     readiness?: () => Promise<void>;
     authoringAssistant?: AuthoringAssistant | null;
+    presentationAssistanceProvider?: PresentationAssistanceProvider | null;
+    presentationTextAssistanceProvider?: PresentationTextAssistanceProvider | null;
+    presentationQuestionSuggestionsProvider?: PresentationQuestionSuggestionsProvider | null;
     oidcProvider?: OidcProvider | null;
     ltiJwtAdapter?: LtiJwtAdapter | null;
     summaryExports?: ReturnType<typeof createSessionSummaryExportService>;
@@ -114,6 +154,9 @@ export async function buildApp(
           "*.controlToken",
           "*.companionToken",
           "*.token",
+          "req.body.token",
+          "request.body.token",
+          "body.token",
           "pin",
           "pinHash",
           "challengeId",
@@ -204,6 +247,10 @@ export async function buildApp(
     });
   }
   const presentations = createPresentationRepository(repository);
+  const presentationShares = createPresentationShareRepository(repository);
+  const presentationAssignments = createPresentationAssignmentRepository(repository);
+  const presentationPractice = createPresentationPracticeAssignmentRepository(repository);
+  const presentationReviewFeedback = createPresentationReviewFeedbackRepository(repository);
   const recoveryPacks = createRecoveryPackRepository(repository);
   const presentationSessions = createPresentationSessionRepository(repository, {
     concurrentResponseWrites: config.PRESENTATION_CONCURRENT_RESPONSE_WRITES,
@@ -380,7 +427,103 @@ export async function buildApp(
     config.AUTHORING_EXTRACTION_TIMEOUT_MS,
     metrics,
   );
+  const configuredPresentationAssistanceProvider =
+    overrides.presentationAssistanceProvider !== undefined
+      ? overrides.presentationAssistanceProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationAssistanceProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationAssistanceProvider = presentationAssistanceProviderAvailable(
+    configuredPresentationAssistanceProvider,
+  )
+    ? configuredPresentationAssistanceProvider
+    : null;
+  const presentationAssistance = new PresentationAssistanceService(
+    repository,
+    presentations,
+    Boolean(presentationAssistanceProvider),
+    presentationsEnabled,
+  );
+  const presentationAssistanceWorker = new PresentationAssistanceWorker(
+    repository,
+    presentationAssistanceProvider,
+    presentationAssistance,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
+  const configuredPresentationTextAssistanceProvider =
+    overrides.presentationTextAssistanceProvider !== undefined
+      ? overrides.presentationTextAssistanceProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationTextAssistanceProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationTextAssistanceProvider = presentationTextAssistanceProviderAvailable(
+    configuredPresentationTextAssistanceProvider,
+  )
+    ? configuredPresentationTextAssistanceProvider
+    : null;
+  const presentationTextAssistance = new PresentationTextAssistanceService(
+    repository,
+    presentations,
+    Boolean(presentationTextAssistanceProvider),
+    presentationsEnabled,
+  );
+  const presentationTextAssistanceWorker = new PresentationTextAssistanceWorker(
+    repository,
+    presentationTextAssistanceProvider,
+    presentationTextAssistance,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
+  const configuredPresentationQuestionSuggestionsProvider =
+    overrides.presentationQuestionSuggestionsProvider !== undefined
+      ? overrides.presentationQuestionSuggestionsProvider
+      : config.AUTHORING_AI_MODE === "openai_compatible"
+        ? new OpenAiCompatiblePresentationQuestionSuggestionsProvider(
+            config.AUTHORING_AI_ENDPOINT!,
+            config.AUTHORING_AI_API_KEY,
+            config.AUTHORING_AI_MODEL,
+            config.AUTHORING_AI_PROVIDER_NAME,
+          )
+        : null;
+  const presentationQuestionSuggestionsProvider = presentationQuestionSuggestionsProviderAvailable(
+    configuredPresentationQuestionSuggestionsProvider,
+  )
+    ? configuredPresentationQuestionSuggestionsProvider
+    : null;
+  const presentationQuestionSuggestions = new PresentationQuestionSuggestionsService(
+    repository,
+    presentations,
+    Boolean(presentationQuestionSuggestionsProvider),
+    presentationsEnabled,
+  );
+  const presentationQuestionSuggestionsWorker = new PresentationQuestionSuggestionsWorker(
+    repository,
+    presentationQuestionSuggestionsProvider,
+    presentationQuestionSuggestions,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
   const storage = new StorageService(config, scanner);
+  const presentationVisualImports = new PresentationVisualImportService(
+    repository,
+    presentations,
+    storage,
+    scanner,
+  );
+  const presentationVisualImportWorker = new PresentationVisualImportWorker(
+    repository,
+    storage,
+    app.log,
+    metrics,
+  );
   const presentationService = new PresentationSessionService({
     workspaceEnabled: presentationRealtimeCreationEnabled,
     liveFlexModeEnabled: (workspaceId, planOverride) =>
@@ -588,6 +731,87 @@ export async function buildApp(
     productEvents,
     productEventsEnabled,
   });
+  await registerPresentationAssistanceRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationAssistance,
+  });
+  await registerPresentationTextAssistanceRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationTextAssistance,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
+  await registerPresentationQuestionSuggestionsRoutes(app, {
+    repository,
+    auth,
+    config,
+    service: presentationQuestionSuggestions,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+  });
+  await registerPresentationVisualImportRoutes(app, {
+    repository,
+    presentations,
+    auth,
+    service: presentationVisualImports,
+    storage,
+    workspaceEnabled: presentationsEnabled,
+  });
+  await registerPresentationSharingRoutes(app, {
+    auth,
+    repository,
+    shares: presentationShares,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationReviewFeedbackRoutes(app, {
+    auth,
+    repository,
+    feedback: presentationReviewFeedback,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationAssignmentRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationAssignments,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationPracticeRoutes(app, {
+    auth,
+    repository,
+    assignments: presentationPractice,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationStaticExportRoutes(app, {
+    auth,
+    repository,
+    presentations,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: presentationsEnabled,
+  });
+  await registerPresentationInsightsRoutes(app, {
+    repository,
+    presentations,
+    sessions: presentationSessions,
+    qna: scopedQna,
+    auth,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    metrics,
+  });
   await registerPresentationSessionRoutes(app, {
     repository,
     presentations,
@@ -662,6 +886,14 @@ export async function buildApp(
     oidc,
     lti,
     authoringWorker,
+    presentationAssistance,
+    presentationAssistanceWorker,
+    presentationTextAssistance,
+    presentationTextAssistanceWorker,
+    presentationQuestionSuggestions,
+    presentationQuestionSuggestionsWorker,
+    presentationVisualImportWorker,
+    presentationVisualImports,
     storage,
     retention,
     reportWorker,
@@ -672,6 +904,9 @@ export async function buildApp(
     presentations,
     presentationSessions,
     presentationService,
+    presentationShares,
+    presentationAssignments,
+    presentationReviewFeedback,
     groups,
     libraryMetadata,
     canvasBoards,

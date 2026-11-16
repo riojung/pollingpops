@@ -1,0 +1,70 @@
+.results {
+  color: var(--ui-text);
+  min-width: 0;
+}
+.results h2 {
+  font-size: 1.2rem;
+  margin-top: 24px;
+}
+.results p {
+  line-height: 1.5;
+}
+.scroll {
+  overflow: auto;
+  max-width: 100%;
+  overscroll-behavior: contain;
+}
+.scroll:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.scroll table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 20rem;
+  font-size: 1rem;
+}
+.scroll .rankingTable {
+  min-width: 44rem;
+}
+.scroll caption {
+  text-align: left;
+  font-weight: 700;
+  padding: 8px 0;
+}
+.scroll th,
+.scroll td {
+  padding: 10px;
+  border: 1px solid var(--ui-border-strong);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.scroll tbody th {
+  min-width: 8rem;
+}
+.scroll th {
+  background: var(--ui-surface-soft);
+  color: var(--ui-text);
+}
+.scroll td {
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-variant-numeric: tabular-nums;
+}
+.compact h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+.compact p {
+  margin: 6px 0;
+  line-height: 1.35;
+}
+.compact caption {
+  padding: 4px 0;
+}
+.compact th,
+.compact td {
+  padding: 6px 8px;
+}

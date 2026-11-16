@@ -1,3 +1,13 @@
+import { interactionDocument } from "./support/presentation-interaction-fixture.js";
+import {
+  createPresentationNavigationSession,
+  expectPresentationNavigationConformance,
+  presentationNavigationContent,
+  presentationNavigationSlide,
+} from "./support/presentation-navigation-conformance.js";
+import { expectPresentationOpinionResponseConformance } from "./support/presentation-opinion-conformance.js";
+import { expectPresentationTextConformance } from "./support/presentation-text-conformance.js";
+import { expectPresentationVisualImportConformance } from "./support/presentation-visual-import-conformance.js";
 import { expectPresentationSceneConformance } from "./support/presentation-scene-conformance.js";
 import { presentationMediaIds } from "../src/media-references.js";
 import { expectFolderConformance } from "./support/folder-conformance.js";
@@ -12,6 +22,7 @@ import {
 } from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectReportHistoryEvidenceConformance } from "./support/report-history-evidence-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
@@ -34,6 +45,8 @@ import { Pool, type PoolClient } from "pg";
 import {
   ProductEventNameSchema,
   PresentationContentSchema,
+  PresentationDraftSchema,
+  preparePresentationPublication,
   IdeaBoardCreateSchema,
   type AuthoringDraft,
   type PresentationDraft,
@@ -65,6 +78,7 @@ import {
   createRecoveryPackRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
+  createPresentationVisualImportRepository,
   RecoveryPackMediaValidationError,
   type PresentationSessionCommandInput,
   type PresentationSessionCredentialRecord,
@@ -302,6 +316,7 @@ describe.skipIf(!adminUrl)("PostgreSQL migration upgrades", () => {
         phase("complete");
       }
     },
+    15_000,
   );
   it("splits legacy shared folders by content type while retaining Round IDs and frozen versions", async () => {
     const database = `openround_folder_upgrade_${randomUUID().replaceAll("-", "")}`;
@@ -1291,6 +1306,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   const database = `postgres_conformance_${randomUUID().replaceAll("-", "")}`;
   let adminUrl = clusterAdminUrl;
   let runtimeUrl = clusterRuntimeUrl;
+  let migrationRepository: PostgresRepository | undefined;
   let repository: PostgresRepository;
   let runtimePool: Pool;
 
@@ -1312,7 +1328,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     runtime.pathname = `/${database}`;
     runtimeUrl = runtime.toString();
 
-    const migrationRepository = new PostgresRepository(adminUrl!);
+    migrationRepository = new PostgresRepository(adminUrl!);
     await migrationRepository.migrate();
     await migrationRepository.migrate();
     const migrations = await migrationRepository.pool.query<{
@@ -1409,6 +1425,27 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 87, name: "canvas_object_styles" },
       { version: 88, name: "idea_board_rounds" },
       { version: 89, name: "presentation_native_scene_media" },
+      { version: 90, name: "presentation_stage_credentials" },
+      { version: 91, name: "presentation_opinion_formats" },
+      { version: 92, name: "presentation_text_opinions" },
+      { version: 93, name: "presentation_visual_imports" },
+      { version: 94, name: "presentation_basic_interactions" },
+      { version: 95, name: "presentation_navigation" },
+      { version: 96, name: "presentation_advanced_interactions" },
+      { version: 97, name: "presentation_sharing" },
+      { version: 98, name: "presentation_spatial" },
+      { version: 99, name: "presentation_review_feedback" },
+      { version: 100, name: "presentation_assistance" },
+      { version: 101, name: "presentation_creation_receipts" },
+      { version: 102, name: "presentation_text_assistance" },
+      { version: 103, name: "presentation_text_translation" },
+      { version: 104, name: "presentation_question_suggestions" },
+      { version: 105, name: "presentation_reading_assignments" },
+      { version: 106, name: "presentation_practice_assignments" },
+      { version: 107, name: "presentation_motion_backgrounds" },
+      { version: 108, name: "presentation_styled_scenes" },
+      { version: 109, name: "presentation_frame_arithmetic" },
+      { version: 110, name: "workspace_idle_timeout" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -1434,6 +1471,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       await rm(alteredDirectory, { recursive: true, force: true });
     }
     await migrationRepository.close();
+    migrationRepository = undefined;
 
     repository = new PostgresRepository(runtimeUrl!);
     runtimePool = new Pool({ connectionString: runtimeUrl });
@@ -1442,6 +1480,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
 
   afterAll(async () => {
     try {
+      // beforeAll can fail before it closes the migration pool.
+      await migrationRepository?.close();
       await repository?.close();
       await runtimePool?.end();
     } finally {
@@ -1469,6 +1509,191 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(result).not.toBeNull();
     return result!;
   }
+  it("persists visual Presentation imports with fenced assets, erasure and exact retries", async () => {
+    const owner = await creator("visual-import-conformance");
+    await expectPresentationVisualImportConformance(repository, owner.workspaceId, owner.userId);
+  });
+  it("guards raw visual Presentation inputs, manifests, tenant boundaries and admission caps", async () => {
+    const owner = await creator("visual-import-guards");
+    const { presentation, input } = await expectPresentationVisualImportConformance(
+      repository,
+      owner.workspaceId,
+      owner.userId,
+    );
+    const jobs = createPresentationVisualImportRepository(repository),
+      now = new Date();
+    const fresh = { ...input, id: randomUUID(), requestId: randomUUID(), now };
+    await jobs.create(fresh);
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      const reject = async (sql: string, values: unknown[]) => {
+        await client.query("SAVEPOINT visual_guard");
+        await expect(client.query(sql, values)).rejects.toMatchObject({ code: "23514" });
+        await client.query("ROLLBACK TO SAVEPOINT visual_guard");
+      };
+      expect(
+        (
+          await client.query(
+            "SELECT visual_import_utf16_length('') AS empty,visual_import_utf16_length('😀') AS emoji",
+          )
+        ).rows[0],
+      ).toMatchObject({ empty: "0", emoji: "2" });
+      await reject("UPDATE presentation_visual_imports SET source_digest=$2 WHERE id=$1", [
+        fresh.id,
+        "b".repeat(64),
+      ]);
+      await reject("UPDATE presentation_visual_imports SET warnings=$2 WHERE id=$1", [
+        fresh.id,
+        JSON.stringify([""]),
+      ]);
+      await reject("UPDATE presentation_visual_imports SET input_files=$2 WHERE id=$1", [
+        fresh.id,
+        JSON.stringify([
+          {
+            name: "Changed",
+            mimeType: "image/png",
+            base64: Buffer.from("changed source").toString("base64"),
+          },
+        ]),
+      ]);
+      await reject(
+        "UPDATE presentation_visual_imports SET status='ready',input_files=NULL,pages='[]' WHERE id=$1",
+        [fresh.id],
+      );
+      await reject("UPDATE presentation_visual_imports SET status='processing' WHERE id=$1", [
+        fresh.id,
+      ]);
+      await reject("UPDATE presentation_visual_imports SET input_files=NULL WHERE id=$1", [
+        fresh.id,
+      ]);
+      for (const files of [
+        [{ name: "Bad", mimeType: "image/png", base64: "not base64!" }],
+        [{ name: "Bad", base64: "YWJj" }],
+        [{ name: "", mimeType: "image/png", base64: "YWJj" }],
+        [{ name: "Bad", mimeType: "image/png", base64: "YWJj", hiddenOriginal: "not allowed" }],
+        [
+          { name: "PDF", mimeType: "application/pdf", base64: "YWJj" },
+          { name: "Image", mimeType: "image/png", base64: "YWJj" },
+        ],
+      ]) {
+        await reject(
+          `INSERT INTO presentation_visual_imports(id,workspace_id,presentation_id,created_by,request_id,request_hash,source_digest,source_type,source_name,file_count,input_files,status,attempts,available_at,created_at,updated_at,expires_at)
+          VALUES($1,$2,$3,$4,$5,$6,$6,'image_set','Bad source',$7,$8,'pending',0,$9,$9,$9,$10)`,
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            owner.userId,
+            randomUUID(),
+            "a".repeat(64),
+            files.length,
+            JSON.stringify(files),
+            now,
+            new Date(now.getTime() + 60_000),
+          ],
+        );
+      }
+      await client.query("COMMIT");
+      const claim = (await jobs.claim(now, new Date(now.getTime() + 60_000)))!;
+      expect(claim.id).toBe(fresh.id);
+      const asset = {
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        objectKey: "",
+        mimeType: "image/png" as const,
+        sizeBytes: 20,
+        scanStatus: "pending" as const,
+        altText: "Converted page",
+        createdAt: now,
+      };
+      asset.objectKey = `quarantine/${owner.workspaceId}/${asset.id}.png`;
+      const fence = { jobId: claim.id, attempt: claim.attempt, leaseToken: claim.leaseToken, now };
+      await jobs.reservePageAssets({ ...fence, assets: [asset] });
+      const finalizationToken = randomUUID();
+      await repository.claimMediaAssetFinalization(
+        owner.workspaceId,
+        asset.id,
+        finalizationToken,
+        now,
+      );
+      await repository.updateMediaAsset(owner.workspaceId, asset.id, {
+        scanStatus: "clean",
+        objectKey: `media/${owner.workspaceId}/${asset.id}/${finalizationToken}.png`,
+        finalizationToken,
+        finalizedAt: now,
+      });
+      const page = {
+        pageNumber: 1,
+        mediaId: asset.id,
+        width: 100,
+        height: 100,
+        extractedText: "Author review suggestion",
+        warnings: [],
+      };
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      for (const bad of [
+        { ...page, width: 1601 },
+        { ...page, width: 1600, height: 1600 },
+        { ...page, extractedText: "😀".repeat(3001) },
+        { ...page, warnings: [{}] },
+        { ...page, hiddenOriginal: "not allowed" },
+        { ...page, mediaId: randomUUID() },
+      ])
+        await reject(
+          "UPDATE presentation_visual_imports SET status='ready',input_files=NULL,lease_token=NULL,lease_until=NULL,pages=$2 WHERE id=$1",
+          [fresh.id, JSON.stringify([bad])],
+        );
+      await client.query("COMMIT");
+      expect(await jobs.complete({ ...fence, pages: [page], warnings: [] })).toBe(true);
+      for (let index = 0; index < 3; index++)
+        await jobs.create({ ...fresh, id: randomUUID(), requestId: randomUUID() });
+      await expect(
+        jobs.create({ ...fresh, id: randomUUID(), requestId: randomUUID() }),
+      ).rejects.toMatchObject({ code: "LIMIT_REACHED" });
+      const other = await creator("visual-import-other");
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [other.workspaceId]);
+      expect(
+        (await client.query("SELECT id FROM presentation_visual_imports WHERE id=$1", [fresh.id]))
+          .rows,
+      ).toEqual([]);
+      await client.query("COMMIT");
+      await jobs.cancel(owner.workspaceId, presentation.id, fresh.id);
+      const presentations = new PostgresPresentationRepository(repository);
+      const current = (await presentations.getPresentation(owner.workspaceId, presentation.id))!;
+      await expect(
+        presentations.updatePresentationDraft({
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          draft: current.draft,
+          expectedRevision: current.draftRevision,
+          mutationId: randomUUID(),
+          editorId: owner.userId,
+          draftHash: "f".repeat(64),
+          visualImportId: fresh.id,
+        }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      expect(
+        (
+          await client.query(
+            "SELECT status,input_files,lease_token FROM presentation_visual_imports WHERE id=$1",
+            [fresh.id],
+          )
+        ).rows[0],
+      ).toMatchObject({ status: "canceled", input_files: null, lease_token: null });
+      await client.query("COMMIT");
+      await repository.deleteAccount(owner.userId);
+      expect(await jobs.get(owner.workspaceId, presentation.id, fresh.id)).toBeNull();
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      client.release();
+    }
+  });
   it("persists Survey Library metadata and feedback under restricted PostgreSQL permissions", async () => {
     const actor = await creator("survey-library-feedback");
     await expectSurveyLibraryConformance(repository, actor);
@@ -1738,6 +1963,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("results-history-owner"),
       await creator("results-history-outsider"),
+    );
+  });
+
+  it("distinguishes missing assessed evidence from measured zero in retained PostgreSQL report history", async () => {
+    await expectReportHistoryEvidenceConformance(
+      repository,
+      await creator("report-history-evidence-owner"),
     );
   });
 
@@ -2954,6 +3186,1383 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
         otherWorkspaceId: other.workspaceId,
         editorId: owner.userId,
         design: true,
+      });
+    for (const [document, expected] of [
+      [draft, expectedMediaIds],
+      [content, expectedPublishedMediaIds],
+    ] as const) {
+      const collected = await repository.pool.query<{ media_id: string }>(
+        "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+        [JSON.stringify(document)],
+      );
+      expect(collected.rows.map(({ media_id }) => media_id)).toEqual(expected);
+      expect(collected.rows.map(({ media_id }) => media_id)).toEqual(
+        presentationMediaIds(document).sort(),
+      );
+    }
+  });
+
+  it("retains v11 local interactions through restricted persistence, history and immutable snapshots", async () => {
+    const owner = await creator("presentation-interactions");
+    const other = await creator("presentation-interactions-other");
+    await expectPresentationSceneConformance({
+      repository,
+      workspaceId: owner.workspaceId,
+      otherWorkspaceId: other.workspaceId,
+      editorId: owner.userId,
+      interactions: true,
+    });
+  });
+
+  it("preserves v11 interaction decks with opinion and text response meanings", async () => {
+    const owner = await creator("presentation-interaction-responses");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Interaction response versions",
+    );
+    const input = {
+      repository: new PostgresPresentationSessionRepository(repository),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+    };
+    await expectPresentationOpinionResponseConformance({ ...input, schemaVersion: 11 });
+    await expectPresentationTextConformance({ ...input, schemaVersion: 11 });
+  });
+
+  it("retains v12 sections through durable saves, publication, retries and immutable history", async () => {
+    const owner = await creator("presentation-sections");
+    const presentations = new PostgresPresentationRepository(repository);
+    const base = presentationNavigationContent();
+    const hidden = { ...presentationNavigationSlide("Hidden source"), hidden: true as const };
+    const hiddenOnly = {
+      ...presentationNavigationSlide("Hidden-only source"),
+      hidden: true as const,
+    };
+    const draft = PresentationDraftSchema.parse({
+      ...base,
+      blocks: [...base.blocks, hidden, hiddenOnly],
+      sections: [
+        { ...base.sections![0]!, blockIds: [...base.sections![0]!.blockIds, hidden.id] },
+        { id: randomUUID(), title: "Hidden-only group", blockIds: [hiddenOnly.id] },
+        { id: randomUUID(), title: "Empty draft group", blockIds: [] },
+      ],
+    });
+    const now = new Date();
+    const presentation = await presentations.createPresentation({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      title: draft.title,
+      description: draft.description,
+      status: "draft",
+      draft,
+      draftRevision: 0,
+      draftSchemaVersion: 12,
+      currentVersionId: null,
+      folderId: null,
+      publishedDraftRevision: null,
+      lastEditedBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const changed = {
+      ...draft,
+      blocks: [...draft.blocks].reverse(),
+      sections: draft.sections!.map((section, index) =>
+        index === 0 ? { ...section, title: "Renamed core" } : section,
+      ),
+    };
+    const mutation = {
+      workspaceId: owner.workspaceId,
+      presentationId: presentation.id,
+      draft: changed,
+      expectedRevision: 0,
+      mutationId: randomUUID(),
+      editorId: owner.userId,
+      draftHash: createHash("sha256").update(JSON.stringify(changed)).digest("hex"),
+    };
+    expect((await presentations.updatePresentationDraft(mutation))?.draftRevision).toBe(1);
+    expect((await presentations.updatePresentationDraft(mutation))?.draftRevision).toBe(1);
+    expect(
+      (await presentations.listPresentationHistory(owner.workspaceId, presentation.id)).map(
+        (entry) => entry.draftSchemaVersion,
+      ),
+    ).toEqual([12, 12]);
+    const restored = await presentations.restorePresentationHistory({
+      workspaceId: owner.workspaceId,
+      presentationId: presentation.id,
+      historyRevision: 0,
+      expectedRevision: 1,
+      mutationId: randomUUID(),
+      editorId: owner.userId,
+    });
+    expect(restored?.draftRevision).toBe(2);
+    expect(restored?.draft).toEqual(draft);
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    expect(content.sections).toEqual([{ ...base.sections![0]! }]);
+    expect(content.blocks.map((block) => block.id)).toEqual(base.blocks.map((block) => block.id));
+    const contentHash = createHash("sha256").update(JSON.stringify(content)).digest("hex");
+    const version = await presentations.publishPresentation(
+      {
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: presentation.id,
+        version: 1,
+        content,
+        contentSchemaVersion: 12,
+        contentHash,
+        sourceDraftRevision: 2,
+        publishedAt: now,
+      },
+      2,
+    );
+    expect(version.contentSchemaVersion).toBe(12);
+    const later = { ...draft, sections: [] };
+    await presentations.updatePresentationDraft({
+      workspaceId: owner.workspaceId,
+      presentationId: presentation.id,
+      draft: later,
+      draftHash: createHash("sha256").update(JSON.stringify(later)).digest("hex"),
+      expectedRevision: 2,
+      mutationId: randomUUID(),
+      editorId: owner.userId,
+    });
+    const frozen = await new PostgresPresentationRepository(repository).getPresentationVersion(
+      owner.workspaceId,
+      version.id,
+    );
+    expect(frozen?.content).toEqual(content);
+    expect(frozen?.contentHash).toBe(contentHash);
+    expect(JSON.stringify(frozen?.content)).not.toContain("Hidden-only group");
+    expect(JSON.stringify(frozen?.content)).not.toContain(hidden.id);
+    expect(JSON.stringify(frozen?.content)).not.toContain(hiddenOnly.id);
+  });
+
+  it("keeps PostgreSQL on the durable v12 navigation attempt and receipt conformance contract", async () => {
+    const owner = await creator("presentation-navigation");
+    const published = await createPublishedPresentationFixture(owner, "Navigation source");
+    await expectPresentationNavigationConformance({
+      repository: new PostgresPresentationSessionRepository(repository),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+      reopenRepository: () => new PostgresPresentationSessionRepository(repository),
+    });
+    const preserved = await new PostgresPresentationRepository(repository).getPresentationVersion(
+      owner.workspaceId,
+      published.version.id,
+    );
+    expect(preserved?.content).toEqual(published.content);
+    expect(preserved?.contentHash).toBe(published.version.contentHash);
+    expect(preserved?.contentSchemaVersion).toBe(2);
+    expect(preserved?.content).not.toHaveProperty("sections");
+  });
+
+  it("guards raw v12 section relationships and navigation progress without weakening legacy reads", async () => {
+    const owner = await creator("presentation-navigation-guards");
+    const published = await createPublishedPresentationFixture(owner, "Navigation guard source");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    const { session, content, closedProgress } = await expectPresentationNavigationConformance({
+      repository: sessions,
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+    });
+    const openNow = new Date();
+    const openSession = await sessions.createSession({
+      ...session,
+      id: randomUUID(),
+      code: String(randomInt(1_000_000, 10_000_000)),
+      phase: "question_open",
+      currentBlockIndex: 1,
+      revision: 0,
+      eventSeq: 0,
+      navigationState: undefined,
+      questionOpenedAt: openNow,
+      questionClosesAt: new Date(openNow.getTime() + 30_000),
+    });
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      const reject = async (sql: string, values: unknown[]) => {
+        await client.query("SAVEPOINT navigation_guard");
+        await expect(client.query(sql, values)).rejects.toMatchObject({ code: "23514" });
+        await client.query("ROLLBACK TO SAVEPOINT navigation_guard");
+      };
+      const section = content.sections![0]!;
+      const frozenQuestion = content.blocks[1]!;
+      if (frozenQuestion.kind !== "question") throw new Error("Expected numeric question");
+      const duplicateChoiceId = randomUUID();
+      const invalidDocuments = [
+        { ...content, schemaVersion: 11 },
+        { ...content, sections: null },
+        { ...content, sections: [{ ...section, id: "not-a-uuid" }] },
+        { ...content, sections: [{ ...section, blockIds: [randomUUID()] }] },
+        {
+          ...content,
+          sections: [
+            { ...section, blockIds: [section.blockIds[0], section.blockIds[0]!.toLowerCase()] },
+          ],
+        },
+        { ...content, sections: [section, { ...section, id: section.id.toUpperCase() }] },
+        { ...content, sections: [section, { ...section, id: randomUUID() }] },
+        { ...content, sections: [{ ...section, title: "x".repeat(121) }] },
+        { ...content, sections: [{ ...section, title: "Control\u0001text" }] },
+        { ...content, sections: [{ ...section, privateNote: "must not enter a public name" }] },
+        {
+          ...content,
+          sections: Array.from({ length: 51 }, () => ({
+            id: randomUUID(),
+            title: "Section",
+            blockIds: [],
+          })),
+        },
+        { ...content, blocks: [...content.blocks, content.blocks[0]] },
+        {
+          ...content,
+          blocks: [
+            ...content.blocks,
+            {
+              ...frozenQuestion,
+              id: randomUUID(),
+              question: {
+                ...frozenQuestion.question,
+                id: frozenQuestion.question.id.toLowerCase(),
+              },
+            },
+          ],
+        },
+        {
+          ...content,
+          blocks: content.blocks.map((block, index) =>
+            index === 1
+              ? {
+                  ...frozenQuestion,
+                  question: {
+                    ...frozenQuestion.question,
+                    type: "single_select",
+                    choices: [
+                      { id: duplicateChoiceId, label: "One", isCorrect: true },
+                      { id: duplicateChoiceId.toUpperCase(), label: "Two", isCorrect: false },
+                    ],
+                  },
+                }
+              : block,
+          ),
+        },
+      ];
+      for (const invalid of invalidDocuments)
+        await reject(
+          "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=$2 WHERE id=$3",
+          [JSON.stringify(invalid), invalid.schemaVersion, published.presentation.id],
+        );
+      await reject("UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11 WHERE id=$2", [
+        JSON.stringify(content),
+        published.presentation.id,
+      ]);
+      for (const invalid of [
+        { ...content, sections: [{ ...section, title: "" }] },
+        { ...content, sections: [{ ...section, blockIds: [] }] },
+        {
+          ...content,
+          blocks: [{ ...content.blocks[0], hidden: true }, ...content.blocks.slice(1)],
+        },
+      ]) {
+        expect(
+          (
+            await client.query(
+              "SELECT openround_presentation_sections_valid($1::jsonb,12,true) AS valid",
+              [JSON.stringify(invalid)],
+            )
+          ).rows[0].valid,
+        ).toBe(false);
+      }
+      const state = session.navigationState!;
+      const questionId = content.blocks[1]!.id;
+      const mutateQuestion = (patch: Record<string, unknown>) => ({
+        ...state,
+        blocks: state.blocks.map((entry) =>
+          entry.blockId === questionId ? { ...entry, ...patch } : entry,
+        ),
+      });
+      const invalidStates = [
+        null,
+        { returnBlockId: null, blocks: [] },
+        { ...state, returnBlockId: randomUUID() },
+        { ...state, privateNote: "invalid" },
+        { ...state, blocks: [...state.blocks, state.blocks[0]] },
+        {
+          ...state,
+          blocks: [
+            ...state.blocks,
+            {
+              blockId: content.blocks[3]!.id,
+              phase: "content",
+              questionOpenedAt: null,
+              questionClosesAt: null,
+            },
+          ],
+        },
+        mutateQuestion({ phase: "content" }),
+        mutateQuestion({ questionOpenedAt: new Date().toISOString() }),
+        mutateQuestion({ questionClosesAt: "1900-01-01T00:00:00.000Z" }),
+        { ...state, returnBlockId: questionId },
+      ];
+      for (const invalid of invalidStates)
+        await reject(
+          "UPDATE presentation_live_sessions SET navigation_state=$1::jsonb,revision=revision+1 WHERE id=$2",
+          [JSON.stringify(invalid), session.id],
+        );
+      await reject("UPDATE presentation_live_sessions SET navigation_state=$1::jsonb WHERE id=$2", [
+        JSON.stringify({ ...state, returnBlockId: content.blocks[2]!.id }),
+        session.id,
+      ]);
+      await reject(
+        "UPDATE presentation_live_sessions SET current_block_index=1,phase='question_open',question_opened_at=$1,question_closes_at=$2,navigation_state=$3::jsonb,revision=revision+1 WHERE id=$4",
+        [
+          closedProgress!.questionOpenedAt,
+          closedProgress!.questionClosesAt,
+          JSON.stringify(mutateQuestion({ phase: "question_open" })),
+          session.id,
+        ],
+      );
+      await reject(
+        "UPDATE presentation_live_sessions SET phase='question_reveal',revision=revision+1 WHERE id=$1",
+        [session.id],
+      );
+      const editedBlock = {
+        ...frozenQuestion,
+        question: { ...frozenQuestion.question, prompt: "Rewritten frozen question" },
+      };
+      for (const replacement of [
+        {
+          ...content,
+          blocks: content.blocks.map((block, index) => (index === 1 ? editedBlock : block)),
+        },
+        { ...content, blocks: [content.blocks[1], content.blocks[0], ...content.blocks.slice(2)] },
+        { ...content, blocks: content.blocks.slice(0, -1) },
+        { ...content, sections: [{ ...section, title: "Rewritten frozen section" }] },
+      ])
+        await reject(
+          "UPDATE presentation_live_sessions SET content_snapshot=$1::jsonb,revision=revision+1 WHERE id=$2",
+          [JSON.stringify(replacement), session.id],
+        );
+      await client.query("SAVEPOINT valid_live_insertion");
+      expect(
+        (
+          await client.query(
+            "UPDATE presentation_live_sessions SET content_snapshot=$1::jsonb,revision=revision+1 WHERE id=$2",
+            [
+              JSON.stringify({
+                ...content,
+                blocks: [
+                  ...content.blocks.slice(0, 3),
+                  presentationNavigationSlide("New live slide"),
+                  ...content.blocks.slice(3),
+                ],
+              }),
+              session.id,
+            ],
+          )
+        ).rowCount,
+      ).toBe(1);
+      await client.query("ROLLBACK TO SAVEPOINT valid_live_insertion");
+      await reject(
+        "INSERT INTO presentation_session_command_receipts(id,workspace_id,session_id,command_id,expected_revision,resulting_revision,event_type) VALUES($1,$2,$3,$4,$5,$6,'navigation.jumped')",
+        [
+          randomUUID(),
+          owner.workspaceId,
+          session.id,
+          randomUUID(),
+          session.revision,
+          session.revision + 1,
+        ],
+      );
+      await reject(
+        "INSERT INTO presentation_session_timeline(id,workspace_id,session_id,sequence,event_type,block_index,block_id,navigation) VALUES($1,$2,$3,$4,'navigation.jumped',2,$5,$6::jsonb)",
+        [
+          randomUUID(),
+          owner.workspaceId,
+          session.id,
+          session.eventSeq + 1,
+          content.blocks[2]!.id,
+          JSON.stringify({
+            fromBlockId: content.blocks[0]!.id,
+            toBlockId: randomUUID(),
+            returnBlockId: null,
+            restored: true,
+          }),
+        ],
+      );
+      await reject(
+        "UPDATE presentation_live_sessions SET current_block_index=2,phase='content',question_opened_at=NULL,question_closes_at=NULL,navigation_state=$1::jsonb,revision=revision+1 WHERE id=$2",
+        [
+          JSON.stringify({
+            ...openSession.navigationState!,
+            returnBlockId: content.blocks[1]!.id,
+            blocks: [
+              ...openSession.navigationState!.blocks,
+              {
+                blockId: content.blocks[2]!.id,
+                phase: "content",
+                questionOpenedAt: null,
+                questionClosesAt: null,
+              },
+            ],
+          }),
+          openSession.id,
+        ],
+      );
+      const legacy = await createPresentationSessionFixture(
+        owner,
+        published,
+        String(randomInt(1_000_000, 10_000_000)),
+      );
+      await reject("UPDATE presentation_live_sessions SET navigation_state=$1::jsonb WHERE id=$2", [
+        JSON.stringify({ returnBlockId: null, blocks: [] }),
+        legacy.session.id,
+      ]);
+      await reject(
+        "INSERT INTO presentation_session_command_receipts(id,workspace_id,session_id,command_id,expected_revision,resulting_revision,event_type,request_hash) VALUES($1,$2,$3,$4,0,1,'navigation.jumped',$5)",
+        [randomUUID(), owner.workspaceId, legacy.session.id, randomUUID(), "a".repeat(64)],
+      );
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+    expect((await sessions.getSessionById(session.id))!.navigationState).toEqual(
+      session.navigationState,
+    );
+  });
+
+  it("retains completed v12 Pack cards and closed recheck windows through detours and return", async () => {
+    const owner = await creator("presentation-navigation-recheck");
+    const published = await createPublishedPresentationFixture(owner, "Navigation Pack source");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    const pack = RecoveryPackContentSchema.parse(recoveryPackDraft());
+    const packed = presentationPackMediaDraft(pack);
+    const content = PresentationContentSchema.parse({
+      ...packed,
+      schemaVersion: 12,
+      blocks: [
+        presentationNavigationSlide("Path"),
+        ...packed.blocks,
+        presentationNavigationSlide("Detour"),
+      ],
+      sections: [],
+    });
+    const fixture = await createPresentationNavigationSession({
+      repository: sessions,
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+      content,
+      recoveryPackCardsEnabled: true,
+    });
+    let session = fixture.session;
+    const insertion = content.recoveryPackInsertions![0]!;
+    const intervention = {
+      type: "explain" as const,
+      reference: {
+        insertionId: insertion.id,
+        packId: insertion.packId,
+        packVersionId: insertion.packVersionId,
+        packVersion: insertion.packVersion,
+        contentHash: insertion.contentHash,
+        cardId: pack.interventions[0]!.id,
+      },
+    };
+    const command = (
+      change: Pick<PresentationSessionCommandInput, "phase" | "currentBlockIndex" | "event"> &
+        Partial<PresentationSessionCommandInput>,
+    ): PresentationSessionCommandInput => ({
+      workspaceId: owner.workspaceId,
+      sessionId: session.id,
+      expectedRevision: session.revision,
+      commandId: randomUUID(),
+      requestHash: createHash("sha256").update(randomUUID()).digest("hex"),
+      status: "active",
+      occurredAt: new Date(fixture.now.getTime() + (session.revision + 1) * 1000),
+      ...change,
+    });
+    const accept = async (input: PresentationSessionCommandInput) => {
+      const result = await sessions.transitionSessionCommand(input);
+      if (result.status !== "accepted")
+        throw new Error("Expected accepted Pack navigation transition");
+      session = result.session;
+    };
+    const navigate = (
+      index: number,
+      type: "navigation.jumped" | "navigation.returned" | "navigation.revisited",
+      anchor: string | null,
+    ) => {
+      const target = content.blocks[index]!;
+      const prior = session.navigationState!.blocks.find((entry) => entry.blockId === target.id);
+      return command({
+        phase: prior?.phase ?? (target.kind === "content" ? "content" : "question_open"),
+        currentBlockIndex: index,
+        recoveryPackIntervention: prior?.recoveryPackIntervention ?? null,
+        navigationState: { ...session.navigationState!, returnBlockId: anchor },
+        event: {
+          type,
+          blockIndex: index,
+          blockId: target.id,
+          navigation: {
+            fromBlockId: content.blocks[session.currentBlockIndex]!.id,
+            toBlockId: target.id,
+            returnBlockId: anchor,
+            restored: Boolean(prior),
+          },
+        },
+      });
+    };
+    await accept(
+      command({
+        phase: "content",
+        currentBlockIndex: 0,
+        event: { type: "content.presented", blockIndex: 0, blockId: content.blocks[0]!.id },
+      }),
+    );
+    await expect(
+      sessions.transitionSessionCommand(navigate(2, "navigation.jumped", content.blocks[0]!.id)),
+    ).rejects.toThrow(/recheck|diagnostic/);
+    await accept(
+      command({
+        phase: "question_open",
+        currentBlockIndex: 1,
+        event: { type: "question.launched", blockIndex: 1, blockId: content.blocks[1]!.id },
+      }),
+    );
+    await accept(
+      command({
+        phase: "question_reveal",
+        currentBlockIndex: 1,
+        event: { type: "question.revealed", blockIndex: 1, blockId: content.blocks[1]!.id },
+      }),
+    );
+    await accept(
+      command({
+        phase: "intervention",
+        currentBlockIndex: 1,
+        recoveryPackIntervention: intervention,
+        event: { type: "intervention.presented", blockIndex: 1, blockId: content.blocks[1]!.id },
+      }),
+    );
+    const originalDiagnostic = structuredClone(
+      session.navigationState!.blocks.find((entry) => entry.blockId === content.blocks[1]!.id),
+    );
+    await expect(
+      sessions.transitionSessionCommand(navigate(3, "navigation.jumped", content.blocks[1]!.id)),
+    ).rejects.toThrow(/Complete the linked/);
+    // The SQL fence independently rejects a legacy cursor writer that bypasses the pending pair.
+    const client = await runtimePool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      const bypass = {
+        ...session.navigationState!,
+        returnBlockId: content.blocks[1]!.id,
+        blocks: [
+          ...session.navigationState!.blocks,
+          {
+            blockId: content.blocks[3]!.id,
+            phase: "content",
+            questionOpenedAt: null,
+            questionClosesAt: null,
+          },
+        ],
+      };
+      await expect(
+        client.query(
+          "UPDATE presentation_live_sessions SET current_block_index=3,phase='content',recovery_pack_intervention=NULL,navigation_state=$1::jsonb,revision=revision+1 WHERE id=$2",
+          [JSON.stringify(bypass), session.id],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await client.query("ROLLBACK");
+    } finally {
+      client.release();
+    }
+    await accept(
+      command({
+        phase: "question_open",
+        currentBlockIndex: 2,
+        event: { type: "question.launched", blockIndex: 2, blockId: content.blocks[2]!.id },
+      }),
+    );
+    await accept(
+      command({
+        phase: "question_reveal",
+        currentBlockIndex: 2,
+        event: { type: "question.revealed", blockIndex: 2, blockId: content.blocks[2]!.id },
+      }),
+    );
+    const originalRecheck = structuredClone(
+      session.navigationState!.blocks.find((entry) => entry.blockId === content.blocks[2]!.id),
+    );
+    await accept(navigate(3, "navigation.jumped", content.blocks[2]!.id));
+    await accept(navigate(2, "navigation.returned", null));
+    expect(session.phase).toBe("question_reveal");
+    expect(
+      session.navigationState!.blocks.find((entry) => entry.blockId === content.blocks[2]!.id),
+    ).toEqual(originalRecheck);
+    await accept(navigate(1, "navigation.jumped", content.blocks[2]!.id));
+    expect(session.recoveryPackIntervention).toEqual(intervention);
+    expect(
+      session.navigationState!.blocks.find((entry) => entry.blockId === content.blocks[1]!.id),
+    ).toEqual(originalDiagnostic);
+    await expect(
+      sessions.transitionSessionCommand(navigate(2, "navigation.jumped", content.blocks[2]!.id)),
+    ).rejects.toThrow(/linked diagnostic/);
+    await accept(navigate(2, "navigation.revisited", content.blocks[2]!.id));
+    expect(session.phase).toBe("question_reveal");
+    expect(session.questionOpenedAt).toBeNull();
+    expect(session.questionClosesAt).toBeNull();
+    expect(
+      session.navigationState!.blocks.find((entry) => entry.blockId === content.blocks[2]!.id),
+    ).toEqual(originalRecheck);
+    expect(
+      (await sessions.listTimeline(session.id)).filter(
+        (event) => event.type === "question.launched",
+      ),
+    ).toHaveLength(2);
+    expect(
+      (await sessions.listTimeline(session.id)).filter(
+        (event) => event.type === "intervention.presented",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it.each(
+    [
+      "https:///example.com",
+      "https:////example.com/path?contact=a@b#c@d",
+      "HTTP://///example.com:00000080/path",
+      "https:////[::1]:00000443/source",
+      "https:////例え.テスト/資料",
+      "https:////%65xample.com:00000443/source",
+      "https://@example.com/",
+      "https://:@example.com/",
+      "https:////:@example.com/",
+      "https://%65xample.com/source",
+      "https://%65xample%2Ecom/source",
+      "https://%C3%A9xample.com/source",
+      "https://%e4%be%8b%e3%81%88%2e%e3%83%86%e3%82%b9%e3%83%88/source",
+      "HTTPS:////:@%65xample%2Ecom:00000443/source",
+      "https://%EF%BB%BFexample.com/source",
+      "https://exa%C2%ADmple.com/source",
+      "https://%E2%80%8Bexample.com/source",
+      "https://%EF%BC%A5xample.com/source",
+      "https://example%E3%80%82com/source",
+      "https://example.com/source%zz?escaped=%#tail%0",
+      "https://example.com/%00/%FF/%2F?part=%C3%28",
+    ].flatMap((href) => (["link", "richText"] as const).map((mode) => ({ href, mode }))),
+  )(
+    "preserves safe URL variants for $mode $href through draft upgrade and publication",
+    async ({ href, mode }) => {
+      const owner = await creator("presentation-extra-slash-url");
+      const presentations = new PostgresPresentationRepository(repository);
+      const sessions = new PostgresPresentationSessionRepository(repository);
+      const now = new Date();
+      const scene = {
+        schemaVersion: 4,
+        aspectRatio: "16:9",
+        nodes: [
+          {
+            id: "title",
+            type: "text",
+            role: "title",
+            text: "Legacy linked evidence",
+            frame: { x: 8, y: 8, width: 84, height: 20 },
+          },
+          {
+            id: "body",
+            type: "text",
+            role: "body",
+            text: "Read the source",
+            frame: { x: 8, y: 35, width: 84, height: 25 },
+            richText: {
+              paragraphs: [
+                {
+                  kind: "paragraph",
+                  runs: [
+                    {
+                      text: "Read the source",
+                      href: mode === "richText" ? href : "https://example.com/legacy",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+        readingOrder: ["title", "body"],
+      };
+      const original = PresentationDraftSchema.parse({
+        title: "Existing linked slide",
+        schemaVersion: 8,
+        blocks: [
+          {
+            id: randomUUID(),
+            kind: "content",
+            layout: "title_body",
+            textElements: [],
+            mediaId: null,
+            mediaAlt: null,
+            speakerNotes: "",
+            scene,
+          },
+        ],
+      });
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        title: original.title,
+        description: original.description,
+        status: "draft",
+        draft: original,
+        draftRevision: 0,
+        draftSchemaVersion: 8,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const hash = (value: unknown) =>
+        createHash("sha256").update(JSON.stringify(value)).digest("hex");
+      const originalContent = PresentationContentSchema.parse(original);
+      const originalVersion = await presentations.publishPresentation(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          version: 1,
+          content: originalContent,
+          contentSchemaVersion: 8,
+          contentHash: hash(originalContent),
+          sourceDraftRevision: 0,
+          publishedAt: now,
+        },
+        0,
+      );
+      const upgraded = structuredClone(original);
+      upgraded.schemaVersion = 11;
+      const block = upgraded.blocks[0]!;
+      if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+      block.scene.schemaVersion = 5;
+      if (mode === "link") {
+        block.scene.nodes.push({
+          id: "link",
+          type: "link",
+          label: "Open the source",
+          href,
+          frame: { x: 8, y: 65, width: 38, height: 20 },
+        });
+        block.scene.readingOrder.push("link");
+      } else {
+        // Adding the first control upgrades the scene without changing its existing rich-text URL.
+        block.scene.nodes.push({
+          id: "reveal",
+          type: "reveal",
+          scope: "local",
+          label: "Show evidence",
+          body: "Public evidence",
+          frame: { x: 8, y: 65, width: 38, height: 20 },
+        });
+        block.scene.readingOrder.push("reveal");
+      }
+      const content = PresentationContentSchema.parse(upgraded);
+      const mutation = {
+        workspaceId: owner.workspaceId,
+        presentationId: presentation.id,
+        draft: upgraded,
+        expectedRevision: 0,
+        mutationId: randomUUID(),
+        editorId: owner.userId,
+        draftHash: hash(upgraded),
+      };
+      await expect(presentations.updatePresentationDraft(mutation)).resolves.toMatchObject({
+        draftRevision: 1,
+        draftSchemaVersion: 11,
+        draft: upgraded,
+      });
+      await expect(presentations.updatePresentationDraft(mutation)).resolves.toMatchObject({
+        draftRevision: 1,
+        draft: upgraded,
+      });
+      const version = await presentations.publishPresentation(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: presentation.id,
+          version: 2,
+          content,
+          contentSchemaVersion: 11,
+          contentHash: hash(content),
+          sourceDraftRevision: 1,
+          publishedAt: now,
+        },
+        1,
+      );
+      expect(version).toMatchObject({ content, contentHash: hash(content) });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: presentation.id,
+        presentationVersionId: version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "content",
+        currentBlockIndex: 0,
+        revision: 0,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      expect((await sessions.getSessionById(session.id))?.content).toEqual(content);
+      const history = await presentations.listPresentationHistory(
+        owner.workspaceId,
+        presentation.id,
+      );
+      expect(history.map((entry) => entry.draft)).toEqual([upgraded, original]);
+      expect(
+        await presentations.getPresentationVersion(owner.workspaceId, originalVersion.id),
+      ).toMatchObject({ content: originalContent, contentHash: hash(originalContent) });
+      const saved = await presentations.getPresentation(owner.workspaceId, presentation.id);
+      const savedBlock = saved!.draft.blocks[0]!;
+      if (savedBlock.kind !== "content" || !savedBlock.scene)
+        throw new Error("Expected saved native scene");
+      if (mode === "link")
+        expect(savedBlock.scene.nodes.find((node) => node.type === "link")).toMatchObject({ href });
+      else
+        expect(savedBlock.scene.nodes.find((node) => node.id === "body")).toMatchObject({
+          richText: { paragraphs: [{ runs: [{ href }] }] },
+        });
+      // Neither repository parsing nor SQL may canonicalize the caller's persisted URL spelling.
+      expect(JSON.stringify(saved!.draft)).toBe(
+        JSON.stringify(PresentationDraftSchema.parse(upgraded)),
+      );
+      expect(JSON.stringify(version.content)).toBe(JSON.stringify(content));
+    },
+  );
+
+  it("rejects unsafe extra-slash URLs in new controls and upgraded rich text", async () => {
+    const owner = await creator("presentation-extra-slash-rejection");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Extra slash rejection guards",
+    );
+    const native = interactionDocument().blocks[0]!;
+    if (native.kind !== "content" || !native.scene) throw new Error("Expected native scene");
+    for (const href of [
+      "https:///user@example.com",
+      "https:////user@example.com/",
+      "https:////:password@example.com/",
+      "https:////@@example.com/",
+      "https:////user:password@example.com",
+      "http:////user:password@[::1]",
+      "https:////",
+      "https:////?host=example.com",
+      "https:////#example.com",
+      "https:////example.com:65536",
+      "https:////example.com\\bad",
+      "https:////example.com/\u0085",
+      "javascript:////example.com",
+      "data:////example.com",
+      "ftp:////example.com",
+    ]) {
+      for (const mode of ["link", "richText"] as const) {
+        const candidate = structuredClone(native);
+        const scene = candidate.scene!;
+        if (mode === "link") {
+          const link = scene.nodes.find((node) => node.type === "link")!;
+          if (link.type !== "link") throw new Error("Expected link");
+          link.href = href;
+        } else {
+          const text = scene.nodes.find((node) => node.type === "text")!;
+          if (text.type !== "text") throw new Error("Expected title");
+          text.richText = {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: text.text, href }] }],
+          };
+        }
+        const document = { title: "Unsafe link", schemaVersion: 11, blocks: [candidate] };
+        expect(PresentationDraftSchema.safeParse(document).success).toBe(false);
+        expect(PresentationContentSchema.safeParse(document).success).toBe(false);
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_interactions_valid($1::jsonb,11,false) AS valid",
+              [JSON.stringify(document)],
+            )
+          ).rows[0]!.valid,
+        ).toBe(false);
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11 WHERE id=$2",
+              [JSON.stringify(document), published.presentation.id],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+      }
+    }
+  });
+
+  it.each(
+    [
+      {
+        category: "malformed escapes",
+        hrefs: [
+          "https://%",
+          "https://%0",
+          "https://%zz.example",
+          "https://%g0.example",
+          "https://%0g.example",
+          "https://example%.com",
+          "https:////:@%zz.example/source",
+        ],
+      },
+      {
+        category: "invalid UTF8",
+        hrefs: [
+          "https://%C3.example/source",
+          "https://%C3%28.example/source",
+          "https://%E2%82.example/source",
+          "https://%E2%28%A1.example/source",
+          "https://%ED%A0%80.example/source",
+          "https://%C0%AF.example/source",
+          "https://%F0%80%80%80.example/source",
+          "https://%80.example/source",
+          "https://%FF.example/source",
+        ],
+      },
+      {
+        category: "forbidden decoded host characters",
+        hrefs: [
+          "https://prefix%00.example/source",
+          "https://prefix%01.example/source",
+          "https://prefix%02.example/source",
+          "https://prefix%03.example/source",
+          "https://prefix%04.example/source",
+          "https://prefix%05.example/source",
+          "https://prefix%06.example/source",
+          "https://prefix%07.example/source",
+          "https://prefix%08.example/source",
+          "https://prefix%09.example/source",
+          "https://prefix%0A.example/source",
+          "https://prefix%0B.example/source",
+          "https://prefix%0C.example/source",
+          "https://prefix%0D.example/source",
+          "https://prefix%0E.example/source",
+          "https://prefix%0F.example/source",
+          "https://prefix%10.example/source",
+          "https://prefix%11.example/source",
+          "https://prefix%12.example/source",
+          "https://prefix%13.example/source",
+          "https://prefix%14.example/source",
+          "https://prefix%15.example/source",
+          "https://prefix%16.example/source",
+          "https://prefix%17.example/source",
+          "https://prefix%18.example/source",
+          "https://prefix%19.example/source",
+          "https://prefix%1A.example/source",
+          "https://prefix%1B.example/source",
+          "https://prefix%1C.example/source",
+          "https://prefix%1D.example/source",
+          "https://prefix%1E.example/source",
+          "https://prefix%1F.example/source",
+          "https://prefix%20.example/source",
+          "https://prefix%23.example/source",
+          "https://prefix%25.example/source",
+          "https://prefix%2F.example/source",
+          "https://prefix%3A.example/source",
+          "https://prefix%3C.example/source",
+          "https://prefix%3E.example/source",
+          "https://prefix%3F.example/source",
+          "https://prefix%40.example/source",
+          "https://prefix%5B.example/source",
+          "https://prefix%5C.example/source",
+          "https://prefix%5D.example/source",
+          "https://prefix%5E.example/source",
+          "https://prefix%7C.example/source",
+          "https://prefix%7F.example/source",
+          "https://%C2%80.example/source",
+          "https://%C2%85.example/source",
+          "https://%252F.example/source",
+          "https://%2565xample.com/source",
+        ],
+      },
+      {
+        category: "mapped forbidden Unicode",
+        hrefs: [
+          "https://%C2%A0example.com/source",
+          "https://%EF%BC%8Fexample.com/source",
+          "https://%EF%BC%85example.com/source",
+          "https://%EF%BC%A0example.com/source",
+        ],
+      },
+      {
+        category: "empty IDNA host",
+        hrefs: ["https://%EF%BB%BF/source", "https://%C2%AD/source", "https://%E2%80%8B/source"],
+      },
+    ].flatMap((group) => (["link", "richText"] as const).map((mode) => ({ ...group, mode }))),
+  )(
+    "rejects percent-host $category for $mode without changing the parent",
+    async ({ hrefs, mode }) => {
+      const owner = await creator("presentation-percent-host-rejection");
+      const presentations = new PostgresPresentationRepository(repository);
+      const draft = interactionDocument();
+      if (mode === "richText") {
+        const legacy = draft.blocks[0]!;
+        if (legacy.kind !== "content" || !legacy.scene) throw new Error("Expected legacy scene");
+        draft.schemaVersion = 8;
+        draft.blocks = [legacy];
+        legacy.scene.schemaVersion = 4;
+        legacy.scene.nodes = legacy.scene.nodes.filter(
+          (node) => node.type !== "reveal" && node.type !== "link",
+        );
+        const ids = new Set(legacy.scene.nodes.map((node) => node.id));
+        legacy.scene.readingOrder = legacy.scene.readingOrder.filter((id) => ids.has(id));
+      }
+      const now = new Date();
+      const presentation = await presentations.createPresentation({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        title: draft.title,
+        description: draft.description,
+        status: "draft",
+        draft,
+        draftRevision: 0,
+        draftSchemaVersion: draft.schemaVersion,
+        currentVersionId: null,
+        folderId: null,
+        publishedDraftRevision: null,
+        lastEditedBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const snapshot = async () =>
+        packPracticeScoped(
+          owner.workspaceId,
+          async (client) =>
+            (
+              await client.query(
+                "SELECT to_jsonb(parent) AS parent FROM presentations parent WHERE id=$1",
+                [presentation.id],
+              )
+            ).rows[0]!.parent,
+        );
+      const originalParent = await snapshot();
+      for (const href of hrefs) {
+        const document = structuredClone(draft);
+        const block = document.blocks[0]!;
+        if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+        document.schemaVersion = 11;
+        block.scene.schemaVersion = 5;
+        if (mode === "link") {
+          const link = block.scene.nodes.find((node) => node.type === "link")!;
+          if (link.type !== "link") throw new Error("Expected link");
+          link.href = href;
+        } else {
+          block.scene.nodes.push({
+            id: "new-reveal",
+            type: "reveal",
+            scope: "local",
+            label: "Show evidence",
+            body: "Public evidence",
+            frame: { x: 8, y: 65, width: 38, height: 20 },
+          });
+          block.scene.readingOrder.push("new-reveal");
+          const text = block.scene.nodes.find((node) => node.type === "text")!;
+          if (text.type !== "text") throw new Error("Expected title");
+          text.richText = {
+            paragraphs: [{ kind: "paragraph", runs: [{ text: text.text, href }] }],
+          };
+        }
+        expect(PresentationDraftSchema.safeParse(document).success, href).toBe(false);
+        expect(PresentationContentSchema.safeParse(document).success, href).toBe(false);
+        // Exercise the raw storage boundary before helper assertions: malformed URLs cannot
+        // commit an unreadable parent, a changed revision, or any other mutation fields.
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "UPDATE presentations SET draft=$1::jsonb,draft_schema_version=11,draft_revision=draft_revision+1,updated_at=$2 WHERE id=$3",
+              [JSON.stringify(document), new Date(now.getTime() + 1000), presentation.id],
+            ),
+          ),
+          href,
+        ).rejects.toMatchObject({ code: "23514" });
+        expect(await snapshot(), href).toEqual(originalParent);
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_interactions_valid($1::jsonb,11,false) AS valid",
+              [JSON.stringify(document)],
+            )
+          ).rows[0]!.valid,
+          href,
+        ).toBe(false);
+      }
+      expect(
+        (await presentations.getPresentation(owner.workspaceId, presentation.id))?.draft,
+      ).toEqual(draft);
+      expect(
+        await presentations.listPresentationHistory(owner.workspaceId, presentation.id),
+      ).toMatchObject([{ revision: 0, draft }]);
+    },
+  );
+
+  it("guards raw local interaction scenes and document version11", async () => {
+    const owner = await creator("presentation-interaction-raw");
+    const presentations = new PostgresPresentationRepository(repository);
+    const draft = interactionDocument();
+    const now = new Date();
+    const presentation = await presentations.createPresentation({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      title: draft.title,
+      description: draft.description,
+      status: "draft",
+      draft,
+      draftRevision: 0,
+      draftSchemaVersion: 11,
+      currentVersionId: null,
+      folderId: null,
+      publishedDraftRevision: null,
+      lastEditedBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const native = draft.blocks[0]!;
+    if (native.kind !== "content" || !native.scene) throw new Error("Expected interaction scene");
+    const scene = native.scene;
+    const revealIndex = scene.nodes.findIndex((node) => node.type === "reveal");
+    const linkIndex = scene.nodes.findIndex((node) => node.type === "link");
+    const valid = async (value: unknown, version = 11, published = false) =>
+      (
+        await repository.pool.query<{ valid: boolean }>(
+          "SELECT openround_presentation_interactions_valid($1::jsonb,$2,$3) AS valid",
+          [JSON.stringify(value), version, published],
+        )
+      ).rows[0]!.valid;
+    const documentWithScene = (candidate: unknown) => ({
+      ...draft,
+      blocks: [{ ...native, scene: candidate }, ...draft.blocks.slice(1)],
+    });
+    const nodeChange = (fields: Record<string, unknown>, index = revealIndex) => ({
+      ...scene,
+      nodes: scene.nodes.map((node, position) =>
+        position === index ? { ...node, ...fields } : node,
+      ),
+    });
+    expect(await valid(draft)).toBe(true);
+    expect(await valid(draft, 11, true)).toBe(true);
+    expect(
+      (
+        await repository.pool.query(
+          "SELECT openround_presentation_json_bytes($1::jsonb) AS bytes",
+          [JSON.stringify(draft)],
+        )
+      ).rows[0]!.bytes,
+    ).toBe(String(Buffer.byteLength(JSON.stringify(draft))));
+    const invalids: unknown[] = [
+      ...[2, 3, 4, 5, 6, 7, 8, 9, 10, "11", null].map((schemaVersion) => ({
+        ...draft,
+        schemaVersion,
+      })),
+      documentWithScene({ ...scene, schemaVersion: 4 }),
+      documentWithScene({ ...scene, schemaVersion: "5" }),
+      documentWithScene(nodeChange({ scope: "session" })),
+      documentWithScene(nodeChange({ scope: null })),
+      documentWithScene(nodeChange({ body: null })),
+      documentWithScene(nodeChange({ body: "x".repeat(4001) })),
+      documentWithScene(nodeChange({ label: "😀".repeat(121) })),
+      documentWithScene(nodeChange({ label: "x\u0001" })),
+      documentWithScene(nodeChange({ body: "x\u007f" })),
+      documentWithScene(nodeChange({ script: "alert(1)" })),
+      documentWithScene(nodeChange({ html: "<script>bad</script>" })),
+      documentWithScene(nodeChange({ targetId: "title" })),
+      documentWithScene(nodeChange({ action: { type: "navigate" } })),
+      documentWithScene(nodeChange({ style: { color: "red" } })),
+      documentWithScene(nodeChange({ type: "hotspot" })),
+      documentWithScene(nodeChange({ id: "title" })),
+      documentWithScene(nodeChange({ frame: { x: 95, y: 30, width: 20, height: 20 } })),
+      documentWithScene(
+        nodeChange({ rotation: 45, frame: { x: 0, y: 0, width: 100, height: 100 } }),
+      ),
+      documentWithScene({ ...scene, readingOrder: ["title"] }),
+      documentWithScene({
+        ...scene,
+        nodes: Array.from({ length: 51 }, (_, index) => ({
+          ...scene.nodes[revealIndex],
+          id: `panel-${index}`,
+        })),
+      }),
+      ...[
+        "javascript:alert(1)",
+        "data:text/html,hello",
+        "#title",
+        "/slide/2",
+        "https://user:password@example.com",
+        "https://user@example.com",
+        "https://exa mple.com",
+        "https://example.com\\bad",
+        "https://example.com/\u0085",
+        "https://",
+        "https://example.com:99999",
+      ].map((href) => documentWithScene(nodeChange({ href }, linkIndex))),
+    ];
+    for (const invalid of invalids) {
+      expect(await valid(invalid)).toBe(false);
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query("UPDATE presentations SET draft=$1::jsonb WHERE id=$2", [
+            JSON.stringify(invalid),
+            presentation.id,
+          ]),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+    }
+    expect(await valid(draft, 10)).toBe(false);
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("UPDATE presentations SET draft_schema_version=10 WHERE id=$1", [
+          presentation.id,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    for (const [index, fields] of [
+      [revealIndex, { label: "" }],
+      [revealIndex, { body: "\u00a0\n" }],
+      [linkIndex, { href: "" }],
+      [linkIndex, { label: "" }],
+    ] as const) {
+      const incomplete = documentWithScene(nodeChange(fields, index));
+      expect(await valid(incomplete)).toBe(true);
+      expect(await valid(incomplete, 11, true)).toBe(false);
+    }
+    for (const href of [
+      "HTTPS://example.com:443/path?contact=a@b#c@d",
+      "http://example.com",
+      "https://[::1]:8080/",
+      "https://例え.テスト/資料",
+      "https://example.com/#@username",
+      "https://example.com/?user=name@example.com",
+      "https://%65xample.com/",
+      "https://example.com:00000080/",
+    ]) {
+      const candidate = documentWithScene(nodeChange({ href }, linkIndex));
+      expect(PresentationContentSchema.safeParse(candidate).success).toBe(true);
+      expect(await valid(candidate, 11, true)).toBe(true);
+      await packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("UPDATE presentations SET draft=$1::jsonb WHERE id=$2", [
+          JSON.stringify(candidate),
+          presentation.id,
+        ]),
+      );
+    }
+    for (const [index, field, maximum] of [
+      [revealIndex, "label", 120],
+      [revealIndex, "body", 4000],
+    ] as const) {
+      for (const [count, expected] of [
+        [maximum, true],
+        [maximum + 1, false],
+      ] as const) {
+        const candidate = documentWithScene(nodeChange({ [field]: "😀".repeat(count) }, index));
+        expect(PresentationContentSchema.safeParse(candidate).success).toBe(expected);
+        expect(await valid(candidate, 11, true)).toBe(expected);
+      }
+    }
+    const invalid = documentWithScene(nodeChange({ body: "" }));
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_versions(id,workspace_id,presentation_id,version,content,content_schema_version,content_hash,source_draft_revision,published_at) VALUES($1,$2,$3,1,$4::jsonb,11,$5,0,$6)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            JSON.stringify(invalid),
+            "a".repeat(64),
+            now,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const unsafe = documentWithScene(nodeChange({ scope: "session" }));
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_draft_history(id,workspace_id,presentation_id,revision,draft,draft_schema_version,saved_by,created_at) VALUES($1,$2,$3,1,$4::jsonb,11,$5,$6)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            presentation.id,
+            JSON.stringify(unsafe),
+            owner.userId,
+            now,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    // Use a real parent/version and bypass the repository parser to exercise the snapshot trigger.
+    const published = await createPublishedPresentationFixture(owner, "Raw interaction snapshot");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    const session = await sessions.createSession({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      title: draft.title,
+      content: PresentationContentSchema.parse(draft),
+      code: String(randomInt(1000000, 10000000)),
+      status: "active",
+      phase: "content",
+      currentBlockIndex: 0,
+      revision: 0,
+      createdBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      liveExpiresAt: new Date(now.getTime() + 3600000),
+      retentionExpiresAt: new Date(now.getTime() + 86400000),
+    });
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "UPDATE presentation_live_sessions SET content_snapshot=$1::jsonb WHERE id=$2",
+          [JSON.stringify(invalid), session.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect((await sessions.getSessionById(session.id))?.content).toEqual(draft);
+    expect(
+      await presentations.listPresentationHistory(owner.workspaceId, presentation.id),
+    ).toHaveLength(1);
+  });
+
+  it("retains v8 groups, rotation and inline data with flat SQL media retention through retries and history", async () => {
+    const owner = await creator("presentation-composition-scene");
+    const other = await creator("presentation-composition-scene-other");
+    const { draft, content, expectedMediaIds, expectedPublishedMediaIds } =
+      await expectPresentationSceneConformance({
+        repository,
+        workspaceId: owner.workspaceId,
+        otherWorkspaceId: other.workspaceId,
+        editorId: owner.userId,
+        composition: true,
       });
     for (const [document, expected] of [
       [draft, expectedMediaIds],
@@ -4285,6 +5894,824 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       ]),
     );
     expect(await repository.getMediaAsset(owner.workspaceId, mediaId)).not.toBeNull();
+  });
+
+  it("guards raw Presentation opinion document versions and keeps v9 media discovery compatible", async () => {
+    const questionMedia = randomUUID();
+    const sceneMedia = randomUUID();
+    const question = {
+      id: randomUUID(),
+      type: "ranking",
+      prompt: "Priorities",
+      purpose: "opinion",
+      confidence: "off",
+      delivery: "main",
+      linkedRecheckQuestionId: null,
+      basePoints: 0,
+      rankCount: 2,
+      mediaId: questionMedia,
+      mediaAlt: "Context",
+      choices: ["A", "B", "C"].map((label) => ({ id: randomUUID(), label, isCorrect: false })),
+    };
+    const document = {
+      schemaVersion: 9,
+      blocks: [
+        { id: randomUUID(), kind: "question", question },
+        {
+          id: randomUUID(),
+          kind: "content",
+          scene: { nodes: [{ type: "image", mediaId: sceneMedia }] },
+        },
+      ],
+    };
+    const valid = async (value: unknown, version = 9) =>
+      (
+        await repository.pool.query<{ valid: boolean }>(
+          "SELECT openround_presentation_opinion_formats_valid($1::jsonb, $2::integer) AS valid",
+          [JSON.stringify(value), version],
+        )
+      ).rows[0]!.valid;
+    expect(await valid(document)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 8 })).toBe(false);
+    expect(await valid(document, 8)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 10 }, 10)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 11 }, 11)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 12 }, 12)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 13 }, 13)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 14 }, 14)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 15 }, 15)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 19 }, 19)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
+    expect(await valid(document, 10)).toBe(false);
+    const uppercase = {
+      ...document,
+      blocks: [
+        {
+          ...document.blocks[0]!,
+          id: document.blocks[0]!.id.toUpperCase(),
+          question: {
+            ...question,
+            id: question.id.toUpperCase(),
+            choices: question.choices.map((choice) => ({ ...choice, id: choice.id.toUpperCase() })),
+          },
+        },
+      ],
+    };
+    expect(await valid(uppercase)).toBe(true);
+    for (const schemaVersion of [2, 3, 4, 5, 6, 7, 8]) {
+      expect(
+        await valid(
+          {
+            schemaVersion,
+            blocks: [
+              {
+                id: randomUUID(),
+                kind: "question",
+                question: {
+                  ...question,
+                  type: "single_select",
+                  purpose: "opinion",
+                  basePoints: 1_000,
+                  rankCount: undefined,
+                  choices: question.choices.map((choice, index) => ({
+                    ...choice,
+                    isCorrect: index === 0,
+                  })),
+                },
+              },
+            ],
+          },
+          schemaVersion,
+        ),
+      ).toBe(true);
+    }
+    for (const extra of [
+      { type: "open_text" },
+      { type: "word_cloud" },
+      { basePoints: 1 },
+      { confidence: "required" },
+      { delivery: "recheck" },
+      { linkedRecheckQuestionId: randomUUID() },
+      { rankCount: 4 },
+      { rankCount: null },
+      { rankCount: "2" },
+      { basePoints: "0" },
+      { choices: question.choices.map((choice) => ({ ...choice, isCorrect: true })) },
+    ]) {
+      expect(
+        await valid({
+          ...document,
+          blocks: [{ id: randomUUID(), kind: "question", question: { ...question, ...extra } }],
+        }),
+      ).toBe(false);
+    }
+    expect(
+      (
+        await repository.pool.query<{ media_id: string }>(
+          "SELECT media_id FROM openround_presentation_media_ids($1::jsonb) ORDER BY media_id",
+          [JSON.stringify(document)],
+        )
+      ).rows.map(({ media_id }) => media_id),
+    ).toEqual([questionMedia, sceneMedia].sort());
+  });
+
+  it.each(["poll", "ranking"] as const)(
+    "rejects raw %s response question IDs that differ from the frozen E04 block",
+    async (type) => {
+      const owner = await creator(`presentation-wrong-question-${type}`);
+      const published = await createPublishedPresentationFixture(owner, "Frozen response identity");
+      const sessions = new PostgresPresentationSessionRepository(repository);
+      const question = {
+        id: randomUUID().toUpperCase(),
+        type,
+        prompt: "Choose priorities",
+        purpose: "opinion",
+        confidence: "off",
+        delivery: "main",
+        linkedRecheckQuestionId: null,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        explanation: "",
+        mediaId: null,
+        mediaAlt: null,
+        choices: ["One", "Two", "Three"].map((label) => ({
+          id: randomUUID().toUpperCase(),
+          label,
+          isCorrect: false,
+        })),
+        ...(type === "poll" ? { maxSelections: 2 } : { rankCount: 2 }),
+      };
+      const blockId = randomUUID().toUpperCase();
+      const content = PresentationContentSchema.parse({
+        title: "Frozen opinion identity",
+        schemaVersion: 9,
+        blocks: [{ id: blockId, kind: "question", question }],
+      });
+      for (const currentBlock of [true, false]) {
+        const now = new Date();
+        const session = await sessions.createSession({
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          presentationId: published.presentation.id,
+          presentationVersionId: published.version.id,
+          title: content.title,
+          content,
+          code: String(randomInt(1_000_000, 10_000_000)),
+          status: "active",
+          phase: currentBlock ? "question_open" : "lobby",
+          currentBlockIndex: currentBlock ? 0 : -1,
+          revision: 1,
+          settings: { timeMode: "flex" },
+          trustMode: "learning",
+          questionOpenedAt: currentBlock ? now : null,
+          questionClosesAt: null,
+          createdBy: owner.userId,
+          createdAt: now,
+          updatedAt: now,
+          finishedAt: null,
+          liveExpiresAt: new Date(now.getTime() + 60_000),
+          retentionExpiresAt: new Date(now.getTime() + 86_400_000),
+        });
+        const participantId = randomUUID();
+        await sessions.addParticipant({
+          id: participantId,
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          nickname: "Identity guard",
+          tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+          joinedAt: now,
+          lastSeenAt: now,
+        });
+        const selections = question.choices.slice(0, 2).map((choice) => choice.id.toLowerCase());
+        const response =
+          type === "poll" ? { choiceIds: selections } : { orderedChoiceIds: selections };
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              `INSERT INTO presentation_live_responses
+            (id,workspace_id,session_id,participant_id,block_id,question_id,response,response_schema_version,
+             correct,score,response_ms,submitted_at,idempotency_key,request_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,2,NULL,0,1000,$8,$9,$10)`,
+              [
+                randomUUID(),
+                owner.workspaceId,
+                session.id,
+                participantId,
+                blockId.toLowerCase(),
+                randomUUID(),
+                JSON.stringify(response),
+                new Date(now.getTime() + 1000),
+                randomUUID(),
+                createHash("sha256").update(JSON.stringify(response)).digest("hex"),
+              ],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+        await expect(sessions.listResponses(session.id)).resolves.toEqual([]);
+      }
+    },
+  );
+
+  it("returns typed text moderation expiry after waiting for the session fence", async () => {
+    const owner = await creator("text-moderation-expiry-wait");
+    const published = await createPublishedPresentationFixture(owner, "Expiry fence");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    for (const expires of ["credential", "session"] as const) {
+      const now = new Date();
+      const blockId = randomUUID(),
+        questionId = randomUUID();
+      const content = PresentationContentSchema.parse({
+        title: "Expiry text",
+        schemaVersion: 10,
+        blocks: [
+          {
+            id: blockId,
+            kind: "question",
+            question: {
+              id: questionId,
+              type: "open_text",
+              prompt: "Share",
+              purpose: "opinion",
+              confidence: "off",
+              delivery: "main",
+              linkedRecheckQuestionId: null,
+              timeLimitSeconds: 30,
+              basePoints: 0,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          },
+        ],
+      });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: published.presentation.id,
+        presentationVersionId: published.version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "question_open",
+        currentBlockIndex: 0,
+        revision: 1,
+        settings: { timeMode: "flex" },
+        questionOpenedAt: now,
+        questionClosesAt: null,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      const credential = await sessions.createCredential({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        role: "host",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        createdAt: now,
+        expiresAt: session.liveExpiresAt,
+        revokedAt: null,
+      });
+      const participantId = randomUUID();
+      await sessions.addParticipant({
+        id: participantId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Private",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+      const responseId = randomUUID();
+      await sessions.acceptResponse(
+        {
+          id: responseId,
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          participantId,
+          blockId,
+          questionId,
+          response: { textValue: "Waiting private text" },
+          responseSchemaVersion: 3,
+          correct: null,
+          score: 0,
+          responseMs: 1,
+          submittedAt: new Date(now.getTime() + 1),
+          idempotencyKey: randomUUID(),
+          requestHash: "a".repeat(64),
+        },
+        1,
+      );
+      const blocker = await runtimePool.connect();
+      let moderation: ReturnType<typeof sessions.moderateTextResponse> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+        await blocker.query("SELECT id FROM presentation_live_sessions WHERE id=$1 FOR UPDATE", [
+          session.id,
+        ]);
+        if (expires === "credential")
+          await blocker.query(
+            "UPDATE presentation_session_credentials SET expires_at=clock_timestamp()+interval '100 milliseconds' WHERE id=$1",
+            [credential.id],
+          );
+        else
+          await blocker.query(
+            "UPDATE presentation_live_sessions SET live_expires_at=clock_timestamp()+interval '100 milliseconds' WHERE id=$1",
+            [session.id],
+          );
+        moderation = sessions.moderateTextResponse({
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          hostCredentialId: credential.id,
+          commandId: randomUUID(),
+          responseId,
+          expectedRevision: 1,
+          expectedModerationVersion: 0,
+          status: "approved",
+          requestHash: "b".repeat(64),
+          occurredAt: new Date(),
+        });
+        await blocker.query("SELECT pg_sleep(0.2)");
+        await blocker.query("COMMIT");
+        await expect(moderation).resolves.toMatchObject({
+          status: expires === "credential" ? "unauthorized" : "phase_closed",
+        });
+        expect((await sessions.listResponses(session.id))[0]).toMatchObject({
+          moderationStatus: "pending",
+          moderationVersion: 0,
+        });
+      } finally {
+        await blocker.query("ROLLBACK");
+        blocker.release();
+        if (moderation) await Promise.allSettled([moderation]);
+      }
+    }
+  });
+
+  it("fences raw joins against first-text promotion at the 250 participant limit", async () => {
+    const owner = await creator("text-promotion-join-race");
+    const published = await createPublishedPresentationFixture(owner, "Promotion fence");
+    const { sessions, session } = await createPresentationSessionFixture(
+      owner,
+      published,
+      String(randomInt(1000000, 10000000)),
+    );
+    await packPracticeScoped(owner.workspaceId, (client) =>
+      client.query(
+        `INSERT INTO presentation_live_participants(id,workspace_id,session_id,nickname,token_hash) SELECT gen_random_uuid(),$1,$2,'Person '||number,md5(random()::text)||md5(random()::text) FROM generate_series(1,249) number`,
+        [owner.workspaceId, session.id],
+      ),
+    );
+    const blockId = randomUUID();
+    const content = PresentationContentSchema.parse({
+      title: "Text promoted",
+      schemaVersion: 10,
+      blocks: [
+        {
+          id: blockId,
+          kind: "question",
+          question: {
+            id: randomUUID(),
+            type: "open_text",
+            prompt: "Share",
+            purpose: "opinion",
+            confidence: "off",
+            delivery: "main",
+            linkedRecheckQuestionId: null,
+            timeLimitSeconds: 30,
+            basePoints: 0,
+            explanation: "",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        },
+      ],
+    });
+    const blocker = await runtimePool.connect();
+    let promotion: Promise<unknown> | undefined;
+    let joins: Array<Promise<unknown>> = [];
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT set_config('app.workspace_id',$1,true)", [owner.workspaceId]);
+      await blocker.query("SELECT id FROM presentation_live_sessions WHERE id=$1 FOR UPDATE", [
+        session.id,
+      ]);
+      promotion = sessions.transitionSessionCommand({
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        commandId: randomUUID(),
+        expectedRevision: 0,
+        requestHash: "a".repeat(64),
+        phase: "lobby",
+        currentBlockIndex: -1,
+        status: "active",
+        content,
+        event: { type: "presentation.started", blockIndex: null, blockId: null },
+      });
+      const deadline = Date.now() + 2000;
+      let waiting = false;
+      while (Date.now() < deadline) {
+        const row = await runtimePool.query(
+          "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM presentation_live_sessions WHERE workspace_id%'",
+        );
+        if (row.rows[0].count > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(true);
+      joins = [0, 1].map((index) =>
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "INSERT INTO presentation_live_participants(id,workspace_id,session_id,nickname,token_hash) VALUES($1,$2,$3,$4,$5)",
+            [
+              randomUUID(),
+              owner.workspaceId,
+              session.id,
+              `Racing ${index}`,
+              createHash("sha256").update(randomUUID()).digest("hex"),
+            ],
+          ),
+        ),
+      );
+      await blocker.query("COMMIT");
+      await expect(promotion).resolves.toMatchObject({ status: "accepted" });
+      const results = await Promise.allSettled(joins);
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const rejection = results.find((result) => result.status === "rejected");
+      expect(rejection).toMatchObject({ status: "rejected", reason: { code: "23514" } });
+      expect(await sessions.listParticipants(session.id)).toHaveLength(250);
+      expect((await sessions.getSessionById(session.id))?.content.schemaVersion).toBe(10);
+      const join = await sessions.joinParticipantWithinLimit(
+        {
+          id: randomUUID(),
+          workspaceId: owner.workspaceId,
+          sessionId: session.id,
+          nickname: "Over capacity",
+          tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+          joinedAt: new Date(),
+          lastSeenAt: new Date(),
+        },
+        500,
+      );
+      expect(join.status).toBe("full");
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await Promise.allSettled([...(promotion ? [promotion] : []), ...joins]);
+    }
+  });
+
+  it("keeps ordinary Presentation response writes concurrent alongside text guards", async () => {
+    const owner = await creator("ordinary-concurrent-with-text");
+    const published = await createPublishedPresentationFixture(
+      owner,
+      "Ordinary concurrent responses",
+    );
+    const sessions = new PostgresPresentationSessionRepository(repository, {
+      concurrentResponseWrites: true,
+    });
+    const now = new Date();
+    const block = published.content.blocks[0]!;
+    if (block.kind !== "question") throw new Error("Expected question");
+    const session = await sessions.createSession({
+      id: randomUUID(),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      title: published.content.title,
+      content: published.content,
+      code: String(randomInt(1000000, 10000000)),
+      status: "active",
+      phase: "question_open",
+      currentBlockIndex: 0,
+      revision: 1,
+      settings: { timeMode: "flex" },
+      questionOpenedAt: now,
+      questionClosesAt: null,
+      createdBy: owner.userId,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      liveExpiresAt: new Date(now.getTime() + 60000),
+      retentionExpiresAt: new Date(now.getTime() + 86400000),
+    });
+    const participants = [randomUUID(), randomUUID()];
+    for (const id of participants)
+      await sessions.addParticipant({
+        id,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Concurrent",
+        tokenHash: createHash("sha256").update(id).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+    await expect(
+      packPracticeScoped(owner.workspaceId, (client) =>
+        client.query(
+          "INSERT INTO presentation_live_responses(id,workspace_id,session_id,participant_id,block_id,question_id,response,correct,score,response_ms,submitted_at) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,true,1000,1,$8)",
+          [
+            randomUUID(),
+            owner.workspaceId,
+            session.id,
+            participants[0],
+            block.id,
+            block.question.id,
+            JSON.stringify({ numericValue: "1", textValue: "legacy-private-leak" }),
+            new Date(now.getTime() + 1),
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const results = await Promise.all(
+      participants.map((participantId) =>
+        sessions.acceptResponse(
+          {
+            id: randomUUID(),
+            workspaceId: owner.workspaceId,
+            sessionId: session.id,
+            participantId,
+            blockId: block.id,
+            questionId: block.question.id,
+            response: { numericValue: "1" },
+            correct: true,
+            score: 1000,
+            responseMs: 1,
+            submittedAt: new Date(now.getTime() + 1),
+            idempotencyKey: randomUUID(),
+            requestHash: "a".repeat(64),
+          },
+          1,
+        ),
+      ),
+    );
+    expect(results.map((result) => result.status)).toEqual(["accepted", "accepted"]);
+    expect(await sessions.listResponses(session.id)).toHaveLength(2);
+  });
+
+  it("guards raw Presentation text storage, Unicode bounds, erasure and command namespaces", async () => {
+    const owner = await creator("presentation-text-sql");
+    const published = await createPublishedPresentationFixture(owner, "Text SQL guards");
+    const sessions = new PostgresPresentationSessionRepository(repository);
+    for (const type of ["open_text", "word_cloud"] as const) {
+      const now = new Date();
+      const blockId = randomUUID().toUpperCase(),
+        questionId = randomUUID().toUpperCase();
+      const content = PresentationContentSchema.parse({
+        title: "Text guards",
+        schemaVersion: 10,
+        blocks: [
+          {
+            id: blockId,
+            kind: "question",
+            question: {
+              id: questionId,
+              type,
+              prompt: "Share",
+              purpose: "opinion",
+              confidence: "off",
+              delivery: "main",
+              linkedRecheckQuestionId: null,
+              timeLimitSeconds: 30,
+              basePoints: 0,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          },
+        ],
+      });
+      const session = await sessions.createSession({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        presentationId: published.presentation.id,
+        presentationVersionId: published.version.id,
+        title: content.title,
+        content,
+        code: String(randomInt(1000000, 10000000)),
+        status: "active",
+        phase: "question_open",
+        currentBlockIndex: 0,
+        revision: 1,
+        settings: { timeMode: "flex" },
+        trustMode: "learning",
+        questionOpenedAt: now,
+        questionClosesAt: null,
+        createdBy: owner.userId,
+        createdAt: now,
+        updatedAt: now,
+        finishedAt: null,
+        liveExpiresAt: new Date(now.getTime() + 3600000),
+        retentionExpiresAt: new Date(now.getTime() + 86400000),
+      });
+      const credential = await sessions.createCredential({
+        id: randomUUID(),
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        role: "host",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        createdAt: now,
+        expiresAt: session.liveExpiresAt,
+        revokedAt: null,
+      });
+      const participantId = randomUUID();
+      await sessions.addParticipant({
+        id: participantId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        nickname: "Private text",
+        tokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
+        joinedAt: now,
+        lastSeenAt: now,
+      });
+      const limit = type === "open_text" ? 1000 : 80;
+      for (const [text, expected] of [
+        ["😀".repeat(limit / 2), true],
+        ["😀".repeat(limit / 2 + 1), false],
+        ["e\u0301", false],
+        ["é", true],
+        ["\u00a0private", false],
+        ["a\u0001b", false],
+        ["a\nb", type === "open_text"],
+      ] as const) {
+        expect(
+          (
+            await repository.pool.query(
+              "SELECT openround_presentation_text_value_valid($1,$2) AS valid",
+              [text, type],
+            )
+          ).rows[0].valid,
+        ).toBe(expected);
+      }
+      const marker = `raw-private-text-${type}`;
+      const responseId = randomUUID();
+      const nonce = randomUUID();
+      const insert = `INSERT INTO presentation_live_responses(id,workspace_id,session_id,participant_id,block_id,question_id,response,response_schema_version,correct,score,response_ms,submitted_at,idempotency_key,request_hash,text_value,moderation_status,moderation_version) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,1,$11,$12,$13,$14,$15,$16)`;
+      const defaults = {
+        questionId,
+        response: {},
+        version: 3,
+        correct: null as boolean | null,
+        score: 0,
+        textValue: marker,
+        status: "pending",
+        moderationVersion: 0,
+        idempotencyKey: nonce as string | null,
+        requestHash: "a".repeat(64) as string | null,
+      };
+      for (const patch of [
+        { idempotencyKey: null },
+        { idempotencyKey: "" },
+        { requestHash: null },
+        { requestHash: "A".repeat(64) },
+        { questionId: randomUUID() },
+        { response: { textValue: marker } },
+        { version: 2 },
+        { version: 4 },
+        { correct: true },
+        { score: 1 },
+        { textValue: "" },
+        { textValue: "😀".repeat(limit / 2 + 1) },
+        { textValue: "e\u0301" },
+        { status: "approved", moderationVersion: 1 },
+        { status: "removed", textValue: null },
+      ]) {
+        const row = { ...defaults, ...patch };
+        await expect(
+          packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(insert, [
+              responseId,
+              owner.workspaceId,
+              session.id,
+              participantId,
+              blockId,
+              row.questionId,
+              JSON.stringify(row.response),
+              row.version,
+              row.correct,
+              row.score,
+              new Date(now.getTime() + 1),
+              row.idempotencyKey,
+              row.requestHash,
+              row.textValue,
+              row.status,
+              row.moderationVersion,
+            ]),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+      }
+      const input = {
+        id: responseId,
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        participantId,
+        blockId: blockId.toLowerCase(),
+        questionId: questionId.toLowerCase(),
+        response: { textValue: marker },
+        responseSchemaVersion: 3 as const,
+        correct: null,
+        score: 0,
+        responseMs: 1,
+        submittedAt: new Date(now.getTime() + 1),
+        idempotencyKey: nonce,
+        requestHash: "a".repeat(64),
+      };
+      expect((await sessions.acceptResponse(input, 1)).status).toBe("accepted");
+      expect(JSON.stringify(await repository.exportAccount(owner.userId))).not.toContain(marker);
+      const command = {
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        hostCredentialId: credential.id,
+        commandId: randomUUID(),
+        expectedRevision: 1,
+        expectedModerationVersion: 0,
+        responseId,
+        status: "approved" as const,
+        requestHash: "b".repeat(64),
+        occurredAt: new Date(now.getTime() + 10),
+      };
+      expect((await sessions.moderateTextResponse(command)).status).toBe("accepted");
+      expect(
+        (
+          await sessions.moderateTextResponse({
+            ...command,
+            commandId: randomUUID(),
+            expectedModerationVersion: 1,
+            status: "removed",
+            requestHash: "c".repeat(64),
+          })
+        ).status,
+      ).toBe("accepted");
+      expect(
+        (
+          await packPracticeScoped(owner.workspaceId, (client) =>
+            client.query(
+              "SELECT text_value,response,moderation_status,moderation_version FROM presentation_live_responses WHERE id=$1",
+              [responseId],
+            ),
+          )
+        ).rows,
+      ).toEqual([
+        { text_value: null, response: {}, moderation_status: "removed", moderation_version: 2 },
+      ]);
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "UPDATE presentation_live_responses SET text_value=$2,moderation_status='approved',moderation_version=3 WHERE id=$1",
+            [responseId, marker],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await expect(
+        packPracticeScoped(owner.workspaceId, (client) =>
+          client.query(
+            "INSERT INTO presentation_session_command_receipts(id,workspace_id,session_id,command_id,expected_revision,resulting_revision,event_type) VALUES($1,$2,$3,$4,1,2,'question.revealed')",
+            [randomUUID(), owner.workspaceId, session.id, command.commandId],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await packPracticeScoped(owner.workspaceId, (client) =>
+        client.query("DELETE FROM presentation_session_credentials WHERE id=$1", [credential.id]),
+      );
+      expect(
+        await sessions.findTextModerationReceipt(owner.workspaceId, session.id, command.commandId),
+      ).toMatchObject({ hostCredentialId: credential.id, status: "approved" });
+      await sessions.transitionSession({
+        workspaceId: owner.workspaceId,
+        sessionId: session.id,
+        expectedRevision: 1,
+        phase: "finished",
+        currentBlockIndex: 0,
+        status: "finished",
+        event: { type: "presentation.finished", blockIndex: null, blockId: null },
+      });
+      await sessions.deleteSession(owner.workspaceId, session.id);
+      expect(
+        await sessions.findTextModerationReceipt(owner.workspaceId, session.id, command.commandId),
+      ).toBeNull();
+    }
+  });
+
+  it("moderates Presentation text privately with erasure, versioned receipts, reveal and deletion", async () => {
+    const owner = await creator("presentation-text-conformance");
+    const published = await createPublishedPresentationFixture(owner, "Moderated text");
+    await expectPresentationTextConformance({
+      repository: new PostgresPresentationSessionRepository(repository),
+      workspaceId: owner.workspaceId,
+      presentationId: published.presentation.id,
+      presentationVersionId: published.version.id,
+      createdBy: owner.userId,
+    });
   });
 
   it("keeps PostgreSQL on the shared Presentation repository conformance contract", async () => {

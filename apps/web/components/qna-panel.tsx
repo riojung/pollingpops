@@ -13,6 +13,12 @@ import { createPresentationQnaClient } from "../lib/presentation-qna";
 import { clientUuid } from "../lib/uuid";
 import { createInFlightRefreshCoalescer, createReadRetryScheduler } from "../lib/refresh-queue";
 import { useLocale } from "./locale-provider";
+import type { MessageKey } from "../lib/i18n/catalog";
+import {
+  localizeQnaModerationError,
+  localizeQnaSelfName,
+  qnaModerationCopy,
+} from "../lib/i18n/qna-moderation-copy";
 
 type QnaPanelProps = {
   role: "participant" | "moderator" | "observer";
@@ -23,16 +29,22 @@ type QnaPanelProps = {
 };
 
 type PanelPage = QnaPage & Partial<Pick<ScopedQnaPage, "audienceSeq" | "lifecycle">>;
-type PendingAction = { key: string; command: ScopedQnaCommand; success: string; done?: () => void };
+type PendingAction = {
+  key: string;
+  command: ScopedQnaCommand;
+  success: MessageKey | "";
+  done?: () => void;
+};
 
 export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round" }: QnaPanelProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const copy = qnaModerationCopy(locale);
   const [page, setPage] = useState<PanelPage | null>(null);
   const [questionBody, setQuestionBody] = useState("");
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<MessageKey | "">("");
   const [pending, setPending] = useState<PendingAction | null>(null);
   const loadRequest = useRef(0);
   const refreshQueue = useRef(createInFlightRefreshCoalescer<void>());
@@ -193,7 +205,11 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
     }
   }
 
-  async function perform(key: string, action: () => Promise<unknown>, success = "") {
+  async function perform(
+    key: string,
+    action: () => Promise<unknown>,
+    success: MessageKey | "" = "",
+  ) {
     setBusyKey(key);
     setError("");
     setNotice("");
@@ -219,8 +235,8 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
         command: { type: "question.create", body, idempotencyKey: clientUuid() },
         success:
           page?.settings.moderationMode === "pre"
-            ? t("live.qna.questionSentForReview")
-            : t("live.qna.questionShared"),
+            ? "live.qna.questionSentForReview"
+            : "live.qna.questionShared",
         done: () => setQuestionBody(""),
       });
       return;
@@ -235,12 +251,13 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
         setQuestionBody("");
       },
       page?.settings.moderationMode === "pre"
-        ? t("live.qna.questionSentForReview")
-        : t("live.qna.questionShared"),
+        ? "live.qna.questionSentForReview"
+        : "live.qna.questionShared",
     );
   }
 
   async function submitReply(questionId: string) {
+    if (role === "observer" || scoped) return;
     const body = replyBodies[questionId]?.trim();
     if (!body) return;
     await perform(
@@ -252,7 +269,7 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
         });
         setReplyBodies((current) => ({ ...current, [questionId]: "" }));
       },
-      role === "moderator" ? t("live.qna.replyPublished") : t("live.qna.replySubmitted"),
+      role === "moderator" ? "live.qna.replyPublished" : "live.qna.replySubmitted",
     );
   }
 
@@ -345,9 +362,10 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
   const visibleQuestions = page?.questions ?? [];
   const closed = page?.lifecycle === "closed";
   const mutationDisabled = closed || !!busyKey || !!pending;
+  const displayError = localizeQnaModerationError(locale, error);
 
   return (
-    <section className="panel qna-panel" aria-labelledby={`qna-heading-${role}`}>
+    <section className="panel qna-panel" lang={locale} aria-labelledby={`qna-heading-${role}`}>
       <div className="qna-heading">
         <div>
           <p className="eyebrow">{t("live.qna.eyebrow")}</p>
@@ -359,33 +377,28 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
       </div>
 
       {error ? (
-        <p className="error" lang="en-CA" role="alert">
-          {error}
+        <p className="error" lang={displayError.language} role="alert">
+          {displayError.text}
         </p>
       ) : null}
       {notice ? (
         <p className="success" role="status">
-          {notice}
+          {t(notice)}
         </p>
       ) : null}
       {scoped ? (
-        <p className="notice" lang="en-CA">
-          {t("live.presentationQna.disclosure")}
+        <p className="notice">
+          {copy(
+            "The facilitator can see your session alias. Anonymous public display hides it from the room, not from the facilitator.",
+          )}
         </p>
       ) : null}
       {closed ? (
-        <p className="notice" lang="en-CA">
-          {t("live.presentationQna.closed")}
-        </p>
+        <p className="notice">{copy("This Presentation has ended. Q&A is now read-only.")}</p>
       ) : null}
       {pending && !busyKey ? (
-        <button
-          className="button"
-          lang="en-CA"
-          onClick={() => void runScoped(pending)}
-          type="button"
-        >
-          {t("live.presentationQna.retry")}
+        <button className="button" onClick={() => void runScoped(pending)} type="button">
+          {copy("Retry the same Q&A action")}
         </button>
       ) : null}
 
@@ -455,6 +468,7 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
             <textarea
               className="textarea"
               id="qna-question-body"
+              lang={questionBody.trim() ? "" : locale}
               maxLength={1_000}
               onChange={(event) => setQuestionBody(event.target.value)}
               placeholder={t("live.qna.questionPlaceholder")}
@@ -482,173 +496,188 @@ export function QnaPanel({ role, sessionId, token, revision, scopeKind = "round"
         <p className="notice">{t("live.qna.paused")}</p>
       ) : null}
 
-      {!page ? <p className="muted">{t("live.qna.loading")}</p> : null}
+      {!page && !error ? (
+        <p className="muted" role="status">
+          {t("live.qna.loading")}
+        </p>
+      ) : null}
       {page && visibleQuestions.length === 0 ? (
         <p className="qna-empty">{t("live.qna.empty")}</p>
       ) : null}
       <ol className="qna-list">
-        {visibleQuestions.map((question) => (
-          <li className="qna-question" key={question.id}>
-            <div className="qna-question-meta">
-              <span>
-                <strong lang="">{question.author.displayName}</strong> ·{" "}
-                {statusLabel(question.status)}
-              </span>
-              <span>{t("live.qna.votes", { count: question.voteCount })}</span>
-            </div>
-            <p className="qna-question-body" lang="">
-              {question.body}
-            </p>
-            {question.label ? (
-              <span className="status-pill" lang="">
-                {question.label}
-              </span>
-            ) : null}
+        {visibleQuestions.map((question) => {
+          const authorName = localizeQnaSelfName(locale, role, question.author, "question");
+          return (
+            <li className="qna-question" key={question.id}>
+              <div className="qna-question-meta">
+                <span>
+                  <strong lang={authorName.language}>{authorName.text}</strong> ·{" "}
+                  {statusLabel(question.status)}
+                </span>
+                <span>{t("live.qna.votes", { count: question.voteCount })}</span>
+              </div>
+              <p className="qna-question-body" lang="">
+                {question.body}
+              </p>
+              {question.label ? (
+                <span className="status-pill" lang="">
+                  {question.label}
+                </span>
+              ) : null}
 
-            {role === "participant" &&
-            ["published", "answered"].includes(question.status) &&
-            !closed ? (
-              <button
-                aria-pressed={question.votedByMe}
-                className="button-quiet small-button"
-                disabled={scoped ? mutationDisabled : busyKey === `vote:${question.id}`}
-                onClick={() => void setVote(question)}
-                type="button"
-              >
-                {question.votedByMe ? t("live.qna.removeVote") : t("live.qna.sameQuestion")}
-              </button>
-            ) : null}
-
-            {role === "moderator" ? (
-              <fieldset
-                className="button-row qna-moderation-actions"
-                disabled={scoped ? mutationDisabled : false}
-              >
-                <legend className="sr-only">{t("live.qna.controls")}</legend>
-                {scoped && question.status === "published" ? (
-                  <button
-                    className="button-quiet small-button"
-                    lang="en-CA"
-                    onClick={() => void moderate(question, "answered")}
-                    type="button"
-                  >
-                    {t("live.presentationQna.markAnswered")}
-                  </button>
-                ) : null}
-                {question.status === "pending" ? (
-                  <button
-                    className="button small-button"
-                    disabled={busyKey === `moderate:${question.id}`}
-                    onClick={() => void moderate(question, "published")}
-                    type="button"
-                  >
-                    {t("live.qna.publish")}
-                  </button>
-                ) : null}
-                {!["dismissed", "removed"].includes(question.status) ? (
-                  <button
-                    className="button-quiet small-button"
-                    disabled={busyKey === `moderate:${question.id}`}
-                    onClick={() => void moderate(question, "dismissed")}
-                    type="button"
-                  >
-                    {t("live.qna.dismiss")}
-                  </button>
-                ) : null}
-                {question.status !== "removed" ? (
-                  <button
-                    className="button-danger small-button"
-                    disabled={busyKey === `moderate:${question.id}`}
-                    onClick={() => void moderate(question, "removed")}
-                    type="button"
-                  >
-                    {t("live.qna.remove")}
-                  </button>
-                ) : null}
-                {(question.moderationParticipantId || scoped) && question.status !== "removed" ? (
-                  <button
-                    className="button-danger small-button"
-                    disabled={busyKey === `moderate:${question.id}`}
-                    onClick={() =>
-                      window.confirm(t("live.qna.removeAndBlockConfirm")) &&
-                      void moderate(question, "removed", true)
-                    }
-                    type="button"
-                  >
-                    {t("live.qna.removeAndBlock")}
-                  </button>
-                ) : null}
-              </fieldset>
-            ) : null}
-
-            {question.replies.length > 0 ? (
-              <ul className="qna-replies" aria-label={t("live.qna.replies")}>
-                {question.replies.map((reply) => (
-                  <li key={reply.id}>
-                    <p>
-                      <strong lang="">{reply.author.displayName}</strong> ·{" "}
-                      <span lang="">{reply.body}</span>
-                    </p>
-                    {role === "moderator" && reply.status === "pending" ? (
-                      <div className="button-row">
-                        <button
-                          className="button-quiet small-button"
-                          disabled={busyKey === `moderate-reply:${reply.id}`}
-                          onClick={() => void moderateReply(reply.id, "published")}
-                          type="button"
-                        >
-                          {t("live.qna.publishReply")}
-                        </button>
-                        <button
-                          className="button-danger small-button"
-                          disabled={busyKey === `moderate-reply:${reply.id}`}
-                          onClick={() => void moderateReply(reply.id, "removed")}
-                          type="button"
-                        >
-                          {t("live.qna.removeReply")}
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            {!scoped &&
-            (role === "moderator" ||
-              (settings?.participantReplies &&
-                ["published", "answered"].includes(question.status))) &&
-            question.status !== "removed" ? (
-              <div className="qna-reply-compose">
-                <label className="field" htmlFor={`qna-reply-${question.id}`}>
-                  <span className="field-label">
-                    {role === "moderator" ? t("live.qna.facilitatorReply") : t("live.qna.addReply")}
-                  </span>
-                  <textarea
-                    className="textarea"
-                    id={`qna-reply-${question.id}`}
-                    maxLength={1_000}
-                    onChange={(event) =>
-                      setReplyBodies((current) => ({
-                        ...current,
-                        [question.id]: event.target.value,
-                      }))
-                    }
-                    value={replyBodies[question.id] ?? ""}
-                  />
-                </label>
+              {role === "participant" &&
+              ["published", "answered"].includes(question.status) &&
+              !closed ? (
                 <button
+                  aria-pressed={question.votedByMe}
                   className="button-quiet small-button"
-                  disabled={busyKey === `reply:${question.id}` || !replyBodies[question.id]?.trim()}
-                  onClick={() => void submitReply(question.id)}
+                  disabled={scoped ? mutationDisabled : busyKey === `vote:${question.id}`}
+                  onClick={() => void setVote(question)}
                   type="button"
                 >
-                  {t("live.qna.reply")}
+                  {question.votedByMe ? t("live.qna.removeVote") : t("live.qna.sameQuestion")}
                 </button>
-              </div>
-            ) : null}
-          </li>
-        ))}
+              ) : null}
+
+              {role === "moderator" ? (
+                <fieldset
+                  className="button-row qna-moderation-actions"
+                  disabled={scoped ? mutationDisabled : false}
+                >
+                  <legend className="sr-only">{t("live.qna.controls")}</legend>
+                  {scoped && question.status === "published" ? (
+                    <button
+                      className="button-quiet small-button"
+                      onClick={() => void moderate(question, "answered")}
+                      type="button"
+                    >
+                      {copy("Mark answered")}
+                    </button>
+                  ) : null}
+                  {question.status === "pending" ? (
+                    <button
+                      className="button small-button"
+                      disabled={busyKey === `moderate:${question.id}`}
+                      onClick={() => void moderate(question, "published")}
+                      type="button"
+                    >
+                      {t("live.qna.publish")}
+                    </button>
+                  ) : null}
+                  {!["dismissed", "removed"].includes(question.status) ? (
+                    <button
+                      className="button-quiet small-button"
+                      disabled={busyKey === `moderate:${question.id}`}
+                      onClick={() => void moderate(question, "dismissed")}
+                      type="button"
+                    >
+                      {t("live.qna.dismiss")}
+                    </button>
+                  ) : null}
+                  {question.status !== "removed" ? (
+                    <button
+                      className="button-danger small-button"
+                      disabled={busyKey === `moderate:${question.id}`}
+                      onClick={() => void moderate(question, "removed")}
+                      type="button"
+                    >
+                      {t("live.qna.remove")}
+                    </button>
+                  ) : null}
+                  {(question.moderationParticipantId || scoped) && question.status !== "removed" ? (
+                    <button
+                      className="button-danger small-button"
+                      disabled={busyKey === `moderate:${question.id}`}
+                      onClick={() =>
+                        window.confirm(t("live.qna.removeAndBlockConfirm")) &&
+                        void moderate(question, "removed", true)
+                      }
+                      type="button"
+                    >
+                      {t("live.qna.removeAndBlock")}
+                    </button>
+                  ) : null}
+                </fieldset>
+              ) : null}
+
+              {question.replies.length > 0 ? (
+                <ul className="qna-replies" aria-label={t("live.qna.replies")}>
+                  {question.replies.map((reply) => {
+                    const replyName = localizeQnaSelfName(locale, role, reply.author, "reply");
+                    return (
+                      <li key={reply.id}>
+                        <p>
+                          <strong lang={replyName.language}>{replyName.text}</strong> ·{" "}
+                          <span lang="">{reply.body}</span>
+                        </p>
+                        {role === "moderator" && reply.status === "pending" ? (
+                          <div className="button-row">
+                            <button
+                              className="button-quiet small-button"
+                              disabled={busyKey === `moderate-reply:${reply.id}`}
+                              onClick={() => void moderateReply(reply.id, "published")}
+                              type="button"
+                            >
+                              {t("live.qna.publishReply")}
+                            </button>
+                            <button
+                              className="button-danger small-button"
+                              disabled={busyKey === `moderate-reply:${reply.id}`}
+                              onClick={() => void moderateReply(reply.id, "removed")}
+                              type="button"
+                            >
+                              {t("live.qna.removeReply")}
+                            </button>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+
+              {!scoped &&
+              (role === "moderator" ||
+                (role === "participant" &&
+                  settings?.participantReplies &&
+                  ["published", "answered"].includes(question.status))) &&
+              question.status !== "removed" ? (
+                <div className="qna-reply-compose">
+                  <label className="field" htmlFor={`qna-reply-${question.id}`}>
+                    <span className="field-label">
+                      {role === "moderator"
+                        ? t("live.qna.facilitatorReply")
+                        : t("live.qna.addReply")}
+                    </span>
+                    <textarea
+                      className="textarea"
+                      id={`qna-reply-${question.id}`}
+                      lang=""
+                      maxLength={1_000}
+                      onChange={(event) =>
+                        setReplyBodies((current) => ({
+                          ...current,
+                          [question.id]: event.target.value,
+                        }))
+                      }
+                      value={replyBodies[question.id] ?? ""}
+                    />
+                  </label>
+                  <button
+                    className="button-quiet small-button"
+                    disabled={
+                      busyKey === `reply:${question.id}` || !replyBodies[question.id]?.trim()
+                    }
+                    onClick={() => void submitReply(question.id)}
+                    type="button"
+                  >
+                    {t("live.qna.reply")}
+                  </button>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ol>
       {page?.nextCursor ? (
         <button

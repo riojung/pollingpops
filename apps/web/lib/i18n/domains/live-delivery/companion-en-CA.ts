@@ -1,4 +1,4 @@
-/** Foundation copy falls back to English until reviewed translations are available. */
+/** English source copy for Companion and the shared Presentation Q&A foundation. */
 export const companionEnglishMessages = {
   "live.presentationQna.activate": "Activate audience Q&A",
   "live.presentationQna.activating": "Activating Q&A…",

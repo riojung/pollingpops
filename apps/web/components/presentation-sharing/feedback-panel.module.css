@@ -1,0 +1,84 @@
+.panel {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.toolbar h2 {
+  margin: 0;
+}
+.panel button {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+  font: inherit;
+  cursor: pointer;
+}
+.panel button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.panel label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px;
+  font: inherit;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+}
+.threads {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.thread {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+}
+.thread h3 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.message {
+  border-bottom: 1px solid var(--ui-border);
+  padding: 8px 0;
+}
+.body {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.byline {
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .panel {
+    padding: 12px;
+  }
+}

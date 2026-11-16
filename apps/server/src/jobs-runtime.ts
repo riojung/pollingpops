@@ -9,7 +9,28 @@ import { JobRunner } from "./job-runner.js";
 import { ReportWorker } from "./report-worker.js";
 import { PresentationReportWorker } from "./presentation-report-worker.js";
 import { AuthoringWorker } from "./authoring-worker.js";
+import { PresentationVisualImportWorker } from "./presentation-visual-import-worker.js";
 import { OpenAiCompatibleAuthoringAssistant } from "./authoring-assistant.js";
+import {
+  OpenAiCompatiblePresentationAssistanceProvider,
+  presentationAssistanceProviderAvailable,
+} from "./presentation-assistance-provider.js";
+import { PresentationAssistanceService } from "./presentation-assistance-service.js";
+import { PresentationAssistanceWorker } from "./presentation-assistance-worker.js";
+import {
+  OpenAiCompatiblePresentationTextAssistanceProvider,
+  presentationTextAssistanceProviderAvailable,
+} from "./presentation-text-assistance-provider.js";
+import { PresentationTextAssistanceService } from "./presentation-text-assistance-service.js";
+import { PresentationTextAssistanceWorker } from "./presentation-text-assistance-worker.js";
+import {
+  OpenAiCompatiblePresentationQuestionSuggestionsProvider,
+  presentationQuestionSuggestionsProviderAvailable,
+} from "./presentation-question-suggestions-provider.js";
+import { PresentationQuestionSuggestionsService } from "./presentation-question-suggestions-service.js";
+import { PresentationQuestionSuggestionsWorker } from "./presentation-question-suggestions-worker.js";
+import { createPresentationRepository } from "@openround/db";
+import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { ClamAvScanner } from "./malware-scanner.js";
 import { StorageService } from "./storage.js";
 import { RetentionService } from "./retention.js";
@@ -40,6 +61,7 @@ export async function createJobsRuntime(
       ? new ClamAvScanner(config.CLAMAV_HOST!, config.CLAMAV_PORT, config.CLAMAV_TIMEOUT_MS)
       : null;
   const storage = new StorageService(config, scanner);
+  const visualImports = new PresentationVisualImportWorker(repository, storage);
   const assistant =
     config.AUTHORING_AI_MODE === "openai_compatible"
       ? new OpenAiCompatibleAuthoringAssistant(
@@ -60,6 +82,82 @@ export async function createJobsRuntime(
     assistant,
     config.AUTHORING_WORKER_LEASE_MS,
     config.AUTHORING_EXTRACTION_TIMEOUT_MS,
+  );
+  const configuredAssistanceProvider =
+    config.AUTHORING_AI_MODE === "openai_compatible"
+      ? new OpenAiCompatiblePresentationAssistanceProvider(
+          config.AUTHORING_AI_ENDPOINT!,
+          config.AUTHORING_AI_API_KEY,
+          config.AUTHORING_AI_MODEL,
+          config.AUTHORING_AI_PROVIDER_NAME,
+        )
+      : null;
+  const assistanceProvider = presentationAssistanceProviderAvailable(configuredAssistanceProvider)
+    ? configuredAssistanceProvider
+    : null;
+  const assistanceService = new PresentationAssistanceService(
+    repository,
+    createPresentationRepository(repository),
+    Boolean(assistanceProvider),
+    (workspaceId) => workspaceFeatureEnabled(repository, config, workspaceId, "presentations"),
+  );
+  const presentationAssistance = new PresentationAssistanceWorker(
+    repository,
+    assistanceProvider,
+    assistanceService,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
+  const configuredTextAssistanceProvider =
+    config.AUTHORING_AI_MODE === "openai_compatible"
+      ? new OpenAiCompatiblePresentationTextAssistanceProvider(
+          config.AUTHORING_AI_ENDPOINT!,
+          config.AUTHORING_AI_API_KEY,
+          config.AUTHORING_AI_MODEL,
+          config.AUTHORING_AI_PROVIDER_NAME,
+        )
+      : null;
+  const textAssistanceProvider = presentationTextAssistanceProviderAvailable(
+    configuredTextAssistanceProvider,
+  )
+    ? configuredTextAssistanceProvider
+    : null;
+  const textAssistanceService = new PresentationTextAssistanceService(
+    repository,
+    createPresentationRepository(repository),
+    Boolean(textAssistanceProvider),
+    (workspaceId) => workspaceFeatureEnabled(repository, config, workspaceId, "presentations"),
+  );
+  const presentationTextAssistance = new PresentationTextAssistanceWorker(
+    repository,
+    textAssistanceProvider,
+    textAssistanceService,
+    config.AUTHORING_WORKER_LEASE_MS,
+  );
+  const configuredQuestionSuggestionsProvider =
+    config.AUTHORING_AI_MODE === "openai_compatible"
+      ? new OpenAiCompatiblePresentationQuestionSuggestionsProvider(
+          config.AUTHORING_AI_ENDPOINT!,
+          config.AUTHORING_AI_API_KEY,
+          config.AUTHORING_AI_MODEL,
+          config.AUTHORING_AI_PROVIDER_NAME,
+        )
+      : null;
+  const questionSuggestionsProvider = presentationQuestionSuggestionsProviderAvailable(
+    configuredQuestionSuggestionsProvider,
+  )
+    ? configuredQuestionSuggestionsProvider
+    : null;
+  const questionSuggestionsService = new PresentationQuestionSuggestionsService(
+    repository,
+    createPresentationRepository(repository),
+    Boolean(questionSuggestionsProvider),
+    (workspaceId) => workspaceFeatureEnabled(repository, config, workspaceId, "presentations"),
+  );
+  const presentationQuestionSuggestions = new PresentationQuestionSuggestionsWorker(
+    repository,
+    questionSuggestionsProvider,
+    questionSuggestionsService,
+    config.AUTHORING_WORKER_LEASE_MS,
   );
   const retention = new RetentionService(
     repository,
@@ -86,6 +184,26 @@ export async function createJobsRuntime(
         name: "authoring",
         intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
         run: () => authoring.runUntilIdle(),
+      },
+      {
+        name: "visual-imports",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => visualImports.runUntilIdle(1),
+      },
+      {
+        name: "presentation-assistance",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => presentationAssistance.runUntilIdle(1),
+      },
+      {
+        name: "presentation-text-assistance",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => presentationTextAssistance.runUntilIdle(1),
+      },
+      {
+        name: "presentation-question-suggestions",
+        intervalMs: config.AUTHORING_WORKER_INTERVAL_MS,
+        run: () => presentationQuestionSuggestions.runUntilIdle(1),
       },
       {
         name: "retention",
@@ -126,11 +244,16 @@ export async function createJobsRuntime(
     onError,
     async (name) => {
       const controlId =
-        name === "integrations"
-          ? "business-integrations"
-          : name === "billing"
-            ? "billing-reconciliation"
-            : name;
+        name === "visual-imports" ||
+        name === "presentation-assistance" ||
+        name === "presentation-text-assistance" ||
+        name === "presentation-question-suggestions"
+          ? "authoring"
+          : name === "integrations"
+            ? "business-integrations"
+            : name === "billing"
+              ? "billing-reconciliation"
+              : name;
       return !(await platform.getWorkerControl(controlId))?.paused;
     },
   );

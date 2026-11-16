@@ -342,12 +342,14 @@ describe("Presentation slide visibility contract", () => {
     expect(() => PresentationDraftSchema.parse(input)).toThrow("3 MiB");
   });
 
-  it("continues rejecting future document formats", () => {
-    expect(
-      PresentationDraftSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 8 }).success,
-    ).toBe(false);
-    expect(
-      PresentationContentSchema.safeParse({ ...deck([legacySlide()]), schemaVersion: 8 }).success,
-    ).toBe(false);
+  it("retains legacy slides under document 9 and continues rejecting future document formats", () => {
+    for (const schema of [PresentationDraftSchema, PresentationContentSchema]) {
+      expect(schema.parse({ ...deck([legacySlide()]), schemaVersion: 9 }).schemaVersion).toBe(9);
+      expect(schema.parse({ ...deck([legacySlide()]), schemaVersion: 12 }).schemaVersion).toBe(12);
+      expect(schema.parse({ ...deck([legacySlide()]), schemaVersion: 13 }).schemaVersion).toBe(13);
+      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 14 }).success).toBe(true);
+      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 15 }).success).toBe(true);
+      expect(schema.safeParse({ ...deck([legacySlide()]), schemaVersion: 19 }).success).toBe(false);
+    }
   });
 });

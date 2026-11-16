@@ -2,13 +2,18 @@ import {
   PresentationCompanionSnapshotSchema,
   PresentationHostSnapshotSchema,
   PresentationParticipantSnapshotSchema,
+  PresentationStageSnapshotSchema,
   type PresentationBlock,
   type PresentationCompanionSnapshot,
   type PresentationHostSnapshot,
   type PresentationParticipantSnapshot,
+  type PresentationStageSnapshot,
   type QuestionDraft,
+  presentationQuestionSupported,
   questionPurpose,
-  requiresExtendedRoundResponses,
+  isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  requiresPresentationTextOpinions,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -27,7 +32,22 @@ import {
 import {
   presentationCompetitionStandings,
   presentationHasQuestions,
+  presentationHasParticipantStandings,
+  presentationScoredResponses,
 } from "./presentation-competition.js";
+import { presentationOpinionSummary } from "./presentation-opinion-results.js";
+import { presentationNavigationSnapshot } from "./presentation-navigation.js";
+import { presentationSpatialSnapshotFields } from "./presentation-spatial.js";
+import {
+  presentationDeliveredScene,
+  presentationInteractionSnapshot,
+  presentationBranchSnapshot,
+} from "./presentation-advanced-interactions.js";
+import {
+  presentationResponseMatchesBlock,
+  presentationResponsesForContent,
+} from "./presentation-response-identifiers.js";
+import { presentationBlockDesign } from "./presentation-block-design.js";
 
 const PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS = 15_000;
 
@@ -97,8 +117,12 @@ function facilitatorVisibleResponses(
  * Participant projection is deliberately an allowlist. New authoring fields remain private until
  * explicitly reviewed for participant delivery.
  */
-export function presentationParticipantBlock(block: PresentationBlock | null) {
+export function presentationParticipantBlock(
+  block: PresentationBlock | null,
+  session?: PresentationSessionRecord,
+) {
   if (!block) return null;
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -107,27 +131,38 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
-      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
+      ...(design ? { design } : {}),
+      ...(block.scene ? { scene: presentationDeliveredScene(block, session) } : {}),
     };
   }
   const question = block.question;
-  if (requiresExtendedRoundResponses({ questions: [question] })) {
+  const blockFields = { id: block.id, kind: block.kind, ...(design ? { design } : {}) };
+  if (!presentationQuestionSupported(question)) {
     throw new Error("This response format currently supports Live Rounds only");
   }
   const base = {
     id: question.id,
     type: question.type,
     prompt: question.prompt,
-    confidence: question.confidence,
+    confidence:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? "off"
+        : question.confidence,
     timeLimitSeconds: question.timeLimitSeconds,
     mediaId: question.mediaId,
     mediaAlt: question.mediaAlt,
+    ...(question.type === "poll" && question.maxSelections !== undefined
+      ? { maxSelections: question.maxSelections }
+      : {}),
+    ...(question.type === "ranking"
+      ? { rankCount: question.rankCount ?? question.choices.length }
+      : {}),
   };
-  if (question.type === "numeric") return { id: block.id, kind: block.kind, question: base };
+  if (question.type === "numeric" || isPresentationTextResultQuestion(question))
+    return { ...blockFields, question: base };
   if (question.type === "rating") {
     return {
-      id: block.id,
-      kind: block.kind,
+      ...blockFields,
       question: {
         ...base,
         min: question.min,
@@ -139,8 +174,7 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
   }
   if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
   return {
-    id: block.id,
-    kind: block.kind,
+    ...blockFields,
     question: {
       ...base,
       choices: question.choices.map(({ id, label }) => ({ id, label })),
@@ -149,14 +183,17 @@ export function presentationParticipantBlock(block: PresentationBlock | null) {
 }
 
 function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean) {
-  if (requiresExtendedRoundResponses({ questions: [question] })) {
+  if (!presentationQuestionSupported(question)) {
     throw new Error("This response format currently supports Live Rounds only");
   }
   const projected = {
     id: question.id,
     type: question.type,
     prompt: question.prompt,
-    confidence: question.confidence ?? "off",
+    confidence:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? "off"
+        : (question.confidence ?? "off"),
     choices:
       "choices" in question
         ? question.choices.map((choice) => ({ id: choice.id, label: choice.label }))
@@ -173,9 +210,18 @@ function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean)
         }
       : {}),
     timeLimitSeconds: question.timeLimitSeconds,
-    basePoints: question.basePoints,
+    basePoints:
+      isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)
+        ? 0
+        : question.basePoints,
     mediaId: question.mediaId,
     mediaAlt: question.mediaAlt,
+    ...(question.type === "poll" && question.maxSelections !== undefined
+      ? { maxSelections: question.maxSelections }
+      : {}),
+    ...(question.type === "ranking"
+      ? { rankCount: question.rankCount ?? question.choices.length }
+      : {}),
   };
   return facilitator
     ? {
@@ -187,7 +233,7 @@ function presentationLiveQuestion(question: QuestionDraft, facilitator: boolean)
 }
 
 function presentationRevealedAnswer(question: QuestionDraft) {
-  if (requiresExtendedRoundResponses({ questions: [question] })) {
+  if (!presentationQuestionSupported(question)) {
     throw new Error("This response format currently supports Live Rounds only");
   }
   if (question.type === "numeric") {
@@ -199,7 +245,12 @@ function presentationRevealedAnswer(question: QuestionDraft) {
       explanation: question.explanation,
     };
   }
-  if (question.type === "rating" || question.type === "poll") {
+  if (
+    question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isPresentationTextResultQuestion(question)
+  ) {
     return { kind: "unscored" as const, explanation: question.explanation };
   }
   if (!("choices" in question)) throw new Error("Unsupported Presentation response format");
@@ -216,8 +267,11 @@ function presentationRealtimeBlock(
   block: PresentationBlock | null,
   facilitator: boolean,
   revealAnswer = false,
+  session?: PresentationSessionRecord,
+  staffScene = facilitator,
 ) {
   if (!block) return null;
+  const design = session ? presentationBlockDesign(session.content.blocks, block.id) : undefined;
   if (block.kind === "content") {
     return {
       id: block.id,
@@ -226,12 +280,14 @@ function presentationRealtimeBlock(
       textElements: block.textElements.map((element) => ({ ...element })),
       mediaId: block.mediaId,
       mediaAlt: block.mediaAlt,
-      ...(block.scene ? { scene: structuredClone(block.scene) } : {}),
+      ...(design ? { design } : {}),
+      ...(block.scene ? { scene: presentationDeliveredScene(block, session, staffScene) } : {}),
     };
   }
   return {
     id: block.id,
     kind: block.kind,
+    ...(design ? { design } : {}),
     question: presentationLiveQuestion(block.question, facilitator),
     ...(facilitator
       ? {
@@ -247,6 +303,7 @@ export function buildPresentationProjectionData(
   responses: PresentationSessionResponseRecord[],
   timeline: PresentationSessionTimelineRecord[] = [],
 ): PresentationProjectionData {
+  responses = presentationResponsesForContent(session.content, responses);
   const responseByParticipantAndBlock = new Map<string, PresentationSessionResponseRecord>();
   const latestReceiptByParticipant = new Map<string, PresentationSessionResponseRecord>();
   for (const response of responses) {
@@ -262,10 +319,10 @@ export function buildPresentationProjectionData(
     participants,
     responses,
     timeline,
-    leaderboard: rankedParticipants(participants, responses),
+    leaderboard: rankedParticipants(participants, presentationScoredResponses(session, responses)),
     facilitatorLeaderboard: rankedParticipants(
       participants,
-      facilitatorVisibleResponses(session, responses),
+      facilitatorVisibleResponses(session, presentationScoredResponses(session, responses)),
     ),
     responseByParticipantAndBlock,
     latestReceiptByParticipant,
@@ -293,6 +350,9 @@ export function buildPresentationHostSnapshot(
       sampledAt.getTime() - participant.lastSeenAt.getTime() <=
         PRESENTATION_PARTICIPANT_PRESENCE_WINDOW_MS,
   ).length;
+  const opinionSummary = ["question_reveal", "intervention", "finished"].includes(session.phase)
+    ? presentationOpinionSummary(block, responses)
+    : undefined;
   return PresentationHostSnapshotSchema.parse({
     sessionId: session.id,
     artifactType: "presentation",
@@ -314,12 +374,37 @@ export function buildPresentationHostSnapshot(
     ...(recoveryPackCards.length ? { recoveryPackCards } : {}),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "host",
+    ...presentationSpatialSnapshotFields(session.content),
+    ...(session.content.schemaVersion >= 12
+      ? { navigation: presentationNavigationSnapshot(session) }
+      : {}),
+    ...(session.content.schemaVersion >= 13
+      ? {
+          interactionState: presentationInteractionSnapshot(session, true),
+          branches: presentationBranchSnapshot(session, responses),
+        }
+      : {}),
+    ...(requiresPresentationTextOpinions(session.content) ? { textModerationAvailable: true } : {}),
+    presenter: {
+      speakerNotes: block?.kind === "content" ? block.speakerNotes : "",
+      nextBlock:
+        session.status === "finished"
+          ? null
+          : presentationRealtimeBlock(
+              session.content.blocks[session.currentBlockIndex + 1] ?? null,
+              false,
+              false,
+              session,
+              true,
+            ),
+    },
     currentBlock: presentationRealtimeBlock(
       block,
       true,
       session.phase === "question_reveal" ||
         session.phase === "intervention" ||
         session.phase === "finished",
+      session,
     ),
     participantCount: participants.length,
     ...(presentationHasQuestions(session)
@@ -333,6 +418,7 @@ export function buildPresentationHostSnapshot(
         }
       : {}),
     responseCount,
+    ...(opinionSummary ? { opinionSummary } : {}),
     participants: data.facilitatorLeaderboard.map(({ id, nickname, joinedAt, score, rank }) => ({
       id,
       nickname,
@@ -348,6 +434,55 @@ export function buildPresentationHostSnapshot(
       responseCount,
       sampledAt: sampledAt.toISOString(),
     },
+    finishedAt: session.finishedAt?.toISOString() ?? null,
+  });
+}
+
+export function buildPresentationStageSnapshot(
+  session: PresentationSessionRecord,
+  data: PresentationProjectionData,
+): PresentationStageSnapshot {
+  const block = presentationCurrentBlock(session);
+  const recoveryPackIntervention = presentationRecoveryPackPlayback(session);
+  const answerVisible = ["question_reveal", "intervention", "finished"].includes(session.phase);
+  const opinionSummary = answerVisible
+    ? presentationOpinionSummary(block, data.responses)
+    : undefined;
+  return PresentationStageSnapshotSchema.parse({
+    sessionId: session.id,
+    artifactType: "presentation",
+    presentationId: session.presentationId,
+    presentationVersionId: session.presentationVersionId,
+    title: session.title,
+    code: session.code,
+    status: session.status,
+    phase: session.phase,
+    currentBlockIndex: session.currentBlockIndex,
+    blockCount: session.content.blocks.length,
+    revision: session.revision,
+    seq: session.eventSeq,
+    serverTime: new Date().toISOString(),
+    questionOpenedAt: session.questionOpenedAt?.toISOString() ?? null,
+    questionClosesAt: presentationQuestionDeadline(session)?.toISOString() ?? null,
+    acceptingResponses: presentationAcceptingResponses(session),
+    settings: presentationSnapshotSettings(session),
+    ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
+    projection: "stage",
+    ...presentationSpatialSnapshotFields(session.content),
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
+    revealedAnswer:
+      answerVisible && block?.kind === "question"
+        ? presentationRevealedAnswer(block.question)
+        : null,
+    ...(opinionSummary ? { opinionSummary } : {}),
+    participantCount: data.participants.length,
+    responseCount:
+      block?.kind === "question"
+        ? data.responses.filter((response) => response.blockId === block.id).length
+        : 0,
     finishedAt: session.finishedAt?.toISOString() ?? null,
   });
 }
@@ -368,6 +503,20 @@ export function buildPresentationParticipantSnapshot(
     session.phase === "intervention" ||
     session.phase === "finished";
   const recoveryPackIntervention = presentationRecoveryPackPlayback(session);
+  const opinionSummary = resultVisible
+    ? presentationOpinionSummary(block, data.responses)
+    : undefined;
+  const ownTextResponse =
+    block?.kind === "question" &&
+    isPresentationTextResultQuestion(block.question) &&
+    currentResponse?.moderationStatus
+      ? {
+          responseId: currentResponse.id,
+          blockId: block.id,
+          status: currentResponse.moderationStatus,
+          moderationVersion: currentResponse.moderationVersion ?? 0,
+        }
+      : undefined;
   return PresentationParticipantSnapshotSchema.parse({
     sessionId: session.id,
     artifactType: "presentation",
@@ -388,10 +537,15 @@ export function buildPresentationParticipantSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
+    ...presentationSpatialSnapshotFields(session.content),
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
     participantId,
-    currentBlock: presentationRealtimeBlock(block, false),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
     participantCount: data.participants.length,
     responseSubmitted: Boolean(currentResponse),
+    ...(ownTextResponse ? { ownTextResponse } : {}),
     responseReceipt: latestResponse?.idempotencyKey
       ? {
           responseId: latestResponse.id,
@@ -401,11 +555,18 @@ export function buildPresentationParticipantSnapshot(
         }
       : null,
     standing:
-      presentationHasQuestions(session) && session.phase !== "question_open" && standing
+      presentationHasParticipantStandings(session) && session.phase !== "question_open" && standing
         ? { rank: standing.rank, score: standing.score }
         : null,
+    ...(opinionSummary ? { opinionSummary } : {}),
     responseResult:
-      resultVisible && currentResponse
+      resultVisible &&
+      currentResponse &&
+      !(
+        block?.kind === "question" &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question))
+      )
         ? { correct: currentResponse.correct, score: currentResponse.score }
         : null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
@@ -418,9 +579,35 @@ export function buildTargetedPresentationParticipantSnapshot(
   projection: PresentationParticipantSnapshotProjection,
   acknowledgedResponse: PresentationSessionResponseRecord,
 ): PresentationParticipantSnapshot {
+  acknowledgedResponse = presentationResponsesForContent(session.content, [
+    acknowledgedResponse,
+  ])[0]!;
+  const projectedCurrentResponse = projection.currentResponse
+    ? presentationResponsesForContent(session.content, [projection.currentResponse])[0]!
+    : null;
   const block = presentationCurrentBlock(session);
-  const currentResponse =
-    block?.id === acknowledgedResponse.blockId ? acknowledgedResponse : projection.currentResponse;
+  const currentResponse = presentationResponseMatchesBlock(
+    block,
+    acknowledgedResponse.blockId,
+    session.content.schemaVersion >= 12,
+  )
+    ? block?.kind === "question" &&
+      isPresentationTextResultQuestion(block.question) &&
+      projectedCurrentResponse?.id === acknowledgedResponse.id
+      ? projectedCurrentResponse
+      : acknowledgedResponse
+    : projectedCurrentResponse;
+  const ownTextResponse =
+    block?.kind === "question" &&
+    isPresentationTextResultQuestion(block.question) &&
+    currentResponse?.moderationStatus
+      ? {
+          responseId: currentResponse.id,
+          blockId: block.id,
+          status: currentResponse.moderationStatus,
+          moderationVersion: currentResponse.moderationVersion ?? 0,
+        }
+      : undefined;
   const resultVisible =
     session.phase === "question_reveal" ||
     session.phase === "intervention" ||
@@ -446,16 +633,27 @@ export function buildTargetedPresentationParticipantSnapshot(
     settings: presentationSnapshotSettings(session),
     ...(recoveryPackIntervention ? { recoveryPackIntervention } : {}),
     projection: "participant",
+    ...presentationSpatialSnapshotFields(session.content),
     participantId,
-    currentBlock: presentationRealtimeBlock(block, false),
+    ...(session.content.schemaVersion >= 13
+      ? { interactionState: presentationInteractionSnapshot(session) }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session),
     participantCount: projection.participantCount,
     responseSubmitted: Boolean(currentResponse),
+    ...(ownTextResponse ? { ownTextResponse } : {}),
     standing:
-      presentationHasQuestions(session) && session.phase !== "question_open"
+      presentationHasParticipantStandings(session) && session.phase !== "question_open"
         ? projection.standing
         : null,
     responseResult:
-      resultVisible && currentResponse
+      resultVisible &&
+      currentResponse &&
+      !(
+        block?.kind === "question" &&
+        (isPresentationOpinionResultQuestion(block.question) ||
+          isPresentationTextResultQuestion(block.question))
+      )
         ? { correct: currentResponse.correct, score: currentResponse.score }
         : null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
@@ -509,7 +707,12 @@ export function buildPresentationCompanionSnapshot(
       ? { recoveryPackIntervention: host.recoveryPackIntervention }
       : {}),
     projection: "companion",
-    currentBlock: presentationRealtimeBlock(block, false),
+    ...(host.spatial ? { spatial: host.spatial } : {}),
+    ...(host.navigation ? { navigation: host.navigation } : {}),
+    ...(host.interactionState
+      ? { interactionState: host.interactionState, branches: host.branches }
+      : {}),
+    currentBlock: presentationRealtimeBlock(block, false, false, session, true),
     roomStatus: host.roomStatus,
     canInsertRecoveryPack,
     canInsertQuickCheck,
@@ -523,9 +726,13 @@ export function buildPresentationCompanionSnapshot(
         }
       : {}),
     resultSummary:
-      resultVisible && block?.kind === "question"
+      resultVisible &&
+      block?.kind === "question" &&
+      block.question.type !== "ranking" &&
+      !isPresentationTextResultQuestion(block.question)
         ? { blockId: block.id, responseCount: currentResponses.length, choiceCounts }
         : null,
+    ...(host.opinionSummary ? { opinionSummary: host.opinionSummary } : {}),
     primaryAction: session.status === "active" ? "advance" : "none",
     finishedAt: host.finishedAt,
   });
@@ -536,10 +743,14 @@ export function buildPresentationListSnapshot(
   participants: PresentationSessionParticipantRecord[],
   responses: PresentationSessionResponseRecord[],
 ) {
+  responses = presentationResponsesForContent(session.content, responses);
   const block = presentationCurrentBlock(session);
+  const opinionSummary = ["question_reveal", "intervention", "finished"].includes(session.phase)
+    ? presentationOpinionSummary(block, responses)
+    : undefined;
   const leaderboard = rankedParticipants(
     participants,
-    facilitatorVisibleResponses(session, responses),
+    facilitatorVisibleResponses(session, presentationScoredResponses(session, responses)),
   ).map(({ joinedAt, ...participant }) => ({
     ...participant,
     joinedAt: joinedAt.toISOString(),
@@ -565,6 +776,7 @@ export function buildPresentationListSnapshot(
       session.phase === "question_reveal" ||
         session.phase === "intervention" ||
         session.phase === "finished",
+      session,
     ),
     questionOpenedAt: session.questionOpenedAt?.toISOString() ?? null,
     questionClosesAt: presentationQuestionDeadline(session)?.toISOString() ?? null,
@@ -574,6 +786,7 @@ export function buildPresentationListSnapshot(
       block?.kind === "question"
         ? responses.filter((response) => response.blockId === block.id).length
         : 0,
+    ...(opinionSummary ? { opinionSummary } : {}),
     participants: leaderboard,
     // REST v1 requires this roster alias to match participants, including unassessed decks.
     leaderboard,

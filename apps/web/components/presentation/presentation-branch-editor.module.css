@@ -1,0 +1,17 @@
+.editor,
+.editor fieldset {
+  min-inline-size: 0;
+}
+
+.editor :is(label, legend, button) {
+  overflow-wrap: anywhere;
+}
+
+.editor :is(input, select) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.editor button {
+  white-space: normal;
+}

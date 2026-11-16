@@ -1,0 +1,243 @@
+.editor {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.editor label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.editor input,
+.editor select,
+.editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+}
+.editor textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.editor input[readonly],
+.editor textarea[readonly] {
+  background: var(--ui-surface-muted, #f0f4f8);
+}
+.help,
+.error {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.error {
+  color: var(--ui-danger, #a42828);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.actions button {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.actions button:disabled {
+  opacity: 0.5;
+}
+.gridWrap {
+  min-width: 0;
+  max-width: 100%;
+  max-height: 460px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--ui-border, #aab9c7);
+  border-radius: 8px;
+  background: var(--ui-surface-soft, #f6f8fb);
+}
+.gridWrap:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+.gridActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.gridActions button {
+  font-size: 11px;
+}
+
+.editGrid,
+.dataTable {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+.editGrid caption {
+  margin-bottom: 8px;
+  text-align: start;
+  font-weight: 700;
+}
+.editGrid td,
+.editGrid th {
+  min-width: 0;
+  padding: 3px;
+}
+.editor .editGrid textarea {
+  min-height: 42px;
+}
+.dataView {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--native-padding, 0.46875cqw);
+  overflow: auto;
+  color: var(--native-text, #102a43);
+  background: var(--native-background, #fff);
+  font-size: 1.5625cqw;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dataTable caption {
+  padding-block: 0 0.4em;
+  font-weight: 700;
+  text-align: start;
+  white-space: pre-wrap;
+}
+.dataTable th,
+.dataTable td {
+  padding: 0.3em;
+  text-align: start;
+  vertical-align: top;
+  border: 0.05em solid var(--native-border, #94a3b8);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.dataTable th {
+  font-weight: 700;
+}
+.chart figcaption {
+  display: grid;
+  gap: 0.3em;
+  white-space: pre-wrap;
+}
+.chart figcaption strong {
+  font-size: 1.1em;
+}
+.chartColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6em;
+  margin-top: 0.4em;
+  min-width: 0;
+  align-items: start;
+}
+.chartVisual,
+.chartColumns > table {
+  min-width: 0;
+}
+.plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-block: 0.4em;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 0.7em;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.legend li {
+  min-width: 0;
+  max-width: 100%;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-inline-end: 0.25em;
+}
+.categoryHelp {
+  margin-block: 0.4em;
+  font-size: 0.9em;
+}
+.chart[data-chart-layout="split"] .chartColumns {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8em;
+}
+@media (max-width: 700px) {
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *) {
+    height: auto;
+    overflow: visible;
+    font-size: 16px;
+    padding: var(--native-reading-padding, 6px);
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .chartColumns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    thead,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tbody,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tr,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    th,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    caption {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    tr {
+    margin-block: 8px;
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td::before {
+    content: attr(data-label) ": ";
+    font-weight: 700;
+  }
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    th,
+  .dataView:not([data-native-fixed-layout="true"]):not(:global([data-static-thumbnail="true"]) *)
+    .dataTable
+    td {
+    padding: 6px;
+    border-width: 1px;
+  }
+}

@@ -23,9 +23,18 @@ jobs:
           version: 10.15.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Restore application compiler caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/control/.next/cache
+          key: next-check-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/*/next.config.ts', 'apps/*/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-check-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/*/next.config.ts', 'apps/*/tsconfig.build.json', 'scripts/build/*.mjs') }}-
       - run: pnpm format:check
       - run: pnpm check:docker-context
       - run: pnpm lint
@@ -39,16 +48,7 @@ jobs:
           VITEST_MAX_WORKERS: "1"
       - run: pnpm build
       - name: Validate fail-fast hosted production configuration
-        run: pnpm --filter @openround/server config:check
-        env:
-          NODE_ENV: production
-          DATABASE_URL: postgresql://runtime:example@database.internal/openround
-          REDIS_URL: rediss://cache.internal:6380
-          WEB_ORIGIN: https://quiz.example.ca
-          PUBLIC_API_URL: https://api.example.ca
-          COOKIE_SECURE: "true"
-          FEATURE_SIGNUPS: "false"
-          METRICS_ENABLED: "false"
+        run: pnpm check:server-startup
       - run: pnpm readiness:check
       - run: pnpm smoke:tracing
       - name: Validate Prometheus configuration and alert rules
@@ -111,6 +111,16 @@ jobs:
         env:
           TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
           TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
+      - name: Verify Presentation assistance under restricted PostgreSQL
+        run: pnpm --filter @openround/db exec vitest run test/presentation-assistance-postgres.test.ts test/presentation-creation-postgres.test.ts test/presentation-text-assistance-postgres.test.ts test/presentation-question-suggestions-postgres.test.ts --maxWorkers=1
+        env:
+          TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
+          TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
+      - name: Verify Presentation editor geometry under restricted PostgreSQL
+        run: pnpm --filter @openround/db exec vitest run test/presentation-frame-arithmetic-postgres.test.ts test/presentation-styled-scenes-postgres.test.ts test/presentation-advanced-interactions-postgres.test.ts --maxWorkers=1
+        env:
+          TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
+          TEST_DATABASE_URL: postgresql://openround_test_app:test-only-runtime@localhost:5432/openround
       - run: pnpm test:multi-writer
         env:
           TEST_DATABASE_ADMIN_URL: postgresql://openround:test-only@localhost:5432/openround
@@ -130,6 +140,7 @@ jobs:
           - webkit-mobile
     env:
       PLAYWRIGHT_PRODUCTION: "true"
+      PLAYWRIGHT_REUSE_BUILD: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -141,6 +152,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Restore feature-off browser compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next-browser-core/cache
+          key: next-browser-core-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-browser-core-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-
+      - name: Prepare feature-off production web once
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/browser-core-build-diagnostics/resources.jsonl" --
+          node scripts/build/browser.mjs build core
       - name: Run feature-off browser suite
         run: pnpm test:e2e --project="${{ matrix.project }}"
       - name: Run business administration browser journeys
@@ -162,12 +185,13 @@ jobs:
             test-results/
             test-results-business/
             playwright-report-business/
+            ${{ runner.temp }}/browser-core-build-diagnostics/
           if-no-files-found: ignore
           retention-days: 14
 
   browser-beta:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.project == 'webkit-beta-mobile' && 45 || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -178,6 +202,7 @@ jobs:
           - webkit-beta-mobile
     env:
       PLAYWRIGHT_PRODUCTION: "true"
+      PLAYWRIGHT_REUSE_BUILD: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -185,16 +210,29 @@ jobs:
           version: 10.15.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Restore beta browser compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/web/.next-browser-beta/cache
+          key: next-browser-beta-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            next-browser-beta-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml', 'apps/web/next.config.ts', 'apps/web/tsconfig.build.json', 'scripts/build/*.mjs') }}-
+      - name: Prepare beta production web once for all fresh API phases
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/browser-beta-build-diagnostics/resources.jsonl" --
+          node scripts/build/browser.mjs build beta
       - name: Run isolated UX beta browser project
         # Keep GitHub annotations and the existing HTML artifact; line also names the active case.
         run: >-
           node scripts/ci/browser-diagnostics.mjs
           --output "$RUNNER_TEMP/browser-beta-diagnostics/resources.jsonl" --
-          pnpm test:e2e:beta --project="${{ matrix.project }}" --reporter=github,line,html
+          pnpm test:e2e:beta --project="${{ matrix.project }}"
+          --grep-invert='presentation-(translation|question-suggestions|private-sharing|text-assistance)\.spec\.ts' --reporter=github,line,html
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-beta
           PLAYWRIGHT_HTML_OPEN: never
@@ -202,6 +240,86 @@ jobs:
           BETA_E2E_ROUND_PROTOCOL: "true"
           BETA_E2E_SESSION_SUMMARIES: "true"
           BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run translation browser journeys with a fresh API
+        # The shared actor gets a fresh fixture and its normal authoring rate budget.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/presentation-translation-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-translation.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-translation
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-translation
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run discussion-suggestion browser journeys with a fresh API
+        if: ${{ !cancelled() }}
+        # Keep the existing authoring rate budget independent from other AI workflows.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/presentation-question-suggestions-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-question-suggestions.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-question-suggestions
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-question-suggestions
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run text-assistance receipt recovery with a fresh API
+        if: ${{ !cancelled() }}
+        # Exact replay and its CI retry can consume the shared actor's admission window.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/text-assistance-recovery-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-text-assistance.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-text-assistance-recovery
+          --grep='reviewed text edits recover exact acknowledgements and support safe Undo'
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-text-assistance-recovery
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Run remaining text-assistance journeys with a fresh API
+        if: ${{ !cancelled() }}
+        # Give stale-source checks their normal actor budget after receipt-recovery retries.
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/text-assistance-remaining-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-text-assistance.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-text-assistance-remaining
+          --grep-invert='reviewed text edits recover exact acknowledgements and support safe Undo'
+          --reporter=github,line,html
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-text-assistance-remaining
+          PLAYWRIGHT_HTML_OPEN: never
+          BETA_E2E_AUTHORING: "true"
+          BETA_E2E_ROUND_PROTOCOL: "true"
+          BETA_E2E_SESSION_SUMMARIES: "true"
+          BETA_E2E_IDEA_BOARDS: "true"
+      - name: Verify visual import and presentation downloads with isolated synthetic media
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: >-
+          node scripts/ci/browser-diagnostics.mjs
+          --output "$RUNNER_TEMP/visual-import-diagnostics/resources.jsonl" --
+          pnpm test:e2e:beta tests/beta-e2e/presentation-visual-import.spec.ts
+          tests/beta-e2e/presentation-static-export.spec.ts
+          tests/beta-e2e/presentation-private-sharing.spec.ts
+          --project="${{ matrix.project }}" --output=test-results-visual-import
+          --reporter=github,line,html
+        env:
+          BETA_E2E_VISUAL_IMPORTS: "true"
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual-import
+          PLAYWRIGHT_HTML_OPEN: never
       - name: Retain beta reports and retry diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -211,6 +329,22 @@ jobs:
             playwright-report-beta/
             test-results-beta/
             ${{ runner.temp }}/browser-beta-diagnostics/
+            test-results-translation/
+            playwright-report-translation/
+            ${{ runner.temp }}/presentation-translation-diagnostics/
+            test-results-question-suggestions/
+            playwright-report-question-suggestions/
+            ${{ runner.temp }}/presentation-question-suggestions-diagnostics/
+            test-results-text-assistance-recovery/
+            playwright-report-text-assistance-recovery/
+            ${{ runner.temp }}/text-assistance-recovery-diagnostics/
+            test-results-text-assistance-remaining/
+            playwright-report-text-assistance-remaining/
+            ${{ runner.temp }}/text-assistance-remaining-diagnostics/
+            test-results-visual-import/
+            playwright-report-visual-import/
+            ${{ runner.temp }}/visual-import-diagnostics/
+            ${{ runner.temp }}/browser-beta-build-diagnostics/
           if-no-files-found: ignore
           retention-days: 14
 

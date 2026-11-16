@@ -1,0 +1,524 @@
+.shell.shell {
+  --round-control-height: 44px;
+  --round-control-radius: 10px;
+  --round-card-radius: 16px;
+  --round-motion-duration: 160ms;
+  --round-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --round-canvas: #f5f6fa;
+  --round-surface: #ffffff;
+  --round-surface-raised: #ffffff;
+  --round-soft: #f3f4f8;
+  --round-hover: #eceef5;
+  --round-text: #24283b;
+  --round-muted: #626b80;
+  --round-border: #dfe3ed;
+  --round-border-strong: #8992a8;
+  --round-accent: #6941c6;
+  --round-accent-hover: #5330a3;
+  --round-accent-soft: #f0ebfb;
+  --round-accent-ink: #5933ac;
+  --round-focus: var(--round-accent);
+  --round-on-accent: #ffffff;
+  --round-header: #1d2335;
+  --round-success: #176b50;
+  --round-success-soft: #e8f6ef;
+  --round-success-border: #65ae91;
+  --round-danger: #a52b38;
+  --round-danger-soft: #fff0f1;
+  --round-danger-border: #e7a0a9;
+  --ui-canvas: var(--round-canvas);
+  --ui-surface: var(--round-surface);
+  --ui-surface-raised: var(--round-surface-raised);
+  --ui-surface-soft: var(--round-soft);
+  --ui-surface-hover: var(--round-hover);
+  --ui-surface-translucent: var(--round-surface);
+  --ui-text: var(--round-text);
+  --ui-text-strong: var(--round-text);
+  --ui-text-subtle: var(--round-muted);
+  --ui-text-muted: var(--round-muted);
+  --ui-border: var(--round-border);
+  --ui-border-subtle: var(--round-border);
+  --ui-border-strong: var(--round-border-strong);
+  --ui-accent: var(--round-accent);
+  --ui-accent-hover: var(--round-accent-hover);
+  --ui-accent-ink: var(--round-accent-ink);
+  --ui-accent-soft: var(--round-accent-soft);
+  --ui-on-accent: var(--round-on-accent);
+  --ui-focus: var(--round-accent);
+  --ui-danger-bg: var(--round-danger-soft);
+  --ui-danger-text: var(--round-danger);
+  --ui-danger-border: var(--round-danger-border);
+  --ui-success-bg: var(--round-success-soft);
+  --ui-success-text: var(--round-success);
+  --ui-shadow-sm: 0 1px 3px rgb(20 26 45 / 4%);
+  --ui-shadow-md: 0 6px 24px rgb(20 26 45 / 5%);
+  --ui-shadow-lg: 0 16px 48px rgb(20 26 45 / 12%);
+  --host-border: var(--round-border);
+  --host-radius: 16px;
+  --radius: 16px;
+  --radius-small: 10px;
+  --ink: var(--round-text);
+  --ink-soft: var(--round-muted);
+  --line: var(--round-border);
+  --paper: var(--round-surface);
+  --sand: var(--round-soft);
+  --sky: var(--round-accent-soft);
+  --teal: var(--round-accent);
+  --teal-dark: var(--round-accent-ink);
+  --navy: var(--round-header);
+  --shadow: var(--ui-shadow-md);
+  background: radial-gradient(ellipse at 50% 0, var(--round-accent-soft), transparent 50%)
+    var(--round-canvas);
+  color: var(--round-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: normal;
+}
+
+:global(html[data-color-mode="dark"]) .shell.shell {
+  --round-canvas: #131722;
+  --round-surface: #1c2231;
+  --round-surface-raised: #222a3b;
+  --round-soft: #252d40;
+  --round-hover: #303a50;
+  --round-text: #edf0f8;
+  --round-muted: #b3bed2;
+  --round-border: #374158;
+  --round-border-strong: #7c8da9;
+  --round-accent: #bca4ff;
+  --round-accent-hover: #cdbcff;
+  --round-accent-soft: #302846;
+  --round-accent-ink: #d3c2ff;
+  --round-on-accent: #211631;
+  --round-header: #191e2c;
+  --round-success: #91ddbc;
+  --round-success-soft: #193b33;
+  --round-success-border: #4b9c7e;
+  --round-danger: #ffb2bd;
+  --round-danger-soft: #442833;
+  --round-danger-border: #a8596b;
+  color-scheme: dark;
+}
+
+.shell.shell :is(h1, h2, h3, :global(.field-label)) {
+  color: var(--round-text);
+  letter-spacing: -0.025em;
+}
+
+.shell.shell :global(.live-topbar) {
+  background: var(--round-header);
+  flex-wrap: nowrap;
+  gap: 16px;
+  min-height: 72px;
+  padding-block: 12px;
+}
+
+.shell :global(.live-topbar)::before {
+  box-shadow: 0 0 0 100vmax var(--round-header);
+}
+
+.shell.shell :global(.live-topbar) > :global(.button-row) {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 12px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.shell :global(.brand-name) {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.shell :global(.brand-pop) {
+  height: 42px;
+  width: 36px;
+}
+
+.shell.shell :is(:global(.button), :global(.button-quiet), :global(.button-danger)) {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--round-control-radius);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 650;
+  justify-content: center;
+  line-height: 1.25;
+  min-height: var(--round-control-height);
+  padding: 10px 16px;
+  text-align: center;
+  transition:
+    background var(--round-motion-duration) var(--round-motion-ease),
+    border-color var(--round-motion-duration) var(--round-motion-ease),
+    box-shadow var(--round-motion-duration) var(--round-motion-ease);
+}
+
+.shell.shell :global(.button) {
+  background: var(--round-accent);
+  color: var(--round-on-accent);
+}
+
+.shell.shell :global(.button):hover:not(:disabled) {
+  background: var(--round-accent-hover);
+  filter: none;
+  transform: none;
+}
+
+.shell.shell :global(.button-quiet) {
+  background: var(--round-surface);
+  border-color: var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.button-quiet):hover:not(:disabled) {
+  background: var(--round-hover);
+}
+
+.shell.shell :global(.button-danger) {
+  background: var(--round-danger-soft);
+  color: var(--round-danger);
+}
+
+.shell :global(.live-topbar) :global(.button-quiet) {
+  background: rgb(255 255 255 / 10%);
+  border-color: rgb(255 255 255 / 25%);
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.shell :global(.live-topbar) :global(.button-quiet):hover:not(:disabled) {
+  background: rgb(255 255 255 / 17%);
+}
+
+.shell.shell
+  :is(:global(.live-card), :global(.panel), [data-variant="host"], [data-variant="participant"]) {
+  background: var(--round-surface);
+  border: 1px solid var(--round-border);
+  border-radius: var(--round-card-radius);
+  box-shadow: var(--ui-shadow-sm);
+  color: var(--round-text);
+}
+
+/* Legacy conversation surfaces have their own light backgrounds. Migrate their
+   foregrounds and backgrounds together inside the modern Round shell. */
+.shell.shell :global(.audience-drawer) {
+  background: var(--round-surface);
+  border-inline-start: 1px solid var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.audience-tabs) button {
+  color: var(--round-muted);
+}
+
+.shell.shell :global(.audience-tabs) button:hover {
+  background: var(--round-hover);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.audience-tabs) button[aria-selected="true"] {
+  border-bottom-color: var(--round-accent);
+  color: var(--round-accent-ink);
+}
+
+.shell.shell
+  :is(
+    :global(.chat-message),
+    :global(.chat-replying),
+    :global(.qna-question),
+    :global(.qna-empty),
+    :global(.staff-list) li,
+    :global(.participant-activity-table) tbody tr,
+    :global(.pulse-stat),
+    :global(.pulse-button)
+  ) {
+  background: var(--round-soft);
+  border-color: var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :is(:global(.qna-replies) li, :global(.reaction-button), :global(.reaction-count)) {
+  background: var(--round-surface-raised);
+  border-color: var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.qna-replies) {
+  border-inline-start-color: var(--round-accent);
+}
+
+.shell.shell :is(:global(.chat-replying) button, :global(.text-button)) {
+  color: var(--round-accent-ink);
+}
+
+.shell.shell :global(.danger-link) {
+  color: var(--round-danger);
+}
+
+.shell.shell
+  :is(
+    :global(.reaction-button)[aria-pressed="true"],
+    :global(.pulse-button)[data-selected="true"]
+  ) {
+  background: var(--round-accent-soft);
+  border-color: var(--round-accent);
+  box-shadow: 0 0 0 2px var(--round-accent);
+}
+
+.shell.shell :global(.pulse-meter) {
+  background: var(--round-border);
+}
+
+.shell.shell :global(.pulse-meter) span {
+  background: var(--round-accent);
+}
+
+.shell.shell :global(.round-session-summary) {
+  background: var(--round-surface);
+  border-color: var(--round-border);
+}
+
+.shell.shell :global(.round-session-summary) span {
+  color: var(--round-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.shell.shell :global(.round-session-summary) strong {
+  color: var(--round-text);
+}
+
+.shell.shell :is(:global(.muted), :global(.lead)) {
+  color: var(--round-muted);
+}
+
+.shell.shell :global(.eyebrow) {
+  color: var(--round-accent-ink);
+}
+
+.shell :global(.status-pill) {
+  background: var(--round-accent-soft);
+  color: var(--round-accent-ink);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.shell.shell :global(.countdown) {
+  background: var(--round-accent-soft);
+  color: var(--round-accent-ink);
+}
+
+.shell.shell :global(.roster) li {
+  background: var(--round-soft);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.roster-kick) {
+  align-items: center;
+  color: var(--round-danger);
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1.25;
+}
+
+.shell.shell :global(.join-address-settings) > summary {
+  color: var(--round-muted);
+}
+
+.shell.shell :global(.metric) {
+  background: var(--round-soft);
+}
+
+.shell.shell
+  :is(:global(.metric) strong, :global(.qna-settings) legend, :global(.qna-question-body)) {
+  color: var(--round-text);
+}
+
+.shell.shell :is(:global(.notice), :global(.recovery-guidance)) {
+  background: var(--round-soft);
+  border: 1px solid var(--round-border);
+  border-inline-start: 3px solid var(--round-accent);
+  border-radius: var(--round-control-radius);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.recovery-guidance) small {
+  color: var(--round-muted);
+}
+
+.shell.shell :is(:global(.staff-management), :global(.recovery-process)) summary {
+  color: var(--round-muted);
+}
+
+.shell.shell :is(:global(.input), :global(.textarea), :global(.select)) {
+  background: var(--round-surface);
+  border-color: var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.success) {
+  background: var(--round-success-soft);
+  border-color: var(--round-success-border);
+  color: var(--round-success);
+}
+
+.shell.shell :global(.error) {
+  color: var(--round-danger);
+}
+
+.shell.shell :global(.participant-submit-bar) {
+  background: var(--round-surface-raised);
+  border-color: var(--round-border);
+  color: var(--round-text);
+}
+
+.shell.shell :global(.host-confidence-control) label {
+  align-items: center;
+  border-color: var(--round-border);
+  border-radius: var(--round-control-radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  min-height: var(--round-control-height);
+  padding: 10px 12px;
+}
+
+.shell.shell :global(.host-question-prompt) {
+  font-size: clamp(1.5rem, 2.5vw, 2.1rem);
+  font-weight: 700;
+}
+
+.shell.shell :global(.answer-button) {
+  align-content: center;
+  background: var(--round-soft);
+  border: 1px solid var(--round-border);
+  border-radius: 12px;
+  color: var(--round-text);
+  font-size: 1rem;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.shell.shell :global(.answer-button):hover:not(:disabled) {
+  background: var(--round-hover);
+}
+
+.shell.shell :global(.answer-button)[data-selected="true"] {
+  background: var(--round-accent-soft);
+  border-color: var(--round-accent);
+  box-shadow: 0 0 0 1px var(--round-accent);
+}
+
+.shell.shell :global(.answer-selection-check) {
+  background: var(--round-accent);
+  color: var(--round-on-accent);
+}
+
+.shell.shell :global(.answer-button)[data-correct="true"] {
+  background: var(--round-success-soft);
+  border-color: var(--round-success-border);
+  color: var(--round-success);
+}
+
+.shell.shell :global(.answer-button)[data-incorrect="true"] {
+  background: var(--round-danger-soft);
+  border-color: var(--round-danger-border);
+  color: var(--round-danger);
+}
+
+.shell :global(.round-presenter-icon) {
+  flex: 0 0 18px;
+  height: 18px;
+  width: 18px;
+}
+
+@media (max-width: 600px) {
+  .shell.shell
+    :global(.host-command-bar)
+    :is(:global(.button), :global(.button-quiet), :global(.button-danger)) {
+    padding-inline: 10px;
+  }
+
+  .shell.shell :global(.live-topbar) {
+    gap: 10px;
+    min-height: 68px;
+  }
+
+  .shell.shell :global(.live-topbar) > :global(.button-row) {
+    gap: 8px;
+  }
+
+  .shell :global(.brand-name),
+  .shell :global(.round-presenter-label) {
+    display: none;
+  }
+
+  .shell :global(.live-topbar) :global(.connection) {
+    font-size: 0;
+    gap: 0;
+  }
+
+  .shell :global(.round-presenter-button) {
+    min-width: var(--round-control-height);
+    padding: 10px;
+  }
+}
+
+:global(html[data-openround-contrast="high"]) .shell.shell {
+  --round-canvas: #ffffff;
+  --round-surface: #ffffff;
+  --round-surface-raised: #ffffff;
+  --round-soft: #f0f0f0;
+  --round-hover: #e0e0e0;
+  --round-text: #000000;
+  --round-muted: #1f1f1f;
+  --round-border: #000000;
+  --round-border-strong: #000000;
+  --round-accent: #000000;
+  --round-accent-hover: #222222;
+  --round-accent-soft: #f0f0f0;
+  --round-accent-ink: #000000;
+  --round-on-accent: #ffffff;
+  --round-success: #000000;
+  --round-success-soft: #ffffff;
+  --round-success-border: #000000;
+  --round-danger: #000000;
+  --round-danger-soft: #ffffff;
+  --round-danger-border: #000000;
+  background-image: none;
+}
+
+@media (prefers-contrast: more) {
+  :global(html) .shell.shell.shell {
+    --round-canvas: #ffffff;
+    --round-surface: #ffffff;
+    --round-surface-raised: #ffffff;
+    --round-soft: #f0f0f0;
+    --round-hover: #e0e0e0;
+    --round-text: #000000;
+    --round-muted: #1f1f1f;
+    --round-border: #000000;
+    --round-border-strong: #000000;
+    --round-accent: #000000;
+    --round-accent-hover: #222222;
+    --round-accent-soft: #f0f0f0;
+    --round-accent-ink: #000000;
+    --round-on-accent: #ffffff;
+    --round-success: #000000;
+    --round-success-soft: #ffffff;
+    --round-success-border: #000000;
+    --round-danger: #000000;
+    --round-danger-soft: #ffffff;
+    --round-danger-border: #000000;
+    background-image: none;
+  }
+}

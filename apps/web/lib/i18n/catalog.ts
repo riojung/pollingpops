@@ -170,9 +170,11 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
   if (path === "/report" || path.startsWith("/report/")) {
     return ["report-round", "live-delivery", "session-summary"];
   }
-  if (
-    ["/practice", "/followup"].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
-  ) {
+  // Private participant practice reuses live response, confidence and media controls.
+  if (path === "/followup" || path.startsWith("/followup/")) {
+    return ["report-round", "live-delivery"];
+  }
+  if (path === "/practice" || path.startsWith("/practice/")) {
     return ["report-round"];
   }
   if (
@@ -201,7 +203,7 @@ export function localeDomainsForPath(pathname: string): LocaleDomain[] {
     path === "/create/presentation" ||
     path.startsWith("/create/presentation/")
   )
-    return ["delivery-authoring", "idea-boards"];
+    return ["delivery-authoring", "live-delivery", "idea-boards"];
   if (
     ["/signin", "/invite", "/presentation"].some(
       (prefix) => path === prefix || path.startsWith(`${prefix}/`),

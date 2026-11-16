@@ -1,0 +1,78 @@
+.stage:global(.live-stage) {
+  align-content: start;
+  align-items: start;
+  gap: 18px;
+  justify-items: stretch;
+  max-width: 840px;
+  padding-block: 24px 48px;
+}
+
+.stage > * {
+  min-width: 0;
+}
+
+.stage > p[role="status"] {
+  margin: 0;
+}
+
+.card:global(.live-card) {
+  --participant-card-padding: clamp(20px, 3vw, 32px);
+  border: 1px solid color-mix(in srgb, var(--experience-text) 14%, transparent);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 10%);
+  padding: var(--participant-card-padding);
+}
+
+.card .title {
+  font-size: clamp(1.65rem, 3.5vw, 2.25rem);
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.taskHeading:global(.page-heading) {
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.task :global(.answer-grid) {
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.task[data-review] :global(.answer-button) {
+  min-height: 64px;
+  padding-block: 12px;
+}
+
+.task :global(.participant-submit-bar) {
+  margin-inline: calc(-1 * var(--participant-card-padding));
+  margin-bottom: calc(-1 * var(--participant-card-padding));
+  padding-inline: var(--participant-card-padding);
+}
+
+:global(.participant-shell[data-submit-docked="true"]) .task :global(.participant-submit-bar) {
+  margin: 0 auto;
+}
+
+.completion > :global(.eyebrow) {
+  margin-top: 0;
+}
+
+.completion > :global(.lead) {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.stage > :global(.audience-tray) {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .stage:global(.live-stage) {
+    padding-top: 18px;
+  }
+}

@@ -83,8 +83,13 @@ export async function expectTextOpinionPersistenceConformance(input: {
   expect(
     (await repository.getQuizVersion(workspaceId, version.id))?.content.questions,
   ).toMatchObject(draft.questions);
-  expect(await repository.listPublishedQuizQuestionMetadata(workspaceId, question.prompt)).toEqual({
-    questions: [],
+  expect(
+    await repository.listPublishedQuizQuestionMetadata(workspaceId, "What should change?"),
+  ).toMatchObject({
+    questions: [
+      { sourceQuizVersionId: version.id, type: "open_text" },
+      { sourceQuizVersionId: version.id, type: "word_cloud" },
+    ],
     hasMore: false,
   });
   const initial = createGameState({

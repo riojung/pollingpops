@@ -8,6 +8,1157 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Expanded presentation designs and full application November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration grows the visual library from eight to
+30 original collections, with 240 coordinated editable layouts. The 22 additions cover
+business strategy, reporting, marketing, roadmaps, technology, research, education, creative
+work, wellbeing, sustainability and community presentations. Ten discovery categories now
+include Corporate, Creative, Academic, Nature, Playful and Geometric alongside the four
+existing visual styles. Collections can belong to more than one useful category.
+
+Eight further Canva sets were inspected at cover and interior level. Their abstract product
+patterns inform original native compositions; competitor artwork and assets are not bundled.
+All 30 collections have distinct example narratives in the existing ten languages, providing
+300 localized decks and 2,400 publication-valid layout recipes. The original eight recipes
+retain their compositions and identifiers.
+
+Applying a design to an existing presentation now defaults to **Full design**: authored
+content moves into the collection's actual composition, with new artwork and typography.
+**Colors and fonts** explicitly retains the previous style-only behavior. Preview and commit
+use the same transformation; apply remains one undo/autosave transaction. Content, meaningful
+object IDs, rich text, notes, citations, motion and activities are preserved. Imported canvases,
+connected diagrams, grouped/interactive/rotated content, or layouts that cannot fit safely retain
+their geometry and show a clear notice. The base-color theme control identifies collection
+palettes as **From presentation design**; explicit base-color overrides keep the applied layout.
+
+The gallery initially shows twelve covers, searches the full catalog and reveals twelve more
+on demand with keyboard focus on the first new collection. Eight-slide preview decks are built
+when opened, avoiding eager construction of all 240 scenes. Typed composition modules and the
+shared composer allow additions without a new contract, migration, subscription or dependency.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,941 tests and 526 existing
+opt-in skips, including formatting, lint, types, all four production build tasks and compiled
+server startup. All 245 focused tests and 4,913 web tests pass. Eight targeted production browser
+checks pass across desktop Chromium/Firefox and phone Chromium/WebKit, including repeat
+application, font changes, retained text layout, preview/apply/undo/reload and base-color overrides.
+The initial complete-catalog browser qualification passed 24 journeys and 960 rendered layout
+checks with no text overflow. The 64 original layout object arrays remain byte-identical to `d82eeab`.
+Captures and receipts are under `artifacts/presentation-expanded-designs/`; the final repository
+checkpoint is `pre-pr-qualification.json`.
+
+Review corrections preserve page markers when moving between footer and header designs,
+including after an intervening font/style change. Full design retains the original slide geometry
+when text still cannot fit at the minimum size; the preview discloses that fallback.
+
+The [additional-template benchmark and original briefs](evidence/presentation-expanded-designs-2026-11.md)
+record inspected sources and scope. Local automated validation does not advance hosted,
+native-language human review or physical-device acceptance gates.
+
+### Authored presentation collections November 13, 2026
+
+The `codex/presentation-designed-collections` iteration replaces the initial design recipes
+with eight original, coordinated visual collections and 64 native layouts. Nine individually
+inspected Canva sets informed the design benchmark; covers and one interior from each were
+reviewed, without copying their assets or claiming a verified popularity ranking.
+
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas now have
+family-specific compositions, typography, decorative geometry, palettes and localized example
+headlines. Business proposals, brand stories, startup pitches, project plans, wellbeing workshops,
+creative briefs, portfolios and team workshops have distinct visual identities. The compact
+gallery emphasizes covers and purposes; full-size preview and a scrollable layout strip expose
+each coordinated set. Existing style application preserves authored content and geometry.
+
+Bounded named palettes, text typography and decorative-shape appearance opt into scene 9 and
+document 18. Migration 108 adds database validation for the new fields and version floors;
+older migrations and stored presentation bytes remain unchanged. Native, ordinary and activity
+views, public sharing and static exports retain the palette. Text and geometry stay editable;
+image areas are clearly labeled placeholders rather than unlicensed stock imagery.
+Switching the collection font clears only conflicting text-font overrides; other typography,
+content and object geometry remain intact.
+Explicit object colors replace collection palette paints while retaining outline and border
+treatments. Formatted text uses readable palette colors in mobile reading and accessible
+outline views; recolored dark placeholders retain contrasting labels in web and static exports.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,774 tests and 526 opt-in
+skips, including formatting, lint, types, all four production build tasks and compiled startup.
+All 80 localized example decks (640 layout recipes) pass publication validation. Twenty
+production browser journeys pass across desktop Chromium/Firefox and phone Chromium/WebKit,
+including all 64 English layouts' text fit, large cover type, layout diversity, German/Korean
+creation, editable save/reload, existing-content preservation, insertion and retry recovery.
+Regressions cover explicit shape colors, contrasting placeholder labels and formatted-text
+contrast in mobile and accessible-outline views, including private sharing.
+Five styled PostgreSQL tests plus 33 PostgreSQL regressions pass on an isolated local cluster;
+strict version/null, field, budget, semantic and privacy fences are retained. The temporary
+cluster was stopped. Independent read-only review has no unresolved actionable findings.
+Captures and a source receipt are under `artifacts/presentation-designed-collections/`.
+
+See the [individual-template benchmark and original design briefs](evidence/presentation-designed-collections-2026-11.md).
+Local automated results do not advance hosted, native-language or physical-device acceptance.
+
+### Presentation design library November 13, 2026
+
+The `codex/presentation-design-library` source adds a separate Presentation design collection
+alongside the existing content templates. Eight original families provide 64 native layouts:
+Studio, Editorial, Midnight, Blueprint, Terracotta, Signal, Monograph and Canvas. All ten
+creation languages have discovery, preview and illustrative slide copy. Templates → Designs,
+the dedicated design starting point and the editor's Presentation designs control expose the
+same collection. The template library retains its existing Rounds default.
+
+Applying style to a content slide or the whole presentation preserves objects, geometry,
+rich text, language, notes, media references, questions and existing motion. Ordinary content
+slides use the established native adapter. Activities inherit nearby visible content styling;
+image-based imports retain the colors in their artwork. Adding one layout is a separate,
+undoable operation with fresh IDs and its own selected design. New-design creation freezes
+the account-scoped creation and draft requests for idempotent retries, including lost POST
+acknowledgements and gallery remounts. Failed attempts expose a localized Start another action
+that creates a fresh presentation while keeping any previously created draft unchanged.
+Preview includes authenticated images and a complete
+reading alternative. Static exports now retain inherited static palettes/fonts on activities
+as well as native and ordinary pages.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with 8,746 tests and 521 opt-in skips,
+including formatting, lint, types, all four production builds and compiled startup. All 64
+layout recipes pass publication validation. Twelve production browser journeys pass across
+desktop Chromium/Firefox and phone Chromium/WebKit: separate discovery, real layout previews,
+German/Korean copy, keyboard focus, accessibility/reflow, lost creation acknowledgements,
+editable creation, content/motion preservation, undo/redo, scope isolation, layout insertion
+and save/reload. A real revision-conflict scenario verifies safe retries and fresh creation
+without changing the previously edited target. The browser fixture also passes a separate
+TypeScript check. Independent read-only reviews verified the addressed motion, byte-budget,
+creation-lifecycle and retained-attempt recovery issues.
+Local captures and a source receipt are under `artifacts/presentation-designs/`.
+
+See [design research and behavior](evidence/presentation-design-library-2026-11.md). The
+collection adds no dependency, external asset service, per-use AI request or schema migration.
+Hosted, native-language, customer and physical-device acceptance gates remain separate.
+
+### Workspace palette refinement November 13, 2026
+
+The `codex/workspace-muted-colors` source refines the workspace colors below into a
+shared neutral and sage palette across Library, Sessions, Results, Home and Assignments.
+Type previews and icons use neutral surfaces and text, with one sage selected-tab treatment.
+Routine draft and processing badges are neutral; published and active work use soft sage.
+Status icons and translated labels carry the lifecycle meaning, with red reserved for work
+that needs attention. Full-height colored card rails are removed. Host, Resume and report
+actions follow the charcoal primary-button style; Edit and Assign use neutral outlined
+buttons. Unselected favorite stars and Results widget dividers are also neutral.
+
+Validation: 51 focused contrast and signal tests, web lint, formatting and a production beta
+build pass. Four production browser journeys pass across desktop Chromium/Firefox and phone
+Chromium/WebKit, covering both themes, grid/list density, resolved text contrast, action
+eligibility, keyboard focus, forced colors and German labels. Local fixture screenshots and
+metrics are under `artifacts/workspace-colors/`. An independent read-only CSS review found
+no actionable issues. This local styling refinement does not advance release acceptance gates.
+
+### Workspace type and lifecycle colors November 12, 2026
+
+The `codex/workspace-semantic-colors` source adds shared type, lifecycle and action
+signals across Library, Sessions, Results, Home and Assignments. Round content uses
+blue, Presentations violet, Surveys teal and Practice amber. Status badges retain their
+translated labels and add decorative icons: drafts/processing/scheduled work use amber,
+published/ready work green, active/open work blue, expired/failed work red, and completed
+or archived work neutral. Thin card rails make the same states visible in grid and list
+views. Host, Resume, Edit, result and assignment actions have distinct treatments while
+keeping their existing destinations and eligibility.
+
+Both themes use contrast-checked colors, keyboard focus and forced-color fallbacks.
+Report lifecycle colors remain independent of scores; genuine zero accuracy and absent
+evidence retain their existing meaning. Compact dimensions, full wrapping titles,
+permissions and destructive-action confirmations are preserved. Local screenshots and
+resolved color/density measurements are under `artifacts/workspace-colors/`; this slice
+does not advance hosted, native-language, customer or physical-device acceptance.
+
+Validation: `pnpm check` passes with 8,537 tests and 514 opt-in skips, including
+406 web suites / 4,597 tests, lint/types, all four production build tasks and compiled
+server startup smoke. The browser fixture also passes a separate strict TypeScript check.
+The existing Library/Sessions/Results workflows pass 12 browser cases. After the final
+forced-color refinement, four mixed-state journeys pass against a fresh production beta
+build across desktop Chromium/Firefox and phone Chromium/WebKit. They cover both themes,
+grid/list density, German labels, keyboard focus including hover in forced colors,
+translated status text/icons, actual action eligibility and resolved text contrast.
+The final web production build and 51 focused palette/signal tests also pass.
+
+### Built-in Presentation motion backgrounds November 12, 2026
+
+The `codex/presentation-motion-backgrounds` source adds six optional original backgrounds:
+Aurora, Soft waves, Floating orbs, Gradient mesh, Flowing ribbons and Star drift. Creators
+choose a preset in Slide tools → Layout → Design, preview the selected option and apply
+it with the existing design controls. Static remains the default. No motion builder,
+remote media, new dependency, generation allowance or paid asset is required.
+
+The shared decorative renderer supports native slides, ordinary slides with inherited
+design and audience activities. Motion respects reduced-motion preferences and pauses
+in hidden tabs/offscreen surfaces. Local pause/play persists across slide changes without
+editing the document or submitting an activity response. Thumbnails and layout comparisons
+remain still. PNG, PDF, readable HTML, offline HTML and print preserve static-export
+semantics with a deterministic still composition. All new system copy covers ten locales.
+
+Optional `design.motionBackground` opts into scene8/document17; omission leaves historical
+content and appearance unchanged. Copy, recovery, assistance, publication, sharing and
+assignments preserve the token/version. Append-only migration107 extends PostgreSQL
+validators and delivery/response fences without rewriting existing JSON or hashes. See the
+[compatibility notes](presentation-implementation-plan-2026-11.md#built-in-motion-backgrounds--november-12-2026).
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes 8,590 tests with 518 standard
+opt-in skips, formatting, lint, types, all four production build tasks and compiled-server
+startup. Eight production-browser cases pass across desktop Chromium/Firefox and phone
+Chromium/WebKit. These check real animation timelines for all six presets, save/Undo/Redo,
+bulk design, static thumbnails, None, private-reader/presenter playback, pause persistence,
+readable-but-unwritable storage, and Korean 320px reduced-motion/keyboard/touch/Axe behavior.
+Twenty-three PostgreSQL checks pass against an isolated PostgreSQL17 instance, including
+version17 draft/history/publication/share/assignment writes, live navigation/reveal/response
+fences and invalid-token/version rejection. The temporary instance was removed afterward.
+Renderer tests cover all 24 preset/palette combinations and deterministic PNG/PDF/HTML
+snapshots. Captures and the source-bound receipt are under `artifacts/presentation-motion/`.
+These local checks do not establish physical-device, manual accessibility or hosted release
+acceptance, and no existing release gate is advanced.
+
+The November 13 review follow-up preserves scene8 in generic node updates when text has
+language metadata, so manual edits and pronunciation changes remain valid on motion slides
+and after motion is disabled. Migration107 also extends the existing question-suggestion
+source projector to scene8 while retaining its text-only projection, limits and digests.
+PostgreSQL coverage exercises job admission, claim, completion, apply and exact retries
+with active and cleared motion; historical migration104 is unchanged. The focused reviewer
+confirmed both reported compatibility defects are resolved.
+
+Follow-up validation passes `VITEST_MAX_WORKERS=1 pnpm check`: 8,594 tests, 521 standard
+opt-in skips, all production builds and compiled-server startup. Twelve selected production
+browser cases pass across the same four profiles, including actual manual editing and
+pronunciation add/clear/reload on motion slides and scene8 retention after None. The focused
+PostgreSQL suggestion/motion suites pass 15 tests; the isolated instance was removed.
+The current source-bound receipt is `artifacts/presentation-motion/review-fixes-2026-11-13.json`.
+
+### Customer template collection November 12, 2026
+
+The `codex/customer-template-collection` source strengthens existing original templates
+for actual creator tasks. All 96 slides across the twelve native Presentation decks use
+Editorial, Briefing or Workshop visual families, with covers, callouts, comparisons,
+processes, a timeline, editable tables/charts and closing actions. The gallery filters
+these families and the preview exposes each slide's presenter guidance. All 21
+Presentation IDs and their ten creation languages remain available.
+
+Eight existing Round starters now contain four to eight substantive questions and
+localized guidance for preparation, facilitation, interpretation and follow-up. Knowledge
+packs retain meaningful answer keys and linked rechecks; preference and feedback questions
+remain unscored. Four of these starters also provide complete eight-question Surveys,
+with participant introductions and explicitly optional items. The Survey catalog curates
+six feedback scenarios while all seventeen compatible legacy template IDs retain preview
+and creation support. The remaining starters are preserved, not declared editorially
+upgraded by this slice.
+
+Round and Survey previews use dedicated read-only dialogs. Survey preview and creation
+share the same factory, including introductions and required flags. Copies remain
+independent, existing permissions and exact retries remain in place, and ordinary template
+creation requires neither AI generation nor paid stock assets. Native-language review
+packets include the current content, guides and preview copy without accepting any review
+decision. See the [reference comparison and delivered scope](presentation-implementation-plan-2026-11.md#customer-template-collection--november-12-2026).
+
+This collection still needs native-language editorial review and observed customer
+adaptation/facilitation before a market-readiness claim. Existing hosted, accessibility,
+customer and release gates are unchanged. The branch starts independently from main;
+the preceding workspace-color PR remains separate.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes 8,502 tests with 514 standard
+opt-in skips, formatting, lint, type checks, all four production build tasks and compiled
+server startup. Sixteen distinct selected production-browser cases pass across desktop
+Chromium/Firefox and phone Chromium/WebKit. Those journeys cover all 96 English native
+slides for text/shape fit, shared data views, presenter guides, independent editable copies,
+publication preservation and Round/Survey preview-to-creation fidelity. An additional 24
+representative German/Korean slides per profile retain complete public text and content
+language with no text/shape or page-width overflow. The browser fixtures pass strict
+TypeScript, scoped lint and formatting. Local captures and measurements are recorded under
+`artifacts/customer-templates/`.
+
+### Compact workspace collections November 12, 2026
+
+The `codex/workspace-compact-layout` source applies Home's compact header sizing and
+shared spacing to workspace collections. Library, Sessions and Results use smaller grid
+cards and horizontal desktop list rows, with inline metadata and actions. Discover and
+template galleries use smaller previews and grouped actions; Assignments, Idea board
+cards, Groups and folders share the reduced spacing. Long content wraps, Library
+descriptions remain bounded snippets, and touch controls keep their larger targets.
+Existing filtering, selection, favorites, permissions, evidence and preview behavior is
+preserved. Local browser qualification and validation results are recorded with this slice;
+this does not advance hosted, native-language, customer or physical-device acceptance.
+
+At a 1440px desktop viewport, the synthetic collection fixtures show four grid columns,
+Library cards around 283px and list rows around 117px, Round session cards around 248px
+and list rows around 98px, and assignment rows around 105px. Richer evidence and long
+titles grow naturally. The browser journeys cover both themes, all collection types,
+German/Korean Library labels, keyboard selection and menus, 44px touch targets, and
+Groups form reflow at 320, 768, 900 and 1024px. Captures and measurements are under
+`artifacts/workspace-density/`.
+
+Validation: `pnpm check` passes with 8,459 tests and 514 opt-in skips, including lint,
+type checks, production builds and server startup smoke. Four-profile density journeys
+and the existing collection workflows pass 14 distinct selected production-browser
+cases. The new browser fixtures also pass a separate strict TypeScript check. Supporting
+browser Axe/keyboard/reflow checks do not establish manual accessibility acceptance.
+
+### Option B report evidence and recovery November 12, 2026
+
+The `codex/option-b-report-clarity` source corrects Round history/Home summaries that
+presented unanswered assessments as `0%`, preserving genuine measured zeros and immutable
+stored reports. Presentation report reads and captured exports now fence auth/workspace
+changes, late responses and canonical context changes. Exhausted transient reads have an
+honest unavailable state and explicit retry. The report controls and embedded Session
+insights panel cover all ten locales while original authored/report text and existing
+CSV/readable-summary downloads remain unchanged. See the
+[implementation record](option-b-ux-implementation.md#report-evidence-and-recovery--november-12-2026).
+Manual/native-language/customer/device/hosted acceptance and the 15 pending release gates
+remain separate work; no staging environment is selected.
+
+### Home overview and compact recent work November 12, 2026
+
+The `codex/home-insights-workspace` source adds four linked Home widgets for accessible
+work, active sessions, completion across recent assignments and ready recent reports.
+A compact Next up panel prioritizes live work, an open assignment closing soon, an
+editable draft and a ready report. It uses the existing authorized Home summary, with
+no new endpoint or per-item detail fetches. Counts do not imply personal ownership or
+unique participants; missing attempt evidence remains distinct from zero completion.
+Recent result/assignment samples are labelled, and capped session counts use a lower
+bound. Empty suggestions do not claim all work is complete.
+
+Recent work uses icon-led rows with wrapping titles, status, counts, timestamps and
+canonical actions, removing the old 215px card minimum. Home opts into a compact header;
+phone layouts retain the global Create menu and avoid a duplicate page-level control.
+New copy covers all ten configured locales. Keyboard focus, loading/retry, long labels,
+light/dark themes and forced-color controls have dedicated browser coverage. The
+[implementation record](home-workspace-overview.md) records data boundaries and validation.
+
+The repository gate passes 8,403 tests with 513 standard opt-in skips, including all
+403 web suites / 4,466 tests, all four production build tasks and compiled-server startup.
+Focused tests, strict browser-fixture types and the dedicated beta build also pass.
+Twelve selected production-browser cases pass across
+desktop Chromium/Firefox and phone Chromium/WebKit. Synthetic desktop rows measure
+64–77px against the removed 215px minimum; responsive rows preserve complete titles and
+canonical actions. Manual acceptance and existing release gates remain unchanged.
+
+The review follow-up keeps Accessible work as an aggregate summary with separate Library
+and Boards links, covering board-only viewers and legacy summaries with missing board
+totals. All 87 focused tests, 12 selected browser cases, types/lint and normal/beta
+production builds pass for the review fix. The focused reviewer confirms that navigation
+mismatch is resolved.
+
+### Option B local acceptance preparation November 11, 2026
+
+The `codex/option-b-acceptance` source adds a shared macOS browser runner that resolves
+the local Firefox profile-startup blocker, production keyboard/reflow journeys, and a
+source-bound language-review exporter/checker. Qualification corrects clipped Create
+menus, Escape focus return, template-preview keyboard containment and German Results
+card-header overflow. Ten locale packets
+contain 374 review entries each; all decisions remain pending. English remains reference
+material and language Preview labels remain in place. See the
+[implementation record](option-b-ux-implementation.md#local-acceptance-preparation--november-11-2026)
+and [native-language review workflow](evidence/native-language-review.md).
+
+The repository gate passes **8,377 tests** with 513 standard opt-in skips, all four
+production builds and compiled-server startup. All **28 distinct selected production-browser
+cases** pass across desktop Chromium/Firefox and phone Chromium/WebKit, including the
+corrected keyboard and Results reflow journeys. The review HTML passes eight standalone
+Chromium/Firefox cases across German/Korean and desktop/320px widths, with no active
+content, external requests or horizontal overflow.
+
+The named Option B software follow-ups are implemented. Customer observation, native
+review, manual assistive-technology/browser-zoom/physical-device checks, hosted
+qualification and deferred public launch content remain acceptance work. No staging
+environment is selected. The release ledger remains **0 complete / 15 pending**; no
+manual review or external approval is inferred from local automation.
+
+### Option B remaining software follow-ups November 11, 2026
+
+The `codex/option-b-remaining` source preserves Pack practice work and implements the last
+two software follow-ups named in the prior checkpoint: shared practice management and
+creation-locale templates/defaults. Shared practice now has grouped responsive sections,
+ten-locale feedback/date/count rendering, and actor/permission/stale-response guards.
+All 21 Presentation templates and 36 Round starters (17 Survey-compatible) create localized
+editable content in the ten supported languages, with English as default. Presentation
+catalogs load individually. Newly created question/data/Pack headings and local question
+starter scaffolds capture their creation language; UI language changes preserve existing
+content, frozen sources, private links, previews, pending bodies and retry identities.
+
+The [implementation record](option-b-ux-implementation.md#remaining-software-follow-ups--november-11-2026)
+records exact scope and final validation. The repository gate passes **8,339 tests** with
+513 standard opt-in skips, all four production builds and compiled-server startup. All
+**12 distinct selected production-browser cases** pass across desktop Chromium and 320px
+Chromium/WebKit phone viewports, including Axe/overflow and exact-request recovery checks.
+Native-language review, customer observation,
+manual accessibility/device checks, hosted qualification and deferred public launch content
+remain open; the release ledger retains **0 complete / 15 pending** gates.
+
+### Option B Pack practice November 11, 2026
+
+The `codex/option-b-pack-practice` source extends all ten configured UI locales to Pack
+practice setup, frozen previews, private-link receipts and source attribution in Assignments
+and Results, with English as default. Known setup diagnostics follow the selected language;
+unknown diagnostics retain their original English text. Form values, English title defaults,
+authored content, published source identity, private URLs and downloaded CSV bytes retain
+their meanings. Changing language preserves form state, pending creation and exact retry
+identity. Receipt feedback follows the selected language without recopying, refocusing or
+recording a share event. Scoped layout and focus styles accommodate long content and labels.
+
+The repository gate passes 8,160 tests with 513 standard opt-in skips, all four production
+build tasks and compiled-server startup. After browser testing exposed a German visible-label/
+accessible-name mismatch, collection view controls now use matching full labels across all
+ten locales. Final verification passes all 394 web suites / 4,287 tests, web types, scoped
+lint and fresh normal/beta production web builds. Twelve distinct selected production-browser
+cases pass across desktop Chromium and 320px phone Chromium/WebKit, including the new
+localized creation/receipt journey and unchanged Pack practice regressions. The
+[implementation record](option-b-ux-implementation.md#pack-practice-follow-up--november-11-2026)
+records the verification scope. Shared `/practice/[id]` management and creation-locale
+templates/default content remain implementation follow-ups. Hosted qualification, customer
+observation, native-language review, manual accessibility/physical-device checks and the
+deferred launch-facing content remain release work.
+
+### Round live workspace refinement November 11, 2026
+
+The `codex/round-live-workspace` source improves the Round host and participant layouts.
+Hosts get a four-part room summary, visible Audience access, secondary tools that expand
+in normal flow, separate question/standings cards and a guidance column that stacks below
+1024px. Desktop primary, Audience and More controls share one header row whether tools are
+open or closed. Controls use centered 44px targets; narrow screens use accessible icons and
+wrap complete controls for long translations. A shared modern live interface uses crisp
+sans-serif type, slate surfaces, restrained violet accents and coherent light/dark/high-contrast
+states. Participant review and completion use a continuous aligned column with restrained
+headings, compact live standings, a modest single-person result and bounded multi-person
+final standings. Stored experience themes and presenter appearance remain unchanged.
+
+All 392 web suites / 4,192 tests pass, alongside web lint/types and fresh normal, beta and
+core production web builds. Fifteen distinct selected production-browser cases pass: six
+core competition/privacy/recheck cases and nine beta cases across desktop Chromium and
+phone Chromium/WebKit. Checks include the full save/reload/reveal/final journey, retained
+receipts, 320px overflow/Axe, control geometry and the 1024px sidebar crossover. Browser
+review caught and corrected an overly tall phone command bar; fixture expectations now
+reflect the intentional absence of a single-person podium. The
+[implementation record](option-b-ux-implementation.md#round-live-workspace-refinement--november-11-2026)
+keeps this local verification separate from pending release qualification. No server,
+protocol, scoring, authored content or stored theme contract changes are included.
+
+The Round review follow-up corrects nested-surface contrast in Audience/chat/Q&A, staff and
+responsive participant rows, reactions and Pulse. Three additional populated-surface browser
+cases pass across desktop Chromium and 320px phone Chromium/WebKit, with scoped Axe,
+computed palette checks and real conversation/staff data. Desktop covers light, dark and
+app/system high contrast. Fresh normal/beta builds and scoped static checks pass. The
+independent focused reviewer confirms the original finding is resolved; the implementation
+record includes corrected rerun scope.
+
+### Option B Pack tools November 11, 2026
+
+The `codex/option-b-pack-tools` source extends selected-language guidance to Pack library/
+editing, source review/approval, export review, Round/Presentation insertion and updates,
+facilitator references and practice entry points. All ten configured locales retain English
+as default. Authored/generated/default content and canonical source/recovery/version/request
+identities retain their meanings. The repository gate passes 8,066 tests with 513 standard
+opt-in skips, all four production builds and server startup. All 392 web suites / 4,183 tests
+pass. Final web types, scoped lint and fresh normal/beta builds pass after a small German
+placeholder refinement. Fifty distinct selected production-browser cases pass across desktop
+Chromium and phone Chromium/WebKit, including fifteen new localized cases. The
+[Option B implementation record](option-b-ux-implementation.md) preserves verification scope,
+screenshot review and corrected fixture reruns. Pack practice setup, preview, private-link receipts and attribution remain a
+separate follow-up, alongside creation-locale templates/default content, hosted/manual/
+native-language/customer acceptance and deferred public launch content.
+
+### Option B source workflows November 10, 2026
+
+The `codex/option-b-source-workflows` source extends all ten configured UI locales to local
+question starters, AI discussion suggestion review/recovery, visual imports and trusted-source
+dialog guidance. Launch/resume controls, source attribution and explicit known system
+feedback follow the selected language. Original source/proposal text, file and review values,
+English question-generation contracts and exact recovery identities retain their meanings.
+
+The trusted-source dialog follows actual editor permission, including changes during its
+prerequisite save. Permission transitions retain focus inside that dialog; closing a resumed
+discussion proposal returns focus to its visible Resume control. Review controls wrap on
+narrow screens and retain shared focus/surface tokens.
+
+The repository gate passes 7,947 tests with 513 standard opt-in skips, all four production
+builds and server startup. After the focused follow-ups, all 386 web suites / 4,066 tests,
+web types and fresh normal/beta web builds pass, bringing validated repository coverage to
+7,949 passing tests. Forty-four distinct selected production-browser cases pass across
+desktop Chromium and phone Chromium/WebKit, including twelve new localized cases. The
+[Option B implementation record](option-b-ux-implementation.md) preserves corrected reruns,
+focus repairs and verification scope. Creation-locale template/default content and Pack
+library/editor tools remain follow-ups. Hosted, native-language/customer, manual
+accessibility/device and deferred public launch acceptance remain release work.
+
+### Option B assistance review and recovery November 10, 2026
+
+The `codex/option-b-assistance-recovery` source extends all ten configured locales to
+outline proposals, text rewrite/shorten/translation review and recovery, and local layout
+comparison. Resume controls and the latest-text-edit attribution follow the selected UI
+language; authored/generated wording, source excerpts and provenance stay unchanged.
+The three typed catalogs expose 218 keys, including 22 references to existing translations.
+
+UI language stays outside controller, actor, storage and request identity. Explicit source
+and target languages, review/selection state, source/revision fences and exact receipt
+retries keep their existing meanings. Local layout review retains authored content,
+reading order, geometry semantics and ordinary history. Dialogs share surface/focus tokens
+and wrap long controls on narrow screens.
+
+The repository gate passes 7,790 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup; web validation covers 381 suites / 3,907 tests. The
+fresh beta production build passes. Fifty-one distinct selected production-browser cases
+pass across desktop Chromium and phone Chromium/WebKit, including nine new localized
+review/recovery/layout cases. The [Option B implementation record](option-b-ux-implementation.md)
+preserves scope, corrected fixture reruns and pending hosted acceptance. Creation-locale
+template/default content, discussion/source-import assistance and Pack library/editor tools
+remain follow-ups. Hosted, native-language/customer, manual accessibility/device and
+deferred launch-facing acceptance remain release work.
+
+### Option B audience and navigation follow-up November 10, 2026
+
+The `codex/option-b-audience-navigation` source extends all ten configured locales to
+native audience controls, accessible outline, detail dialogs, chart guidance, branch
+authoring and shared host/Companion navigation. Host navigation entry and acknowledgement
+recovery guidance use the same selected-language copy as the shared controls. Branch
+authoring now explicitly respects canonical read-only and mutation-busy state.
+
+The new catalogs expose 96 typed keys, reusing nineteen existing translations. Authored
+text/language, labels, URLs, data, stored IDs, branch thresholds, history fields, broadcast
+authority and exact command retries retain their existing meanings. Templates and sample
+data remain saved content; this slice does not translate existing drafts or generate
+different sample values when the interface language changes.
+
+The repository gate passes 7,621 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup. Final integrated web validation passes 378 suites /
+3,800 tests, bringing the validated repository suites to 7,683 passing tests. Final web
+types, integration lint and fresh normal/beta production builds pass. Fifty-eight distinct
+selected production-browser cases pass across desktop Chromium and phone Chromium/WebKit,
+including final navigation focus/spacing, passive-preview keyboard access and advanced
+image/map requalification. The [Option B implementation record](option-b-ux-implementation.md)
+distinguishes corrected reruns, local runtime interruption and remaining hosted acceptance.
+
+Creation-locale template/default content, assistance review/recovery and Pack library/editor
+tools remain pending. Hosted qualification of this source, native-language/customer review,
+manual accessibility/device checks and deferred launch-facing content remain release work.
+
+### Option B specialized native editors November 10, 2026
+
+The `codex/option-b-specialist-editors` source extends all ten configured locales to
+rich-text, table/chart, video and interaction-authoring controls, including overview/map
+and known validation/recovery feedback. Mounted locale changes retain staged input,
+selection, invalid entries and source feedback. Authored content/language, URLs, stored
+enums, history, data revision fences, local-only preview and canonical viewer behavior
+retain their existing meanings.
+
+The repository gate passes 7,575 tests with 513 standard opt-in skips, all four production
+builds and compiled-server startup; web validation covers 372 suites / 3,692 tests.
+Forty-six distinct selected production-browser cases pass across desktop Chromium and phone
+Chromium/WebKit, including six new Korean editor cases and affected advanced image/map
+journeys. The preceding PR #227 hosted matrix now passes, including WebKit within its
+45-minute budget; this is baseline evidence and does not qualify the new specialist source.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves scope and
+verification. Remaining native audience/template copy, branching/shared navigation,
+assistance review/recovery and Pack library/editor tools remain pending. Hosted
+qualification of this source, native-language/customer review, manual accessibility/device
+checks and deferred launch-facing content remain release work.
+
+### Option B native editor shell follow-up November 10, 2026
+
+The `codex/option-b-native-editor` source extends the selected locale to ordinary native
+editing, insertion menus, image-upload guidance and access/reading-order controls, while
+preserving authored content/language, stored enums/geometry/order and existing permission
+and history boundaries. The separate specialized editors, shared branching/navigation,
+assistance review/recovery and Pack library/editor tools remain pending.
+
+The previous phone WebKit beta run exhausted its 30-minute job budget at case 125/132,
+without a recorded assertion failure, and skipped five later phases. Its beta budget is
+now 45 minutes; other projects retain 30 and every test/step/assertion remains in place.
+Fresh hosted acceptance of the resulting source remains pending. Repository validation
+completes 7,452 passing tests with 513 standard opt-in skips, formatting/lint/types,
+all four production builds and compiled-server startup. All 368 web suites / 3,569 tests
+pass; the final three inspector-label follow-ups pass 155 focused tests, web types, scoped
+lint and fresh normal/beta web builds. Thirty-seven distinct selected production-browser
+cases pass across desktop Chromium and phone Chromium/WebKit. The implementation record
+distinguishes final reruns from distinct counts and preserves the pending hosted gate. The
+[Option B implementation record](option-b-ux-implementation.md) retains scope and evidence;
+manual/customer/native-language/device checks and deferred launch-facing content remain
+release work.
+
+### Option B editor and Companion follow-up November 10, 2026
+
+The `codex/option-b-editor-companion` source extends selected-language guidance to native
+object selection and geometry, design/composition/fit controls, Sections and spatial
+navigation, and the Presentation Companion shell and auxiliary pickers. All ten configured
+locales are retained with English as default. Authored content and its language annotations,
+stored geometry/enums, playback order, aggregate privacy and exact command retries retain
+their existing meanings. Spatial controls use shared surface, focus and disabled tokens.
+
+Canonical read-only permission now disables Sections and native mutation controls while
+retaining selection, inspection and preview. Current-permission guards cover captured
+callbacks, deferred history writes, undo/redo and active native gestures.
+
+The integrated repository gate passes 7,426 tests and all four builds/startup checks.
+After the authored-language and stage-sizing follow-ups, all 3,547 web tests and web type
+checking pass. Fresh normal/beta production builds and 51 distinct selected desktop/phone
+browser cases pass, including a final twelve-case qualification after Companion's responsive
+layout fix. Scoped lint, formatting and diff checks pass. The verification record distinguishes
+these local results from the pending hosted matrix and local Firefox profile limitation.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves scope and
+verification. Detailed native text/data/video/interaction inspectors, authoring assistance
+and Pack library/editor tools remain pending. Customer observation, native-language review,
+manual accessibility/device qualification, the full hosted matrix and deferred launch-facing
+content remain release work.
+
+### Option B specialist workflows November 10, 2026
+
+The `codex/option-b-secondary-flows` source extends selected-language controls and recovery
+guidance to Round staff/embed tools, follow-up access management and participation, and
+Q&A/text moderation across the ten configured locales. Staff writes prevent duplicate
+creation; one-time links retain visible copy recovery. Follow-up actions respect canonical
+owner/editor permissions and session deletion stays owner-only. Read-only users retain
+access metadata; Q&A observers cannot compose replies. Authored content, credential
+transport, privacy projections and exact retry identities retain their existing meanings.
+
+Integration fixes restore preview/delivery styling parity, distinguish activity preview
+landmarks, close imported-Round popovers without covering the next action, and correct
+the participant brand/self label. Direct follow-up visits now load the shared delivery
+catalog, preventing internal keys and narrow-screen overflow. The repository gate passes
+7,331 tests and all builds/startup checks; after the final catalog correction, all 3,459
+web tests, web type checking, scoped lint and fresh web production builds pass. Fifty-five
+distinct selected production-browser cases pass across desktop Chromium and phone
+Chromium/WebKit, with fresh API fixtures. These results are scoped in the implementation
+record; the full hosted matrix and local Firefox qualification remain open.
+
+The [Option B implementation record](option-b-ux-implementation.md) preserves the bounded
+scope and pending qualification. Advanced native inspectors, Sections/spatial navigation,
+AI/Pack tools and Companion chrome still need language review. Launch-facing content,
+customer observation, manual accessibility/device work and the release gates remain open.
+
+### Option B customer workflow completion November 10, 2026
+
+The merged `codex/option-b-ux` source refines Home and Library, first-session guidance and mobile
+navigation, private Quick poll creation, focused Round editing, publication-version choice,
+participant entry/completion, primary live commands, report interpretation/recovery and signup.
+The [Option B implementation record](option-b-ux-implementation.md) maps the concerns,
+records verification and preserves the launch-facing content explicitly deferred to release
+preparation. English remains the default and existing locale choices remain available.
+
+The `codex/option-b-completion` follow-up adds goal-based entry on first-session Home and
+Create, one Round creation surface with keyboard starting-method tabs, exact published
+version/date details and translations for the primary creation/delivery/results journey.
+It also fixes the PIN card's narrow-screen intrinsic width and updates existing browser
+journeys for the new native disclosures. Specialist language review and customer/manual
+release qualification remain explicit in the implementation record.
+Primary activity-slide guidance, public display states and ranking receipts also follow
+the selected locale. Default opinion-poll reports now retain absent correctness instead
+of showing zero accuracy; empty assessments remain distinct from real assessed zero.
+
+The completion repository check passes 7,217 tests, all four production builds and
+compiled-server startup; 513 standard opt-in skips remain. Eighty-six distinct selected
+browser cases are verified, including 59 production beta cases across desktop Chromium
+and phone Chromium/WebKit. The final accessible-name follow-up also passes 92 focused
+tests, web type checking, scoped lint, a fresh production build and dialog/menu browser
+checks. The implementation record preserves the remaining Firefox profile limitation. Customer
+observation, manual accessibility, physical devices, the full hosted matrix/deployment
+and existing release gates remain open; this source work does not claim release acceptance.
+
+### Presentation editing and interaction clarity November 9, 2026
+
+The `codex/presentation-interaction-polish` source moves geometry controls into a selected-object
+toolbar outside authored frames. Existing selection, group, pointer, keyboard and history paths
+remain the authority. Interactions have a dedicated picker, trigger/result/audience guidance and a
+current-slide preview using the existing viewer-local review renderer. Missing destinations and
+unsaved URL entries remain explicit; preview preserves tools and focus across compact layouts.
+No live command, session, publication or response is created by trying a draft action.
+
+See the [editing/interaction record](evidence/presentation-interaction-polish.md) for verification,
+boundaries and remaining design/qualification work. No contract, service, dependency or AI cost
+is introduced by this slice.
+The final repository check passes **6,986 tests**, all four builds and compiled-server startup;
+513 standard opt-in skips remain. All **40 selected production-browser cases** pass across four
+profiles with a fresh API fixture per profile. Automated focus/Axe, 320px layout and CSS-zoom
+coverage retain their local scope; manual/device/observed-creator and hosted gates remain open.
+
+### Presentation design-quality gaps November 9, 2026
+
+The source on `codex/presentation-design-quality` integrates reviewed local layout alternatives
+into the Layout inspector and corrects native typography/spacing that changed fit when editor
+rails constrained the slide. The ordinary phone reading view remains readable. Fit guidance
+waits for fonts and does not infer wide-slide fit from a stacked reader. Visible filmstrip images
+use scoped creator-authorized readers; hidden rows/panels release them and access/image failures
+show placeholders. No AI credits, paid service, dependency or content migration is added.
+
+The [design-quality record](evidence/presentation-design-quality.md) records verification and the
+remaining boundary. These changes close selected design gaps; broad-creator observation, manual
+accessibility/device work, deeper mixed-object layouts and the wider E00–E14 scope remain open.
+The final repository check passes **6,964 tests**, all four builds and compiled-server startup;
+513 standard opt-in skips remain. **34 distinct selected production-browser cases are verified**
+across four profiles, with one export case isolated to avoid a shared-fixture rate limit.
+Editing-handle placement and interaction discoverability remain the next design refinements.
+The review follow-up fixes activity images covering answer rows and verifies eight production
+browser cases across the four profiles, including all four choices and wrapping labels.
+
+### Presentation creator UX foundation November 8, 2026
+
+The source on `codex/presentation-ux-foundation` puts blank creation and visual browsing first.
+All 21 original templates have real slide thumbnails, use-case/search filters, clear/no-results
+states and content/activity counts. Source proposals remain distinct from visual import and
+optional outline assistance. The editor uses a thumbnail filmstrip, central stage, contextual
+inspector and command bar with visible save/publication state and explicit delivery actions.
+Existing creation intents, gates, allowances, document/scene formats, retry recovery and immutable
+publication retain their meanings; no provider, service or paid design dependency is added.
+
+The full repository check passes 6,910 tests and all builds, including a compiled-server
+startup/configuration smoke that catches the practice/sharing contracts import cycle fixed in
+this branch. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox
+and phone Chromium/WebKit, including actual exports, automated accessibility, focus, 320px layout
+and 200% zoom. Standard opt-in integration skips remain. Manual accessibility, physical-device,
+observed broad-creator, hosted/capacity/cost and release qualification remain open. The
+[current E00–E14 gap map and phased UX track](presentation-implementation-plan-2026-11.md#ux-upgrade-track-and-current-gaps)
+preserve the broad-creator and lowest sustainable subscription priorities; implemented slices
+below do not imply competitor parity. Source remains undeployed.
+
+The November 9 review follow-up passes 14 additional Recovery Pack browser cases across all four
+profiles. It migrates the remaining import/reference journeys to the new disclosures and fixes
+the inert ancestor that prevented recovery of lost update/undo acknowledgements. Ordinary edits
+remain paused, competing operations still block the recovery panel, and exact retry identities
+remain unchanged. Transport-driven apply/undo regressions are included in the repository count.
+
+The PR review follow-up also retains a newly inserted video node's selection while the parent
+scene updates. Deferred-render/rejection tests and 36 selected composition, information,
+accessibility and AI-assistance browser cases pass. Remaining journey selectors now follow the
+new launcher and inspector, and pending discussion recovery uses its reachable banner. These are
+selected local qualifications, not a claim that the full hosted CI matrix is green.
+
+### Presentation self-paced choice practice November 8, 2026
+
+The source on `codex/presentation-self-paced-practice` adds **Assign practice** for an immutable
+publication containing ordinary single-choice and true/false checks. Recipients explicitly start,
+acknowledge content pages, submit each answer once and finish after every page/check. Personal
+correctness and authored feedback appear only after that attempt's answer is accepted. A private
+resume link restores accepted progress; shared links and preview do not discover another attempt.
+
+Separate practice records/receipts in additive migration106 preserve existing reading/live/report
+meanings. Current authority, source lifecycle, deadlines, exact retries and small-group suppression
+apply. There is no timer, points, verified identity, mastery claim, new provider or service.
+See the [practice record](evidence/presentation-self-paced-practice.md) for boundaries and
+qualification. The full repository check passes 6,889 tests and four builds; the updated restricted
+PostgreSQL CI suite passes 499 tests, and all 16 selected production-browser workflows pass across
+four desktop/mobile profiles. Broader question formats, opinion responses, delayed feedback policy and identified/
+individual creator reporting remain later E08 work. Source remains undeployed.
+
+### Presentation reading insights November 8, 2026
+
+The source on `codex/presentation-reading-reports` adds explicit **Reading insights** to each
+reading assignment. Current owners/editors can load and refresh frozen-version anonymous attempt,
+explicit completion and page-acknowledgement counts, then export the exact displayed snapshot as
+a formula-safe CSV. Preview visits are excluded. Small total and complementary groups are
+suppressed; attempts are not unique people and reading completion is not assessment or mastery.
+
+Counts-only repository reads preserve assignment RLS, current authority, source lifecycle and
+the expiry-plus-seven-day boundary. Revoked/expired assignments remain reportable during that
+window. The client fences late results and clears reports/exports on identity or source changes.
+No new migration, provider, service or dependency is added. This increment also repairs the stale
+migration105 ledger assertion and includes the E08 restricted PostgreSQL cases in CI. See the
+[reading-insights record](evidence/presentation-reading-insights.md) for scope and qualification.
+The full repository check passes with 6,853 tests and four builds; the actual restricted
+PostgreSQL CI command passes 482 tests, and all eight selected production-browser workflows pass
+across four desktop/mobile profiles.
+Answer collection, assessment feedback and identified/individual attempt reporting remain later
+E08 work. Source remains undeployed.
+
+### Presentation self-paced reading assignments November 8, 2026
+
+The source on `codex/presentation-e08-self-paced` adds **Assign reading** to a published
+Presentation. A creator chooses a deadline, copies a private assignment link and can revoke it.
+The frozen publication is independent of later draft/publication changes. Preview does not start
+an attempt; the reader explicitly starts, acknowledges each page and finishes reading.
+
+Anonymous attempts have separate private credentials, revision-fenced progress and compact exact
+retry receipts. A personal resume link requires an explicit resume action; a shared assignment
+link never loads another reader's progress. Recipient credentials and uncertain operations stay
+in memory, and Clear reader removes private progress from that view. Creator pending-link
+recovery is bound to the current user/workspace. Reading completion is self-reported and does not
+claim identity, assessment or mastery; questions remain readable previews.
+
+Migration105 adds separate assignment, attempt and receipt records with forced scoped RLS,
+immutable capability/receipt guards, bounded admission and existing account/source erasure and
+retention integration. The implementation reuses safe publication/media projection and rendering,
+adds no provider call or service, and preserves existing document/scene and live/report meanings.
+See the [reading-assignment record](evidence/presentation-e08-reading-assignments.md) for scope and
+qualification. The full repository check passed with 6,824 tests and four application/admin builds;
+targeted restricted PostgreSQL and all eight selected production-browser workflows across four
+profiles also pass. Response collection, assessment feedback, identified learner assignments and
+attempt reporting remain later E08 work. Source remains undeployed; existing release gates remain
+open.
+
+### Component build pipeline November 7, 2026
+
+The source on `codex/component-build-pipeline` separates host builds into customer web, server,
+operator control and admin CLI tasks. Source dependency hashes replace unused shared-package
+declaration prerequisites. Optional library artifacts remain available. Docker image builds
+avoid duplicate host compilation, accept a development component selector and preserve hosted
+exact-SHA release controls. Compiler and dependency caches are retained within their proper
+component boundaries.
+
+Guarded Next builds have isolated outputs, strict production type profiles, bounded worker
+counts, progress heartbeats, deadlines and owned-process cancellation. Workspace type checks
+retain tests. Browser CI builds once per role/profile and verifies source/environment/complete
+standalone output before reuse with fresh API fixtures. The media and authoring cases that
+previously used incompatible/shared fixtures now have explicit phases. Both Playwright configs
+send SIGTERM with a ten-second graceful shutdown window, allowing the helper to await detached
+Next cleanup and release its output lease.
+
+`VITEST_MAX_WORKERS=1 pnpm check` passed in 395.98 seconds, including 6,362 package and 420 support
+tests, strict checks and all four runtime/admin builds. Normal opt-in skips remain. This full run
+preceded the final import-only Node/ESLint cleanup, after which 131 focused tests, workspace/build
+lint, formatting and the Docker closure guard passed. Selected production browser qualification
+passed 22 cases with two compilations and seven fresh API phases; manifests were unchanged,
+schema-2 provenance passed, and no owned fixture ports or leases remained after exit.
+Both roles also passed rebuild, standalone HTTP and SIGTERM cleanup checks after the Node import
+cleanup. A subsequent review fix adds terminal SIGHUP cleanup with exit status 129; all 22 compiler
+guard tests pass, including configuration restoration, lease release and owned-descendant cleanup.
+
+The configured all-pass CI web compilation count falls from 21 to 9. One local cold observation
+fell from 32.69 to 20.51 seconds and 2.46 to 1.90 GiB peak process-tree RSS; warm timings varied.
+The Docker daemon was unavailable, so actual image builds remain unqualified despite passing
+closure and fake-tool orchestration checks. See the
+[diagnosis and measurement record](evidence/component-build-pipeline.md) and
+[component build runbook](runbooks/component-builds.md). Application schemas and deployed
+topology remain unchanged. The existing mobile word-cloud viewport and inert Pack-update Retry
+failures and release gates stay open; this work does not claim hosted CI is green.
+
+### Presentation offline interactive HTML November 7, 2026
+
+The source on `codex/presentation-offline-export` adds **Offline interactive HTML** to the
+published-version export dialog. One file embeds public readable content, images and visual
+snapshots. Native local disclosure panels and page/section/previous-next links work without
+JavaScript or an internet connection. Public broadcast bodies become local disclosures;
+activities remain readable previews without answer submission, scoring, progress or completion tracking.
+
+The increment reuses the existing recipient-safe projection, source/media authorization,
+renderer worker and resource limits. No provider call, service, dependency, migration,
+document/scene version or entitlement is introduced. Existing PDF/PNG/readable HTML retain
+their meanings. The full repository check, focused contracts/server/web checks, compiled-worker
+smoke and eight production-browser workflows across four profiles pass; see the
+[offline export record](evidence/presentation-offline-export.md). Actual downloaded-file controls
+work with networking and JavaScript disabled. Source remains undeployed.
+Self-paced attempts, editable PPTX and live visual-stage interaction remain separate work.
+
+### Reviewed AI discussion suggestions November 7, 2026
+
+The source on `codex/presentation-question-suggestions` adds optional **Suggest discussion
+questions** from a visible native slide's exact title/body text. Explicit generation uses one
+existing AI job to propose two English discussion/reflection questions; creators review both,
+choose one and confirm before inserting an independent unscored open-text opinion question.
+Free local starters and manual authoring remain available. No generation publishes or edits
+the deck automatically.
+
+Migration104 adds a private expiring queue, sharing the monthly admission ledger and combined
+two-active-job limit with outline and text assistance. Exact saved-source/revision checks,
+durable insertion receipts, account-bound recovery and fresh-only Undo protect source and
+unrelated work. Source attribution remains private in recipient, review and export projections.
+No new provider, service, dependency, entitlement or document/scene version is introduced.
+
+Focused contracts, controller/modal, editor and privacy checks, 56 selected real PostgreSQL
+cases and 66 production-browser workflows across four profiles pass. The full repository check
+also passes: 958 contracts, 584 database, 1,419 server, 2,946 web and 354 support tests, plus
+strict checks and production builds. See the
+[discussion-suggestion record](evidence/presentation-question-suggestions.md). This increment is
+merged in [PR #210](https://github.com/riojung/pollingpops/pull/210) and remains undeployed;
+scored AI assessment generation and broader E12 scopes remain separate work.
+
+### Reviewed local question starters November 6, 2026
+
+The source on `codex/presentation-question-starters` adds **Question starters** for a visible
+native slide's authored title/body text. Creators review a discussion prompt, subjective clarity
+rating or eligible priority poll before inserting one independent editable opinion question.
+Priority options copy all 2–6 complete authored points; unsuitable longer lists are never
+silently shortened. English template scaffolding and source-only interpretation are explicit.
+
+Insertion uses one ordinary Undo/autosave step, preserves the source and its private metadata,
+inherits its section and retains existing spatial frames. Exact text/language/order and current
+actor/target barriers fence stale review. Copied source attribution remains private in participant,
+review and export projections. No AI call, job, allowance use, dependency, service, schema,
+migration, persisted version or entitlement is introduced.
+
+Focused checks and 18 production-browser workflows across four desktop/mobile profiles pass.
+The full repository check passes, including 938 contracts, 578 database, 1,393 server, 2,878 web
+and 354 repository-support tests, strict checks and production builds. See the
+[starter record](evidence/presentation-question-starters.md). This increment is merged in
+[PR #209](https://github.com/riojung/pollingpops/pull/209) and remains undeployed.
+Reviewed AI discussion questions follow in the November 7 increment above. Scored AI assessment
+generation, classic-slide starters and broader conversational generation remain separate work.
+
+### Presentation E12 reviewed translation November 6, 2026
+
+The source on `codex/presentation-e12-translation` adds **Translate text** for one selected plain
+native title/body object. Creators explicitly choose one of 12 canonical target languages,
+request a proposal, inspect complete original/translated wording and confirm **Apply reviewed
+translation**. Generation never edits or publishes the deck. The existing provider, monthly
+allowance and combined active-job limit are reused.
+
+Scene7 stores an optional language on each text object; document16 permits these annotations and
+private translation provenance. A manual **Text language** control permits correction/clearing.
+Source/target language identity joins the existing exact request, review, Apply and recovery
+fences. Translation changes only the selected wording/annotation and latest-edit record, with
+required version floors; old rewrite/shorten payloads and hashes retain their bytes. Migration103
+adds guarded language columns and matching readers without altering migrations001–102.
+
+The full repository check, 48 selected real PostgreSQL cases and 32 production-browser workflows
+across four desktop/mobile profiles pass. See the
+[translation record](evidence/presentation-e12-translation.md). This increment is merged in
+[PR #208](https://github.com/riojung/pollingpops/pull/208) and remains undeployed.
+Rich-text/whole-deck translation, RTL, question suggestions and other E12 scopes remain planned.
+The reviewed layout increment remains separately proposed in
+[PR #207](https://github.com/riojung/pollingpops/pull/207).
+
+### Presentation E12 selected-text assistance November 6, 2026
+
+The source on `codex/presentation-e12-text-assistance` adds optional **Rewrite text** and
+**Shorten text** for one selected plain native text object. Creators explicitly request a
+proposal, compare the complete original and proposed wording, then confirm **Apply reviewed
+text**. Generation leaves the deck unchanged. Only the selected text, role and operation enter
+the approved provider; notes, citations and other objects are excluded.
+
+Migration102 adds a private, expiring text-assistance queue sharing the existing authoring
+allowance and the combined two-active-job limit with outline assistance. Document15 records the
+latest accepted text edit separately from original citations/source disclosure; scene6 and live
+response/report semantics retain their meanings. Exact recovery, unchanged-target/revision
+fences and current-tab Undo/Redo protect application. The initial full repository check and 43
+selected PostgreSQL cases passed. The review corrections also pass all 2,808 web tests and 24
+production-browser journeys across four profiles, including editing after generation refusal
+and safe removal of unreadable recovery records;
+see the
+[selected-text record](evidence/presentation-e12-text-assistance.md). Translation, suggested
+layouts/questions, rich-text rewriting, conversational editing and generated media remain later
+E12 work. Source is ready for review and remains undeployed.
+
+### Presentation E12 outline-first creation November 6, 2026
+
+The source on `codex/presentation-e12-outline-create` adds **From outline** to Presentation
+creation. An explicit action saves a titled native draft, then opens the existing reviewed
+outline workflow. Opening the editor or panel never admits an AI job; cancellation/failure leaves
+the draft editable. Exact actor/workspace-bound creation recovery avoids duplicate drafts after
+lost acknowledgements. Migration101 adds compact append-only, forced-RLS creation receipts;
+draft creation uses no AI allowance and introduces no provider or content version.
+
+The full repository check, focused checks, 33 selected PostgreSQL cases and eight production
+browser workflows across four profiles pass. See the
+[creation record](evidence/presentation-e12-outline-create.md). This is a bounded E12 extension;
+translation and other later scopes remain planned. This slice is merged in
+[PR #205](https://github.com/riojung/pollingpops/pull/205) and remains undeployed.
+
+### Presentation E12 outline assistance November 5, 2026
+
+The source on `codex/presentation-e12-outline` adds optional **Outline to slides** in the saved
+Presentation editor. Creators request 3–8 text slides from an explicit outline, review generated
+wording and complete exact source excerpts, then insert selected editable native slides. Every
+proposal labels generated claims as unverified; generation leaves the deck unchanged until
+explicit insertion. Existing manual creation and publication retain their controls.
+
+Migration100 separates private assistance jobs from legacy source jobs and adds a compact shared
+monthly authoring ledger. Existing allowance/entitlement values remain unchanged. Exact create/
+apply recovery, actor/source/expiry fences, bounded provider work and private-data erasure protect
+the workflow. The full repository check, focused checks, twenty-seven selected PostgreSQL cases
+and four production browser profiles pass. See the
+[E12 record](evidence/presentation-e12-outline-assistance.md). This is the first E12 software slice;
+rewrite/shorten, translation, suggested layouts and conversational editing remain later work.
+The selected outline slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
+and remains undeployed.
+
+### Presentation E11 private review feedback November 5, 2026
+
+The source on `codex/presentation-e11-review` adds opt-in comments for existing private review
+links. Signed-in free reviewers can discuss published pages without joining the creator's
+workspace or allocating a paid creator seat. Current owners/editors resolve/reopen threads and
+approve that link's review of its pinned version. Later feedback makes approval stale; drafts,
+other links and later publications retain their own state.
+
+Migration099 adds bounded sidecar storage, forced RLS, version/source guards, exact operation
+receipts and account erasure/export handling. Existing E08 responses, document14, scene6, live
+assessments and Report V1–V7 retain their meanings. The full repository check, four
+production-browser profiles and sixteen selected real PostgreSQL cases pass; see the
+[E11 record](evidence/presentation-e11-review-feedback.md)
+for verification. No new provider, service or dependency is added. Concurrent authoring remains
+separate. This slice is merged in [PR #203](https://github.com/riojung/pollingpops/pull/203)
+and remains undeployed.
+
+### Presentation E10 bounded spatial story map November 5, 2026
+
+The source on `codex/presentation-e10-spatial` adds an optional spatial story map. Authors arrange
+existing slides/activities as bounded frames, use the existing numbered sequence as the path,
+and preview the visible publication. The live host, stage, participant and Companion maps follow
+the confirmed current page while its readable content and response controls stay mounted.
+Audience maps contain numbered geometry only. Hidden planning frames, future content, notes,
+answers and private navigation details are excluded.
+
+Document14 and migration098 add the opt-in layout without changing scene6, existing draft/save
+receipts, navigation/assessment semantics or Report V1–V7. Local camera controls require no new
+service, provider or live command. The full repository check, eight selected real PostgreSQL
+cases and four production-browser profiles pass; see the
+[E10 record](evidence/presentation-e10-spatial.md) for verification and limits.
+This is the bounded story-map slice; content-plane camera rendering,
+nested frames and facilitator-broadcast overview controls remain later E10 work. The selected
+slice is merged in [PR #202](https://github.com/riojung/pollingpops/pull/202) and remains undeployed.
+
+### Presentation E09 live-session insights November 5, 2026
+
+The source on `codex/presentation-e09-reporting` adds a creator report panel for finished,
+retained Presentation sessions: frozen-version block/section delivery, response coverage,
+opinion distributions, paired recovery and current public Q&A counts. CSV and a self-contained
+readable HTML summary use the same aggregate projection. Response denominators use the original
+reveal roster, with missing legacy history distinguished from zero. Private participant data,
+submitted text, presenter notes and answer keys are excluded; positive activity samples below five stay
+hidden. Existing Report V1–V7 and public AggregateSummary V1 retain their meanings.
+
+This is the selected live-session software scope; private review links remain untracked and
+self-paced assignments/attempts remain planned. Counts-only reads reuse the existing database,
+with bounded inputs/output, read limits and operational metrics. No migration, paid provider,
+new service or model call is added. See the [E09 record](evidence/presentation-e09-session-insights.md)
+for verification: the full repository pipeline, five selected PostgreSQL cases and four production
+browser profiles pass. Deployment/qualification remain separate. The selected software scope is
+merged in [PR #201](https://github.com/riojung/pollingpops/pull/201) and remains undeployed.
+
+### Presentation E13 static export November 5, 2026
+
+The source on `codex/presentation-e13-static-export` implements the broad-creator static
+portability slice: whole-deck PDF, one-page PNG and self-contained accessible HTML. It pins an
+immutable published version and uses the recipient-safe projection, current actor/source/media
+authorization and clean private images. The creator dialog lists published pages independently
+of draft edits, supports cancellation, and explains flattened controls, authored overflow and
+irrevocable downloaded copies. The bounded renderer reuses existing canvas/PDF/font facilities;
+there is no new service, dependency, entitlement, stored-content version or migration.
+
+The full repository pipeline, four production-browser workflows and compiled-worker output smoke
+pass; see the [E13 record](evidence/presentation-e13-static-export.md). Browser checks also verified
+accessible landmarks, focus return and dynamic Builder drawer placement after commands wrap at
+320px. The selected static software scope is complete, merged in
+[PR #200](https://github.com/riojung/pollingpops/pull/200), and remains undeployed. Editable PPTX,
+offline interactive packages and self-paced assignments remain outside this slice.
+
+### Presentation E06 completion and E08 private sharing November 5, 2026
+
+The source on `codex/presentation-interactions-sharing` includes reviewed E07 navigation and
+adds the selected remaining E06 interactions plus E08 private review links. Document13/scene6 and
+migration096 add image hotspots, accessible detail dialogs, stable internal controls, durable
+host-broadcast reveals and explicit response-eligible branches. ReportV7 preserves old readers.
+Migration097 adds version-pinned, expiring/revocable links with safe recipient projections,
+per-page access checks and bounded private media proxying. No learner attempts, paid provider or
+new hosted service is introduced. The full repository pipeline, 70 selected PostgreSQL cases and
+eight production-browser workflows pass;
+see the [E06](evidence/presentation-e06-completion.md) and
+[E08](evidence/presentation-e08-private-sharing.md) records. Changes are merged in
+[PR #199](https://github.com/riojung/pollingpops/pull/199) and remain undeployed.
+
+### Presentation E07 sections and navigation November 4, 2026
+
+The source increment on `codex/presentation-e07-navigation` adds named sections, a private live map,
+stable block-ID jump/return and durable visited phases through document12/migration095. Numbered
+order remains the default path. Closed activities retain their original windows, responses and
+scores; linked rechecks remain indivisible. ReportV6 identifies presented/skipped blocks without
+fabricating completion. The full repository pipeline, 64 selected PostgreSQL cases and four
+production browser profiles pass; see the
+[evidence record](evidence/presentation-e07-navigation.md). The source is included in the interactions/sharing branch and remains undeployed.
+
+### Presentation E06 basic interactions November 4, 2026
+
+The planned first slice is implemented locally on `codex/presentation-e06-basic-interactions`:
+viewer-local reveal/hide panels, safe external links, native authoring/history tools and a shared
+accessible outline across delivery surfaces. Scene5/document11 and migration094 preserve existing
+activity, response, scoring and immutable-publication meanings. No AI provider or per-click job
+is added. The full repository check, restricted PostgreSQL, focused tests and four production
+browser profiles pass; see the [evidence record](evidence/presentation-e06-basic-interactions.md).
+This source increment merged in [PR #198](https://github.com/riojung/pollingpops/pull/198) and remains
+undeployed. The richer interactions are tracked in the E06 completion increment above; live
+navigation is tracked in E07.
+
+### Presentation E05 visual import November 4, 2026
+
+Software is complete and merged in [PR #197](https://github.com/riojung/pollingpops/pull/197),
+following E04's completion in PR #196. PDF/image-set conversion, private previews, ordered selection,
+author-reviewed visual/reading slide pairs, safe retry identities and owned-media cleanup are
+implemented. Migration 093 and a Node 26 converter runtime are required; AI credits and provider
+configuration are not required. The full repository check, 93 migrations with restricted
+PostgreSQL cases, four production browser profiles and the compiled renderer smoke pass.
+See the [evidence record](evidence/presentation-e05-visual-import.md) and
+[rollout requirements](runbooks/upgrade.md#presentation-visual-import-compatibility). This source
+increment is merged and remains undeployed; E13 export and
+manual/hosted/cost acceptance are separate.
+
+### Presentation E04 moderated text November 4, 2026
+
+Software complete and merged in [PR #196](https://github.com/riojung/pollingpops/pull/196),
+following the first family in PR #195.
+The second family adds open text and word clouds, host-only pending/approved/removed moderation,
+body erasure, minimum-five approved public results and V5 report/CSV evidence. Moderation
+advances event sequence without changing the response revision/window. Document v10,
+response storage v3 and migration 092 require coordinated readers/writers; defaults and
+historical meanings stay unchanged. See the [verification record](evidence/presentation-e04-moderated-text.md)
+for the repository check, sixteen real PostgreSQL cases and 48 unique browser cases across
+documented slices, plus remaining manual/device, hosted-rollout, cost and parity gates. This
+increment is merged; hosted rollout remains pending. See the
+[rollout instructions](runbooks/upgrade.md#presentation-moderated-text-compatibility).
+
+### Presentation E04 opinion polls and rankings November 4, 2026
+
+The first E04 family adds multiple-selection opinion polls and full/top-N rankings across
+authoring, independent published Round copies, live responses, audience stage/Companion results,
+and report/CSV evidence. Accepted responses remain unscored. Poll percentages count respondents;
+ranking weights decrease from the total choice count and are separate from participant scores.
+Results are anonymous aggregates for the current revealed question only.
+
+These formats explicitly use document v9, response storage v2 and Report V4. Migration 091 and
+a coordinated API/job/web reader-writer cutover are required; default document versions, legacy
+content/hashes and existing report meanings remain unchanged. V4 retrieval requires
+`includeOpinionResults=true`. See the [rollout instructions](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+and [first-family verification record](evidence/presentation-e04-opinion-formats.md).
+
+Repository checks, restricted PostgreSQL 17 and the final four-profile opinion workflows passed;
+see the verification record for exact runs and limits. The moderated text and word-cloud
+family is tracked in the newer entry above. This first increment did not close the epic or establish
+physical-device, manual accessibility, hosted rollout, capacity, operating-cost or competitor
+parity acceptance.
+
+### Presentation E03 desktop delivery November 4, 2026
+
+The presenter workspace now separates private speaker notes and next-slide preview from a
+read-only audience stage. Notes and preview come from the session's frozen published version;
+hidden planning slides and later draft/publication edits do not enter an existing session.
+The local elapsed timer has explicit Start/Pause/Reset and refresh recovery. Right Arrow,
+Page Down and Space advance through existing command receipts and revision fences while native
+controls, editable content, modal dialogs and pending commands retain their keyboard behavior.
+
+The audience stage has persistent join code, address and QR access, full-screen controls and an
+explicit new-tab fallback when a popup is blocked. Its separate pass expires within one hour and
+can be rotated or revoked without replacing host control. Stage reads omit creator cookies and
+exclude private notes, future slides, participant records, moderation and unrevealed answers.
+Migration 090 adds the stage credential role; deploy all matching readers before the first mint.
+
+Repository checks, real PostgreSQL 17 and the production browser matrix plus focused viewport
+rerun passed; see the [E03 delivery record](evidence/presentation-e03-delivery.md).
+Actual screen sharing, managed-browser policy, manual assistive technology, physical devices,
+operating cost/capacity and hosted rollout qualification remain open. A richer phone remote is
+separate optional work; existing Companion scope and host control-pass rotation remain intact.
+
+### Presentation E02 composition and information components November 4, 2026
+
+The remaining E02 software scope is implemented locally: transient snap guides, persistent flat
+groups, proportional group resizing, bounded rotation with attached connector anchors, editable
+tables and deterministic bar/line/pie charts. Group arrangement preserves internal geometry,
+semantic reading order and existing media authority. New information objects have visible data
+tables, authored descriptions and staged CSV/TSV editing with discrete Apply/Undo steps.
+
+Twelve original eight-slide native scenario decks cover broad creation without required activities;
+the nine existing facilitated templates remain available. The gallery provides shared-renderer
+thumbnails and keyboard-accessible full-deck previews. Explicit external HTTPS video and
+captions/transcript links use existing rich text without provider embeds or automatic requests.
+
+New persisted composition and data fields opt into scene v4/document v8. Older documents and
+hashes, classic API default v2, blank native creation v7 and mutation envelope v2 retain their
+representations. Full-document validation rejects oversized edits before history or autosave and
+retains staged data/link inputs. No SQL migration, paid service, font download or entitlement is
+added. See the [E02 acceptance record](evidence/presentation-e02-completion.md) and
+[reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
+
+Verification is recorded separately from observed creator usability, manual assistive technology,
+physical devices, native browser zoom, operating-cost/capacity measurements and hosted deployment
+qualification. Those evidence gates remain open; this is not a broad competitor-parity claim.
+
 ### Presentation design foundation E02 slice November 4, 2026
 
 Native slides can opt into four color themes and system font/spacing tokens. Authors can apply a
@@ -28,9 +1179,10 @@ font download, SDK or subscription entitlement. See the
 [verification record](evidence/presentation-design-foundation.md) and
 [upgrade boundary](runbooks/upgrade.md#native-presentation-design-compatibility).
 
-E02 remains in progress. Snap guides, grouping, rotation, tables/charts and complete scenario
-templates remain later increments. Creator observations, manual accessibility, physical devices,
-capacity, operating-cost measurements and deployed qualification remain open.
+At this earlier checkpoint, snap guides, grouping, rotation, tables/charts and complete scenario
+templates were subsequent work. They are covered by the completion increment above. Creator
+observations, manual accessibility, physical devices, capacity, operating-cost measurements and
+deployed qualification remain open.
 
 ### Presentation E01 completion November 4, 2026
 

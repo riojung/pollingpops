@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { type RecoveryPackContent, type RecoveryPackInsertion } from "@openround/contracts";
+import {
+  type RecoveryPackContent,
+  type RecoveryPackInsertion,
+  type SupportedLocale,
+} from "@openround/contracts";
+import { packInsertionCopy, packInsertionFeedback } from "../../lib/i18n/pack-insertion-copy";
 import { apiFetch, humanError } from "../../lib/api";
 import styles from "./recovery-pack-insertion.module.css";
 
@@ -19,30 +24,37 @@ interface PackVersion {
 
 export function RecoveryPackPresentationReferences({
   insertions,
+  locale = "en-CA",
 }: {
+  locale?: SupportedLocale;
   insertions: readonly RecoveryPackInsertion[];
 }) {
+  const copy = packInsertionCopy(locale);
   if (!insertions.length) return null;
   return (
     <section
-      aria-label="Recovery Pack facilitator references"
+      aria-label={copy("Recovery Pack facilitator references")}
       className={styles.references}
-      lang="en-CA"
+      lang={locale}
     >
       {insertions.map((insertion) => {
         const content = insertion.updateBaseline?.content ?? insertion.originalContent;
         return (
           <details key={insertion.id}>
             <summary>
-              Recovery Pack references: <span lang="">{content.title}</span> · version{" "}
-              {insertion.updateBaseline?.packVersion ?? insertion.packVersion}
+              {copy("Recovery Pack references:")} <span lang="">{content.title}</span> ·{" "}
+              {copy("version {version}", {
+                version: insertion.updateBaseline?.packVersion ?? insertion.packVersion,
+              })}
             </summary>
             <p>
-              Frozen facilitator references from the accepted source baseline, initially copied at
-              insertion. Checkpoint edits and source Pack changes do not update these cards until
-              you accept an update. Live explanation or worked-example playback is available in
-              eligible new Presentation sessions when enabled for the workspace. The facilitator
-              explicitly selects a card after revealing the Pack diagnostic.
+              {copy(
+                "Frozen facilitator references from the accepted source baseline, initially copied at insertion. Checkpoint edits and source Pack changes do not update these cards until you accept an update.",
+              )}{" "}
+              {copy(
+                "Live explanation or worked-example playback is available in eligible new {artifact} sessions when enabled for the workspace. The facilitator explicitly selects a card after revealing the Pack diagnostic.",
+                { artifact: copy("Presentation") },
+              )}
             </p>
             {content.interventions.map((card) => (
               <section key={card.id}>
@@ -51,7 +63,7 @@ export function RecoveryPackPresentationReferences({
                   {card.body}
                 </p>
                 {card.citations.length ? (
-                  <ul aria-label="Card citations">
+                  <ul aria-label={copy("Card citations")}>
                     {card.citations.map((citation, index) => (
                       <li key={index} lang="">
                         {citation.sourceName}, {citation.locator}
@@ -63,7 +75,7 @@ export function RecoveryPackPresentationReferences({
               </section>
             ))}
             {content.citations.length ? (
-              <ul aria-label="Pack citations">
+              <ul aria-label={copy("Pack citations")}>
                 {content.citations.map((citation, index) => (
                   <li key={index} lang="">
                     {citation.sourceName}, {citation.locator}
@@ -71,7 +83,7 @@ export function RecoveryPackPresentationReferences({
                 ))}
               </ul>
             ) : null}
-            <Link href="/recovery-packs">Open Recovery Pack library</Link>
+            <Link href="/recovery-packs">{copy("Open Recovery Pack library")}</Link>
           </details>
         );
       })}
@@ -81,6 +93,7 @@ export function RecoveryPackPresentationReferences({
 
 export function RecoveryPackPresentationPicker({
   busy,
+  locale = "en-CA",
   error,
   retryVersionId,
   afterSelectedBlock,
@@ -88,17 +101,20 @@ export function RecoveryPackPresentationPicker({
   onClose,
 }: {
   busy: boolean;
+  locale?: SupportedLocale;
   error: string;
   retryVersionId: string | null;
   afterSelectedBlock: boolean;
   onInsert: (versionId: string) => void;
   onClose: () => void;
 }) {
+  const copy = packInsertionCopy(locale);
   const [packs, setPacks] = useState<PublishedPack[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [version, setVersion] = useState<PackVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const feedback = packInsertionFeedback(locale, error || loadError);
   const dialog = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -179,27 +195,33 @@ export function RecoveryPackPresentationPicker({
         aria-labelledby="pack-presentation-insert-title"
         aria-modal="true"
         className={styles.dialog}
-        lang="en-CA"
+        lang={locale}
         onKeyDown={trapFocus}
         role="dialog"
         tabIndex={-1}
       >
-        <h2 id="pack-presentation-insert-title">Insert a published Recovery Pack</h2>
+        <h2 id="pack-presentation-insert-title">{copy("Insert a published Recovery Pack")}</h2>
         <p>
-          Copy its diagnostic and linked recheck{" "}
-          {afterSelectedBlock ? "after the selected block" : "at the end"}, with frozen facilitator
-          cards and citations. The checkpoints remain editable copies. Cards are not audience
-          slides. Live explanation or worked-example playback is available in eligible new
-          Presentation sessions when enabled for the workspace. The facilitator explicitly selects a
-          card after revealing the Pack diagnostic.
+          {copy(
+            "Copy its diagnostic and linked recheck {position}, with frozen facilitator cards and citations. The checkpoints remain editable copies. Cards are not audience slides.",
+            { position: copy(afterSelectedBlock ? "after the selected block" : "at the end") },
+          )}{" "}
+          {copy(
+            "Live explanation or worked-example playback is available in eligible new {artifact} sessions when enabled for the workspace. The facilitator explicitly selects a card after revealing the Pack diagnostic.",
+            { artifact: copy("Presentation") },
+          )}
         </p>
-        {loading ? <p role="status">Loading published Packs…</p> : null}
+        {loading ? <p role="status">{copy("Loading published Packs…")}</p> : null}
         {!loading && !packs.length && !loadError ? (
-          <p>No published Recovery Packs are available. Publish a Pack in the library first.</p>
+          <p>
+            {copy(
+              "No published Recovery Packs are available. Publish a Pack in the library first.",
+            )}
+          </p>
         ) : null}
         {packs.length ? (
           <label className={styles.field}>
-            <span>Published Recovery Pack</span>
+            <span>{copy("Published Recovery Pack")}</span>
             <select
               disabled={busy || Boolean(retryVersionId)}
               onChange={(event) => setSelectedId(event.target.value)}
@@ -214,28 +236,38 @@ export function RecoveryPackPresentationPicker({
           </label>
         ) : null}
         {version ? (
-          <section aria-label="Published Pack preview" className={styles.preview}>
+          <section aria-label={copy("Published Pack preview")} className={styles.preview}>
             <h3>
-              <span lang="">{version.content.title}</span> · version {version.version}
+              <span lang="">{version.content.title}</span> ·{" "}
+              {copy("version {version}", { version: version.version })}
             </h3>
             <p lang="">{version.content.description}</p>
             <dl>
-              <dt>Diagnostic</dt>
+              <dt>{copy("Diagnostic")}</dt>
               <dd lang="">{version.content.diagnostic.prompt}</dd>
-              <dt>Linked recheck</dt>
+              <dt>{copy("Linked recheck")}</dt>
               <dd lang="">{version.content.recheck.prompt}</dd>
             </dl>
-            <p>{version.content.interventions.length} facilitator cards copied as references.</p>
+            <p>
+              {copy("{count} facilitator cards copied as references.", {
+                count: version.content.interventions.length,
+              })}
+            </p>
           </section>
         ) : null}
-        {error || loadError ? <p role="alert">{error || loadError}</p> : null}
-        {retryVersionId ? (
-          <p role="status">
-            The insertion was not acknowledged. Retry the same operation to recover its result
-            without creating another copy. Editing stays paused until it is acknowledged.
+        {error || loadError ? (
+          <p role="alert" lang={feedback.lang}>
+            {feedback.text}
           </p>
         ) : null}
-        {busy ? <p role="status">Saving and inserting…</p> : null}
+        {retryVersionId ? (
+          <p role="status">
+            {copy(
+              "The insertion was not acknowledged. Retry the same operation to recover its result without creating another copy. Editing stays paused until it is acknowledged.",
+            )}
+          </p>
+        ) : null}
+        {busy ? <p role="status">{copy("Saving and inserting…")}</p> : null}
         <div className={styles.actions}>
           <button
             disabled={busy || (!retryVersionId && (!version || Boolean(loadError)))}
@@ -245,13 +277,13 @@ export function RecoveryPackPresentationPicker({
             }}
             type="button"
           >
-            {retryVersionId ? "Retry Pack insertion" : "Insert Pack checkpoints"}
+            {copy(retryVersionId ? "Retry Pack insertion" : "Insert Pack checkpoints")}
           </button>
           <button disabled={busy || Boolean(retryVersionId)} onClick={onClose} type="button">
-            Cancel
+            {copy("Cancel")}
           </button>
           {!retryVersionId && !busy ? (
-            <Link href="/recovery-packs">Open Recovery Pack library</Link>
+            <Link href="/recovery-packs">{copy("Open Recovery Pack library")}</Link>
           ) : null}
         </div>
       </div>

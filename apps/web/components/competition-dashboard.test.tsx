@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { competitionCopies, competitionPlace, competitionText } from "../lib/i18n/competition-copy";
 import { withEnglishLocale } from "../test-utils/english-locale";
+import { localeDomains } from "../lib/i18n/catalog";
+import { scoredResponseCopy } from "../lib/i18n/scored-response-copy";
+import { LocaleProvider } from "./locale-provider";
 import {
   CompetitionDashboard,
   getCompetitionMotionPreference,
@@ -79,7 +82,7 @@ describe("competition dashboard", () => {
     expect(markup).toContain('data-testid="competition-race"');
   });
 
-  it("discloses projector effects and score policy while keeping participant controls direct", () => {
+  it("discloses effects and score policy on projector and final participant views", () => {
     const presenter = render(fixture(), { variant: "presenter", finished: true });
     expect(presenter).toMatch(/<details[^>]*data-testid="competition-display-options"/);
     expect(presenter).not.toMatch(
@@ -88,7 +91,7 @@ describe("competition dashboard", () => {
     expect(presenter).toContain('data-testid="competition-replay"');
     expect(presenter).toContain("Standings include revealed questions only.");
     const participant = render(fixture(), { variant: "participant", finished: true });
-    expect(participant).not.toContain('data-testid="competition-display-options"');
+    expect(participant).toContain('data-testid="competition-display-options"');
     expect(participant).toContain('data-testid="competition-motion-toggle"');
   });
 
@@ -97,7 +100,7 @@ describe("competition dashboard", () => {
     expect(markup).toMatch(/<h1[^>]*>Final standings<\/h1>/);
   });
 
-  it("keeps final podium and personal chase context, including actual movement", () => {
+  it("keeps final podium and personal rank and points, including actual movement", () => {
     const standings = fixture();
     standings.status = "final";
     standings.completedScoredQuestions = 4;
@@ -107,10 +110,9 @@ describe("competition dashboard", () => {
     expect(markup).toContain('data-testid="competition-personal"');
     expect(markup).toContain("Your position");
     expect(markup).toContain('aria-label="Up 2 places"');
-    expect(markup).toContain("Points behind leader");
-    expect(markup).toContain("Points to next place");
+    expect(markup).not.toContain("Points behind leader");
+    expect(markup).not.toContain("Points to next place");
     expect(markup).toContain("1,750");
-    expect(markup).toContain("250");
     expect(markup).toContain("Standings include revealed questions only.");
   });
 
@@ -235,7 +237,11 @@ describe("competition dashboard", () => {
       entry.previousRank = null;
       entry.tied = true;
     }
-    const markup = render(standings, { participantId: "person-0", finished: true });
+    const markup = render(standings, {
+      participantId: "person-0",
+      variant: "host",
+      finished: true,
+    });
     expect(markup).not.toContain('data-testid="competition-question-gain"');
     expect(markup).not.toContain('data-testid="competition-streak"');
     expect(markup).not.toContain("Top finisher");
@@ -298,8 +304,8 @@ describe("competition dashboard", () => {
     });
     expect(markup).toContain("No answer was saved for the revealed scored questions.");
     expect(markup).toContain("No points earned from revealed scored questions.");
-    expect(markup).toContain("Ada");
-    expect(markup).toContain('data-testid="competition-race"');
+    expect(markup).toContain('data-testid="competition-personal"');
+    expect(markup).not.toContain('data-testid="competition-race"');
     expect(markup).not.toContain('data-testid="competition-podium"');
     expect(markup).not.toContain('data-testid="competition-celebration"');
     expect(markup).not.toContain("Top finisher");
@@ -351,6 +357,123 @@ describe("competition dashboard", () => {
       expect(hidden).not.toContain('data-testid="competition-replay"');
     }
   });
+
+  it("makes live participant standings compact while keeping the participant and receipt visible", () => {
+    const standings = fixture();
+    standings.entries[5]!.lastScoreDelta = 250;
+    const markup = render(standings, {
+      variant: "participant",
+      participantId: "person-5",
+      compact: true,
+      responseSummary: {
+        answeredScoredQuestions: 1,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).toContain('data-compact-participant="true"');
+    expect(markup).toMatch(/<h2[^>]*>Current standings<\/h2>/);
+    for (const hidden of ["podium", "race", "spotlight", "motion-toggle", "celebration"])
+      expect(markup).not.toContain(`data-testid="competition-${hidden}"`);
+    const visibleTable = markup.slice(markup.indexOf("<table"), markup.indexOf("</table>"));
+    expect(visibleTable).toContain("Ada");
+    expect(visibleTable).toContain("Fay");
+    expect(visibleTable).toContain('data-self="true"');
+    expect(visibleTable).not.toContain("Dee");
+    expect(markup).toContain("+250 points");
+    expect(markup).toContain('data-testid="scored-response-receipt"');
+    expect(markup).toContain("1 / 2");
+    expect(markup).toMatch(/<details[^>]*><summary>All standings/);
+    expect(markup).not.toMatch(/<details[^>]*open/);
+    expect(markup).toContain("Standings include revealed questions only.");
+  });
+
+  it("keeps a single participant's final result modest without treating positive points as zero", () => {
+    const standings = fixture();
+    standings.entries = standings.entries.slice(0, 1);
+    standings.totalParticipants = 1;
+    const markup = render(standings, {
+      variant: "participant",
+      participantId: "person-0",
+      finished: true,
+      responseSummary: {
+        answeredScoredQuestions: 2,
+        correctScoredQuestions: 2,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).toContain("Final standings");
+    expect(markup).toContain('data-compact-participant="true"');
+    expect(markup).toContain("2,000");
+    expect(markup).toContain('data-testid="scored-response-receipt"');
+    for (const hidden of ["podium", "race", "celebration", "replay", "zero-points"])
+      expect(markup).not.toContain(`data-testid="competition-${hidden}"`);
+    expect(markup).not.toContain("<table");
+  });
+
+  it("reserves a bounded podium and a single standings view for a multi-participant final", () => {
+    const markup = render(fixture(), {
+      variant: "participant",
+      participantId: "person-1",
+      finished: true,
+    });
+    expect(markup).toContain('data-testid="competition-podium"');
+    expect(markup).toContain('data-testid="competition-celebration"');
+    expect(markup).toContain('data-testid="competition-display-options"');
+    expect(markup).toContain('<th scope="col">Position</th>');
+    expect(markup).not.toContain('data-testid="competition-race"');
+    expect(markup).not.toContain('data-testid="competition-spotlight"');
+    expect(markup).not.toContain('aria-label="Scoreboard view"');
+    expect(markup).not.toContain("Points to next place");
+  });
+
+  it("does not release names, scores or own receipts through the compact waiting or opinion states", () => {
+    for (const status of ["waiting", "unscored"] as const) {
+      const standings = { ...fixture(), status, completedScoredQuestions: 0 };
+      const markup = render(standings, {
+        variant: "participant",
+        participantId: "person-0",
+        compact: true,
+        responseSummary: {
+          answeredScoredQuestions: 1,
+          correctScoredQuestions: 1,
+          revealedScoredQuestions: 2,
+        },
+      });
+      expect(markup).not.toContain("Ada");
+      expect(markup).not.toContain("2,000");
+      expect(markup).not.toContain("<table");
+      expect(markup).not.toContain('data-testid="scored-response-receipt"');
+      expect(markup).not.toContain('data-testid="competition-celebration"');
+    }
+  });
+
+  it("retains truthful ties, zero points and unanswered receipts in compact standings", () => {
+    const standings = fixture();
+    standings.scoringMode = "speed";
+    for (const entry of standings.entries) {
+      entry.score = 0;
+      entry.tied = true;
+    }
+    const markup = render(standings, {
+      variant: "participant",
+      participantId: "person-0",
+      compact: true,
+      finished: true,
+      responseSummary: {
+        answeredScoredQuestions: 0,
+        correctScoredQuestions: 0,
+        revealedScoredQuestions: 2,
+      },
+    });
+    expect(markup).toContain("Tied");
+    expect(markup).toContain("Speed scoring");
+    expect(markup).toContain("No answer was saved for the revealed scored questions.");
+    expect(markup).toContain("No points earned from revealed scored questions.");
+    expect(markup).not.toContain('data-testid="competition-celebration"');
+    expect(markup).not.toContain('data-testid="competition-podium"');
+    expect(markup).not.toContain("Top finisher");
+  });
 });
 
 describe("competition localization", () => {
@@ -378,6 +501,31 @@ describe("competition localization", () => {
     ]);
     expect(competitionPlace("ko-KR", 2)).toBe("2위");
     expect(competitionPlace("zh-TW", 3)).toBe("第3名");
+  });
+
+  it("uses the existing localized standings and receipt copy in compact participant mode", () => {
+    for (const locale of supportedLocales) {
+      const markup = renderToStaticMarkup(
+        <LocaleProvider initialLocale={locale} initialDomains={localeDomains} initialMessages={{}}>
+          <CompetitionDashboard
+            standings={fixture()}
+            variant="participant"
+            participantId="person-0"
+            compact
+            responseSummary={{
+              answeredScoredQuestions: 1,
+              correctScoredQuestions: 1,
+              revealedScoredQuestions: 2,
+            }}
+          />
+        </LocaleProvider>,
+      );
+      expect(markup).toContain(`lang="${locale}"`);
+      expect(markup).toContain(competitionText(locale, "standings"));
+      expect(markup).toContain(competitionText(locale, "personalTitle"));
+      expect(markup).toContain(scoredResponseCopy[locale].scope);
+      expect(markup).not.toMatch(/\{(?:count|score|completed|total)\}/);
+    }
   });
 });
 

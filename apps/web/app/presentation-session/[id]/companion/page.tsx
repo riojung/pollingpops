@@ -2,6 +2,11 @@
 
 import { useParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import { isTextQuestion } from "../../../../lib/text-response";
+import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   PresentationCompanionSnapshotSchema,
@@ -38,6 +43,10 @@ import {
   type PresentationRealtimeController,
 } from "../../../../lib/presentation-realtime";
 import { formatNumber } from "../../../../lib/i18n/format";
+import {
+  companionCopy,
+  localizeCompanionError,
+} from "../../../../lib/i18n/domains/live-delivery/companion-translations";
 import { clientUuid } from "../../../../lib/uuid";
 import { isPresentationHostPassRejection } from "../../../../lib/presentation-host-pass";
 import {
@@ -51,6 +60,19 @@ import {
   selectedPublishedQuestion,
   type CompanionPublishedQuestionCatalog,
 } from "../../../../lib/presentation-companion-published-questions";
+import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
+import {
+  isPresentationNavigationCommand,
+  isPresentationRecoverableCommand,
+  persistPresentationNavigationCommand,
+  restorePresentationNavigationCommand,
+  presentationNavigationRetryLabel,
+} from "../../../../lib/presentation-navigation";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
+import { isNativeInteractionNode } from "../../../../components/presentation/native-scene-interaction-view";
+import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
+import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 
 function companionAdvanceMessageKey(snapshot: PresentationCompanionSnapshot) {
   if (snapshot.phase === "lobby") return "live.presentationSession.advance.start" as const;
@@ -86,6 +108,7 @@ type CompanionRecovery = ReturnType<
 export default function PresentationCompanionPage() {
   const { id } = useParams<{ id: string }>();
   const { locale, t } = useLocale();
+  const copy = companionCopy(locale);
   const [pass, setPass] = useState<string | null>(null);
   const [captured, setCaptured] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -97,7 +120,7 @@ export default function PresentationCompanionPage() {
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [overlay, setOverlay] = useState<
-    "join" | "results" | "packs" | "quickCheck" | "publishedQuestions" | null
+    "join" | "results" | "packs" | "quickCheck" | "publishedQuestions" | "navigation" | null
   >(null);
   const [quickCheckDraft, setQuickCheckDraft] = useState(createCompanionQuickCheckDraft);
   const [packCatalog, setPackCatalog] = useState<CompanionRecoveryPackCatalog | null>(null);
@@ -147,10 +170,10 @@ export default function PresentationCompanionPage() {
         }),
       );
     } catch {
-      setError(t("live.companion.missingPass"));
+      setError("Launch the companion from the Presentation host to connect this window.");
     }
     setCaptured(true);
-  }, [id, t]);
+  }, [id]);
 
   const applySnapshot = useCallback(
     (incoming: PresentationCompanionSnapshot) => setSnapshot(incoming),
@@ -193,6 +216,9 @@ export default function PresentationCompanionPage() {
       PresentationCompanionSnapshot,
       PresentationCompanionCommand
     >({
+      pendingCommand: restorePresentationNavigationCommand(sessionStorage, id, {
+        companionToken: pass,
+      }),
       execute: (command) =>
         controller.command(command, async () => {
           const response = await apiFetch<{ snapshot: unknown }>(
@@ -202,10 +228,13 @@ export default function PresentationCompanionPage() {
           return PresentationCompanionSnapshotSchema.parse(response.snapshot);
         }),
       onState: (next) => {
-        if (!disposed) setCommandState(next);
+        if (disposed) return;
+        persistPresentationNavigationCommand(sessionStorage, id, "companion", next.pendingCommand);
+        setCommandState(next);
       },
     });
     commandsRef.current = commands;
+    setCommandState(commands.state());
     controller.start();
     const fallbackTimer = window.setInterval(() => {
       if (controller.needsFallbackPolling()) void controller.reconcile();
@@ -224,9 +253,14 @@ export default function PresentationCompanionPage() {
   }, [applySnapshot, id, pass, rejectPass]);
 
   const results = companionResults(snapshot);
+  const opinionResults = presentationOpinionSummaryFor(snapshot);
+  const textResults =
+    snapshot?.currentBlock?.kind === "question" &&
+    isTextQuestion(snapshot.currentBlock.question.type) &&
+    ["question_reveal", "intervention"].includes(snapshot.phase);
   useEffect(() => {
-    if (!results && overlay === "results") setOverlay(null);
-  }, [overlay, results]);
+    if (!results && !opinionResults && !textResults && overlay === "results") setOverlay(null);
+  }, [overlay, results, opinionResults, textResults]);
 
   function closeOverlay() {
     catalogRequest.current += 1;
@@ -328,7 +362,8 @@ export default function PresentationCompanionPage() {
         if (
           activeCommand?.action === "insert_recovery_pack" ||
           activeCommand?.action === "insert_quick_check" ||
-          activeCommand?.action === "insert_published_question"
+          activeCommand?.action === "insert_published_question" ||
+          (activeCommand && isPresentationNavigationCommand(activeCommand))
         )
           closeOverlay();
       }
@@ -348,6 +383,87 @@ export default function PresentationCompanionPage() {
       commandId: clientUuid(),
       expectedRevision: snapshot.revision,
       action: "advance",
+    });
+  }
+
+  function retryLabel(command: PresentationCompanionCommand) {
+    return isPresentationRecoverableCommand(command)
+      ? localizeCompanionError(locale, presentationNavigationRetryLabel(command)).text
+      : t(companionCommandRetryMessageKey(command));
+  }
+
+  async function navigate(action: "jump_to_block" | "return_to_path", targetBlockId?: string) {
+    if (!pass || !snapshot?.navigation) return;
+    if (
+      action === "jump_to_block" &&
+      !snapshot.navigation.entries.some(
+        (entry) => entry.blockId === targetBlockId && entry.status !== "current" && entry.canJump,
+      )
+    )
+      return;
+    if (action === "return_to_path" && !snapshot.navigation.canReturn) return;
+    const credentials = {
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+    };
+    return executeCommand(
+      action === "jump_to_block"
+        ? { ...credentials, action, targetBlockId: targetBlockId! }
+        : { ...credentials, action },
+    );
+  }
+
+  async function sceneAction(nodeId: string, revealed?: boolean) {
+    const block = snapshot?.currentBlock;
+    if (!pass || !snapshot || block?.kind !== "content") return;
+    const node = block.scene?.nodes.find((entry) => entry.id === nodeId);
+    const credentials = {
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+    };
+    if (typeof revealed === "boolean") {
+      if (node?.type !== "reveal" || node.scope !== "broadcast") return;
+      return executeCommand({
+        ...credentials,
+        action: "set_reveal",
+        blockId: block.id,
+        nodeId,
+        revealed,
+      });
+    }
+    if (
+      node?.type !== "navigation" ||
+      !snapshot.navigation?.entries.some(
+        (entry) =>
+          entry.blockId.toLowerCase() === node.targetBlockId?.toLowerCase() &&
+          entry.canJump &&
+          entry.status !== "current",
+      )
+    )
+      return;
+    return executeCommand({ ...credentials, action: "navigate_scene", blockId: block.id, nodeId });
+  }
+
+  async function followBranch(branchId: string) {
+    if (
+      !pass ||
+      !snapshot ||
+      snapshot.currentBlock?.kind !== "question" ||
+      !snapshot.branches?.some((branch) => branch.id === branchId && branch.available)
+    )
+      return;
+    return executeCommand({
+      sessionId: id,
+      companionToken: pass,
+      commandId: clientUuid(),
+      expectedRevision: snapshot.revision,
+      action: "follow_branch",
+      blockId: snapshot.currentBlock.id,
+      branchId,
     });
   }
 
@@ -430,12 +546,23 @@ export default function PresentationCompanionPage() {
     ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${encodeURIComponent(snapshot.code)}`
     : "";
   const block = snapshot?.currentBlock;
+  const displayError = localizeCompanionError(locale, error);
+  const interactionRuntime = presentationInteractionRuntime(snapshot, {
+    mode: "live_staff",
+    disabled:
+      commandState.busy ||
+      !!commandState.pendingCommand ||
+      !pass ||
+      !controllerRef.current?.canMutate(),
+    onNavigate: (nodeId) => void sceneAction(nodeId),
+    onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
+  });
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <section className={styles.sidecar} aria-label={t("live.companion.title")}>
-        <header>
+        <header className={styles.header}>
           <h1>{t("live.companion.title")}</h1>
-          <p className="muted" role="status" aria-live="polite">
+          <p className={styles.connection} role="status" aria-live="polite">
             {t(
               !pass && captured
                 ? "live.companion.disconnected"
@@ -446,8 +573,8 @@ export default function PresentationCompanionPage() {
           </p>
         </header>
         {error ? (
-          <p className="error" role="alert">
-            {error}
+          <p className="error" role="alert" lang={displayError.language}>
+            {displayError.text}
           </p>
         ) : null}
         {!pass && captured ? (
@@ -477,6 +604,69 @@ export default function PresentationCompanionPage() {
                 })}
               </p>
             </div>
+            <div className={styles.primaryControls}>
+              <p className={styles.acknowledgement} role="status" aria-live="polite">
+                {t(
+                  commandState.busy
+                    ? "live.companion.waitingAck"
+                    : commandState.pendingCommand
+                      ? "live.companion.unconfirmed"
+                      : confirmed
+                        ? "live.companion.confirmed"
+                        : "live.companion.ready",
+                )}
+              </p>
+              <button
+                className="button full-width"
+                disabled={
+                  !pass ||
+                  commandState.busy ||
+                  !controllerRef.current?.canMutate() ||
+                  (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
+                }
+                onClick={() => void advanceOrRetry()}
+                ref={primaryButtonRef}
+                type="button"
+              >
+                {commandState.pendingCommand && !commandState.busy
+                  ? retryLabel(commandState.pendingCommand)
+                  : t(
+                      commandState.busy
+                        ? "live.common.updating"
+                        : snapshot.primaryAction === "none"
+                          ? "live.companion.noAction"
+                          : companionAdvanceMessageKey(snapshot),
+                    )}
+              </button>
+              <div className={styles.navigationTools}>
+                {snapshot.navigation ? (
+                  <button
+                    className="button-quiet"
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget.focus({ preventScroll: true });
+                      setOverlay("navigation");
+                    }}
+                    aria-haspopup="dialog"
+                    aria-expanded={overlay === "navigation"}
+                  >
+                    {copy("Open navigation")}
+                  </button>
+                ) : null}
+                <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
+                  {t("live.companion.showJoin")}
+                </button>
+                {results || opinionResults || textResults ? (
+                  <button
+                    className="button-quiet"
+                    onClick={() => setOverlay("results")}
+                    type="button"
+                  >
+                    {t("live.companion.showResults")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
             <dl className={styles.metrics}>
               {(
                 [
@@ -492,52 +682,43 @@ export default function PresentationCompanionPage() {
                 </div>
               ))}
             </dl>
-            <p className={styles.acknowledgement} role="status" aria-live="polite">
-              {t(
-                commandState.busy
-                  ? "live.companion.waitingAck"
-                  : commandState.pendingCommand
-                    ? "live.companion.unconfirmed"
-                    : confirmed
-                      ? "live.companion.confirmed"
-                      : "live.companion.ready",
-              )}
-            </p>
-            <button
-              className="button full-width"
+            <PresentationSpatialDelivery
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+              navigation={snapshot.navigation}
               disabled={
-                !pass ||
                 commandState.busy ||
-                !controllerRef.current?.canMutate() ||
-                (!commandState.pendingCommand && snapshot.primaryAction !== "advance")
+                !!commandState.pendingCommand ||
+                !pass ||
+                !controllerRef.current?.canMutate()
               }
-              onClick={() => void advanceOrRetry()}
-              ref={primaryButtonRef}
-              type="button"
-            >
-              {t(
-                commandState.busy
-                  ? "live.common.updating"
-                  : commandState.pendingCommand
-                    ? companionCommandRetryMessageKey(commandState.pendingCommand)
-                    : snapshot.primaryAction === "none"
-                      ? "live.companion.noAction"
-                      : companionAdvanceMessageKey(snapshot),
-              )}
-            </button>
+              onJump={(blockId) => void navigate("jump_to_block", blockId)}
+            />
+            {block?.kind === "content" && block.scene?.nodes.some(isNativeInteractionNode) ? (
+              <section
+                aria-label={copy("Current slide interactions")}
+                className={styles.slideInteractions}
+              >
+                <ContentSlideView
+                  block={block}
+                  interactionRuntime={interactionRuntime}
+                  renderSceneImage={(mediaId, altText) => (
+                    <PresentationMedia
+                      key={mediaId}
+                      sessionId={id}
+                      mediaId={mediaId}
+                      altText={altText}
+                      companionToken={pass ?? undefined}
+                    />
+                  )}
+                  variant="live"
+                  interactionSourceKey={JSON.stringify([id, pass, connection === "fallback"])}
+                />
+              </section>
+            ) : null}
             <div className={styles.secondary}>
-              <button className="button-quiet" onClick={() => setOverlay("join")} type="button">
-                {t("live.companion.showJoin")}
-              </button>
-              {results ? (
-                <button
-                  className="button-quiet"
-                  onClick={() => setOverlay("results")}
-                  type="button"
-                >
-                  {t("live.companion.showResults")}
-                </button>
-              ) : null}
               {snapshot.canInsertRecoveryPack !== undefined ? (
                 <button
                   className="button-quiet"
@@ -604,28 +785,93 @@ export default function PresentationCompanionPage() {
               />
             ) : null}
             {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-              <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+              <RecoveryPackLiveCardView
+                card={snapshot.recoveryPackIntervention.card}
+                labels={{
+                  language: locale,
+                  regionName: copy("Active Recovery Pack card"),
+                  attribution: `${copy("Recovery Pack card")} · ${t("live.companion.packs.version", { version: formatNumber(locale, snapshot.recoveryPackIntervention.card.reference.packVersion) })}`,
+                  sources: copy("Sources"),
+                }}
+              />
+            ) : null}
+            {snapshot.branches ? (
+              <PresentationBranches
+                locale={locale}
+                branches={snapshot.branches}
+                disabled={
+                  commandState.busy ||
+                  !!commandState.pendingCommand ||
+                  !pass ||
+                  !controllerRef.current?.canMutate()
+                }
+                onFollow={(branchId) => void followBranch(branchId)}
+              />
             ) : null}
           </>
         ) : null}
       </section>
+      {overlay === "navigation" && snapshot?.navigation ? (
+        <PresentationNavigationDialog
+          locale={locale}
+          navigation={snapshot.navigation}
+          disabled={
+            commandState.busy ||
+            !!commandState.pendingCommand ||
+            !pass ||
+            !controllerRef.current?.canMutate()
+          }
+          onJump={(blockId) => void navigate("jump_to_block", blockId)}
+          onReturn={() => void navigate("return_to_path")}
+          onClose={closeOverlay}
+          returnFocusRef={primaryButtonRef}
+          pendingCommand={commandState.pendingCommand}
+          busy={commandState.busy}
+          onRetry={() => void executeCommand()}
+          retryDisabled={!pass || commandState.busy || !controllerRef.current?.canMutate()}
+        />
+      ) : null}
       {overlay === "join" && snapshot ? (
         <CompanionOverlay title={t("live.companion.joinTitle")} onClose={closeOverlay}>
           <p>{t("live.presentationSession.joinCode")}</p>
           <p className={styles.joinCode}>{snapshot.code}</p>
           <QRCodeSVG value={joinUrl} size={200} title={t("live.companion.joinQr")} />
-          <a className={styles.joinLink} href={joinUrl} target="_blank" rel="noopener noreferrer">
+          <a
+            className={styles.joinLink}
+            href={joinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            lang=""
+          >
             {joinUrl}
           </a>
         </CompanionOverlay>
       ) : null}
-      {overlay === "results" && results && block?.kind === "question" ? (
+      {overlay === "results" &&
+      (results || opinionResults || textResults) &&
+      block?.kind === "question" ? (
         <CompanionOverlay title={t("live.companion.resultTitle")} onClose={closeOverlay}>
           <p lang="">{block.question.prompt}</p>
-          <p>
-            {t("live.companion.answered")}: {formatNumber(locale, results.responseCount)}
-          </p>
-          {results.choiceCounts.length ? (
+          {results || opinionResults ? (
+            <p>
+              {t("live.companion.answered")}:{" "}
+              {formatNumber(locale, (opinionResults ?? results)!.responseCount)}
+            </p>
+          ) : null}
+          {textResults && snapshot && pass && isTextQuestion(block.question.type) ? (
+            <PresentationTextResults
+              sessionId={id}
+              blockId={block.id}
+              type={block.question.type}
+              revision={snapshot.revision}
+              seq={snapshot.seq}
+              phase={snapshot.phase}
+              projection="companion"
+              credential={pass}
+            />
+          ) : opinionResults ? (
+            <PresentationOpinionResults summary={opinionResults} />
+          ) : results?.choiceCounts.length ? (
             <dl className={styles.results}>
               {results.choiceCounts.map(({ choiceId, count }) => {
                 const choice = block.question.choices.find(
@@ -679,8 +925,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -722,8 +968,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>
@@ -765,8 +1011,8 @@ export default function PresentationCompanionPage() {
             </>
           ) : null}
           {error ? (
-            <p className="error" role="alert">
-              {error}
+            <p className="error" role="alert" lang={displayError.language}>
+              {displayError.text}
             </p>
           ) : null}
         </CompanionOverlay>

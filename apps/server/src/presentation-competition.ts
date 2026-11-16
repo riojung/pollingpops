@@ -3,6 +3,10 @@ import {
   questionDelivery,
   questionPurpose,
   questionTypeDefinition,
+  isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
 } from "@openround/contracts";
 import {
   comparePresentationLeaderboardEntries,
@@ -17,6 +21,45 @@ export function presentationHasQuestions(session: Pick<PresentationSessionRecord
   return session.content.blocks.some(
     (block) => block.kind === "question" && block.id !== session.content.liveQuickCheck?.blockId,
   );
+}
+
+export function presentationHasScoredQuestions(
+  session: Pick<PresentationSessionRecord, "content">,
+) {
+  return session.content.blocks.some(
+    (block) =>
+      block.kind === "question" &&
+      block.id !== session.content.liveQuickCheck?.blockId &&
+      questionTypeDefinition(block.question.type).scored &&
+      block.question.basePoints > 0,
+  );
+}
+
+/** New E04 opinion responses cannot contribute points, even if an imported row contains a score. */
+export function presentationScoredResponses(
+  session: Pick<PresentationSessionRecord, "content">,
+  responses: PresentationSessionResponseRecord[],
+) {
+  const excludedIds = new Set(
+    session.content.blocks.flatMap((block) =>
+      block.kind === "question" &&
+      (isPresentationOpinionResultQuestion(block.question) ||
+        isPresentationTextResultQuestion(block.question))
+        ? [block.id.toLowerCase()]
+        : [],
+    ),
+  );
+  return responses.filter((response) => !excludedIds.has(response.blockId.toLowerCase()));
+}
+
+/** Legacy decks retain their established standing behavior; E04-only opinions have no ranking. */
+export function presentationHasParticipantStandings(
+  session: Pick<PresentationSessionRecord, "content">,
+) {
+  return requiresPresentationOpinionFormats(session.content) ||
+    requiresPresentationTextOpinions(session.content)
+    ? presentationHasScoredQuestions(session)
+    : presentationHasQuestions(session);
 }
 
 /** Staff-only competition view; this does not expand Presentation audience identity access. */
@@ -36,20 +79,30 @@ export function presentationCompetitionStandings(
       : [],
   );
   const revealed = ["question_reveal", "intervention", "finished"].includes(session.phase);
-  const completed = scoredBlocks.filter(
-    (block) =>
-      block.index < session.currentBlockIndex ||
-      (block.index === session.currentBlockIndex && revealed),
-  );
-  const releasedIds = new Set(completed.map((block) => block.id));
-  const previousIds = new Set(completed.slice(0, -1).map((block) => block.id));
+  const nonlinear = session.content.schemaVersion >= 12;
+  const key = (id: string) => (nonlinear ? id.toLowerCase() : id);
+  const scoredById = new Map(scoredBlocks.map((block) => [key(block.id), block]));
+  // Progress insertion order is actual visit order. A backward jump retains every closed
+  // attempt, while skipped earlier blocks never become completed merely by their position.
+  const completed = nonlinear
+    ? (session.navigationState?.blocks ?? []).flatMap((progress) => {
+        const block = scoredById.get(key(progress.blockId));
+        return block && ["question_reveal", "intervention"].includes(progress.phase) ? [block] : [];
+      })
+    : scoredBlocks.filter(
+        (block) =>
+          block.index < session.currentBlockIndex ||
+          (block.index === session.currentBlockIndex && revealed),
+      );
+  const releasedIds = new Set(completed.map((block) => key(block.id)));
+  const previousIds = new Set(completed.slice(0, -1).map((block) => key(block.id)));
   function rank(
     blockIds: ReadonlySet<string>,
     roster: PresentationSessionParticipantRecord[] = participants,
   ) {
     const totals = new Map<string, number>();
     for (const response of responses) {
-      if (!blockIds.has(response.blockId)) continue;
+      if (!blockIds.has(key(response.blockId))) continue;
       totals.set(
         response.participantId,
         (totals.get(response.participantId) ?? 0) + response.score,
@@ -68,7 +121,9 @@ export function presentationCompetitionStandings(
     timeline.find(
       (event) =>
         event.type === "question.revealed" &&
-        event.blockId === previousBlockId &&
+        event.blockId !== null &&
+        previousBlockId !== undefined &&
+        key(event.blockId) === key(previousBlockId) &&
         event.sequence <= session.eventSeq,
     )?.revealedParticipantIds ?? [],
   );
@@ -78,7 +133,7 @@ export function presentationCompetitionStandings(
   );
   const previousRanks = new Map(previous.map((entry, index) => [entry.id, index + 1]));
   const responseByParticipantAndBlock = new Map(
-    responses.map((response) => [`${response.participantId}:${response.blockId}`, response]),
+    responses.map((response) => [`${response.participantId}:${key(response.blockId)}`, response]),
   );
   const leaderScore = ranked[0]?.score ?? 0;
   return {
@@ -96,12 +151,13 @@ export function presentationCompetitionStandings(
         : ranked.map((entry, index) => {
             let correctStreak = 0;
             for (const block of [...completed].reverse()) {
-              if (!responseByParticipantAndBlock.get(`${entry.id}:${block.id}`)?.correct) break;
+              if (!responseByParticipantAndBlock.get(`${entry.id}:${key(block.id)}`)?.correct)
+                break;
               correctStreak += 1;
             }
             const lastBlockId = completed.at(-1)?.id;
             const lastScoreDelta = lastBlockId
-              ? (responseByParticipantAndBlock.get(`${entry.id}:${lastBlockId}`)?.score ?? 0)
+              ? (responseByParticipantAndBlock.get(`${entry.id}:${key(lastBlockId)}`)?.score ?? 0)
               : 0;
             return {
               id: entry.id,

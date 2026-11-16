@@ -53,11 +53,16 @@ export function createPresentationCommandRecovery<
 >({
   execute,
   onState,
+  pendingCommand = null,
 }: {
   execute: (command: Command) => Promise<Snapshot>;
   onState: (state: PresentationCommandRecoveryState<Command>) => void;
+  pendingCommand?: Command | null;
 }) {
-  let state: PresentationCommandRecoveryState<Command> = { busy: false, pendingCommand: null };
+  let state: PresentationCommandRecoveryState<Command> = {
+    busy: false,
+    pendingCommand: pendingCommand ? (Object.freeze({ ...pendingCommand }) as Command) : null,
+  };
   const publish = (next: PresentationCommandRecoveryState<Command>) => {
     state = next;
     onState(next);

@@ -20,7 +20,7 @@ export function RoundLibraryViewToggle({
         onClick={() => onChange("grid")}
         type="button"
       >
-        {t("pages.library.grid")}
+        {t("pages.library.gridView")}
       </button>
       <button
         aria-label={t("pages.library.listView")}
@@ -28,7 +28,7 @@ export function RoundLibraryViewToggle({
         onClick={() => onChange("list")}
         type="button"
       >
-        {t("pages.library.list")}
+        {t("pages.library.listView")}
       </button>
     </div>
   );

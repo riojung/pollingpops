@@ -23,6 +23,7 @@ import type {
   ResponsePayload,
   SessionDecisionEvent,
   SessionCounts,
+  SessionPolicy,
   SupportedLocale,
   TimeMultiplier,
   TrustMode,
@@ -127,6 +128,16 @@ export interface WorkspaceSummaryRecord {
   segment: Segment;
   role: CreatorContext["role"];
   homeRegion: string;
+}
+
+export interface CreatorSessionRecord {
+  id: string;
+  userId: string;
+  activeWorkspaceId: string | null;
+  lastActivityAt: Date;
+  idleExpiresAt: Date;
+  expiresAt: Date;
+  idleTimeoutMinutes: number;
 }
 
 export interface WorkspaceMemberRecord {
@@ -1043,6 +1054,7 @@ export type MediaReferenceOwnerType =
   | "presentation_draft"
   | "presentation_version"
   | "presentation_history"
+  | "presentation_visual_import"
   | "recovery_pack_draft"
   | "recovery_pack_version"
   | "recovery_pack_history"
@@ -1128,7 +1140,17 @@ export interface Repository {
     tokenHash: string;
     expiresAt: Date;
     activeWorkspaceId?: string;
+    createdAt?: Date;
   }): Promise<void>;
+  getCreatorSession(tokenHash: string, now: Date): Promise<CreatorSessionRecord | null>;
+  creatorSessionExists(tokenHash: string): Promise<boolean>;
+  renewCreatorSession(
+    tokenHash: string,
+    now: Date,
+    intent: "activity" | "continue",
+  ): Promise<CreatorSessionRecord | null>;
+  getWorkspaceSessionPolicy(workspaceId: string): Promise<SessionPolicy>;
+  updateWorkspaceSessionPolicy(workspaceId: string, policy: SessionPolicy): Promise<void>;
   getCreatorBySession(tokenHash: string, now: Date): Promise<CreatorContext | null>;
   getUserPrincipalBySession(tokenHash: string, now: Date): Promise<UserPrincipal | null>;
   getUserPrincipalById(userId: string): Promise<UserPrincipal | null>;
@@ -1138,6 +1160,7 @@ export interface Repository {
     tokenHash: string,
     userId: string,
     workspaceId: string,
+    now?: Date,
   ): Promise<boolean>;
   listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberRecord[]>;
   updateWorkspaceMemberRole(
@@ -1154,7 +1177,7 @@ export interface Repository {
     now: Date,
     policyVersion: string,
   ): Promise<CreatorContext | null>;
-  revokeCreatorSession(tokenHash: string): Promise<void>;
+  revokeCreatorSession(tokenHash: string, expectedSessionId?: string): Promise<void>;
   getCreatorByUserId(userId: string, workspaceId: string): Promise<CreatorContext | null>;
   listQuizzes(workspaceId: string, includeArchived?: boolean): Promise<QuizListRecord[]>;
   listPublishedQuizQuestionMetadata(

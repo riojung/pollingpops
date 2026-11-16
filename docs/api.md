@@ -99,8 +99,12 @@ account exports. Moderation metadata survives round advancement; finished report
 
 Legacy readers reject newer meanings in older versions; unknown future versions fail closed.
 CSV carries optional `max_selections` and `rank_count`; older polls default to one selection.
-QTI, Presentations, Companion insertion, practice and Recovery Packs explicitly reject these new
-live formats. Surveys retain their independent version-2 multiple-selection support.
+QTI, practice and Recovery Packs explicitly reject these new live formats. Presentations and
+their published-question Companion insertion support multiple-selection opinion polls and rankings
+through the separate [Presentation document-v9 boundary](#presentation-opinion-formats); moderated
+open text and word clouds require the [document-v10 boundary](#presentation-moderated-text). Surveys retain their independent version-2
+multiple-selection support. Round protocol/state numbers in this table do not identify Presentation
+document, response-row or report versions.
 
 Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Readers preserve
 existing schema-7/8/9 sessions even after the writer flag is disabled. Legacy scoring and deadlines
@@ -636,12 +640,141 @@ body text at most 4,000. Layout is `title`, `title_body`, `media`, `quote`, `sec
 Optional `frame: { x, y, width, height }` values are finite canvas percentages: coordinates 0–100, width 12–100, height 6–100, and the rectangle must fit inside the
 canvas. Arbitrary CSS is not accepted. Drafts may keep empty text or incomplete image descriptions;
 publishing requires slide text or an image, and nonblank `mediaAlt` for an image. A Presentation
-contains at most 200 blocks and publication requires a valid interactive main question.
+contains at most 200 blocks and publication requires at least one visible content slide or valid
+interactive question. Content-only decks do not require an artificial activity.
 
 Read upcasters project legacy content-slide `title`/`body` fields into v2 text elements with
 stable IDs; they do not rewrite immutable published rows. Unsupported future schema versions fail
 closed. Public live content projections include layout, text elements, media ID, and image alt,
 while excluding speaker notes, citations, and source disclosure.
+
+### Native scenes and composition versions
+
+Native visuals remain `kind: "content"` blocks with an authoritative `scene`, empty
+`textElements`, and null block-level `mediaId`/`mediaAlt`. Scene v1 uses Presentation document v4;
+rich text adds scene v2/document v5, visibility adds document v6, and design/image fit adds scene
+v3/document v7. Composition adds **scene v4/document v8**. Document v8 also accepts older scene
+versions; older documents reject scene v4 rather than discarding its fields. Persisted draft,
+history, immutable-content and session readers must support v8 before writers are enabled.
+The draft mutation envelope remains **`schemaVersion: 2`**, independently of `draft.schemaVersion`.
+Default API creation remains v2; the explicit blank web starter remains scene3/document7.
+
+All scenes retain the 16:9 aspect ratio, at most 50 nodes, 128 KiB serialized UTF-8 scene budget,
+stable IDs and an explicit `readingOrder` containing every node exactly once. Native documents
+retain the 3 MiB budget, including hidden blocks and frozen Pack baselines. Existing v1–v7 JSON
+and immutable hashes are not rewritten. Document-v8 publication/session admission validates the
+complete visible content and excludes hidden editable blocks.
+
+Scene v4 adds the following closed fields and node types:
+
+- `groups?: [{ id, nodeIds }]`: at most 25 flat groups, each containing 2–50 distinct existing
+  framed nodes. A node belongs to at most one group. Group IDs are distinct from node IDs;
+  groups cannot contain connectors or other groups. Movement, proportional resizing, alignment
+  and layers operate on stored groups without changing semantic reading order.
+- Framed nodes may declare finite `rotation` from −180 to 180 degrees. Both their raw frame and
+  their rotated painted bounds must stay inside the slide. Geometry uses the physical 16:9
+  ratio, not square percentage coordinates. The presence of rotation, including zero, requires
+  scene4/document8; readers do not install a rotation default in old JSON.
+- A table node is `{ id, type: "table", frame, rotation?, caption, headers, rows }`.
+  `caption` is at most 160 characters; `headers` has 1–6 strings of at most 120 characters;
+  `rows` has 1–20 rows with exactly one string per header, at most 300 characters per cell.
+  Publication requires a nonblank caption and headings; cells remain literal text.
+- A chart node is `{ id, type: "chart", frame, rotation?, chartType, title, summary, categories, series }`,
+  with `chartType: "bar" | "line" | "pie"`. Title is at most 160 characters,
+  summary 800, category/series labels 80, categories 1–20, and series 1–4. Each series is
+  `{ name, values }`, with exactly one finite numeric value per category and absolute values
+  at most `1e12`. Pie charts require exactly one nonnegative series with a positive total.
+  Publication requires nonblank title, summary, category and series labels. Rendering uses local
+  SVG and a full labeled data table; no remote chart or spreadsheet service is called.
+
+CSV/TSV parsing and cell editing are local authoring operations. **Preview pasted data** stages a
+replacement grid; **Apply table changes**/**Apply chart changes** commits one existing revisioned
+draft mutation and one Undo operation. **Discard staged changes** restores the object's current
+data. Transient snap guides use a six-screen-pixel movement tolerance, with Alt bypass and Escape
+cancellation; guide state is never serialized. No new endpoint is required for these operations.
+
+The web catalogue combines 12 original eight-slide native scenarios with nine retained facilitated
+v2 templates, 21 entries in total. The native factories explicitly create document8/scene4 decks, use fresh block/node
+IDs and carry no asset media IDs or external assets. Template creation uses the existing
+`POST /v1/presentations` then fenced `PUT …/draft`, always with envelope v2. A failed PUT retry in
+the open chooser reuses its exact pending draft, revision and mutation ID instead of creating a
+second blank shell. Read-only shared-renderer preview does not create a presentation.
+
+**External video** creates an ordinary rich-text node containing a title, an HTTPS video link and
+a required HTTPS captions/transcript fallback. The helper rejects embedded URL credentials; the
+existing general rich-text link contract remains unchanged. Links open only on an explicit click,
+in a new tab with opener/referrer protection. There is no provider metadata request, iframe,
+script, thumbnail or video-byte load during authoring/preview, no availability probe and no
+uploaded-video transcoding. The existing `frame-src 'none'` and `media-src 'self'` CSP remains
+unchanged. Images retain the existing private reference and scan/lifecycle rules; table/chart
+data and links add no media-reference path or SQL migration. See the
+[v8 reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
+
+### Basic interaction versions
+
+Native reveal panels and external link controls opt into **scene v5 / Presentation document v11**.
+The draft mutation envelope stays v2 and existing creation defaults remain unchanged. Document
+v11 also accepts earlier scene versions, polls, rankings and moderated text without changing
+their response formats, scores or reports. Migration 094 and compatible artifact/session readers
+must precede v11 writes. Existing stored JSON and immutable hashes are not rewritten.
+
+Two strict framed node types extend the existing union:
+
+- `{ id, type: "reveal", frame, rotation?, scope: "local", label, body }`: label at most 120
+  characters and plain-text body at most 4,000. The panel opens independently on the current
+  screen. There is no broadcast, response submission or stored reveal state.
+- `{ id, type: "link", frame, rotation?, label, href }`: label at most 120 characters and href
+  at most 2,048. Links use the existing absolute HTTP(S) allowlist, rejecting credentials,
+  whitespace, backslashes and executable schemes. No server fetch or embedded content is added.
+
+Drafts permit incomplete labels/body and an empty href; nonempty unsafe URLs are rejected.
+Publication requires readable labels, nonblank reveal content and a safe nonempty link. Scripts,
+arbitrary HTML, extra action fields and broadcast scope are rejected. Existing node/frame,
+reading-order, scene and document budgets still apply. Duplication remaps stable IDs and keeps
+inline panel content with its control; reordering never changes a target index.
+
+Revealed text is public audience content in the recipient-safe scene, not confidential data or an
+answer-key access mechanism. The renderer omits collapsed body text from the DOM, uses native
+buttons/anchors, and offers an equivalent readable outline. Local actions do not mutate live
+revisions, question phase, scoring or reports. Speaker notes, provenance and hidden slides retain
+their separate private projection rules. See the [v11 rollout](runbooks/upgrade.md#presentation-basic-interactions-compatibility).
+
+## Presentation visual import APIs
+
+Visual import converts one PDF or an ordered PNG/JPEG/WebP image set without an AI provider.
+It is separate from the source-grounded proposal APIs below. Creator authentication and workspace
+scope apply throughout; creation, cancellation and insertion require owner/editor access.
+
+- `GET /v1/presentations/{id}/visual-imports` — availability, limits and recent private jobs.
+- `POST /v1/presentations/{id}/visual-imports` — `{requestId, files: [{name, mimeType, base64}],
+retainOriginal: false}`; returns `202 {job}`. Keep the exact UUID and body for a lost-response retry.
+- `GET /v1/presentations/{id}/visual-imports/{jobId}` — pending/processing/ready/failed/canceled
+  status, safe error/recovery message, conversion warnings and bounded page metadata/text.
+- `GET /v1/presentations/{id}/visual-imports/{jobId}/pages/{pageNumber}` — an authorized private
+  download URL for a ready page. Raw source bytes and object keys are never returned.
+- `DELETE /v1/presentations/{id}/visual-imports/{jobId}` — cancel, invalidate the worker claim,
+  erase retained originals and release temporary page references. Already inserted slides remain.
+- `POST /v1/presentations/{id}/visual-imports/{jobId}/insert` — ordered, unique selected pages,
+  `expectedRevision`, `mutationId`, optional `afterBlockId`, and `fidelityAccepted: true`. Each page
+  supplies `pageNumber`, `title` (160 characters), `alternativeText` (300), `accessibleText` (3,000)
+  and `readingOrderReviewed: true`. Each selection adds two ordinary native slides: a fitted visual
+  image and an editable reading version. An otherwise empty initial placeholder is replaced.
+  Existing native content/activities can be interleaved afterward. Draft revision/mutation receipts
+  prevent duplicate insertion; readiness is checked atomically with cancellation and expiry.
+
+Sources are limited to one 6 MB PDF (40 pages) or 40 images (10 MiB each, 20 MB total), with three
+active conversions and ten new jobs per workspace per UTC day. No PPTX rendering, editable source
+object import or OCR is provided. The preview discloses flattening, fitted stage geometry, lost
+animation/links/audio/video and unverified extracted reading order. Encrypted, malformed,
+over-budget or unsupported PDFs fail with a fixed message suggesting a fresh PDF or smaller batch.
+
+Originals are retained only for pending/processing conversion, erased on ready/terminal failure/
+cancellation, and expire after 24 hours for the retention sweep. Preview access also expires after
+24 hours. Converted page assets use the existing quarantine, malware scan, private-media and
+reference/deletion lifecycle. Canceling a preview does not erase a page already referenced by a
+draft, history or publication. Successful imports use existing native Presentation content fields;
+defaults and historical document meanings are unchanged. See the
+[visual import rollout notes](runbooks/upgrade.md#presentation-visual-import-compatibility).
 
 ## Source-grounded authoring APIs
 
@@ -665,6 +798,150 @@ citation-validated and includes bounded, reviewable content-slide excerpts deriv
 extracted sections plus the linked Recovery pair. Each proposed block retains citations and
 provider/model disclosure. Nothing mutates an artifact until a creator confirms a proposal
 selection, and source-created artifacts remain unpublished drafts.
+
+### Presentation opinion formats
+
+Embedded Presentation draft/content **`schemaVersion: 9`** explicitly permits `poll` questions with
+`maxSelections > 1` and `ranking` questions. A poll's optional `maxSelections` is 1–6 and cannot
+exceed the choice count; omission or one retains the existing single-choice poll meaning.
+Rankings have two to six choices and an optional `rankCount` from one to the choice count.
+Omission ranks every choice; a specified count requires exactly that many ordered IDs.
+
+The new formats require opinion purpose, confidence off, `basePoints:0`, main delivery,
+no linked recheck and no correct choice. Omitted purpose/confidence use opinion/off semantics;
+authors normally write `purpose:"opinion"` and `confidence:"off"` explicitly. Text opinions remain
+rejected even in v9. Promotion
+occurs only when an actual multiple-selection poll or ranking enters the document. Existing v9
+documents retain that floor through editing, design changes, duplication and history operations.
+The draft mutation envelope remains v2. Default API creation remains document v2, the blank native
+launcher document v7/scene v3, and native scenario templates document v8/scene v4. Existing
+document v1–v8 JSON, immutable hashes and accepted retry fingerprints are not rewritten.
+
+Authoring `POST /v1/presentations/{id}/blocks/import` may copy these formats from an exact retained
+Round version, preserving choices and limits with fresh block/question/choice IDs and promoting
+the destination to v9 when needed. Text opinions require v10 as described below. Companion's existing
+`insert_published_question` can independently copy eligible standalone text-only main poll/ranking
+questions into a live session, applying the same v9 floor. Existing source-access, safe phase,
+recovery-topology, provenance, receipt and revision fences remain in force. New source publications
+do not update already copied authoring questions or frozen live insertions. Quick Check creation
+retains its existing single-choice poll contract.
+
+For `presentation.response.submit` and `POST /v1/presentation-sessions/{id}/responses`, preserve the
+existing session/block/revision/idempotency envelope. The `response` member is:
+
+```json
+{ "choiceIds": ["choice-uuid-a", "choice-uuid-b"] }
+```
+
+for an unordered multiple-selection poll, or:
+
+```json
+{ "orderedChoiceIds": ["choice-uuid-b", "choice-uuid-a", "choice-uuid-c"] }
+```
+
+for a ranking in highest-priority-first order. Examples use placeholder IDs; actual values must
+be valid unique choice UUIDs from the current frozen question. Rankings reject `choiceIds`,
+numeric/rating response members and confidence. Polls accept one to `maxSelections` choices;
+rankings require exactly `rankCount` choices, or all choices when that count is omitted. The
+database marks new-format accepted rows with `response_schema_version:2`; this storage field is
+not a replacement REST or Socket.IO envelope version.
+
+Acknowledgements follow durable commit and retain existing receipt recovery. Poll choice order
+does not change the selected set; ranking order is part of the intent. Reusing a ranking's
+idempotency key with a different order returns `409 IDEMPOTENCY_CONFLICT` without changing the
+original receipt. Accepted new-format responses store null correctness and zero participant
+score. Their participant snapshots and acknowledgements keep `responseResult:null`, including
+after reveal and finish; the receipt still confirms acceptance. Opinion-only rooms have no
+participant standings, while a mixed room retains its assessment standings. Legacy question
+semantics and existing response hashes remain unchanged.
+
+Host, participant, stage and Companion projections may include anonymous `opinionSummary` only
+for the current, closed/revealed opinion block. It is absent while that block accepts responses
+and must not carry a previous block's summary across navigation. Poll summaries contain
+`maxSelections`, `responseCount`, `totalSelections`, and per-choice `count` and
+`percentOfRespondents`. Percentages divide by accepted respondents, so their sum may exceed 100%.
+Ranking summaries contain `rankCount`, `responseCount`, `totalRankings`, and per-choice
+`weightedScore`, `rankedRespondents`, `averageRank` and `rankCounts`. With N available choices,
+rank position i (zero based) contributes N−i; unranked choices contribute zero. Summary fields
+exclude participant identities, individual response order, private notes, citations and answer keys.
+
+Opinion-format reports without text use **Presentation Report V4**; mixed text rooms use V5
+as described below. Fetch V4 with
+`GET /v1/presentation-sessions/{id}/report?includeOpinionResults=true`, optionally combined with
+`includeSessionContext=true` and `includeQuickChecks=true`. A V4 read without the opinion opt-in
+returns `422 VALIDATION_ERROR`; there is no lossy V1/V2/V3 projection of its new result meaning.
+Question evidence carries its anonymous `opinionSummary`, null correctness/accuracy and zero
+participant score. Opinion-only reports have empty scored leaderboards and recovery evidence.
+The report page's **Export evidence CSV** downloads `presentation-{sessionId}-evidence.csv` with
+poll counts/respondent percentages, ranking weights/rank counts and the existing assessment
+columns. Cells are quoted, embedded quotes escaped, and authored formula-like prefixes made
+literal. Stored reports and legacy V1–V3 meanings remain unchanged.
+
+Apply migration `091_presentation_opinion_formats.sql` and complete the coordinated
+[reader/writer rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility) before new
+writes. The first-family [verification record](evidence/presentation-e04-opinion-formats.md) records its executed checks.
+
+### Presentation moderated text
+
+Embedded Presentation document **v10** adds `open_text` and `word_cloud` as main, unscored
+opinion questions, with no choices, correct answer, confidence, recovery link or participant points.
+Adding either type promotes the document to v10; later editing, design changes, copies and history
+retain that floor. Versions 1–9 and the default creation versions keep their existing meanings.
+The authoring import and eligible Companion published-question insertion can independently copy
+published Round text questions, with new destination identifiers and a frozen source version.
+
+Submit `response:{"textValue":"..."}` through the existing REST or Socket.IO response envelope.
+The server normalizes NFC and trims before validating and hashing. Open text accepts at most
+1,000 UTF-16 code units and permits internal tabs/newlines; word clouds accept at most 80 and
+reject control characters. Empty, excessive or mixed text/choice/numeric/rating/confidence payloads
+are rejected. There is one accepted response per participant and block, including after removal.
+Limits are 10 text blocks, 250 text respondents per block, 2,500 text entries per room and 5,000
+moderation receipts. Text-capable rooms and live insertion enforce the 250-participant limit atomically.
+
+New text rows use **response storage v3**, an empty public response object and a separate private
+body. Ordinary snapshots, acknowledgements and raw account exports never contain that body.
+Malformed primitive responses return the existing sanitized `400 VALIDATION_ERROR`; invalid
+text values or incompatible text answer fields return `422 VALIDATION_ERROR`.
+The participant's current-block `ownTextResponse` carries only response/block identifiers,
+moderation status and moderation version. A durable receipt confirms saving; an approval is a
+separate operation. Pending is the initial status, approval is explicit, and removal is terminal
+and erases the private body. A removed response cannot be submitted again.
+
+- `GET /v1/presentation-sessions/{id}/response-moderation` requires the exact active host Bearer
+  pass. Query `status=pending|approved|removed`, optional `blockId`, `limit` (1–50) and `cursor`.
+  It returns a private queue with aliases and bodies; removed bodies are null.
+- `POST /v1/presentation-sessions/{id}/response-moderation/{responseId}` requires the same host
+  pass and `{commandId,expectedRevision,expectedModerationVersion,status:"approved"|"removed"}`.
+  Per-response compare-and-swap and the session lock protect transitions. Moderation advances the
+  event sequence without changing the host revision or response window. Exact retries recover
+  the original receipt, including after later removal; conflicting reuse of a command ID fails.
+  A lost acknowledgement must retry the original intent. Finishing closes new moderation.
+- `GET /v1/presentation-sessions/{id}/response-results` requires `blockId` and explicit
+  `role=creator|host|participant|companion|stage`, with optional `limit` (1–50) and `cursor`.
+  Creator reads use the eligible workspace cookie; all other roles require their exact Bearer
+  pass and omit cookies. An invalid pass never falls back to creator authorization. Results are
+  current-block only and contain no participant/response identifiers or submission timestamps.
+
+Public results require a durable reveal for that block and at least five approved respondents.
+Pending and removed responses are excluded. Removing an approved response below five hides
+all bodies and cloud counts. Cloud groups collapse whitespace, normalize NFC and ignore case;
+percentages divide by approved respondents. Cursors are bounded and tied to the session,
+block, filter, revision and event sequence; stale pagination returns `409` and starts again.
+Wrong, missing, expired, revoked or cross-session passes return `401`; invalid inputs return
+`422`, missing/current-block mismatches `404`, and stale versions or intent conflicts `409`.
+
+Text rooms produce **Presentation Report V5**. Retrieve with `includeTextResults=true`; mixed
+V5 reports containing poll/ranking summaries also require `includeOpinionResults=true`.
+`includeQuickChecks=true` independently opts into Quick Check attribution. There is no lossy
+legacy downgrade. `textResults` contains only revealed, threshold-qualified approved text or
+cloud frequencies. The immutable report and evidence CSV exclude pending and removed bodies.
+CSV V5 appends five text columns; V1–V4 keep their previous columns. Formula-like prefixes are
+made literal. Aggregate session summaries continue to suppress participant text.
+
+Apply migration `092_presentation_text_opinions.sql` and deploy matching API, worker, artifact,
+history/export, retention and web readers before accepting v10 writes. See the
+[rollout boundary](runbooks/upgrade.md#presentation-moderated-text-compatibility) and
+[verification record](evidence/presentation-e04-moderated-text.md).
 
 ## Media APIs
 
@@ -727,15 +1004,128 @@ Presentation REST endpoints additionally include:
   idempotency key, and validated response payload; acknowledge only after durable commit.
 - `GET /v1/presentation-sessions/{id}/host-media/{mediaId}`;
   `GET /v1/presentation-sessions/{id}/media/{mediaId}` — role-scoped frozen media access.
+- `POST /v1/presentation-sessions/{id}/stage-pass` — creator owner/editor only; returns
+  `{credentialId,stageToken,expiresAt}` and replaces stage access only. Expiry is capped at one
+  hour and the session lifetime. `DELETE /v1/presentation-sessions/{id}/stage-passes/{credentialId}`
+  atomically revokes only that active, unexpired stage credential. A replaced, already-revoked
+  or expired pass returns `409 CONFLICT` with `details.reason:"STALE_STAGE_PASS"`; a missing,
+  wrong-role or cross-session/workspace identifier returns `404`. A stale request does not revoke
+  a newer pass or record a successful revocation. Host/Companion revocation retains its existing
+  idempotent behavior.
+- `GET /v1/presentation-sessions/{id}/stage` — requires an explicit stage Bearer pass; returns
+  `{snapshot}` with projection `stage`. `GET /v1/presentation-sessions/{id}/stage-media/{mediaId}`
+  permits current-block media only. These routes use no-store responses and cannot use host,
+  participant or Companion passes. A stage pass cannot issue commands, submit answers, use Q&A,
+  edit a deck or mint another role's pass. Existing creator-cookie authority is independent.
 - `GET /v1/presentation-sessions/{id}/report` — private creator response; `202` while pending
-  without a report, otherwise `200`. The default strict envelope and stored Presentation Report V1
-  remain compatible.
+  without a report, otherwise `200`. Legacy report contracts remain compatible; new opinion-format
+  Report V4 requires `includeOpinionResults=true`. V5 requires `includeTextResults=true` and,
+  when it also carries opinion summaries, `includeOpinionResults=true`. Quick Check attribution
+  independently requires `includeQuickChecks=true` as described above.
+
+Presentation document **v12** opts into named `sections:[{id,title,blockIds}]` and durable live
+navigation. Titles are plain text up to 120 characters, with at most 50 sections and one membership
+per block. Drafts may retain unnamed/empty sections; publication requires names and removes hidden
+members and empty sections. UUID membership comparisons are semantic while authored JSON remains
+unchanged. Existing block order is the default path. Scene versions and ordinary defaults stay
+unchanged. Migration095 and compatible readers must precede these writes.
+
+Host and Companion command transports accept `jump_to_block` with `targetBlockId:UUID` and
+`return_to_path` without a target. The existing command envelope supplies session/role credential,
+`commandId` and `expectedRevision`. Navigation is authorized against the frozen session blocks,
+never a client array index. Exact retries keep their ID/revision/action/target and may bind a
+replacement credential of the same role. Target UUID spelling is canonicalized in the fingerprint.
+Changed intent with a reused key returns an idempotency conflict; competing commands keep the
+existing revision fence.
+
+V12 host/Companion snapshots optionally include `navigation` with ordered `entries`, explicit
+`returnTarget`, `canReturn` and `blockedReason`. Entries contain stable block ID, public title,
+kind, section label, current/visited/not_visited status, saved phase and server-derived `canJump`/
+reason. Participant and stage snapshots omit this entire map. Open questions must close/reveal
+before jump/return; pending linked rechecks remain indivisible. Direct recheck jumps are rejected.
+Saved closed phases, original windows and interventions are restored without another attempt or
+score. Ordinary Next emits `navigation.revisited` when restoring a visited block; explicit commands
+emit `navigation.jumped` or `navigation.returned` with from/to/anchor IDs and a restored flag.
+
+Finished v12 sessions produce **Presentation ReportV6**. Add `includeNavigation=true` to the private
+report GET; omit it and a ready v6 report returns 422. Existing text/opinion/Quick Check opt-ins
+still apply. The `navigation` report contains each block's section, presented/skipped status and
+saved phase, plus jump/return counts. Skipped questions have zero respondents/score, null
+correctness/accuracy and no result summary. Old reports and their event enums retain their shape.
+See the [v12 rollout](runbooks/upgrade.md#presentation-sections-and-navigation-compatibility).
+
+Document **v13 / scene v6** adds typed `hotspot`, `dialog` and `navigation` nodes and the
+`broadcast` reveal scope. Hotspots refer to a same-scene unrotated image and must remain inside
+its frame at publication. Detail content is plain audience text. Internal targets are stable
+published block UUIDs, with missing/hidden/self/recheck targets rejected. Drafts may retain
+incomplete fields for editing. Migration096 and matching readers must precede these writes.
+
+Both staff command transports additionally accept `set_reveal:{blockId,nodeId,revealed}`,
+`navigate_scene:{blockId,nodeId}` and `follow_branch:{blockId,branchId}`, inside the existing exact
+command envelope. The server resolves frozen controls and computes branch eligibility; a client
+cannot provide a replacement target or aggregate. Reveal state commits separately from scene,
+navigation, response and scoring state. Exact retries preserve every intent field while role
+credentials may rotate. New-ID reveal no-ops are rejected. Audience snapshots expose only current
+block reveal flags, redact closed broadcast bodies and omit internal target graphs/branch rules.
+
+Question `branches` contain at most ten named UUID rules with a forward target and a `condition`:
+`{kind:"choice_share",choiceId,minPercent,minResponses}` or
+`{kind:"correct_share",minPercent,minResponses}`.
+Minimum responses is 1–10000 and percentage 0–100. Only unlinked main questions support branches.
+Staff snapshots include server-derived `branches` availability after explicit reveal. Ordinary
+Next remains linear; `follow_branch` is an explicit facilitator action. The transaction rechecks
+the accepted response aggregate. No participant submission automatically moves the shared room.
+
+Finished v13 rooms produce **ReportV7**, requiring `includeInteractions=true` as well as existing
+navigation/result opt-ins. `interactionSummary` counts reveal changes and branches. Timeline
+events `scene.reveal_changed` and `navigation.branched` contain typed IDs/aggregate metadata,
+never reveal bodies. Old reports retain their event enums.
+
+Private Presentation review sharing uses separate **recipient contract v1** and migration097:
+
+- `POST /v1/presentations/{id}/shares` — owner/editor, published unarchived source, body
+  `{requestId,versionId,expiresAt,token}`. `expiresAt` is absolute and within thirty days; `token`
+  is a canonical base64url 32-byte random value. Retain this exact request before sending. The
+  response contains safe metadata, a fragment-token URL and `replayed`; only hashes are stored.
+  An expired request that was never accepted returns `410` with error code
+  `PRESENTATION_SHARE_REQUEST_EXPIRED`. A matching accepted receipt is replayed before expiry
+  validation, even if its link has since expired. Only the explicit expired-request response
+  releases a pending create intent; network errors and unrelated rejections retain exact retries.
+- `GET /v1/presentations/{id}/shares` and `DELETE /v1/presentations/{id}/shares/{shareId}` — private
+  owner/editor list and explicit revocation. Limits are twenty active and one hundred retained
+  records per deck; expired records are retained for seven days for reconciliation.
+- `GET /v1/shared-presentations/{id}` — Bearer capability only, no-store recipient-safe frozen
+  version. Notes, keys, explanations, provenance, branch configuration, moderation, scores and
+  live state are excluded. Questions are read-only; no learner attempt is created.
+- `GET /v1/shared-presentations/{id}/access` — small capability/authority/feature recheck returning
+  `{versionId,expiresAt}`, used before each local page transition without loading the full deck.
+- `GET /v1/shared-presentations/{id}/media/{mediaId}` — scanned frozen-reference image bytes,
+  authorized before and after bounded storage reads. No signed URL bypasses later revocation.
+- `GET /v1/presentation-sessions/{id}/companion-media/{mediaId}` — explicit Companion Bearer pass,
+  current-block image only, returning `{media,downloadUrl}` under the existing live-media policy.
+
+Review URLs put their token in the fragment, which the client scrubs into per-tab state. Requests
+omit cookies and use no-referrer. Expiry, revocation, publisher authority loss, feature disablement
+and source deletion invalidate access. A link stays on its immutable version after later edits or
+publications. Review interactions and navigation are local; these links do not implement self-paced
+assignments, responses or completion. See the
+[advanced/sharing rollout](runbooks/upgrade.md#presentation-advanced-interactions-and-private-sharing-compatibility).
 
 New Presentation rooms require their workspace and realtime creation eligibility. Creator control
 requires an owner/editor; guest routes use session-scoped credentials. Deleting a room disconnects
 its sockets through the shared adapter and removes credentials, pending broadcasts, and durable
 report work. In-flight projections and report completions recheck durable existence so deletion
 cannot recreate the room or its report.
+
+Host snapshots add optional `presenter:{speakerNotes,nextBlock}` from the frozen session version.
+Text-capable rooms also expose host-only `textModerationAvailable:true`, derived from the full
+frozen content. It keeps review available after advancing to a nontext slide; ordinary rooms
+omit it and the host UI makes no moderation-queue reads.
+The next block uses the participant-safe content shape; its media is available through creator-only
+host-media alongside current-block media. Stage, participant and Companion snapshots omit this
+private field. Stage answer material appears only for the current question after explicit reveal.
+Apply migration 090 and deploy all compatible readers before creating any stage credential;
+see the [coordinated rollout](runbooks/upgrade.md#presentation-stage-credential-compatibility).
 
 Live Round creation accepts `settings.timeMode: "timed" | "flex"`; omission preserves the
 existing timed behavior. Flex is frozen at creation: an open question has no deadline, the host
@@ -745,8 +1135,9 @@ Round snapshots and ready reports expose their effective `timeMode`. Live Presen
 top-level `timeMode` and defaults to timed. Its flex questions have no `questionClosesAt` and
 remain open until the host reveals/closes them. Both creation paths require the deployment flag
 and workspace allowlist for flex; existing rooms remain usable if eligibility changes later. The
-stored Presentation V1 report and default report response remain unchanged for strict legacy
-readers; `GET /v1/presentation-sessions/{id}/report?includeSessionContext=true` adds
+stored legacy Presentation V1 report and its default response remain unchanged for strict legacy
+readers. New opinion results use the separate V4 read boundary above;
+`GET /v1/presentation-sessions/{id}/report?includeSessionContext=true` adds
 `sessionContext.timeMode` to an opt-in response.
 
 Live Round creation also accepts optional `settings.confidenceEnabled`. `false` turns confidence
@@ -1115,6 +1506,8 @@ Companion snapshots contain a participant-safe current block and aggregate room 
 `resultSummary` contains only `{ blockId, responseCount, choiceCounts: [{ choiceId, count }] }` for
 the current question after reveal. It contains no correctness, keys, explanations, citations,
 participant responses, raw numeric/rating values, or leaderboard. Before reveal it is `null`.
+New v9 opinion formats use the separate anonymous `opinionSummary` described above for selection
+percentages or ordered-ranking aggregates; do not interpret a ranking as legacy choice counts.
 The browser consumes `#pass=...`, removes it from URL history before requests, and keeps the pass
 in session storage, with no inherited host passes or creator cookies on companion API fetches.
 
@@ -1122,7 +1515,9 @@ Optional `canInsertPublishedQuestion` uses the same safe closed-boundary/pending
 New catalog access and insertion require current professional Presentation, Companion/realtime,
 and workspace eligibility, independently of Pack flags and the Pack session-creation latch.
 Only standalone text-only main questions are eligible, including supported choice, numeric,
-poll, and rating types. Both outgoing and incoming recovery links and Pack provenance are
+poll, rating and document-v9 ranking types. Multiple-selection poll/ranking insertion requires
+the [opinion-format reader/writer floor](#presentation-opinion-formats); moderated text and word
+clouds additionally require the [text reader/writer floor](#presentation-moderated-text). Both outgoing and incoming recovery links and Pack provenance are
 excluded. A selected retained version remains valid after a newer publication, but new insertion
 requires a still-present, non-archived workspace source and an exact version hash.
 Source eligibility is revalidated and locked in the insertion transaction through the state,
@@ -1135,8 +1530,9 @@ question IDs, version number, and version hash. This metadata exists only in liv
 survives durable reads/restoration, and is not copied into authoring drafts. Content, timer,
 revision, sequence, event, and receipt commit atomically. Existing sources/drafts remain unchanged.
 Timed/flex behavior and ordinary scoring/confidence follow the frozen question and room settings.
-Reports use existing question evidence with no new provenance fields or schema version; this
-standalone insertion creates no linked/paired recovery claim. Existing snapshots retain the
+Legacy-format reports use existing question evidence with no new provenance fields or schema
+version. A new opinion-format insertion instead requires Report V4 and its explicit read opt-in;
+the standalone insertion creates no linked/paired recovery claim. Existing snapshots retain the
 internal provenance for session export and retention/deletion with their parent session.
 
 Exact receipt recovery occurs before source, phase, gate, or stale-revision rejection, including
@@ -1185,7 +1581,8 @@ have no deadline/countdown and the facilitator closes responses. The frozen live
 PostgreSQL reads/restoration. Published sources remain unchanged. Presentation Report V3
 question evidence optionally carries `sessionOnly: "quick_check"`, with null correctness/accuracy
 and zero score. This records participation/opinion only, not learning or recovery evidence.
-Reports without a Quick Check still use V1/V2; those strict formats are unchanged. Add
+Reports without a Quick Check or new v9 opinion-format evidence still use V1/V2; those strict
+formats are unchanged. V9 opinion results use V4 and require `includeOpinionResults=true`. Add
 `?includeQuickChecks=true` to report retrieval for V3 evidence (combinable with
 `includeSessionContext=true`). Default retrieval projects V3 to a compatible unscored V1/V2
 response without session-only metadata; the ready stored report is never rewritten.

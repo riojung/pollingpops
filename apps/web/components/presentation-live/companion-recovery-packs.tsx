@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import type { RecoveryPackCardReference, RecoveryPackCardSelection } from "@openround/contracts";
 import { useLocale } from "../locale-provider";
 import type { CompanionRecoveryPackCatalog } from "../../lib/presentation-companion-recovery-packs";
+import { localizeCompanionError } from "../../lib/i18n/domains/live-delivery/companion-translations";
+import { formatNumber } from "../../lib/i18n/format";
 import styles from "./companion.module.css";
 
 export function CompanionRecoveryPackPicker({
@@ -21,17 +23,22 @@ export function CompanionRecoveryPackPicker({
   onReload: () => void;
   onInsert: (packVersionId: string) => void;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const displayError = localizeCompanionError(locale, error);
   const labelId = useId();
   const [selectedId, setSelectedId] = useState("");
   const selected = catalog?.packs.find((pack) => pack.packVersionId === selectedId);
   return (
-    <section className={styles.packPicker} aria-label={t("live.companion.packs.pickerTitle")}>
+    <section
+      className={styles.packPicker}
+      lang={locale}
+      aria-label={t("live.companion.packs.pickerTitle")}
+    >
       <p className="muted">{t("live.companion.packs.textOnly")}</p>
       {loading ? <p role="status">{t("live.companion.packs.loading")}</p> : null}
       {error ? (
-        <p className="error" role="alert">
-          {error}
+        <p className="error" role="alert" lang={displayError.language}>
+          {displayError.text}
         </p>
       ) : null}
       {!loading && catalog?.packs.length === 0 ? (
@@ -48,8 +55,11 @@ export function CompanionRecoveryPackPicker({
         >
           <option value="">{t("live.companion.packs.choosePack")}</option>
           {catalog?.packs.map((pack) => (
-            <option key={pack.packVersionId} value={pack.packVersionId}>
-              {pack.title} · {t("live.companion.packs.version", { version: pack.packVersion })}
+            <option key={pack.packVersionId} value={pack.packVersionId} lang="">
+              {pack.title} ·{" "}
+              {t("live.companion.packs.version", {
+                version: formatNumber(locale, pack.packVersion),
+              })}
             </option>
           ))}
         </select>
@@ -93,7 +103,7 @@ export function CompanionRecoveryCardPicker({
   disabled: boolean;
   onStart: (selection: RecoveryPackCardSelection, interventionType: "explain" | "example") => void;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const labelId = useId();
   const [selectedKey, setSelectedKey] = useState("");
   const cardKey = (card: (typeof cards)[number]) =>
@@ -108,7 +118,11 @@ export function CompanionRecoveryCardPicker({
     );
   };
   return (
-    <section className={styles.packPicker} aria-label={t("live.companion.packs.cardActions")}>
+    <section
+      className={styles.packPicker}
+      lang={locale}
+      aria-label={t("live.companion.packs.cardActions")}
+    >
       <h3>{t("live.companion.packs.useCard")}</h3>
       <p className="muted">{t("live.companion.packs.cardDescription")}</p>
       <label className="field">
@@ -122,9 +136,11 @@ export function CompanionRecoveryCardPicker({
         >
           <option value="">{t("live.companion.packs.chooseCard")}</option>
           {cards.map((card, index) => (
-            <option key={cardKey(card)} value={cardKey(card)}>
-              {index + 1}. {card.title} ·{" "}
-              {t("live.companion.packs.version", { version: card.reference.packVersion })}
+            <option key={cardKey(card)} value={cardKey(card)} lang="">
+              {formatNumber(locale, index + 1)}. {card.title} ·{" "}
+              {t("live.companion.packs.version", {
+                version: formatNumber(locale, card.reference.packVersion),
+              })}
             </option>
           ))}
         </select>

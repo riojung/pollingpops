@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { joinBetaRound } from "./round-join";
 import { signInBeta } from "./sign-in";
+import { clickHostCommand, closeHostControls, openHostControls } from "./host-controls";
 
 const apiUrl = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 
@@ -125,6 +126,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       name: "Ask for confidence (optional)",
       exact: true,
     });
+    await openHostControls(host);
     await expect(hostConfidence).toBeVisible();
     await expect(hostConfidence).toBeChecked();
     const expectedJoinUrl = `${new URL(host.url()).origin}/join?code=${session.code}`;
@@ -159,6 +161,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       const nickname = guest.getByRole("textbox", { name: /^Nickname/ });
       await expect(nickname).toBeVisible();
       await nickname.fill("River Learner");
+      await guest.locator('summary[aria-label="Change avatar"]').click();
       await expect(guest.getByRole("radio")).toHaveCount(24);
       await guest
         .getByTestId("avatar-option-hedgehog")
@@ -186,7 +189,7 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(guest.getByRole("img", { name: "Hedgehog avatar", exact: true })).toBeVisible();
       const unsaved = await context.newPage();
       await unsaved.goto(`/join?code=${session.code}`);
-      await expect(unsaved.getByRole("radio")).toHaveCount(24);
+      await expect(unsaved.getByRole("radio")).toHaveCount(0);
       await unsaved
         .getByRole("textbox", { name: /^Nickname/ })
         .fill("UnsavedDraftWithLongNickname");
@@ -405,7 +408,8 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(
         guest.getByTestId("participant-task").getByText("Correct", { exact: true }),
       ).toBeVisible();
-      await host.getByRole("button", { name: "Show standings", exact: true }).click();
+      await clickHostCommand(host, "Show standings");
+      await closeHostControls(host.getByTestId("host-command-bar"));
       const dashboards = [host, presenter];
       const viewports =
         suffix === "desktop"
@@ -429,7 +433,9 @@ for (const suffix of ["desktop", "@mobile"]) {
             expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
             if (surface === host) {
               const commands = await host.getByTestId("host-command-bar").boundingBox();
-              expect(box!.y + box!.height).toBeLessThanOrEqual(commands!.y);
+              const commandsBeforeDashboard = commands!.y + commands!.height <= box!.y;
+              const commandsAfterDashboard = box!.y + box!.height <= commands!.y;
+              expect(commandsBeforeDashboard || commandsAfterDashboard).toBe(true);
               expect(commands!.y + commands!.height).toBeLessThanOrEqual(viewport.height);
             }
           }
@@ -484,7 +490,9 @@ for (const suffix of ["desktop", "@mobile"]) {
             expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
             if (surface === host) {
               const commands = await host.getByTestId("host-command-bar").boundingBox();
-              expect(box!.y + box!.height).toBeLessThanOrEqual(commands!.y);
+              const commandsBeforeDashboard = commands!.y + commands!.height <= box!.y;
+              const commandsAfterDashboard = box!.y + box!.height <= commands!.y;
+              expect(commandsBeforeDashboard || commandsAfterDashboard).toBe(true);
               expect(commands!.y + commands!.height).toBeLessThanOrEqual(viewport.height);
             }
             expect((await new AxeBuilder({ page: surface }).analyze()).violations).toEqual([]);
@@ -650,9 +658,14 @@ for (const suffix of ["desktop", "@mobile"]) {
       await expect(answer).toBeDisabled();
       await host.getByRole("button", { name: "Lock answers", exact: true }).click();
       await host.getByRole("button", { name: "Reveal answer", exact: true }).click();
-      await host.getByRole("button", { name: "Show standings", exact: true }).click();
+      await clickHostCommand(host, "Show standings");
       await host.getByRole("button", { name: "Finish round", exact: true }).click();
       await expect(guest.getByText("Your final score is 1,000.", { exact: true })).toBeVisible();
+      const finalStandings = guest.getByTestId("competition-dashboard");
+      await expect(finalStandings).toHaveAttribute("data-compact-participant", "true");
+      await expect(finalStandings.getByTestId("competition-podium")).toHaveCount(0);
+      await expect(finalStandings.getByTestId("competition-race")).toHaveCount(0);
+      await expect(finalStandings.getByTestId("competition-personal")).toContainText("1,000");
       const receipt = guest.getByTestId("scored-response-receipt");
       await expect(receipt).toContainText("Saved answers1 / 1");
       await expect(receipt).toContainText("Correct1");

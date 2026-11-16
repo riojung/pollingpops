@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import {
   PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES,
   PresentationDraftSchema,
@@ -11,7 +12,12 @@ import {
   setPresentationSlideHidden,
 } from "./presentation-builder";
 import { createNativeContentBlock } from "./presentation-native-scene";
-import { applyNativeDesignToDeck, nativeSceneDocumentVersion } from "./presentation-deck-design";
+import { createNativeTableNode } from "./presentation-native-data";
+import {
+  applyNativeDesignToDeck,
+  applyNativeSceneToDeck,
+  nativeSceneDocumentVersion,
+} from "./presentation-deck-design";
 
 const design: PresentationSceneDesign = { theme: "midnight", font: "serif", spacing: "relaxed" };
 
@@ -87,12 +93,114 @@ describe("native design across a Presentation", () => {
     [7, 1, 7],
     [7, 2, 7],
     [7, 3, 7],
+    [7, 4, 8],
+    [8, 1, 8],
+    [8, 2, 8],
+    [8, 3, 8],
+    [8, 4, 8],
+    [9, 1, 9],
+    [9, 2, 9],
+    [9, 3, 9],
+    [9, 4, 9],
+    [10, 1, 10],
+    [10, 2, 10],
+    [10, 3, 10],
+    [10, 4, 10],
+    [2, 5, 11],
+    [10, 5, 11],
+    [11, 1, 11],
+    [11, 2, 11],
+    [11, 3, 11],
+    [11, 4, 11],
+    [11, 5, 11],
+    [12, 1, 12],
+    [12, 2, 12],
+    [12, 3, 12],
+    [12, 4, 12],
+    [12, 5, 12],
   ] as const)(
     "preserves/promotes document %s for scene %s to %s",
     (current, sceneVersion, expected) => {
       expect(nativeSceneDocumentVersion(current, { schemaVersion: sceneVersion })).toBe(expected);
     },
   );
+
+  it("retains opted-in opinion v9 across bulk design and later native edits", () => {
+    const original = draft();
+    original.schemaVersion = 9;
+    const question = createQuestionBlock("ranking");
+    original.blocks.push(question);
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(9);
+    expect(changed.blocks.at(-1)).toBe(question);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(9);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(9);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
+  it("retains text-opinion v10 across bulk design, native edits and hidden state", () => {
+    const original = draft();
+    original.schemaVersion = 10;
+    original.blocks.push(createQuestionBlock("open_text"));
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(10);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    expect(applyNativeSceneToDeck(changed, first.id, first.scene).schemaVersion).toBe(10);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(10);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+  });
+
+  it("retains opted-in navigation and section IDs across bulk design and native edits", () => {
+    const original = draft();
+    original.schemaVersion = 12;
+    original.sections = [
+      { id: randomUUID(), title: "Evidence", blockIds: [original.blocks[0]!.id] },
+    ];
+    const changed = applyNativeDesignToDeck(original, design);
+    expect(changed.schemaVersion).toBe(12);
+    expect(changed.sections).toBe(original.sections);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    const edited = applyNativeSceneToDeck(changed, first.id, first.scene);
+    expect(edited.schemaVersion).toBe(12);
+    expect(edited.sections).toBe(original.sections);
+    expect(setPresentationSlideHidden(edited, first.id, true).schemaVersion).toBe(12);
+    expect(PresentationDraftSchema.safeParse(edited).success).toBe(true);
+  });
+
+  it("promotes interaction edits and preserves actions across deck design, recovery and question edits", () => {
+    const original = draft();
+    const first = original.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected native slide");
+    const reveal = {
+      id: "audience-detail",
+      type: "reveal" as const,
+      scope: "local" as const,
+      label: "Show detail",
+      body: "Audience detail",
+      frame: { x: 8, y: 35, width: 84, height: 40 },
+    };
+    const edited = applyNativeSceneToDeck(original, first.id, {
+      ...first.scene,
+      schemaVersion: 5,
+      nodes: [...first.scene.nodes, reveal],
+      readingOrder: [...first.scene.readingOrder, reveal.id],
+    });
+    expect(edited.schemaVersion).toBe(11);
+    edited.blocks.push(createQuestionBlock("open_text"));
+    const changed = applyNativeDesignToDeck(edited, design);
+    const updated = changed.blocks[0]!;
+    if (updated.kind !== "content" || !updated.scene) throw new Error("Expected scene");
+    expect(updated.scene.schemaVersion).toBe(5);
+    expect(updated.scene.nodes).toContainEqual(reveal);
+    expect(changed.schemaVersion).toBe(11);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(11);
+    expect(PresentationDraftSchema.safeParse(changed).success).toBe(true);
+    expect(original.schemaVersion).toBe(6);
+    expect(first.scene.schemaVersion).toBe(1);
+  });
 
   it("refuses an all-slide design that exceeds the document budget without changing the source", () => {
     const original = draft();
@@ -130,5 +238,58 @@ describe("native design across a Presentation", () => {
     const source = JSON.stringify(original);
     expect(() => applyNativeDesignToDeck(original, design)).toThrow(/3 MiB/);
     expect(JSON.stringify(original)).toBe(source);
+    const target = original.blocks[0]!;
+    if (target.kind !== "content" || !target.scene) throw new Error("Expected a native slide");
+    const table = createNativeTableNode();
+    const nextScene = {
+      ...target.scene,
+      schemaVersion: 4 as const,
+      nodes: [...target.scene.nodes, table],
+      readingOrder: [...target.scene.readingOrder, table.id],
+    };
+    expect(() => applyNativeSceneToDeck(original, target.id, nextScene)).toThrow(/3 MiB/);
+    expect(JSON.stringify(original)).toBe(source);
+    const reduced = structuredClone(original);
+    const last = reduced.blocks.at(-1)!;
+    if (last.kind !== "content" || !last.scene) throw new Error("Expected a native slide");
+    const body = last.scene.nodes.find(
+      (node) => node.type === "text" && node.role === "body" && node.text.length >= 1000,
+    );
+    if (body?.type !== "text") throw new Error("Expected long body text");
+    body.text = body.text.slice(1000);
+    const accepted = applyNativeSceneToDeck(reduced, target.id, nextScene);
+    expect(accepted.schemaVersion).toBe(8);
+    expect(accepted.blocks[0]).toEqual({ ...target, scene: nextScene });
+    expect(accepted.blocks[1]).toBe(reduced.blocks[1]);
+  });
+
+  it("preserves composition content and document floors through bulk design, hiding and older native edits", () => {
+    const original = draft();
+    const block = original.blocks[0]!;
+    if (block.kind !== "content" || !block.scene) throw new Error("Expected a native slide");
+    const table = createNativeTableNode();
+    block.scene = {
+      ...block.scene,
+      schemaVersion: 4,
+      nodes: [...block.scene.nodes, table],
+      readingOrder: [...block.scene.readingOrder, table.id],
+      groups: [{ id: "group", nodeIds: [block.scene.nodes[0]!.id, table.id] }],
+    };
+    original.schemaVersion = 8;
+    const changed = applyNativeDesignToDeck(original, design);
+    const first = changed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected the designed slide");
+    expect(first.scene).toEqual({ ...block.scene, design });
+    expect(changed.schemaVersion).toBe(8);
+    expect(setPresentationSlideHidden(changed, first.id, true).schemaVersion).toBe(8);
+    const legacy = changed.blocks[1]!;
+    if (legacy.kind !== "content" || !legacy.scene)
+      throw new Error("Expected the other native slide");
+    const olderScene = { ...legacy.scene, schemaVersion: 1 as const };
+    delete olderScene.design;
+    const updated = applyNativeSceneToDeck(changed, legacy.id, olderScene);
+    expect(updated.schemaVersion).toBe(8);
+    expect(updated.blocks[0]).toBe(changed.blocks[0]);
+    expect(applyNativeDesignToDeck(changed, design)).toBe(changed);
   });
 });

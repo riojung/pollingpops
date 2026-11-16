@@ -5,6 +5,7 @@ import type { PresentationSessionRecord } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import { PRESENTATION_PACK_INSERTION_DRAFT_LIMIT } from "./draft-limits.js";
 import { PresentationSessionServiceError } from "./presentation-session-errors.js";
+import { presentationNavigationBlockedReason } from "./presentation-navigation.js";
 import {
   evidenceWorkspaceFeatureEnabled,
   professionalWorkspaceFeatureEnabled,
@@ -44,6 +45,8 @@ export function presentationClosedInsertionBoundary(session: PresentationSession
     !(session.phase === "question_reveal" && block?.kind === "question")
   )
     return false;
+  if (session.content.schemaVersion >= 12)
+    return presentationNavigationBlockedReason(session) === null;
   const pendingQuestions = new Set(
     session.content.blocks
       .slice(session.currentBlockIndex + 1)

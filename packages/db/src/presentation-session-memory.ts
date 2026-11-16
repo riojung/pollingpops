@@ -1,3 +1,31 @@
+import {
+  validateInsightsOpinionSelectors,
+  memoryInsightsOpinionCounts,
+  type PresentationInsightsOpinionSelector,
+} from "./presentation-insights-opinions.js";
+import {
+  presentationRevealRosterSelectors,
+  type PresentationRevealRosterSelector,
+} from "./presentation-insights-types.js";
+import { transitionPresentationInteractionState } from "./presentation-interactions.js";
+import { transitionPresentationNavigationState } from "./presentation-navigation.js";
+import { requiresPresentationTextOpinions } from "@openround/contracts";
+import {
+  assertTextReadSession,
+  textModerationPage,
+  textResponseResults,
+  textReportEvidence,
+} from "./presentation-text-rules.js";
+import {
+  PresentationTextReadError,
+  PresentationTextCapacityError,
+  type PresentationTextModerationInput,
+  type PresentationTextModerationAcceptance,
+  type PresentationTextModerationReceiptRecord,
+  type PresentationTextModerationPageInput,
+  type PresentationTextResultsInput,
+  type PresentationPrivateTextResponse,
+} from "./presentation-text-types.js";
 import { randomUUID } from "node:crypto";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { MemoryRepository } from "./memory.js";
@@ -17,6 +45,11 @@ import {
   assertCommandRequestHash,
   commandReceiptMatches,
   normalizeSession,
+  normalizePresentationResponse,
+  presentationResponseBlockId,
+  presentationTextValue,
+  assertPresentationTextCapacity,
+  assertPresentationTextReceiptIdentity,
   responseWindowOpen,
   transitionWindow,
   transitionRecoveryPackIntervention,
@@ -31,6 +64,7 @@ import {
   type PresentationResponseAcceptance,
   type PresentationResponseAcknowledgementState,
   type PresentationResponseContext,
+  type PresentationActiveCredentialRevocation,
   type PresentationSessionCommandInput,
   type PresentationSessionCommandReceiptRecord,
   type PresentationSessionCreateInput,
@@ -55,6 +89,11 @@ export class MemoryPresentationSessionRepository
   private readonly sessions = new Map<string, PresentationSessionRecord>();
   private readonly participants = new Map<string, PresentationSessionParticipantRecord>();
   private readonly responses = new Map<string, PresentationSessionResponseRecord>();
+  private readonly textBodies = new Map<string, string | null>();
+  private readonly textModerationReceipts = new Map<
+    string,
+    PresentationTextModerationReceiptRecord
+  >();
   private readonly timeline = new Map<string, PresentationSessionTimelineRecord>();
   private readonly commandReceipts = new Map<string, PresentationSessionCommandReceiptRecord>();
   private readonly credentials = new Map<string, PresentationSessionCredentialRecord>();
@@ -139,6 +178,9 @@ export class MemoryPresentationSessionRepository
       presentationSessionResponses: [...this.responses.values()]
         .filter((response) => sessionIds.has(response.sessionId))
         .map(clone),
+      presentationTextModerationReceipts: [...this.textModerationReceipts.values()]
+        .filter((receipt) => sessionIds.has(receipt.sessionId))
+        .map(clone),
       presentationSessionTimeline: [...this.timeline.values()]
         .filter((event) => sessionIds.has(event.sessionId))
         .map(clone),
@@ -195,6 +237,7 @@ export class MemoryPresentationSessionRepository
     }
     for (const [id, response] of this.responses) {
       if (response.sessionId === sessionId || participantIds.has(response.participantId)) {
+        this.textBodies.delete(response.id);
         this.responses.delete(id);
       }
     }
@@ -204,6 +247,8 @@ export class MemoryPresentationSessionRepository
     for (const [key, receipt] of this.commandReceipts) {
       if (receipt.sessionId === sessionId) this.commandReceipts.delete(key);
     }
+    for (const [key, receipt] of this.textModerationReceipts)
+      if (receipt.sessionId === sessionId) this.textModerationReceipts.delete(key);
     for (const [id, credential] of this.credentials) {
       if (credential.sessionId === sessionId) this.credentials.delete(id);
     }
@@ -419,6 +464,12 @@ export class MemoryPresentationSessionRepository
       throw new PresentationSessionConflictError(input.expectedRevision, session.revision);
     }
     assertCommandRequestHash(command?.requestHash);
+    if (
+      command &&
+      (input.event.type.startsWith("navigation.") || input.event.type === "scene.reveal_changed") &&
+      command.requestHash == null
+    )
+      throw new Error("Navigation commands require an intent fingerprint");
     if (command?.publishedQuestionSource) {
       if (!this.liveRooms.assertPresentationPublishedQuestionSource)
         throw new PresentationPublishedQuestionSourceUnavailableError();
@@ -434,7 +485,22 @@ export class MemoryPresentationSessionRepository
       throw new Error("Recovery Pack cards were not enabled when this session was created");
     }
     const content = transitionContent(session, input);
+    if (
+      requiresPresentationTextOpinions(content) &&
+      [...this.participants.values()].filter((participant) => participant.sessionId === session.id)
+        .length > 250
+    )
+      throw new PresentationTextCapacityError(
+        "Text opinion rooms support at most 250 participants",
+      );
     const window = transitionWindow({ ...session, content }, input, now);
+    const navigationState = transitionPresentationNavigationState(session, input, content, window);
+    const interactionState = transitionPresentationInteractionState(
+      session,
+      input,
+      content,
+      [...this.responses.values()].filter((response) => response.sessionId === session.id),
+    );
     const becomingFinished = session.status !== "finished" && input.status === "finished";
     const updated: PresentationSessionRecord = {
       ...session,
@@ -443,6 +509,8 @@ export class MemoryPresentationSessionRepository
       currentBlockIndex: input.currentBlockIndex,
       status: input.status,
       recoveryPackIntervention: intervention,
+      ...(navigationState === undefined ? {} : { navigationState }),
+      ...(interactionState === undefined ? {} : { interactionState }),
       revision: session.revision + 1,
       eventSeq: session.eventSeq + 1,
       ...window,
@@ -504,6 +572,19 @@ export class MemoryPresentationSessionRepository
   async transitionSessionCommand(
     input: PresentationSessionCommandInput,
   ): Promise<PresentationTransitionAcceptance> {
+    if (
+      [...this.textModerationReceipts.values()].some(
+        (receipt) =>
+          receipt.workspaceId === input.workspaceId &&
+          receipt.sessionId === input.sessionId &&
+          receipt.commandId.toLowerCase() === input.commandId.toLowerCase(),
+      )
+    ) {
+      const session = this.sessions.get(input.sessionId);
+      return session
+        ? { status: "idempotency_conflict", session: clone(session) }
+        : { status: "not_found" };
+    }
     const receipt = this.commandReceipts.get(`${input.sessionId}:${input.commandId}`);
     if (receipt?.workspaceId === input.workspaceId) {
       const session = this.sessions.get(input.sessionId);
@@ -526,6 +607,14 @@ export class MemoryPresentationSessionRepository
     if (!session || session.workspaceId !== input.workspaceId) {
       throw new Error("Presentation session does not exist");
     }
+    if (
+      requiresPresentationTextOpinions(session.content) &&
+      [...this.participants.values()].filter((participant) => participant.sessionId === session.id)
+        .length >= 250
+    )
+      throw new PresentationTextCapacityError(
+        "Text opinion rooms support at most 250 participants",
+      );
     session.eventSeq += 1;
     const stored = clone(input);
     this.participants.set(input.id, stored);
@@ -547,7 +636,13 @@ export class MemoryPresentationSessionRepository
     const participantCount = [...this.participants.values()].filter(
       (participant) => participant.sessionId === input.sessionId,
     ).length;
-    if (participantCount >= participantLimit) return { status: "full" };
+    if (
+      participantCount >=
+      (requiresPresentationTextOpinions(session.content)
+        ? Math.min(participantLimit, 250)
+        : participantLimit)
+    )
+      return { status: "full" };
     if (this.liveRooms instanceof MemoryRepository)
       assertAudienceAdmissionInMemory(this.liveRooms, input.workspaceId);
     if (this.liveRooms instanceof MemoryRepository)
@@ -575,10 +670,13 @@ export class MemoryPresentationSessionRepository
         candidate.sessionId === sessionId &&
         candidate.workspaceId === workspaceId &&
         candidate.tokenHash === tokenHash &&
+        (candidate.role === "host" || candidate.role === "companion") &&
         !candidate.revokedAt &&
         candidate.expiresAt > now,
     );
-    return credential ? { role: credential.role, id: credential.id, alias: "Facilitator" } : null;
+    return credential && credential.role !== "stage"
+      ? { role: credential.role, id: credential.id, alias: "Facilitator" }
+      : null;
   }
 
   async findParticipant(sessionId: string, tokenHash: string) {
@@ -622,12 +720,22 @@ export class MemoryPresentationSessionRepository
   }
 
   async saveResponse(input: PresentationSessionResponseRecord) {
-    const key = `${input.sessionId}:${input.participantId}:${input.blockId}`;
+    assertPresentationTextReceiptIdentity(input);
+    const session = this.sessions.get(input.sessionId);
+    const blockId = presentationResponseBlockId(session, input.blockId);
+    const key = `${input.sessionId}:${input.participantId}:${blockId}`;
     const existing = this.responses.get(key);
     if (existing) return clone(existing);
-    const stored = clone(input);
+    const stored = normalizePresentationResponse(session, input);
+    if (stored.responseSchemaVersion === 3 && session) {
+      assertPresentationTextCapacity(
+        session,
+        [...this.responses.values()].filter((response) => response.sessionId === session.id),
+        stored.blockId,
+      );
+      this.textBodies.set(stored.id, presentationTextValue(session, input));
+    }
     this.responses.set(key, stored);
-    const session = this.sessions.get(input.sessionId);
     if (session?.workspaceId === input.workspaceId) session.eventSeq += 1;
     return clone(stored);
   }
@@ -636,6 +744,7 @@ export class MemoryPresentationSessionRepository
     input: PresentationSessionResponseRecord,
     expectedSessionRevision: number,
   ): Promise<PresentationResponseAcceptance> {
+    assertPresentationTextReceiptIdentity(input);
     if (input.idempotencyKey) {
       const idempotent = [...this.responses.values()].find(
         (candidate) =>
@@ -675,7 +784,8 @@ export class MemoryPresentationSessionRepository
     ) {
       return { status: "phase_closed" };
     }
-    const key = `${input.sessionId}:${input.participantId}:${input.blockId}`;
+    const blockId = presentationResponseBlockId(session, input.blockId);
+    const key = `${input.sessionId}:${input.participantId}:${blockId}`;
     const existing = this.responses.get(key);
     if (existing) {
       if (input.idempotencyKey) {
@@ -689,8 +799,16 @@ export class MemoryPresentationSessionRepository
     }
     // A response changes participant/answer aggregates while the host revision stays fixed.
     // Advance the independent sequence so delayed snapshots cannot roll those aggregates back.
+    const stored = normalizePresentationResponse(session, input);
+    if (stored.responseSchemaVersion === 3) {
+      assertPresentationTextCapacity(
+        session,
+        [...this.responses.values()].filter((response) => response.sessionId === session.id),
+        stored.blockId,
+      );
+      this.textBodies.set(stored.id, presentationTextValue(session, input));
+    }
     session.eventSeq += 1;
-    const stored = clone(input);
     this.responses.set(key, stored);
     return {
       status: "accepted",
@@ -756,8 +874,11 @@ export class MemoryPresentationSessionRepository
       const rank = ranked.findIndex((participant) => participant.id === participantId);
       standing = rank < 0 ? null : { rank: rank + 1, score: ranked[rank]!.score };
     }
-    const currentResponse = currentBlockId
-      ? this.responses.get(`${sessionId}:${participantId}:${currentBlockId}`)
+    const responseBlockId = currentBlockId
+      ? presentationResponseBlockId(this.sessions.get(sessionId), currentBlockId)
+      : null;
+    const currentResponse = responseBlockId
+      ? this.responses.get(`${sessionId}:${participantId}:${responseBlockId}`)
       : undefined;
     return {
       participantCount: participants.length,
@@ -803,6 +924,64 @@ export class MemoryPresentationSessionRepository
       .filter((event) => event.sessionId === sessionId)
       .sort((left, right) => left.sequence - right.sequence)
       .map(clone);
+  }
+
+  async getRevealRosterCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationRevealRosterSelector[],
+    now = new Date(),
+  ) {
+    const selected = presentationRevealRosterSelectors.parse(selectors);
+    if (
+      this.liveRooms instanceof MemoryRepository &&
+      (await this.liveRooms.workspaceDeletionStarted(workspaceId))
+    )
+      throw new PresentationTextReadError("NOT_FOUND", "Presentation session not found");
+    const session = this.sessions.get(sessionId);
+    assertTextReadSession(session, workspaceId, now, true);
+    if (session.status !== "finished")
+      throw new PresentationTextReadError("NOT_FOUND", "Presentation session not found");
+    return selected.map((selector) => {
+      const event = [...this.timeline.values()].find(
+        (event) =>
+          event.workspaceId === workspaceId &&
+          event.sessionId === sessionId &&
+          event.sequence === selector.sequence &&
+          event.type === "question.revealed" &&
+          event.blockId?.toLowerCase() === selector.blockId,
+      );
+      return {
+        ...selector,
+        participantCount:
+          event?.revealedParticipantIds == null
+            ? null
+            : new Set(event.revealedParticipantIds.map((id) => id.toLowerCase())).size,
+      };
+    });
+  }
+
+  async getInsightsOpinionCounts(
+    workspaceId: string,
+    sessionId: string,
+    selectors: PresentationInsightsOpinionSelector[],
+    now = new Date(),
+  ) {
+    validateInsightsOpinionSelectors(selectors);
+    if (
+      this.liveRooms instanceof MemoryRepository &&
+      (await this.liveRooms.workspaceDeletionStarted(workspaceId))
+    )
+      return [];
+    const session = this.sessions.get(sessionId);
+    if (
+      !session ||
+      session.workspaceId !== workspaceId ||
+      session.status !== "finished" ||
+      session.retentionExpiresAt <= now
+    )
+      return [];
+    return memoryInsightsOpinionCounts(session, selectors, this.responses.values());
   }
 
   async getReport(workspaceId: string, sessionId: string) {
@@ -1010,5 +1189,208 @@ export class MemoryPresentationSessionRepository
     }
     credential.revokedAt ??= revokedAt;
     return clone(credential);
+  }
+
+  async revokeActiveCredential(
+    workspaceId: string,
+    sessionId: string,
+    credentialId: string,
+    revokedAt: Date,
+    role: PresentationSessionCredentialRole,
+  ): Promise<PresentationActiveCredentialRevocation> {
+    // No await separates the exact-role lookup, active test and mutation in memory.
+    const credential = this.credentials.get(credentialId);
+    if (
+      !credential ||
+      credential.workspaceId !== workspaceId ||
+      credential.sessionId !== sessionId ||
+      credential.role !== role
+    )
+      return { status: "not_found" };
+    if (credential.revokedAt !== null || credential.expiresAt <= revokedAt) {
+      return { status: "stale" };
+    }
+    credential.revokedAt = new Date(Math.max(credential.createdAt.getTime(), revokedAt.getTime()));
+    return { status: "revoked", credential: clone(credential) };
+  }
+  private textRows(sessionId: string): PresentationPrivateTextResponse[] {
+    return [...this.responses.values()]
+      .filter((record) => record.sessionId === sessionId && record.responseSchemaVersion === 3)
+      .map((record) => ({
+        record: clone(record),
+        textValue: this.textBodies.get(record.id) ?? null,
+      }));
+  }
+  async findTextModerationReceipt(workspaceId: string, sessionId: string, commandId: string) {
+    const receipt = this.textModerationReceipts.get(`${sessionId}:${commandId.toLowerCase()}`);
+    return receipt?.workspaceId === workspaceId ? clone(receipt) : null;
+  }
+  async moderateTextResponse(
+    input: PresentationTextModerationInput,
+  ): Promise<PresentationTextModerationAcceptance> {
+    const session = this.sessions.get(input.sessionId);
+    if (!session || session.workspaceId !== input.workspaceId) return { status: "not_found" };
+    this.assertWorkspaceMutationAllowed(input.workspaceId);
+    const credential = this.credentials.get(input.hostCredentialId);
+    if (
+      !credential ||
+      credential.sessionId !== session.id ||
+      credential.workspaceId !== input.workspaceId ||
+      credential.role !== "host" ||
+      credential.revokedAt ||
+      credential.expiresAt <= input.occurredAt
+    )
+      return { status: "unauthorized" };
+    const key = `${session.id}:${input.commandId.toLowerCase()}`;
+    const row = [...this.responses.values()].find(
+      (response) =>
+        response.id.toLowerCase() === input.responseId.toLowerCase() &&
+        response.sessionId === session.id &&
+        response.responseSchemaVersion === 3,
+    );
+    if (!row) return { status: "not_found" };
+    const prior = this.textModerationReceipts.get(key);
+    if (prior)
+      return prior.requestHash === input.requestHash &&
+        prior.hostCredentialId === input.hostCredentialId
+        ? {
+            status: "duplicate",
+            session: clone(session),
+            receipt: clone(prior),
+            response: clone(row),
+          }
+        : { status: "idempotency_conflict" };
+    if (
+      [...this.commandReceipts.values()].some(
+        (receipt) =>
+          receipt.sessionId === session.id &&
+          receipt.commandId.toLowerCase() === input.commandId.toLowerCase(),
+      )
+    )
+      return { status: "idempotency_conflict" };
+    if (
+      session.status !== "active" ||
+      session.liveExpiresAt <= input.occurredAt ||
+      session.retentionExpiresAt <= input.occurredAt
+    )
+      return { status: "phase_closed" };
+    if (
+      session.revision !== input.expectedRevision ||
+      row.moderationVersion !== input.expectedModerationVersion
+    )
+      return {
+        status: "stale",
+        session: clone(session),
+        actualModerationVersion: row.moderationVersion ?? 0,
+      };
+    if (
+      row.moderationStatus === "removed" ||
+      (row.moderationStatus === "approved" && input.status !== "removed")
+    )
+      return { status: "not_found" };
+    if (
+      [...this.textModerationReceipts.values()].filter(
+        (receipt) => receipt.sessionId === session.id,
+      ).length >= 5000
+    )
+      return { status: "limit_reached" };
+    if (!/^[a-f0-9]{64}$/.test(input.requestHash))
+      throw new Error("Invalid moderation fingerprint");
+    const receipt: PresentationTextModerationReceiptRecord = {
+      id: randomUUID(),
+      workspaceId: input.workspaceId,
+      sessionId: session.id,
+      commandId: input.commandId,
+      responseId: row.id,
+      blockId: row.blockId,
+      hostCredentialId: input.hostCredentialId,
+      requestHash: input.requestHash,
+      previousStatus: row.moderationStatus as "pending" | "approved",
+      status: input.status,
+      expectedRevision: input.expectedRevision,
+      expectedModerationVersion: input.expectedModerationVersion,
+      resultingModerationVersion: input.expectedModerationVersion + 1,
+      acceptedAt: input.occurredAt,
+    };
+    row.moderationStatus = input.status;
+    row.moderationVersion = receipt.resultingModerationVersion;
+    row.moderatedAt = input.occurredAt;
+    if (input.status === "removed") this.textBodies.set(row.id, null);
+    session.textModerationSeq = (session.textModerationSeq ?? 0) + 1;
+    session.eventSeq += 1;
+    this.textModerationReceipts.set(key, receipt);
+    return {
+      status: "accepted",
+      session: clone(session),
+      receipt: clone(receipt),
+      response: clone(row),
+    };
+  }
+  async getTextModerationPage(input: PresentationTextModerationPageInput) {
+    const now = input.now ?? new Date();
+    const session = this.sessions.get(input.sessionId);
+    assertTextReadSession(session, input.workspaceId, now);
+    this.assertWorkspaceMutationAllowed(input.workspaceId);
+    const credential = this.credentials.get(input.hostCredentialId);
+    if (
+      !credential ||
+      credential.sessionId !== session.id ||
+      credential.role !== "host" ||
+      credential.revokedAt ||
+      credential.expiresAt <= now
+    )
+      throw new PresentationTextReadError("UNAUTHORIZED", "Host credential required");
+    return textModerationPage(
+      session,
+      this.textRows(session.id),
+      new Map([...this.participants.values()].map((row) => [row.id, row.nickname])),
+      input,
+    );
+  }
+  async getTextResponseResults(input: PresentationTextResultsInput) {
+    const actor = input.actor;
+    if (
+      actor.role === "creator" &&
+      (!(this.liveRooms instanceof MemoryRepository) ||
+        !(await this.liveRooms.getCreatorByUserId(actor.userId, input.workspaceId)))
+    )
+      throw new PresentationTextReadError("UNAUTHORIZED", "Creator access required");
+    const now = input.now ?? new Date();
+    const session = this.sessions.get(input.sessionId);
+    assertTextReadSession(session, input.workspaceId, now);
+    this.assertWorkspaceMutationAllowed(input.workspaceId);
+    if (actor.role === "participant") {
+      if (
+        !this.participants.has(actor.participantId) ||
+        this.participants.get(actor.participantId)!.sessionId !== session.id
+      )
+        throw new PresentationTextReadError("UNAUTHORIZED", "Participant access required");
+    } else if (actor.role !== "creator") {
+      const credential = this.credentials.get(actor.credentialId);
+      if (
+        !credential ||
+        credential.sessionId !== session.id ||
+        credential.role !== actor.role ||
+        credential.revokedAt ||
+        credential.expiresAt <= now
+      )
+        throw new PresentationTextReadError("UNAUTHORIZED", "Live credential required");
+    }
+    return textResponseResults(
+      session,
+      this.textRows(session.id),
+      [...this.timeline.values()].filter((row) => row.sessionId === session.id),
+      input,
+    );
+  }
+  async getTextReportEvidence(input: { workspaceId: string; sessionId: string; now?: Date }) {
+    const session = this.sessions.get(input.sessionId);
+    assertTextReadSession(session, input.workspaceId, input.now ?? new Date(), true);
+    this.assertWorkspaceMutationAllowed(input.workspaceId);
+    return textReportEvidence(
+      session,
+      this.textRows(session.id),
+      [...this.timeline.values()].filter((row) => row.sessionId === session.id),
+    );
   }
 }

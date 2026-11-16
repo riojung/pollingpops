@@ -20,6 +20,7 @@ export interface RecoveryStoryModel {
   initialResponses?: number;
   evidenceLabel: string;
   unresolvedCount: number;
+  conceptEvidenceCount?: number;
   unresolvedNarrative: string;
   interventions: RecoveryStoryIntervention[];
   nextActionLabel: string;
@@ -27,6 +28,7 @@ export interface RecoveryStoryModel {
   highConfidenceWrong: number;
   correctButUnsure: number;
   smallSample: boolean;
+  initialSmallSample?: boolean;
   evidenceNote: string;
   synthetic?: boolean;
 }
@@ -34,9 +36,11 @@ export interface RecoveryStoryModel {
 export function RecoveryStorySummary({
   model,
   contentLanguage,
+  evidenceLanguage,
 }: {
   model: RecoveryStoryModel;
   contentLanguage?: string;
+  evidenceLanguage?: string;
 }) {
   const { locale, t } = useLocale();
   const number = (value: number) => formatNumber(locale, value);
@@ -86,7 +90,11 @@ export function RecoveryStorySummary({
         </article>
         <article>
           <span>{t("reportRound.story.unresolved")}</span>
-          <strong>{number(model.unresolvedCount)}</strong>
+          <strong>
+            {model.conceptEvidenceCount === 0
+              ? t("reportRound.common.notMeasured")
+              : number(model.unresolvedCount)}
+          </strong>
           <p lang={contentLanguage}>{model.unresolvedNarrative}</p>
         </article>
         <article>
@@ -104,6 +112,9 @@ export function RecoveryStorySummary({
           <p lang={contentLanguage}>{model.nextAction}</p>
         </article>
       </div>
+      {model.initialSmallSample ? (
+        <p className="notice">{t("reportRound.clarity.initialSmallSample")}</p>
+      ) : null}
       <div className="recovery-comparison" aria-label={t("reportRound.story.comparisonLabel")}>
         <div>
           <span>{t("reportRound.story.initialAccuracy")}</span>
@@ -173,7 +184,7 @@ export function RecoveryStorySummary({
           ))}
         </ol>
       ) : null}
-      <p className="muted" lang={contentLanguage}>
+      <p className="recovery-story-evidence-note" lang={evidenceLanguage ?? contentLanguage}>
         {model.evidenceNote}
       </p>
     </section>

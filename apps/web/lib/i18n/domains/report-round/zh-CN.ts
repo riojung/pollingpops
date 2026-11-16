@@ -389,6 +389,23 @@ const messages = {
   "reportRound.editor.history.questionMoved": "已移动问题。",
   "reportRound.editor.recoveredCopy": "{title} — 已恢复副本",
   "reportRound.editor.describeImage": "请先描述教学图片，然后再上传。",
+  "reportRound.clarity.noConceptEvidence": "尚未记录概念层面的学习恢复数据。",
+  "reportRound.clarity.trackedConcepts": "有恢复数据的概念：{count}。",
+  "reportRound.clarity.unresolvedEvidence": "{concept}：{count} 个未解决的回答。",
+  "reportRound.clarity.initialSmallSample": "评估的回答少于五个。请谨慎解读数量。",
+  "reportRound.clarity.nextPractice": "为尚未解决的概念创建针对性练习。",
+  "reportRound.clarity.nextReview": "查看本次会话数据，并安排后续检查。",
+  "reportRound.clarity.nextRecheck": "下次添加关联复查题以收集学习恢复数据。",
+  "reportRound.clarity.targetPractice": "针对性练习",
+  "reportRound.clarity.reviewEvidence": "查看数据",
+  "reportRound.clarity.linkedRecheck": "关联复查",
+  "reportRound.clarity.revote": "重新投票",
+  "reportRound.clarity.noRecheckEvidence": "无复查数据",
+  "reportRound.clarity.sessionReport": "会话报告",
+  "reportRound.clarity.backToResults": "返回结果",
+  "reportRound.clarity.noPairedResponses": "无配对复查回答",
+  "reportRound.clarity.unresolvedConcepts": "未解决的概念",
+  "reportRound.clarity.participation": "参与率",
 } satisfies ReportRoundMessages;
 
 export default messages;

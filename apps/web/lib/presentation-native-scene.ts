@@ -9,6 +9,7 @@ import {
   type PresentationSceneNode,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { removeNativeSceneNodes, synchronizeNativeHotspots } from "./presentation-native-geometry";
 
 export function createNativeContentBlock(): ContentSlideDraft {
   const titleId = clientUuid();
@@ -64,7 +65,82 @@ export function nativeNodeLabel(node: PresentationSceneNode): string {
     return node.role === "title" ? "Slide title" : node.text.trim().slice(0, 40) || "Body text";
   if (node.type === "image") return node.altText?.trim() || "Image";
   if (node.type === "shape") return node.label.trim() || `${node.shape.replaceAll("_", " ")} shape`;
+  if (node.type === "table") return node.caption.trim() || "Data table";
+  if (node.type === "chart") return node.title.trim() || `${node.chartType} chart`;
+  if (node.type === "reveal") return node.label.trim() || "Reveal panel";
+  if (node.type === "link") return node.label.trim() || "External link";
+  if (node.type === "hotspot") return node.label.trim() || "Image hotspot";
+  if (node.type === "dialog") return node.label.trim() || "Detail dialog";
+  if (node.type === "navigation") return node.label.trim() || "Slide link";
   return node.label.trim() || "Connection";
+}
+
+export function createNativeRevealNode(): Extract<PresentationSceneNode, { type: "reveal" }> {
+  return {
+    id: clientUuid(),
+    type: "reveal",
+    scope: "local",
+    label: "",
+    body: "",
+    frame: { x: 8, y: 35, width: 50, height: 30 },
+  };
+}
+
+export function createNativeLinkNode(): Extract<PresentationSceneNode, { type: "link" }> {
+  return {
+    id: clientUuid(),
+    type: "link",
+    label: "",
+    href: "",
+    frame: { x: 62, y: 35, width: 28, height: 14 },
+  };
+}
+
+export function createNativeDialogNode(): Extract<PresentationSceneNode, { type: "dialog" }> {
+  return {
+    id: clientUuid(),
+    type: "dialog",
+    scope: "local",
+    label: "",
+    detailTitle: "",
+    body: "",
+    frame: { x: 8, y: 35, width: 45, height: 20 },
+  };
+}
+
+export function createNativeHotspotNode(
+  image?: Extract<PresentationSceneNode, { type: "image" }>,
+): Extract<PresentationSceneNode, { type: "hotspot" }> {
+  const width = Math.min(12, image?.frame.width ?? 12);
+  const height = Math.min(12, image?.frame.height ?? 12);
+  return {
+    id: clientUuid(),
+    type: "hotspot",
+    scope: "local",
+    imageNodeId: image?.id ?? null,
+    label: "",
+    detailTitle: "",
+    body: "",
+    frame: {
+      x: image ? image.frame.x + (image.frame.width - width) / 2 : 40,
+      y: image ? image.frame.y + (image.frame.height - height) / 2 : 40,
+      width,
+      height,
+    },
+  };
+}
+
+export function createNativeNavigationNode(): Extract<
+  PresentationSceneNode,
+  { type: "navigation" }
+> {
+  return {
+    id: clientUuid(),
+    type: "navigation",
+    label: "",
+    targetBlockId: null,
+    frame: { x: 62, y: 35, width: 28, height: 14 },
+  };
 }
 
 export function updateNativeNode(
@@ -72,26 +148,22 @@ export function updateNativeNode(
   id: string,
   update: (node: PresentationSceneNode) => PresentationSceneNode,
 ): PresentationScene {
-  return { ...scene, nodes: scene.nodes.map((node) => (node.id === id ? update(node) : node)) };
+  const nodes = scene.nodes.map((node) => (node.id === id ? update(node) : node));
+  return synchronizeNativeHotspots(scene, {
+    ...scene,
+    schemaVersion:
+      scene.schemaVersion < 7 &&
+      nodes.some((node) => node.type === "text" && node.lang !== undefined)
+        ? 7
+        : scene.schemaVersion,
+    nodes,
+  });
 }
 
 export function removeNativeNode(scene: PresentationScene, id: string): PresentationScene {
-  const node = scene.nodes.find((item) => item.id === id);
-  if (!node || (node.type === "text" && node.role === "title")) return scene;
-  const removed = new Set(
-    scene.nodes
-      .filter(
-        (item) =>
-          item.id === id ||
-          (item.type === "connector" && (item.from.nodeId === id || item.to.nodeId === id)),
-      )
-      .map((item) => item.id),
-  );
-  return {
-    ...scene,
-    nodes: scene.nodes.filter((item) => !removed.has(item.id)),
-    readingOrder: scene.readingOrder.filter((item) => !removed.has(item)),
-  };
+  const node = scene.nodes.find((node) => node.id === id);
+  if (node?.type === "text" && node.role === "title") return scene;
+  return removeNativeSceneNodes(scene, [id]);
 }
 
 export function reorderNativeNode(
@@ -122,9 +194,23 @@ export function duplicateNativeScene(scene: PresentationScene): PresentationScen
             from: { ...node.from, nodeId: ids.get(node.from.nodeId)! },
             to: { ...node.to, nodeId: ids.get(node.to.nodeId)! },
           }
-        : { ...structuredClone(node), id: ids.get(node.id)! },
+        : node.type === "hotspot"
+          ? {
+              ...structuredClone(node),
+              id: ids.get(node.id)!,
+              imageNodeId: node.imageNodeId ? (ids.get(node.imageNodeId) ?? null) : null,
+            }
+          : { ...structuredClone(node), id: ids.get(node.id)! },
     ),
     readingOrder: scene.readingOrder.map((id) => ids.get(id)!),
+    ...(scene.groups
+      ? {
+          groups: scene.groups.map((group) => ({
+            id: clientUuid(),
+            nodeIds: group.nodeIds.map((id) => ids.get(id)!),
+          })),
+        }
+      : {}),
   };
 }
 

@@ -1,7 +1,9 @@
 import {
   PresentationContentSchema,
   QuestionSchema,
-  requiresExtendedRoundResponses,
+  presentationQuestionSupported,
+  isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
   type PresentationCompanionCommand,
 } from "@openround/contracts";
 import {
@@ -41,7 +43,7 @@ export function presentationPublishedQuestionInsertionTransition(
     (question) => question.id === selection.sourceQuestionId,
   );
   const source = matches[0];
-  if (source && requiresExtendedRoundResponses({ questions: [source] })) {
+  if (source && !presentationQuestionSupported(source)) {
     throw new PresentationSessionServiceError(
       422,
       "VALIDATION_ERROR",
@@ -59,6 +61,17 @@ export function presentationPublishedQuestionInsertionTransition(
       "Select one text-only standalone published question without linked recovery or Pack provenance",
     );
   const question = structuredClone(QuestionSchema.parse(source));
+  if (
+    isPresentationTextResultQuestion(question) &&
+    session.content.blocks.filter(
+      (block) => block.kind === "question" && isPresentationTextResultQuestion(block.question),
+    ).length >= 10
+  )
+    throw new PresentationSessionServiceError(
+      422,
+      "VALIDATION_ERROR",
+      "A Presentation can contain up to 10 text opinion questions",
+    );
   const seed = `${input.commandId}:published-question:${version.id}:${source.id}`;
   const blockId = recoveryPackCopyId(`${seed}:block`);
   question.id = recoveryPackCopyId(`${seed}:question`);
@@ -79,6 +92,11 @@ export function presentationPublishedQuestionInsertionTransition(
   });
   const content = PresentationContentSchema.parse({
     ...session.content,
+    ...(isPresentationTextResultQuestion(question) && session.content.schemaVersion < 10
+      ? { schemaVersion: 10 }
+      : isPresentationOpinionResultQuestion(question) && session.content.schemaVersion < 9
+        ? { schemaVersion: 9 }
+        : {}),
     blocks,
     livePublishedQuestions: [
       ...(session.content.livePublishedQuestions ?? []),

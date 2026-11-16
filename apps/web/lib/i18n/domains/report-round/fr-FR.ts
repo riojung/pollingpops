@@ -442,6 +442,27 @@ const messages = {
   "reportRound.editor.history.questionMoved": "Question déplacée.",
   "reportRound.editor.recoveredCopy": "{title} — copie récupérée",
   "reportRound.editor.describeImage": "Décrivez l’image pédagogique avant de la téléverser.",
+  "reportRound.clarity.noConceptEvidence":
+    "Aucune donnée de récupération par notion n’a été enregistrée.",
+  "reportRound.clarity.trackedConcepts": "Notions avec des données de récupération : {count}.",
+  "reportRound.clarity.unresolvedEvidence": "{concept} : {count} réponse(s) non résolue(s).",
+  "reportRound.clarity.initialSmallSample":
+    "Moins de cinq réponses évaluées. Interprétez ce nombre avec prudence.",
+  "reportRound.clarity.nextPractice": "Créez un entraînement ciblé sur les notions non résolues.",
+  "reportRound.clarity.nextReview":
+    "Examinez les données de cette séance, puis prévoyez une vérification ultérieure.",
+  "reportRound.clarity.nextRecheck":
+    "Ajoutez une vérification liée la prochaine fois pour mesurer la récupération.",
+  "reportRound.clarity.targetPractice": "Entraînement ciblé",
+  "reportRound.clarity.reviewEvidence": "Examiner les données",
+  "reportRound.clarity.linkedRecheck": "vérification liée",
+  "reportRound.clarity.revote": "nouveau vote",
+  "reportRound.clarity.noRecheckEvidence": "Aucune donnée de vérification",
+  "reportRound.clarity.sessionReport": "Rapport de séance",
+  "reportRound.clarity.backToResults": "Retour aux résultats",
+  "reportRound.clarity.noPairedResponses": "Aucune paire de réponses de vérification",
+  "reportRound.clarity.unresolvedConcepts": "notions non résolues",
+  "reportRound.clarity.participation": "participation",
 } satisfies ReportRoundMessages;
 
 export default messages;

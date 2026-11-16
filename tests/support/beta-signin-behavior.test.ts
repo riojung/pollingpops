@@ -36,7 +36,11 @@ type Cookies = Awaited<ReturnType<BrowserContext["cookies"]>>;
 const completeSignIn = new WeakMap<Page, (email: string, returnTo: string) => void>();
 let nextSession = 0;
 
-function pageFixture({ cachedOk = true, cachedEmail = "creator@example.test" } = {}) {
+function pageFixture({
+  cachedOk = true,
+  cachedEmail = "creator@example.test",
+  continueStatus = 200,
+} = {}) {
   const baseURL = mocks.baseURL!;
   let currentUrl = "about:blank";
   let cookies: Cookies = [];
@@ -54,12 +58,27 @@ function pageFixture({ cachedOk = true, cachedEmail = "creator@example.test" } =
     ok: () => Boolean(freshEmail) || cachedOk,
     json: async () => ({ creator: { email: freshEmail ?? cachedEmail } }),
   }));
+  const post = vi.fn(async () => ({
+    status: () => continueStatus,
+    json: async () => ({
+      session: {
+        sessionId: "00000000-0000-4000-8000-000000000001",
+        workspaceId: "00000000-0000-4000-8000-000000000002",
+        serverNow: "2026-11-16T00:00:00.000Z",
+        lastActivityAt: "2026-11-16T00:00:00.000Z",
+        warningAt: "2026-11-16T00:05:00.000Z",
+        expiresAt: "2026-11-16T00:06:00.000Z",
+        absoluteExpiresAt: "2026-12-16T00:00:00.000Z",
+        policy: { idleTimeoutMinutes: 5, warningDurationSeconds: 60 },
+      },
+    }),
+  }));
   const goto = vi.fn(async (destination: string) => {
     currentUrl = new URL(destination, baseURL).href;
   });
   const page = {
     context: () => context,
-    request: { get },
+    request: { get, post },
     goto,
     url: () => currentUrl,
   } as unknown as Page;
@@ -79,7 +98,7 @@ function pageFixture({ cachedOk = true, cachedEmail = "creator@example.test" } =
     ];
     currentUrl = new URL(returnTo, baseURL).href;
   });
-  return { page, context, get, goto };
+  return { page, context, get, post, goto };
 }
 
 beforeEach(() => {
@@ -116,11 +135,19 @@ describe("beta session reuse without discarded documents", () => {
     );
     expect(fresh.page.url()).toBe("http://127.0.0.1:3200/results");
     expect(fresh.goto).not.toHaveBeenCalled();
+    expect(fresh.post).not.toHaveBeenCalled();
 
     const cached = pageFixture();
     await signInBeta(cached.page, "creator@example.test", { returnTo: "/results" });
     expect(cached.goto).toHaveBeenCalledExactlyOnceWith("/results", { waitUntil: "load" });
     expect(cached.get).toHaveBeenCalledExactlyOnceWith("http://127.0.0.1:4200/v1/auth/me");
+    expect(cached.post).toHaveBeenCalledExactlyOnceWith(
+      "http://127.0.0.1:4200/v1/auth/session/activity",
+      { data: { intent: "continue" } },
+    );
+    expect(cached.post.mock.invocationCallOrder[0]).toBeLessThan(
+      cached.goto.mock.invocationCallOrder[0]!,
+    );
     expect(cached.context.clearCookies).not.toHaveBeenCalled();
     expect(mocks.signInCreator).toHaveBeenCalledTimes(1);
 
@@ -149,6 +176,26 @@ describe("beta session reuse without discarded documents", () => {
     );
     expect(wrongAccount.page.url()).toBe("http://127.0.0.1:3200/results");
     expect(wrongAccount.goto).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the real PIN journey if the cached session expires between validation and explicit continuation", async () => {
+    const { signInBeta } = await import("../beta-e2e/sign-in");
+    await signInBeta(pageFixture().page, "creator@example.test");
+    const expired = pageFixture({ continueStatus: 401 });
+    await signInBeta(expired.page, "creator@example.test", { returnTo: "/results" });
+    expect(expired.post).toHaveBeenCalledExactlyOnceWith(
+      "http://127.0.0.1:4200/v1/auth/session/activity",
+      { data: { intent: "continue" } },
+    );
+    expect(expired.context.clearCookies).toHaveBeenCalledExactlyOnceWith({
+      name: "openround_creator",
+    });
+    expect(mocks.signInCreator).toHaveBeenLastCalledWith(expired.page, "creator@example.test", {
+      segment: "education",
+      returnTo: "/results",
+    });
+    expect(expired.goto).not.toHaveBeenCalled();
+    expect(expired.page.url()).toBe("http://127.0.0.1:3200/results");
   });
 
   it.each([

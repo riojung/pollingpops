@@ -2,7 +2,7 @@
 
 import { GuardedLink as Link, useConfirmNavigation } from "../navigation-guard";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { CreatorBrand, creatorLandingHref } from "../brand";
 import { useLocale } from "../locale-provider";
 import { humanError } from "../../lib/api";
@@ -21,6 +21,7 @@ import {
 } from "./workspace-provider";
 import { workspaceCreationOptions } from "./workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
+import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
 import styles from "./workspace.module.css";
 
 type IconName =
@@ -286,6 +287,7 @@ interface WorkspaceShellProps {
   title: string;
   titleLanguage?: string;
   description?: string;
+  headerDensity?: "comfortable" | "compact";
   actions?: ReactNode;
   children: ReactNode;
   /** Compatibility name: requires the baseline shell, independently of UX beta. */
@@ -308,47 +310,69 @@ export function WorkspaceNav({
   const pathname = usePathname();
   const { locale, t } = useLocale();
   const { productFeatures } = useWorkspace();
+  const pendingDisclosure = useRef<HTMLDetailsElement | null>(null);
+  const available = destinations.filter((destination) =>
+    destination.feature === "ideaBoards"
+      ? productFeatures?.ideaBoards === true || productFeatures?.canvasBoards === true
+      : !destination.feature || productFeatures?.[destination.feature] === true,
+  );
+  const renderDestination = (destination: (typeof destinations)[number]) => {
+    const active = destination.match(pathname);
+    return (
+      <Link
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed && !mobile ? t(destination.label) : undefined}
+        data-sidebar-hint={collapsed && !mobile ? t(destination.label) : undefined}
+        title={collapsed && !mobile ? t(destination.label) : undefined}
+        className={
+          mobile
+            ? active
+              ? styles.mobileNavActive
+              : styles.mobileNavLink
+            : active
+              ? styles.navLinkActive
+              : styles.navLink
+        }
+        href={destination.href}
+        key={destination.href}
+        onClick={(event) => {
+          pendingDisclosure.current = mobile ? event.currentTarget.closest("details") : null;
+        }}
+        onNavigate={() => {
+          // GuardedLink invokes this only after any unsaved-work confirmation succeeds.
+          if (pendingDisclosure.current) pendingDisclosure.current.open = false;
+          pendingDisclosure.current = null;
+        }}
+      >
+        {!mobile ? <ShellIcon name={destination.icon} /> : null}
+        {mobile ? (
+          t(destination.label)
+        ) : (
+          <span className={styles.sidebarLabel}>{t(destination.label)}</span>
+        )}
+      </Link>
+    );
+  };
+  const secondary = available.slice(3);
+  const activeSecondary = secondary.find((destination) => destination.match(pathname));
   return (
     <nav
       className={mobile ? styles.mobileNav : styles.nav}
       aria-label={mobile ? t("workspace.nav.mobileLabel") : t("workspace.nav.label")}
       lang={locale}
     >
-      {destinations
-        .filter((destination) =>
-          destination.feature === "ideaBoards"
-            ? productFeatures?.ideaBoards === true || productFeatures?.canvasBoards === true
-            : !destination.feature || productFeatures?.[destination.feature] === true,
-        )
-        .map((destination) => {
-          const active = destination.match(pathname);
-          return (
-            <Link
-              aria-current={active ? "page" : undefined}
-              aria-label={collapsed && !mobile ? t(destination.label) : undefined}
-              data-sidebar-hint={collapsed && !mobile ? t(destination.label) : undefined}
-              title={collapsed && !mobile ? t(destination.label) : undefined}
-              className={
-                mobile
-                  ? active
-                    ? styles.mobileNavActive
-                    : styles.mobileNavLink
-                  : active
-                    ? styles.navLinkActive
-                    : styles.navLink
-              }
-              href={destination.href}
-              key={destination.href}
-            >
-              {!mobile ? <ShellIcon name={destination.icon} /> : null}
-              {mobile ? (
-                t(destination.label)
-              ) : (
-                <span className={styles.sidebarLabel}>{t(destination.label)}</span>
-              )}
-            </Link>
-          );
-        })}
+      {(mobile ? available.slice(0, 3) : available).map(renderDestination)}
+      {mobile ? (
+        <details className={styles.mobileMore} key={pathname}>
+          <summary className={activeSecondary ? styles.mobileNavActive : styles.mobileNavLink}>
+            {workspaceFlowMessages(locale).more}
+            {activeSecondary ? (
+              <span className={styles.mobileCurrent}>{t(activeSecondary.label)}</span>
+            ) : null}
+          </summary>
+          <div className={styles.mobileMorePanel}>{secondary.map(renderDestination)}</div>
+        </details>
+      ) : null}
     </nav>
   );
 }
@@ -398,7 +422,21 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
   const options = workspaceCreationOptions({ canEdit, productFeatures });
   if (!options.length) return null;
   return (
-    <details className={styles.createMenu}>
+    <details
+      className={styles.createMenu}
+      onKeyDown={(event) => {
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          !event.currentTarget.open
+        )
+          return;
+        event.preventDefault();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }}
+    >
       <summary
         aria-label={t("workspace.create.label")}
         className={styles.createButton}
@@ -484,6 +522,7 @@ export function WorkspaceShell({
   title,
   titleLanguage,
   description,
+  headerDensity = "compact",
   actions,
   children,
   requireBeta = true,
@@ -800,10 +839,12 @@ export function WorkspaceShell({
         <main
           className={styles.main}
           id="main"
+          data-header-density={headerDensity === "compact" ? "compact" : undefined}
           lang={translationLevel === "full" ? locale : "en-CA"}
         >
           <header
             className={styles.pageHeader}
+            data-density={headerDensity === "compact" ? "compact" : undefined}
             lang={translationLevel === "none" ? "en-CA" : locale}
           >
             <div>

@@ -1,6 +1,6 @@
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
 import { describe, expect, it } from "vitest";
-import { workspaceCreationOptions } from "./workspace-creation-model";
+import { workspaceCreationGoals, workspaceCreationOptions } from "./workspace-creation-model";
 
 const features = WorkspaceProductFeaturesSchema.parse({
   workspaceShell: true,
@@ -20,6 +20,21 @@ const features = WorkspaceProductFeaturesSchema.parse({
   discover: false,
 });
 describe("workspace creation availability", () => {
+  it("offers beginner goals without bypassing roles or resolved feature grants", () => {
+    expect(workspaceCreationGoals({ canEdit: true, productFeatures: features })).toEqual([
+      { kind: "poll", href: "/create?type=poll" },
+      { kind: "quiz", href: "/create?type=quiz" },
+      { kind: "presentation", href: "/create/presentation" },
+    ]);
+    expect(workspaceCreationGoals({ canEdit: false, productFeatures: features })).toEqual([]);
+    expect(workspaceCreationGoals({ canEdit: true, productFeatures: null })).toEqual([]);
+    expect(
+      workspaceCreationGoals({
+        canEdit: true,
+        productFeatures: { ...features, builderV2: false, presentations: false },
+      }),
+    ).toEqual([{ kind: "round", href: "/dashboard" }]);
+  });
   it("offers all enabled products using their actual creation routes", () => {
     expect(workspaceCreationOptions({ canEdit: true, productFeatures: features })).toEqual([
       { kind: "round", href: "/create?product=round" },

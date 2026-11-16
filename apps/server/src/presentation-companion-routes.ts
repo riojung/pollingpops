@@ -52,6 +52,7 @@ interface PresentationCompanionRouteDependencies {
     | "createCompanionPass"
     | "revokeCompanionPass"
     | "getCompanionSnapshot"
+    | "getCompanionMedia"
     | "companionCommand"
     | "getCompanionRecoveryPacks"
     | "getCompanionPublishedQuestions"
@@ -87,7 +88,7 @@ interface PresentationCompanionRouteDependencies {
 
 function presentationCompanionRateLimitKey(
   request: FastifyRequest,
-  operation: "snapshot" | "command" | "catalog" | "published-questions",
+  operation: "snapshot" | "command" | "catalog" | "published-questions" | "media",
   bearerToken: PresentationCompanionRouteDependencies["bearerToken"],
 ) {
   const body = request.body as { companionToken?: unknown } | null;
@@ -120,7 +121,7 @@ export function registerPresentationCompanionRoutes(
   } = dependencies;
   const rateLimitKey = (
     request: FastifyRequest,
-    operation: "snapshot" | "command" | "catalog" | "published-questions",
+    operation: "snapshot" | "command" | "catalog" | "published-questions" | "media",
   ) => presentationCompanionRateLimitKey(request, operation, bearerToken);
 
   app.post("/v1/presentation-sessions/:id/companion-pass", async (request, reply) => {
@@ -212,6 +213,40 @@ export function registerPresentationCompanionRoutes(
             includePublishedQuestions === "true",
           ),
         };
+      } catch (error) {
+        return sendServiceError(error, reply, request.id);
+      }
+    },
+  );
+
+  app.get(
+    "/v1/presentation-sessions/:id/companion-media/:mediaId",
+    {
+      onRequest: async (_request, reply) => {
+        noStore(reply);
+      },
+      preHandler: async (request, reply) => {
+        if (!(await enforceSharedAdmission(request, reply, rateLimitKey(request, "media"), 120)))
+          return reply;
+      },
+      config: {
+        rateLimit: {
+          max: 120,
+          timeWindow: "1 minute",
+          keyGenerator: (request: FastifyRequest) => rateLimitKey(request, "media"),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id, mediaId } = z
+        .object({ id: z.string().uuid(), mediaId: z.string().uuid() })
+        .parse(request.params);
+      const token = bearerToken(request);
+      if (!token)
+        return apiError(reply, 401, "UNAUTHORIZED", "Companion credential required", request.id);
+      try {
+        const result = await service.getCompanionMedia(id, mediaId, token);
+        return { media: result.media, downloadUrl: result.downloadUrl };
       } catch (error) {
         return sendServiceError(error, reply, request.id);
       }

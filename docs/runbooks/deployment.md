@@ -41,6 +41,11 @@ Build local development images:
 ./scripts/product-build.sh development
 ```
 
+For focused local image builds, add `--component server|web|control`. See
+[component builds and compiler recovery](component-builds.md) for host build commands, cache
+contracts, production browser test reuse, and output-lock recovery. Hosted releases still require
+a complete manifest from one exact Git commit.
+
 Hosted builds require a clean Git worktree, Buildx, a stable Cosign release from 3.0.6 up to but not
 including 4.0.0, an HTTPS application origin matching the checked-in target config, a registry
 prefix matching that config, and `--push`. The build and deployment wrappers reject an unsupported
@@ -138,7 +143,7 @@ Examples:
 #### Docker readiness and the Polling Pops rebrand
 
 Development service commands check the Docker CLI, Compose v2 plugin, and daemon before changing
-services. Development product builds make the same check before running the host build. Each
+services. Development product builds make the same check before compiling inside Docker. Each
 preflight subprocess has a ten-second timeout; dry runs need no running Docker daemon.
 
 A missing `/var/run/docker.sock` is a runtime/context problem, not an image-name problem. Start

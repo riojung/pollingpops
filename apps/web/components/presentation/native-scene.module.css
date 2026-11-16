@@ -12,6 +12,9 @@
   border: 1px solid var(--native-border, var(--ui-border, #cbd5e1));
   font-family: var(--native-font, inherit);
 }
+.stage[data-native-fixed-layout="true"] {
+  box-sizing: border-box;
+}
 .connections {
   position: absolute;
   inset: 0;
@@ -31,34 +34,57 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.node h1[tabindex="0"],
+.node p[tabindex="0"],
+.richBody[tabindex="0"] {
+  overscroll-behavior: contain;
+}
+.node h1[tabindex="0"]:focus-visible,
+.node p[tabindex="0"]:focus-visible,
+.richBody[tabindex="0"]:focus-visible {
+  outline: 3px solid var(--native-link, var(--ui-focus, #1769aa));
+  outline-offset: -4px;
+}
 .node h1 {
-  font-size: clamp(20px, 5cqw, 48px);
-  line-height: var(--native-title-leading, 1.08);
+  /* The authored 1280px plane uses 48px titles and 26px body text. Frames,
+     type and padding scale together, so a smaller editor does not change text fit. */
+  font-size: var(--native-node-size, 3.75cqw);
+  line-height: var(--native-node-leading, var(--native-title-leading, 1.08));
+  font-weight: var(--native-node-weight, 700);
+}
+.node[data-native-typography] h1,
+.node p,
+.richBody {
+  color: var(--native-node-color, inherit);
+  font-family: var(--native-node-font, inherit);
+  text-align: var(--native-node-align, inherit);
 }
 .stage[data-native-theme] .node h1 {
-  color: inherit;
+  color: var(--native-node-color, inherit);
   max-width: none;
-  font-family: inherit;
+  font-family: var(--native-node-font, inherit);
 }
 .node p {
-  font-size: clamp(14px, 2.5cqw, 26px);
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody {
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  padding: var(--native-padding, 6px);
+  padding: var(--native-padding, 0.46875cqw);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-size: clamp(14px, 2.5cqw, 26px);
-  line-height: var(--native-body-leading, 1.35);
+  font-size: var(--native-node-size, 2.03125cqw);
+  line-height: var(--native-node-leading, var(--native-body-leading, 1.35));
+  font-weight: var(--native-node-weight, 400);
 }
 .richBody p {
   width: auto;
@@ -101,7 +127,9 @@
 .shape span {
   position: relative;
   max-width: 85%;
-  font-size: clamp(12px, 2cqw, 22px);
+  font-size: 1.71875cqw;
+  /* Keep fixed-plane label metrics consistent with design-application fit checks. */
+  line-height: 1.35;
   text-align: center;
   overflow-wrap: anywhere;
 }
@@ -129,8 +157,143 @@
 .canvas {
   min-width: 0;
 }
+.canvas:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.canvasSurface {
+  position: relative;
+  min-width: 0;
+}
+.snapGuides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 60;
+}
+.snapGuides line {
+  stroke: #367bad;
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  vector-effect: non-scaling-stroke;
+}
+.groupOutline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px dashed #1769aa;
+  pointer-events: none;
+}
+.groupOutline button {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  pointer-events: auto;
+  touch-action: none;
+  min-width: 28px;
+  min-height: 28px;
+  color: #102a43;
+  background: white;
+  border: 1px solid #1769aa;
+  border-radius: 4px;
+}
 .editableNode {
   cursor: grab;
+}
+.selectionOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.selectionOutline {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 2px solid #1769aa;
+  outline-offset: 0;
+  pointer-events: none;
+}
+.selectionDragBorder {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  background: #1769aa12;
+}
+.selectionDragBorder[data-native-move-border="n"] {
+  inset: -8px 0 auto;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="e"] {
+  inset: 0 -8px 0 auto;
+  width: 8px;
+}
+.selectionDragBorder[data-native-move-border="s"] {
+  inset: auto 0 -8px;
+  height: 8px;
+}
+.selectionDragBorder[data-native-move-border="w"] {
+  inset: 0 auto 0 -8px;
+  width: 8px;
+}
+@media (min-width: 701px) {
+  .stage[data-native-direct-selection="true"] .selected {
+    outline: none;
+  }
+}
+.directResizeHandle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  transform: translate(-50%, -50%);
+}
+.directResizeHandle::after {
+  content: "";
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #1769aa;
+  background: #fff;
+  transform: rotate(var(--native-handle-angle, 0deg));
+}
+.directResizeHandle[data-native-resize-corner]::after {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+.directResizeHandle[data-native-resize-handle="n"],
+.directResizeHandle[data-native-resize-handle="s"] {
+  cursor: ns-resize;
+}
+.directResizeHandle[data-native-resize-handle="w"],
+.directResizeHandle[data-native-resize-handle="e"] {
+  cursor: ew-resize;
+}
+.directResizeHandle[data-native-resize-handle="nw"],
+.directResizeHandle[data-native-resize-handle="se"] {
+  cursor: nwse-resize;
+}
+.directResizeHandle[data-native-resize-handle="ne"],
+.directResizeHandle[data-native-resize-handle="sw"] {
+  cursor: nesw-resize;
+}
+.directResizeHandle:focus-visible {
+  outline: 3px solid #1769aa;
+  outline-offset: -2px;
+  background: #ffffffcc;
 }
 .handles {
   position: absolute;
@@ -288,7 +451,7 @@
   color: var(--ui-text-muted, #52616f);
 }
 @media (max-width: 700px) {
-  .stage {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) {
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
@@ -296,50 +459,78 @@
     padding: 12px;
     container-type: normal;
   }
-  .connections {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connections {
     display: none;
   }
-  .node {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node {
     position: relative !important;
     left: auto !important;
     top: auto !important;
     width: 100% !important;
     height: auto !important;
+    transform: none !important;
   }
-  .node h1,
-  .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-decorative="true"] {
+    display: none;
+  }
+  .groupOutline,
+  .selectionOverlay,
+  .snapGuides {
+    display: none;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     height: auto;
     overflow: visible;
   }
-  .node h1 {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > h1,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node > p {
+    padding: var(--native-reading-padding, 6px);
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node h1 {
     font-size: 30px;
   }
-  .node p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node p {
     font-size: 18px;
   }
-  .richBody {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody {
     height: auto;
     overflow: visible;
     font-size: 18px;
+    padding: var(--native-reading-padding, 6px);
   }
-  .richBody p {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .richBody p {
     font-size: inherit;
   }
-  .shape {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > :is(h1, p, .richBody) {
+    /* Nested rich paragraphs resolve this token rather than inheriting wrapper color. */
+    --native-node-color: var(--native-text, #102a43);
+    color: var(--native-text, #102a43);
+    line-height: 1.45;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"]))
+    .node[data-native-typography]
+    > h1 {
+    line-height: 1.2;
+  }
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape {
     min-height: 100px;
   }
-  .shape span {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .shape span {
     font-size: 18px;
   }
-  .image {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image {
     min-height: 80px;
   }
-  .image,
-  .image > :not(img) {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image,
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image > :not(img) {
     height: auto;
     overflow: visible;
   }
-  .image img {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .image img {
     height: auto;
     max-height: none;
     object-fit: contain;
@@ -361,7 +552,7 @@
     touch-action: auto;
     cursor: auto;
   }
-  .connectorSummary {
+  .stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .connectorSummary {
     position: static;
     width: auto;
     height: auto;
@@ -394,4 +585,381 @@
 }
 .fitFeedback {
   margin-block: 8px 0;
+}
+
+.sceneDelivery {
+  width: 100%;
+  min-width: 0;
+  color: var(--native-text, var(--ui-text-strong, #102a43));
+  font-family: var(--native-font, inherit);
+}
+.interactionToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px;
+  color: var(--native-text, var(--ui-text-strong, #102a43));
+  background: var(--native-background, var(--ui-surface, #fff));
+  border: 1px solid var(--native-border, var(--ui-border, #cbd5e1));
+}
+.interactionToolbar p {
+  flex: 1 1 240px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.interactionToolbar button,
+.interactionAction {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--native-border, var(--ui-border-strong, #486581));
+  border-radius: 8px;
+  color: var(--native-link, var(--ui-link, #145da0));
+  background: var(--native-background, var(--ui-surface, #fff));
+  font: inherit;
+  font-size: clamp(14px, 2cqw, 22px);
+  line-height: 1.3;
+  text-align: start;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+.interactionToolbar button {
+  font-size: 14px;
+}
+.interactionToolbar button:focus-visible,
+.interactionAction:focus-visible,
+.interaction:focus-visible,
+.revealBody:focus-visible {
+  outline: 3px solid var(--native-link, var(--ui-focus, #1769aa));
+  outline-offset: -4px;
+}
+.interaction {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 44px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 8px;
+  color: var(--native-text, #102a43);
+  background: var(--native-background, #fff);
+}
+
+.detailDialog {
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: 1rem;
+  line-height: 1.5;
+  text-align: left;
+}
+.detailDialog::backdrop {
+  background: var(--ui-overlay);
+}
+.detailDialog h2 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.detailBody {
+  margin-top: 1rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.node .detailBody p {
+  height: auto;
+  max-height: none;
+  padding: 0;
+  overflow: visible;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.interactionAction {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+}
+.interaction[data-native-interaction="link"] .interactionAction {
+  flex: 1;
+  justify-content: center;
+  text-decoration: underline;
+}
+.interactionNotice {
+  display: block;
+  font-size: max(12px, 0.75em);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.interactionLabel {
+  display: block;
+  padding: 10px;
+  font-size: clamp(14px, 2cqw, 22px);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.revealBody {
+  min-height: 0;
+  padding: 8px;
+  border: 1px solid var(--native-border, var(--ui-border, #cbd5e1));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.revealBody[hidden] {
+  display: none;
+}
+.node .revealBody p,
+.node .interactionPreview {
+  height: auto;
+  padding: 0;
+  font-size: clamp(14px, 2cqw, 22px);
+  overflow: visible;
+}
+.node .interactionPreview {
+  padding: 8px;
+}
+.outline {
+  display: grid;
+  gap: 16px;
+  aspect-ratio: auto;
+  padding: 16px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.outline .node[data-decorative="true"],
+.outline .connections {
+  display: none;
+}
+.outline .node {
+  position: relative;
+  inset: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  z-index: auto !important;
+  transform: none !important;
+}
+.outline .node h1,
+.outline .node p,
+.outline .richBody {
+  height: auto;
+  overflow: visible;
+}
+.outline .node > h1,
+.outline .node > p,
+.outline .richBody {
+  padding: var(--native-reading-padding, 6px);
+}
+.outline .node h1 {
+  font-size: clamp(22px, 5cqw, 36px);
+}
+.outline .node p,
+.outline .richBody {
+  font-size: 16px;
+}
+.outline .node[data-native-typography] > :is(h1, p, .richBody) {
+  --native-node-color: var(--native-text, #102a43);
+  color: var(--native-text, #102a43);
+  line-height: 1.45;
+}
+.outline .node[data-native-typography] > h1 {
+  line-height: 1.2;
+}
+.outline .shape,
+.outline .image {
+  min-height: 140px;
+}
+.outline .shape span {
+  font-size: 18px;
+}
+.outline .image img {
+  max-height: 400px;
+  object-fit: contain;
+}
+.outline .connectorSummary {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  overflow-wrap: anywhere;
+}
+.outline .interaction {
+  height: auto;
+  overflow: visible;
+}
+.outline .revealBody {
+  max-height: none;
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+  .interaction *,
+  .interactionToolbar * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Native editor chrome stays separate from the audience slide and its phone reader. */
+.objectToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.objectToolbar .actions button,
+.insertDisclosure > summary,
+.editorDisclosure > summary {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  color: var(--ui-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--ui-surface-raised);
+  cursor: pointer;
+}
+
+.objectToolbar .actions button:focus-visible,
+.insertDisclosure > summary:focus-visible,
+.editorDisclosure > summary:focus-visible {
+  outline: 3px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+
+.insertDisclosure {
+  min-width: 0;
+}
+
+.insertDisclosure[open] {
+  flex-basis: 100%;
+}
+
+.insertDisclosure > summary {
+  width: fit-content;
+}
+
+.insertPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.insertPanel fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.insertPanel legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.contextInspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.contextInspector > [data-native-inspector-section] {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.contextInspector > [hidden] {
+  display: none;
+}
+
+.contextInspector .actions button,
+.contextInspector .nodeList button {
+  min-height: 40px;
+}
+
+.contextInspector fieldset + fieldset {
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.selectionSummary {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.selectionSummary label,
+.selectionSummary .help {
+  margin-bottom: 0;
+}
+
+.editorDisclosure > summary {
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .objectToolbar {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .objectToolbar .actions button,
+  .insertDisclosure > summary,
+  .contextInspector .actions button,
+  .contextInspector .nodeList button {
+    min-height: 44px;
+  }
+}
+
+.staticThumbnail {
+  pointer-events: none;
+}
+
+/* Permission boundaries retain the existing normal-flow layout and portaled inspector. */
+.permissionControls {
+  margin: 0;
+  min-inline-size: 0;
+}
+.permissionControls:not(.objectToolbar) {
+  border: 0;
+  padding: 0;
+}
+.permissionControls.objectToolbar {
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.permissionControls[hidden] {
+  display: none;
 }

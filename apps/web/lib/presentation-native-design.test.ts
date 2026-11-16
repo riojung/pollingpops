@@ -113,6 +113,18 @@ describe("native design and conservative layouts", () => {
     });
   });
 
+  it.each([4, 5] as const)("preserves scene %s when applying a design", (version) => {
+    const scene = { ...fixture(), schemaVersion: version };
+    const next = applyNativeSceneDesign(scene, {
+      theme: "midnight",
+      font: "sans",
+      spacing: "relaxed",
+    });
+    expect(next.schemaVersion).toBe(version);
+    expect(next.nodes).toEqual(scene.nodes);
+    expect(PresentationSceneDraftSchema.safeParse(next).success).toBe(true);
+  });
+
   it.each([
     ["title_body", 1, false],
     ["split", 2, false],

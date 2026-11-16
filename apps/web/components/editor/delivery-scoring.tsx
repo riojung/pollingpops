@@ -2,6 +2,7 @@ import { questionTypeDefinition } from "@openround/contracts";
 import type { QuestionDraft } from "@openround/contracts";
 import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
+import { authoringWorkflowCopy } from "./authoring-workflow-copy";
 
 export function DeliveryScoring({
   question,
@@ -10,7 +11,8 @@ export function DeliveryScoring({
   question: QuestionDraft;
   onUpdateQuestion: QuestionUpdater;
 }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const copy = authoringWorkflowCopy(locale);
   return (
     <>
       <div className="toolbar" style={{ marginTop: 22 }}>
@@ -28,7 +30,7 @@ export function DeliveryScoring({
           >
             {[5, 10, 20, 30, 60, 90, 120, 300].map((seconds) => (
               <option key={seconds} value={seconds}>
-                {seconds} seconds
+                {copy.seconds.replace("{count}", new Intl.NumberFormat(locale).format(seconds))}
               </option>
             ))}
           </select>

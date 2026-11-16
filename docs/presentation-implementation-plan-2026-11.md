@@ -13,6 +13,193 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Expanded design collection and application — November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration adds 22 original visual systems to
+the existing eight, reaching 30 collections and 240 editable native layouts. Each addition
+owns its cover and seven coordinated interior compositions. Ten-language discovery and
+example narratives cover business, education, creative and impact needs. Ten overlapping
+categories add Corporate, Creative, Academic, Nature, Playful and Geometric discovery.
+
+The [additional public-template benchmark](evidence/presentation-expanded-designs-2026-11.md)
+records eight more visually inspected covers and interiors. The original eight families and
+their existing identifiers remain stable. Typed composition modules share bounded native
+primitives; no new contract version, migration, dependency or paid asset service is needed.
+
+Existing-deck application defaults to Full design, mapping meaningful authored objects into
+family content regions and replacing only unreferenced decorative artwork. Colors and fonts
+retains the earlier geometry-preserving behavior. Complex connected/grouped/interactive or
+imported canvases retain geometry with an explicit notice. Previews and commits use one
+validated transformation; meaningful IDs, content, reading order, provenance, notes and motion
+must survive with single-step undo. Base color theme controls must identify a collection palette
+honestly and explain their difference from a full layout application.
+
+Discovery initially renders twelve covers and progressively reveals the remaining collections.
+Full-catalog search and category filters apply before pagination; preview decks are constructed
+only on demand. Acceptance covers all 300 localized example decks, 240 English layouts'
+rendered heading/paragraph fit, separate content regions, panel contrast, keyboard browsing,
+localized creation and reload, layout insertion, and full-design preview/apply/undo/reload on
+existing authored work. Results belong in [implementation status](implementation-status.md);
+local checks do not establish hosted, physical-device or native-language human acceptance.
+
+## Authored visual collections — November 13, 2026
+
+The `codex/presentation-designed-collections` follow-up deepens the eight design families into
+complete visual sets. The original names and layout APIs remain stable; each family now has
+its own typography, recurring components, cover composition and eight coordinated interiors.
+Family-specific purposes and illustrative headlines are supplied in all ten creation languages.
+Gallery discovery, full-size previews, new-deck creation and individual-layout insertion use
+the same factories. Existing presentation styling keeps content and native geometry intact.
+
+The [individual-template benchmark](evidence/presentation-designed-collections-2026-11.md)
+records nine inspected public Canva sets and the clean-room design decisions. Implementations
+use editable native vectors and system fonts, with explicit image placeholders. Additional
+families can extend the typed catalog, localized narrative and composition factory.
+
+Named palettes, bounded per-object typography and decorative shape appearance use scene 9 /
+document 18 with additive migration 108. Deploy the migration before enabling new-version
+writes; existing frozen publications are not rewritten. Legacy visuals remain unchanged when
+the optional fields are absent. Browser, live, shared, reading and static-export surfaces must
+honor the same public fields and retain private-data fences. Acceptance results belong in
+[implementation status](implementation-status.md); local automated checks do not qualify hosted,
+physical-device or native-language acceptance gates.
+
+## Presentation design collection — November 13, 2026
+
+The `codex/presentation-design-library` follow-up separates visual designs from the content
+and scenario collection below. Eight original families supply 64 editable native layout recipes
+with ten-locale example copy. Templates → Designs supports visual browsing, filtering, preview
+and new-draft creation. The editor supports applying style to existing content and inserting
+one selected layout through the existing undo/autosave transaction.
+
+Style application retains native geometry and content; ordinary slides use the existing native
+adapter. Activity appearance follows nearby visible content, and imported raster colors remain
+part of the original artwork. Appearance changes and layout insertion are separate actions.
+Existing motion is retained, published source content stays immutable, and complete-document
+budgets are validated before application or spatial insertion. Creation retries preserve their
+original request identity, owner context and initial draft revision.
+
+Public catalog/help evidence, clean-room provenance, implementation boundaries and export
+consistency are recorded in [the design-library evidence](evidence/presentation-design-library-2026-11.md).
+The source uses existing versioned scene primitives and requires no new migration or paid asset
+service. Validation results are recorded in [implementation status](implementation-status.md).
+This closes a specific design-discovery/application gap without treating an original starter
+collection as numerical parity with competitor catalogs or advancing release-acceptance gates.
+
+## Customer template collection — November 12, 2026
+
+The pre-launch template work prioritizes complete, useful examples and faithful previews.
+It improves the existing collection rather than using catalog count as a quality measure.
+The implementation branch is `codex/customer-template-collection`; it starts from main
+independently of the open workspace-color PR.
+
+### Reference observations and product decisions
+
+Sources were inspected on November 12, 2026. These observations describe the public
+libraries; they do not establish market share, customer outcomes or independently measured
+presentation trends.
+
+| Reference                                                                                  | Observed pattern                                                                                 | Polling Pops decision                                                                        |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [Canva presentation library](https://www.canva.com/presentations/templates/)               | Customer-job names, searchable multi-slide designs and visible slide counts                      | Keep real use-case browsing and show complete sequences before creation                      |
+| [Slidesgo 2026 collection](https://slidesgo.com/presentation-trends-2026)                  | Industry, content, style, color and format filters; distinct design families                     | Introduce original Editorial, Briefing and Workshop families with purpose-built compositions |
+| [Adobe Express presentation library](https://www.adobe.com/express/templates/presentation) | Business/education categories, editable matching design elements and whole-presentation examples | Keep text, diagrams and data editable, with one coherent visual language per deck            |
+
+Sources informed browsing and quality standards. Polling Pops scenarios, copy and native
+compositions are original. Static content and existing rendering primitives keep ordinary
+creation independent of per-use AI generation or paid stock assets.
+
+### Delivered scope
+
+- Preserve the 21 Presentation IDs and ten creation languages. Upgrade all 96 slides in
+  the 12 native decks using covers, statements, comparisons, cards, processes, a timeline,
+  editable data views and closings. Preserve existing authored examples, figures and notes.
+  Keep the nine facilitated templates available alongside these content-only decks.
+- Deepen eight existing starter IDs: `source-evaluation`, `percentage-check`,
+  `feedback-skills`, `project-kickoff`, `event-feedback`, `onboarding-experience`,
+  `service-experience` and `learning-needs`. Keep the knowledge packs discoverable as
+  quizzes; put unscored reflection in their facilitator guides.
+- Supply audience, approximate duration, preparation, facilitation, interpretation and
+  follow-up guidance in all ten languages. Preserve creation-language text after later
+  interface-language changes.
+- Give Surveys participant-safe introductions and explicit optional items through the same
+  factory used by preview and creation. Keep owner interpretation guidance separate.
+  Survey templates use the supported unscored polls and labeled ratings.
+- Use dedicated read-only question/questionnaire dialogs, reveal correct-answer reasoning
+  for creator knowledge previews, and show presenter notes in the Presentation preview.
+  Preserve independent copies, idempotent retries, viewer previews and creation permissions.
+
+The expanded activity examples have an explicit job and next action:
+
+| Example               | Questions | Intended use                                                                                  |
+| --------------------- | --------: | --------------------------------------------------------------------------------------------- |
+| Source evaluation     |         6 | Practice evaluating supplied evidence, explain the answer, then recheck with another scenario |
+| Percentage check      |         6 | Work through concrete percentage calculations with explanations and linked rechecks           |
+| Feedback skills       |         4 | Compare responses in supplied workplace scenarios and discuss the reasoning                   |
+| Project kickoff       |         7 | Surface team expectations and uncertainties before agreeing on next steps                     |
+| Event feedback        |         8 | Gather actionable feedback about an event and its follow-up                                   |
+| Onboarding experience |         8 | Identify friction in a new joiner's experience and prioritize support                         |
+| Service experience    |         8 | Review a service interaction without forcing respondents to report a problem                  |
+| Learning needs        |         8 | Identify learning priorities and practical support needs before planning an activity          |
+
+The last four also supply the complete Survey questionnaires. The curated Survey catalog
+retains Team collaboration and Community planning as shorter legacy starters; those two,
+the remaining Round starters and the nine facilitated Presentation templates are not
+represented as newly expanded editorial content.
+
+### Quality evaluation and remaining editorial work
+
+Evaluate each example for task completeness, clear original content, coherent visual
+hierarchy, meaningful interactions, preview fidelity, readable reflow and editability.
+A useful editorial rubric allocates 20 points each to completeness, content and visual
+craft, 15 to interactions, 10 each to preview fidelity and accessibility/reflow, and 5 to
+provenance/editability. An 85-point editorial target is a proposal for customer validation,
+not a score implied by passing automated tests.
+
+Automated checks must catch invalid drafts, wrong arithmetic/answer keys, broken recheck
+links, scored preferences, missing translations, clipping, failed copy creation and
+preview/creation disagreement. Software checks do not establish native-language editorial
+approval or usefulness for a specific customer. The next editorial work is to observe a
+creator adapting and running each workflow, review translations with native speakers,
+and use that evidence to prioritize additional industry scenarios and visual families.
+Free-response Surveys remain a separate capability; these templates do not advertise it.
+
+## Built-in motion backgrounds — November 12, 2026
+
+The `codex/presentation-motion-backgrounds` slice adds optional Aurora, Soft waves,
+Floating orbs, Gradient mesh, Flowing ribbons and Star drift presets. A static background
+remains the default. The Layout inspector provides visual choices, None, an explicit
+selected-tile preview and the existing apply-design action. This is a fixed original
+library: no custom motion builder, stock video, remote asset service or paid generation
+is required.
+
+Motion uses three bounded decorative CSS layers with slow transform animation, with
+colors harmonized to the slide's existing palette. Content, choices, links and geometry
+controls remain above the background. Native slides, inherited ordinary slides and
+audience activities share the renderer. Filmstrip/layout thumbnails stay still; reduced
+motion preferences, hidden tabs and offscreen backgrounds pause animation. A local
+pause/play control sits outside the slide artwork and persists across slide changes.
+Playback preferences are not document edits, responses or broadcast actions.
+
+Published, shared and assignment content preserves the selected preset. PNG, PDF,
+readable HTML and offline HTML retain their existing static-export semantics and render
+a deterministic still composition. Print uses a still background too. New UI labels
+cover all ten supported locales; authored content is unchanged.
+
+### Stored-content compatibility
+
+The optional closed `design.motionBackground` token explicitly opts into scene schema8
+and Presentation document17. Existing documents and omitted tokens keep their original
+versions and appearance. Removing motion retains the document's already-supported
+version; Undo, duplicate, recovery, bulk design and assistance preserve higher versions.
+Publication remains immutable. Named tokens accept no URLs, scripts or arbitrary CSS.
+
+Append-only migration107 extends the PostgreSQL validators and delivery/response fences
+for these versions. It runs through the existing migration process before the updated
+writer is used; it does not rewrite stored JSON or hashes. Motion-enabled documents
+require the updated parser/renderer. No automatic downgrade to an older application
+version is provided for documents written with the new capability.
+
 ## Product definition
 
 The first credible broad release must let an ordinary creator make a pitch, project update,
@@ -26,16 +213,180 @@ The complete workflow is:
 3. Apply a consistent theme, add notes and preview the audience experience.
 4. Present through a private control surface and clean audience display.
 5. Optionally run activities with explicit collect, close and reveal controls.
-6. Share a private read-only link or static file; later assign genuinely self-paced activities.
+6. Share a private read-only link or static file, or choose supported self-paced reading/practice.
 
 Do not force points, correct answers, confidence or educational language into a business deck.
 Do not require AI for any ordinary creation, edit or presentation action.
+
+## UX upgrade track and current gaps
+
+November 8, 2026 source checkpoint: `codex/presentation-ux-foundation` improves the entry and editor
+around existing capabilities. Blank creation and the visual gallery lead; all 21 templates have
+real first-slide thumbnails, use-case filters, search, clear/no-results states and separate
+content/activity counts. Source proposals and optional outline assistance remain secondary and
+keep their existing explicit intent, review and allowance behavior. Source proposals are not
+visual slide import; PDF/image visual import remains in the editor.
+
+The current editor adds a stable thumbnail filmstrip, central slide and contextual inspector,
+with title/save/publication state and Preview/Publish/Present/Share in the command bar. Secondary
+insertion/delivery controls use disclosures. Native inspector sections preserve object selection
+and in-progress fields while switching. That foundation used filmstrip image placeholders;
+the next design-quality slice below adds authorized previews. Existing schemas, exact retries,
+permissions and frozen publications remain the
+authority. Responsive mode uses available editor width so page zoom also closes crowded rails;
+Undo/Redo preserves an open inspector, and closing secondary dialogs restores the invoking action.
+
+Automated qualification for this source passes `VITEST_MAX_WORKERS=1 pnpm check`: 6,910 tests,
+formatting, lint, types, Docker-context validation, all four application/admin builds and the
+compiled-server startup/configuration smoke. Standard opt-in database/provider suites remain
+skipped. Initial browser qualification passed 68 selected workflows across desktop Chromium/Firefox and
+phone Chromium/WebKit using one final beta artifact and a synthetic API/media fixture. Coverage
+includes the new creation/inspector journeys, editing/history, grouping, image placement,
+interactions, choice practice, private sharing, question starters, rich text and actual static/
+offline downloads. The workflows include automated accessibility, focus, 320px layout and 200%
+zoom checks; they do not cover every existing browser journey.
+
+The November 9 review follow-up additionally passes all 14 Recovery Pack browser cases across
+the same four profiles with a rebuilt production artifact. Existing journeys now open the import
+and related-reference disclosures and handle initially closed phone panels. The follow-up also
+fixes a real retry blocker: Pack update/undo acknowledgements can be recovered while ordinary
+editing remains paused. Competing assistance/import operations still fence the recovery panel;
+transport-driven tests preserve exact retry bytes and reject stale retries.
+
+The PR review follow-up preserves selection of an accepted external-video node before the parent
+receives the updated scene, including rejection and deferred-render coverage. Another 36 selected
+browser cases verify video editing, outline/discussion assistance, information components and
+Presentation dialog accessibility across the four profiles. Remaining legacy journeys now use
+the contextual Layout tab and import disclosures, and resume assistance from its recovery banner
+without activating a paused workspace. AI cases use the normal worker server and fresh fixtures
+for rate-budget isolation; allowances and timeouts are unchanged.
+
+The compiled-server smoke also guards the practice/sharing contracts import-cycle regression:
+shared content schemas now have an acyclic module without changing stored content or API shapes.
+Manual assistive-technology, physical-device, observed creator-task, hosted/capacity/cost,
+deployment and release qualification remain open. Earlier package evidence records retain their
+own scope; the current check does not turn them into a complete product-parity claim.
+
+November 9, 2026 next source: `codex/presentation-design-quality` closes three selected design
+gaps. Wide native typography and spacing scale from the 1280×720 presentation plane rather than
+changing relative to authored frames as editor rails open. Ordinary phone delivery keeps its
+readable semantic column. Fit feedback waits for fonts and distinguishes wide geometry from
+stacked reading content. Local reviewed layout alternatives from the earlier PR #207 proposal
+now live in the Layout inspector, retain complete content and apply as one ordinary Undo step.
+Visible filmstrip rows resolve private images through current creator authorization, with
+bounded, scoped readers and placeholders when access or image loading fails. These are original
+authorized image assets, not newly generated small raster files. Source changes do not rewrite
+stored scenes or publications, introduce a service, or require AI credits. See the
+[design-quality record](evidence/presentation-design-quality.md) for qualification and boundaries.
+The final repository check passes 6,964 tests, all four builds and compiled-server startup;
+34 selected browser cases are verified across four profiles, with an isolated export fixture
+for the ordinary account throttle.
+
+The next `codex/presentation-interaction-polish` source moves selected Move/Resize controls out of
+the authored slide, retaining pointer/keyboard/group history semantics. A dedicated interaction
+picker and trigger/result/audience overview make existing actions easier to configure. Contextual
+preview starts on the current visible slide and stays viewer-local, including broadcast reveals;
+retained unsaved URL entries and unavailable targets remain explicit barriers. Compact tools and
+preview preserve focus through resizing. See the
+[editing/interaction record](evidence/presentation-interaction-polish.md) for qualification and
+boundaries. Next are visual trigger/target cues, presenting/sharing UX and external observation/
+device gates; broad E00–E14 completion remains a separate claim.
+Qualification for this slice passes 6,986 repository tests, all four builds, compiled-server
+startup and all 40 selected production-browser cases across the four profiles. Standard opt-in
+integration skips and external evidence gates remain explicit in its record.
+
+The current `codex/presentation-editor-workspace` slice follows the six creator screenshots:
+icon-led grouped insertion menus, an aligned slide action bar, contextual Content/Media/Access
+cards, visual theme and layout choices, compact arrangement properties, and local/AI audience
+idea cards. Viewport-aware menus preserve keyboard navigation and modal focus at phone sizes
+and 200% CSS zoom. Existing scene/history/save/recovery/publication contracts remain in use;
+ordinary editing adds no paid dependency or model calls. See the
+[editor workspace record](evidence/presentation-editor-workspace.md) for final qualification.
+Selected qualification passes 7,004 repository tests, all four builds and 58 production-browser
+cases across Chromium desktop/phone and WebKit phone. Firefox qualification remains incomplete
+at sign-in; see the record for the interruption and evidence limits. Visual trigger/target cues,
+presenting/sharing and external creator/device evidence remain next.
+
+The `codex/presentation-activity-notes-polish` slice makes inserted activity artwork,
+filmstrip and preview share readable deck-aware rendering, with response settings outside the
+slide. New native slides inherit visible design; optional public design tokens come from frozen
+session content so host/stage and participant/companion content keep the same context. Notes gain
+a larger writing surface, expanded editor and explicit private current-slide presenter rehearsal;
+live notes stay host-only and publication-frozen. Qualification passes 7,062 repository tests,
+all four builds and 76 unique production-browser cases across Chromium desktop/phone,
+WebKit phone and Firefox desktop. See the
+[activity and notes record](evidence/presentation-activity-notes.md) for qualification and limits.
+
+The `codex/presentation-interaction-map` slice adds an editor-only reading-order action map,
+selected trigger/outcome and audience guidance, plus passive wide-stage action outlines and valid
+hotspot/image connections. Local map controls select/configure without executing an action or
+changing draft/history/publication state; existing contextual preview retains its guards. Phones
+keep the semantic map in reading flow. See the [interaction-map record](evidence/presentation-interaction-map.md)
+for qualification and boundaries. Presenting/sharing mode and version clarity and observed creator
+tasks remain next. Qualification passes 7,112 repository tests, all four builds and 34 selected
+production-browser workflows across Chromium desktop/phone, WebKit phone and Firefox desktop.
+
+The table below is the current gap map; the detailed E00–E14 sections retain implementation
+history and acceptance contracts. “Implemented” means the selected software slice, not complete
+competitor parity or successful creator task observation.
+
+| Package | Implemented foundation                                                                            | Remaining scope or evidence                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| E00     | Scene decision and original local fixtures                                                        | Observed creator baselines and comparable authenticated competitor tasks                                        |
+| E01     | Durable native editor, rich text, filmstrip, save/recovery and current workspace shell            | Integrated workflow, creator usability and manual assistive-technology qualification                            |
+| E02     | Bounded themes/layouts, composition, tables/charts and 21 scenario decks                          | Observed template fitness, consistent design quality, overflow repair and task-led refinements                  |
+| E03     | Private notes, next slide, elapsed timer and scoped audience stage                                | Actual screen sharing, managed-browser/popup behavior and richer phone remote                                   |
+| E04     | Selected opinion, ranking, moderated text and word-cloud software                                 | Complete mobile/moderation usability and hosted/device/cost qualification                                       |
+| E05     | Reviewed PDF/image visual import and reading alternatives                                         | Editable/PPTX conversion fidelity, compatibility corpus and hosted scanner/storage qualification                |
+| E06     | Local/broadcast reveals, links, dialogs, hotspots and explicit branches                           | Visual-stage interaction coverage and authored keyboard/touch task observation; variables/games remain separate |
+| E07     | Sections and durable phase-safe jump/return                                                       | Observed nonlinear demo/navigation tasks and cross-surface discoverability                                      |
+| E08     | Private review, reading assignments and bounded choice practice                                   | Other response formats, configurable feedback, verified identity and individual creator reports                 |
+| E09     | Live insights and anonymous reading/practice counts                                               | Creator usefulness and measured resource cost; private-link view tracking remains excluded by policy            |
+| E10     | Bounded story map and existing linear cursor                                                      | Content-plane camera rendering, nested frames and host-broadcast overview                                       |
+| E11     | Free signed-in review, threads, resolve/reopen and approval                                       | Object-level concurrent authoring, attachments, mentions and notifications                                      |
+| E12     | Reviewed outline, plain-text edits/translation, question assistance and local layout alternatives | Rich-text/whole-deck/RTL and broader generation; ordinary editing stays AI-free                                 |
+| E13     | PDF/PNG, readable HTML and bounded offline interactive HTML                                       | Editable PPTX, full visual-stage interaction and verified tagged-PDF accessibility                              |
+| E14     | Extension candidates and cost boundaries                                                          | Separately funded media, recording, advanced animation, add-ins, LMS and virtual-camera work                    |
+
+Upgrade the experience in phases using those capabilities rather than restarting the feature plan:
+
+| Phase                             | Scope and next exit                                                                                                                                                                                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Creation and editor foundation | Current source slice: template/blank first, real previews, stable navigation, contextual tools and clear saving/publication. Verify end-to-end creation, selection, undo, recovery and all existing query/feature boundaries.                                                            |
+| 2. Design and interactions        | Refine reusable layouts, type/spacing, fit feedback and original templates. Make action trigger/target/preview understandable. A pitch, proposal and interactive demo must retain complete content through edits and publish without requiring AI.                                       |
+| 3. Presenting and sharing         | Walk through rehearsal, screen sharing, live controls, private review, export and assignment choices. Authors and recipients must understand the version/mode and recover without exposing backstage data. Preserve distinct reading, practice and live meanings.                        |
+| 4. Device and accessibility       | Exercise the whole workflow on representative phones/tablets/desktops, keyboard, VoiceOver/NVDA, 200% zoom and reduced motion; verify contrast, touch targets, focus restoration and remaining localization. Record physical-device and managed-browser gaps explicitly.                 |
+| 5. Observed broad-creator pilot   | Observe pitch/proposal/update/portfolio/talk/demo/workshop tasks with real creators. Record time to a sendable deck, repair effort, discoverability, delivery/share success and total customer cost. Feed failures into the next bounded slice before any parity or broad-release claim. |
+
+Keep the lowest sustainable customer subscription constraint throughout: reuse the shared renderer,
+deterministic layouts, bundled/system assets and existing services. No phase requires a paid canvas
+SDK, stock marketplace or model call for ordinary work. The price hypotheses below remain
+experiments; fewer clicks and less repair time must also reduce customer cost.
+
+### Official UX reference patterns
+
+These sources were checked November 8, 2026. They are vendor documentation, not authenticated
+hands-on tests, comparative usability measurements or market-share evidence. Polling Pops choices
+above are design inferences; they do not imply matching every documented capability.
+
+| Reference                                                                                                            | Documented pattern informing the track                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [Canva editor guide](https://www.canva.com/design-school/resources/using-and-customizing-templates/)                 | Side panel, canvas, selection-dependent toolbar, page/grid controls and save indicator                           |
+| [Google Slides templates/layouts](https://support.google.com/docs/answer/1705254?co=GENIE.Platform%3DDesktop&hl=en)  | Distinct theme/layout/template concepts and individual-slide or full-template insertion                          |
+| [Genially page management](https://help.genially.com/how-to-manage-the-pages-of-your-genially-BylHcvHnj)             | Named pages, list/grid overview and reordering                                                                   |
+| [Genially Reveal setup](https://help.genially.com/how-to-set-up-reveal-interactivity-in-genially-B1LqcwHhi)          | Explicit trigger/target selection and an editor connection indicating the interaction                            |
+| [Genially navigation modes](https://help.genially.com/en_us/navigation-modes-between-pages-rkrHjPB2i)                | Deliberate linear, automatic or authored-link navigation choices and preview guidance                            |
+| [Canva presentation modes](https://www.canva.com/help/presentation-modes/)                                           | Separate audience and presenter windows with notes and upcoming slides                                           |
+| [Genially publication](https://help.genially.com/en_us/how-to-publish-changes-in-genially-HkJAcHNskl)                | Autosaved editor work stays distinct from changes applied to an existing public link                             |
+| [Prezi editor updates](https://support.prezi.com/hc/en-us/articles/360050232633-What-s-new-in-Prezi-Product-updates) | Direct Present/Share with secondary options in a dropdown, intentional frame selection and explicit pan controls |
 
 ## Delivery strategy and realistic scope
 
 Assumption: one experienced full-time maintainer using Codex, with access to design/customer
 feedback and reviewers. Estimates are planning judgments, not measured velocity or commitments.
-External evidence collection and production qualification can extend calendar time.
+They describe the original work-package plan, not the remaining effort after implemented slices.
+Use the current gap map and UX track for next selection. External evidence collection and
+production qualification can extend calendar time.
 
 | Milestone                     | Scope                                                                                            | Development estimate              | Exit                                                              |
 | ----------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- | ----------------------------------------------------------------- |
@@ -56,10 +407,10 @@ Expanded responses, full navigation, self-paced delivery, analytics, collaborati
 portability follow as independently selected releases. Their estimates appear below and are
 additional to the broad pilot except where explicitly included.
 
-The pilot uses a conventional slide sequence with basic reveals/links. Full section-map navigation,
-hotspot dialogs and branching follow in E06/E07; the pilot's product-demo task must be defined
-accordingly. If customer testing makes nonlinear navigation a launch requirement, add E07's
-2–4 weeks to the selected scope.
+The original minimum pilot scope uses a conventional slide sequence with basic reveals/links.
+E06/E07 now contain section navigation, hotspot dialogs and branching software; selecting those for
+the pilot also requires their observed creator and delivery tasks. The earlier 2–4-week E07
+estimate is not a new implementation charge or evidence that navigation is qualified.
 
 ## Architecture decision
 
@@ -87,8 +438,9 @@ flowchart LR
     H --> I[Versioned reports]
 ```
 
-The diagram describes the target, including future review and self-paced runs. It does not imply
-that those modes are already implemented.
+The diagram spans implemented and planned modes. Private review and bounded reading/choice-practice
+now exist; the current gap map and E08 retain their limits. It does not imply unrestricted
+self-paced question support or common live/independent attempt semantics.
 
 Proposed scene fields, to settle in E00 rather than copy directly into code:
 
@@ -121,8 +473,39 @@ the subscription floor without completing the customer workflow.
 
 E00 now has an isolated local implementation; see [ADR 003](decisions/003-presentation-scene.md)
 and the [prototype record](evidence/presentation-scene-prototype.md). E01 implementation is complete
-locally; release qualification remains open. E02's first design-foundation increment is implemented
-below; its remaining scope and later packages remain planned.
+locally; release qualification remains open. E02's design foundation and remaining composition,
+information and scenario-template software are implemented. E03 delivery, E04 opinion/text formats,
+E05 visual import and E06 basic reveal/link interactions are also implemented. E06 advanced
+interactions, E07 sections/live navigation and E08 private view-only sharing are merged in
+[PR #199](https://github.com/riojung/pollingpops/pull/199). E13 static export is merged in
+[PR #200](https://github.com/riojung/pollingpops/pull/200). E09's selected live-session reporting
+scope is merged in [PR #201](https://github.com/riojung/pollingpops/pull/201). The bounded E10
+story map and first E11 review slice are merged in [PR #202](https://github.com/riojung/pollingpops/pull/202)
+and [PR #203](https://github.com/riojung/pollingpops/pull/203). E12's selected outline assistance
+slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204). Its outline-first
+new-deck entry point is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
+Selected plain-text rewrite/shorten is merged in
+[PR #206](https://github.com/riojung/pollingpops/pull/206). Reviewed layout alternatives were
+separately proposed in [PR #207](https://github.com/riojung/pollingpops/pull/207); the current
+`codex/presentation-design-quality` source integrates them into the contextual Layout inspector.
+Reviewed selected-text translation is merged in
+[PR #208](https://github.com/riojung/pollingpops/pull/208). Local reviewed question starters are
+merged in [PR #209](https://github.com/riojung/pollingpops/pull/209). Optional reviewed AI
+discussion suggestions are merged in [PR #210](https://github.com/riojung/pollingpops/pull/210).
+The bounded E13 offline interactive HTML companion is merged in
+[PR #211](https://github.com/riojung/pollingpops/pull/211); its full repository check, compiled-worker smoke and eight
+production-browser workflows across four profiles pass.
+The bounded E08 reading-assignment/attempt foundation is merged in
+[PR #214](https://github.com/riojung/pollingpops/pull/214). Creator aggregate reading
+insights and CSV are merged in [PR #215](https://github.com/riojung/pollingpops/pull/215), with
+frozen-version denominators, small-group suppression and no individual learner records in the
+report. Broader response/feedback policies and later packages remain planned; deployment and
+release qualification remain open.
+The bounded E08 choice-practice increment is merged in
+[PR #216](https://github.com/riojung/pollingpops/pull/216): independent single-choice/true-false
+practice with accepted-answer-only personal feedback and explicit completion. Existing reading
+behavior and report contracts remain intact. Its compiled-server startup regression is fixed in
+the current UX branch by removing a contracts import cycle and adding a post-build startup smoke.
 Its content-only prerequisite and first native scene persistence/editing/delivery slice are now
 implemented locally. The direct-editing increment adds pointer move/resize and temporary
 multiselection using the same scene and persistence path. The following rich-text increment adds
@@ -212,9 +595,15 @@ focal point, selection alignment/distribution and independent visual layer contr
 opt-in scene v3/document v7 and adds no hosted service or paid dependency. See the
 [verification record](evidence/presentation-design-foundation.md) and
 [reader rollout](runbooks/upgrade.md#native-presentation-design-compatibility).
-This is the first E02 slice, not completion of the package. Snap guides, persistent grouping,
-rotation, editable tables/charts and the 10–15 full-deck templates remain subsequent work, along
-with the human and deployment qualifications below.
+The completion increment adds transient snap guides, persistent flat groups and proportional
+resize, physical 16:9 rotation/connector geometry, bounded editable tables and bar/line/pie charts,
+and twelve original eight-slide native scenario decks. The nine facilitated templates remain;
+explicit external video plus captions/transcript links fulfill the conditional media scope without
+provider embeds. New persisted composition/data uses scene v4/document v8; existing creation and
+mutation defaults remain compatible. See the [E02 acceptance record](evidence/presentation-e02-completion.md)
+and [composition reader rollout](runbooks/upgrade.md#native-presentation-composition-compatibility).
+Software implementation does not close the observed creator, device, accessibility, operating-cost
+or deployment qualifications below.
 
 Dependencies: E01. Add theme tokens for fonts/colors/spacing, reusable layout presets, image
 crop/fit, alignment/distribution, snap guides, grouping, layer controls and bounded rotation.
@@ -236,6 +625,14 @@ consent/privacy behavior and visible failure states. Arbitrary iframes and uploa
 transcoding are separate E14 work. Included in design/information milestones.
 
 ### E03 Improve presenter and audience delivery
+
+The desktop implementation is on `codex/presentation-e03-delivery`: private frozen notes and
+next-slide preview, a local elapsed timer, fenced advance shortcuts, persistent join access and a
+separate read-only audience stage with popup fallback. Stage credentials use migration 090 and
+must not be minted until every server reader enforces the new role. Verification is tracked in
+the [delivery evidence](evidence/presentation-e03-delivery.md); observed screen sharing, managed
+browser policies, manual accessibility and physical-device qualification remain open. The richer
+phone remote remains an optional follow-up to the existing scoped Companion.
 
 Dependencies: E01. Audit and extend the existing host/participant/Companion flow and add a clean
 scoped stage. Add clear private notes, next-slide preview, timer, keyboard/clicker actions,
@@ -259,6 +656,24 @@ is an additional 1–2-week candidate if not required for that milestone's tasks
 Dependencies: current live foundations; can proceed independently of most scene editing.
 Sequence: multi-select opinion polls and ranking, then moderated open text and word clouds.
 Reuse Round semantics without treating a shared question union as surface support.
+
+The first-family software increment on `codex/presentation-e04-opinion-formats` implements
+multiple-selection opinion polls and full/top-N rankings in Presentation authoring, independent
+Round copies, live delivery, scoped stage/Companion views, and report/CSV evidence. These formats
+explicitly opt into document v9; existing document v1–v8 meanings and default creation versions
+remain unchanged. Closed-question results are anonymous aggregates, with no participant scoring,
+correct answer, confidence or recovery link. Migration 091 and coordinated readers/writers are
+required before accepting the new formats. See the [first-family evidence record](evidence/presentation-e04-opinion-formats.md)
+and [rollout boundary](runbooks/upgrade.md#presentation-opinion-formats-compatibility).
+Automated first-family verification passed; the record preserves executed runs and their limits.
+The second family on `codex/presentation-e04-moderated-text` adds document v10 moderated open
+text and word clouds, private-body storage, host review, current-block approved results and V5
+report/CSV evidence. Together the two families complete E04's software scope. Its
+[verification record](evidence/presentation-e04-moderated-text.md) records the repository check,
+sixteen real PostgreSQL cases and 48 unique browser cases across documented slices. Software
+completion does not establish manual/device, hosted-rollout, cost-target or competitive parity
+acceptance. The second-family changes are merged in [PR #196](https://github.com/riojung/pollingpops/pull/196); hosted rollout
+remains pending.
 
 Acceptance per format: author, publish, open, submit, acknowledge, reconnect, close, reveal,
 moderate where applicable, report and export all work. Never expose pending or removed text in
@@ -290,6 +705,17 @@ PDF facilities before adding dependencies. Keep original input only under an exp
 policy. E05 plus the static part of E13 share the 3–5-week portability milestone. PPTX visual
 conversion and editable import are later, separately measured scopes.
 
+The software increment on `codex/presentation-e05-visual-import` implements separate PDF/image
+conversion jobs, owned private page assets, preview/loss disclosure, ordered page selection and
+author-reviewed visual/reading slide pairs. Existing native content fields preserve historical
+document semantics; migration 093 adds job/usage lifecycle records. Conversion requires the
+Node 26 runtime's network permission denial and the existing scanned-media facilities, without
+an AI provider. E05's PDF/image import software scope is complete: the repository check,
+restricted PostgreSQL, four production browser profiles and compiled renderer smoke pass in the
+[E05 evidence record](evidence/presentation-e05-visual-import.md). This increment is merged in
+[PR #197](https://github.com/riojung/pollingpops/pull/197) and remains undeployed; E13 export and the recorded manual/hosted/cost
+acceptance gates remain separate.
+
 ### E06 Add accessible interactions and branching
 
 Dependencies: E01. In the broad pilot, implement reveal/hide panels and safe links with reusable
@@ -306,6 +732,21 @@ Basic actions are included in the delivery milestone. Richer hotspots/dialogs/br
 are an additional 2–4-week candidate. Drag/drop, variables and reusable game mechanics are later
 extensions of this model, each requiring a real authoring task and accessible alternative.
 
+The first source increment on `codex/presentation-e06-basic-interactions` implements the planned
+local reveal/hide panels and safe-link slice, using scene5/document11 and migration094. Native
+authoring/history/design operations preserve actions, and shared delivery offers an equivalent
+readable outline without changing responses, scores or host state. The full repository check,
+restricted PostgreSQL, focused checks and four production browser profiles pass in the
+[E06 basic evidence record](evidence/presentation-e06-basic-interactions.md). This increment merged
+in [PR #198](https://github.com/riojung/pollingpops/pull/198) and remains undeployed; richer
+hotspots/dialogs/answer branches and host-broadcast reveals are now implemented on
+`codex/presentation-interactions-sharing` using document13/scene6 and migration096. This completion
+increment adds explicit host-confirmed branches, bounded image anchors, server-withheld broadcast
+bodies and ReportV7. Verification and rollout boundaries appear in the
+[E06 completion record](evidence/presentation-e06-completion.md). Live section navigation is
+implemented separately in E07 below. General scripting, variables and game mechanics remain beyond
+the selected E06 scope.
+
 ### E07 Add sections and safe nonlinear navigation
 
 Dependencies: E01, E03; uses E06 targets. Add named sections, an overview/map, jump and
@@ -317,6 +758,15 @@ transition. Skipping does not fabricate a completed response; revisiting does no
 attempts, points or reveals. Return restores a defined position. Recheck pairs and reports record
 what actually ran. Reconnect/cohost takeover sees the same cursor. Linear and reduced-motion
 paths remain equivalent. Estimate: 2–4 additional weeks.
+
+The source increment on `codex/presentation-e07-navigation` adds opt-in document12 named sections,
+a private host/Companion map, stable block-ID jump/return commands and durable visited progress.
+Numbered block order remains the default path. Detours retain one explicit original anchor;
+revisited activities restore their closed phase, original response window and frozen intervention
+without new attempts or points. Open activities must close/reveal first, and pending linked
+rechecks remain indivisible. Migration095 protects state, frozen targets and exact receipts;
+ReportV6 records presented/skipped blocks and navigation events. Validation and remaining release
+gates are recorded in the [E07 evidence record](evidence/presentation-e07-navigation.md).
 
 ### E08 Share presentations and add self-paced delivery
 
@@ -335,6 +785,35 @@ claims an unacknowledged answer was submitted. Content-view completion and demon
 are separate. Plan 1–2 weeks for bounded view-only sharing, explicitly included in the broad pilot,
 and 4–7 additional weeks for self-paced attempts.
 
+The private review slice is implemented on `codex/presentation-interactions-sharing`; the full
+repository pipeline, 70 PostgreSQL cases and eight production-browser workflows pass. Migration097
+adds expiring/revocable hash-only capabilities pinned to
+immutable versions. The recipient projection excludes private authoring and assessment data;
+page transitions and image reads recheck access. Link creation preserves exact uncertain intent
+across reload. The [E08 private-sharing record](evidence/presentation-e08-private-sharing.md)
+separates this source work from deployment, hosted/device acceptance and independent self-paced
+delivery.
+
+The bounded E08 slice on `codex/presentation-e08-self-paced` adds **self-paced reading assignments** with separate frozen-version
+assignments, private resumable attempts, explicit page acknowledgements and explicit reading
+completion. It reuses the recipient-safe renderer; activity blocks remain readable previews.
+Reading completion is not assessment or mastery. Recipient capabilities and pending actions stay
+in memory; returning requires the personal resume link and an explicit resume action. See the
+[reading-assignment record](evidence/presentation-e08-reading-assignments.md). Answer submission,
+assessment feedback, identified learners and individual attempt reports remain later E08 scope.
+Creator aggregate reports follow in `codex/presentation-reading-reports`: explicit load/refresh,
+anonymous starts/completions and per-page acknowledgements, complementary small-group
+suppression and an exact-snapshot CSV. See the
+[reading-insights record](evidence/presentation-reading-insights.md).
+
+The separate practice slice on `codex/presentation-self-paced-practice` supports 1–50 frozen pages
+and 1–25 ordinary single-choice/true-false checks. It adds explicit start, content acknowledgement,
+one final answer, immediate personal feedback after acceptance, private resume and explicit finish.
+Additive migration106 keeps practice attempts and compact receipts separate from reading records.
+Creators receive anonymous privacy-suppressed start/completion counts. See the
+[practice record](evidence/presentation-self-paced-practice.md). Other response formats, configurable
+feedback timing, verified identity and individual creator attempt reports remain later E08 work.
+
 ### E09 Add useful creator and audience reports
 
 Dependencies: existing reports; E08 for review metrics. Report presentation usage, response
@@ -348,6 +827,18 @@ understanding. Aggregation follows current privacy thresholds; deleted or modera
 return through reports or exports. Reports bind to the frozen version and retain historical readers.
 Instrument resource cost alongside use. Estimate: 2–4 additional weeks for the selected report scope.
 
+The selected live-session implementation adds a creator **Session insights** panel, formula-safe
+CSV and a self-contained readable HTML copy. It combines frozen-version block/section delivery,
+exact original-reveal response rosters, opinion distributions, paired recovery and separately
+timestamped current public Q&A counts. Missing historical coverage remains unknown; present/skipped
+states come from recorded navigation. Samples below five are suppressed, and submitted bodies,
+identities, notes and answer keys are excluded. Historical Report V1–V7 and public AggregateSummary
+V1 remain unchanged. Bounded counts-only database reads and low-cardinality resource metrics avoid
+a model or hosted-service dependency. See the [E09 record](evidence/presentation-e09-session-insights.md).
+Private-link view tracking is excluded under the E08 policy. Self-paced attempt/completion
+reporting now has its own bounded increment on `codex/presentation-reading-reports`, using the
+separate assignment system. Live-session reporting retains its existing contract and meaning.
+
 ### E10 Add spatial storytelling
 
 Dependencies: E01, E06, E07. Arrange sections/frames in a bounded spatial scene and let authors
@@ -359,6 +850,19 @@ hidden/private nodes; focus and reading order stay predictable. Bound scene size
 nested frames and animation duration. A phone reader gets meaningful content. Camera movement
 remains presentation state, not a Canvas board's temporary follow lease. Estimate: 5–9 additional
 weeks for a bounded first spatial mode; unrestricted Prezi parity is a larger ongoing investment.
+
+The first bounded story-map slice is implemented on `codex/presentation-e10-spatial`: explicit
+document14 layout opt-in, frame arrangement with existing save/history, publication-safe path
+preview and geometry-only live maps. The confirmed block cursor drives camera fitting; current
+content and response controls stay readable outside the diagram. View/overview controls are local
+to each viewer. The linear block order remains the path, linked rechecks retain their server
+guards and Report V7 keeps its existing meaning. Migration098 preserves earlier migration bytes
+and extends the existing readers/guards without changing scene6 or default documents.
+See the [E10 record](evidence/presentation-e10-spatial.md) for verification. Content-plane camera
+rendering, nested frames and facilitator-broadcast overview controls remain later E10 scope;
+private review and static exports keep their established linear readers. This slice is merged
+in [PR #202](https://github.com/riojung/pollingpops/pull/202) and remains undeployed; unrestricted
+Prezi parity remains outside this slice.
 
 ### E11 Add review and then concurrent authoring
 
@@ -376,6 +880,17 @@ Estimate: 2–3 weeks for review; 6–10 or more for robust concurrent editing. 
 technology only after an adapter spike and license review; do not add a paid collaboration
 service before cost and merge semantics are understood.
 
+The first review slice is implemented on `codex/presentation-e11-review`: an author explicitly
+enables comments on an existing version-pinned private link. Signed-in free reviewers can create
+page threads, reply and edit/delete their own messages without joining the source workspace or
+receiving a paid seat. Current owner/editor authority governs resolve/reopen and explicit approval
+of that link's review; later feedback makes the prior approval stale. Account-bound exact intents,
+revision fences, bounded plain text, forced RLS and lifecycle erasure/export protect the sidecar
+records in migration099. Existing E08/content/live/report contracts retain their meanings.
+See the [E11 record](evidence/presentation-e11-review-feedback.md) for verification. Concurrent
+authoring, attachments, mentions and notifications remain later scope. The selected review
+slice is merged in [PR #203](https://github.com/riojung/pollingpops/pull/203) and remains undeployed.
+
 ### E12 Extend optional AI assistance
 
 Dependencies: stable native scene, E05 source pipeline and billing quotas. Extend the current
@@ -390,6 +905,76 @@ a model call. Images/audio/video generation are separately priced optional jobs.
 
 Estimate: 2–4 additional weeks for a bounded incremental authoring workflow; unrestricted generated
 media and conversational editing of an entire deck require separate evaluation.
+
+The first selected slice is implemented on `codex/presentation-e12-outline`: **Outline to slides**
+generates 3–8 reviewable text slides from an explicit outline and inserts selected native slides
+into an existing saved deck after creator confirmation. Exact excerpts remain available during
+review and generated claims are labeled unverified. Separate jobs and migration100's compact
+shared admission ledger reuse the existing authoring allowance, provider configuration and worker
+controls. Exact intent recovery and atomic draft/source fences protect insertion; no Presentation
+document/scene version, new provider or entitlement is added. See the
+[E12 record](evidence/presentation-e12-outline-assistance.md) for verification and limits.
+Translation, layout/question suggestions and conversational editing remain later E12 work.
+This slice is merged in [PR #204](https://github.com/riojung/pollingpops/pull/204)
+and remains undeployed.
+
+The outline-first creation increment on `codex/presentation-e12-outline-create` adds **From
+outline** to the Presentation launcher. Explicit creation saves a titled native draft before
+opening the existing review panel; query navigation never generates content. Migration101's
+compact, account/workspace-bound creation receipts recover uncertain creation acknowledgements
+without duplicating or recreating deleted drafts. Draft creation is allowance-free; later
+proposal admission uses existing E12 limits. No document/scene version or provider is added.
+See the [outline-first creation record](evidence/presentation-e12-outline-create.md).
+This increment is merged in [PR #205](https://github.com/riojung/pollingpops/pull/205).
+
+The selected-text increment on `codex/presentation-e12-text-assistance` adds **Rewrite text** and
+**Shorten text** for one selected plain native title/body object. Only that text, role and
+operation enter the approved provider; formatted rich text remains manually editable. Complete
+original/proposed review and an explicit confirmation precede an atomic unchanged-target edit.
+Existing citations and original source disclosure remain intact, with a separate latest-edit
+record and an unverified-wording warning. Document15 and migration102 support this private
+metadata and expiring queue; scene6 and existing live/report formats retain their meanings.
+Exact request/application recovery, current authority/source checks, combined outline/text
+concurrency, shared monthly allowance and bounded provider work reuse existing facilities.
+No paid service or new commercial entitlement is introduced. See the
+[selected-text record](evidence/presentation-e12-text-assistance.md) for verification and limits.
+
+The selected translation increment on `codex/presentation-e12-translation` extends the same
+reviewed workflow to one plain native text object and 12 canonical target languages. Only the
+selected text, role, operation and requested target enter the existing approved provider.
+Source/target annotations bind creation, proposals, exact application and recovery; changing
+only the original language invalidates a fresh application/rebase. Scene7/document16 retain
+per-object language independently from private latest-edit provenance. The manual **Text
+language** control corrects or clears annotations without AI use. Migration103 extends the
+existing queue and matching readers while preserving migrations001–102 and legacy hashes.
+Generation does not change the deck; creators review complete wording before one undoable
+application. No new provider, service, dependency or entitlement is added. See the
+[translation record](evidence/presentation-e12-translation.md). Whole-deck/rich-text translation,
+RTL, question suggestions, model-generated design and conversational editing remain later scope.
+
+The local question-starter increment on `codex/presentation-question-starters` offers reviewed
+discussion, subjective clarity and eligible priority-poll templates from a visible native
+slide's authored title/body. It quotes complete wording, infers no facts or correct answers,
+and labels its English template scaffolding. Priority polls require all 2–6 complete valid
+authored points; they never silently shorten or select from an oversized list. Insertion uses
+one normal Undo/autosave step, inherits the source section and preserves spatial/source data.
+Private source attribution stays out of recipient/review/export content. No AI service, job,
+allowance, schema, migration, version or entitlement is added. See the
+[starter record](evidence/presentation-question-starters.md). This is a low-cost question-starter
+slice; reviewed AI discussion questions follow in the increment below, while scored assessment
+generation remains separately planned.
+
+The next bounded AI increment on `codex/presentation-question-suggestions` proposes exactly
+two source-specific English discussion/reflection questions from one visible native slide's
+authored title/body. Creators inspect both prompts and exact body citations, select one and
+explicitly confirm before inserting an unscored opinion open-text question. Generation alone
+does not edit or publish. Migration104's separate expiring queue reuses the approved provider,
+shared monthly ledger and combined two-active-job limit. Saved source/language/list/order
+fences, exact admission/insertion recovery and fresh-only Undo preserve unrelated source and
+later work. No new content version, dependency or commercial entitlement is added. See the
+[discussion-suggestion record](evidence/presentation-question-suggestions.md). Scored assessment
+generation, other generated question formats and conversational whole-deck editing remain
+separately planned.
 
 ### E13 Deliver static export and later richer portability
 
@@ -407,6 +992,29 @@ response behavior and no credentials; editable PPTX for a declared text/image/sh
 and PPTX import with a compatibility corpus and loss report. E05/static export share the 3–5-week
 milestone. Editable PPTX import/export is a separate 6–12-plus-week project after a conversion spike;
 perfect round-tripping is not promised. Offline packaging is separately scoped after sharing.
+
+The source on `codex/presentation-e13-static-export` adds whole-deck PDF, selected-page PNG and
+self-contained accessible HTML from the safe immutable published projection. The creator chooses
+a published version; a separate safe metadata read supplies its page IDs. Current actor/source/
+media authorization is rechecked before delivery. Rendering uses existing canvas/PDF/fonts in a
+bounded worker, with no new paid service, content version, entitlement or database migration.
+PDF/PNG flatten controls and preserve authored frames; HTML includes complete readable text,
+tables and public panel details. Limits cover 100 exported pages, 1280×720 visual pages, 40 images,
+media/decoded pixels/output bytes, per-actor admission, concurrent jobs and deadlines. The
+[E13 evidence record](evidence/presentation-e13-static-export.md) separates automated verification
+from manual, hosted, device, usability and cost qualification.
+
+The next bounded portability increment on `codex/presentation-offline-export` adds a single
+offline interactive HTML companion from the same authorized immutable publication. Embedded
+images and complete semantic content accompany flat slide snapshots. Native disclosure panels
+and page/section/previous-next anchors work without JavaScript or network access. Public
+broadcast bodies become local disclosures; questions remain readable previews without responses,
+scoring, learner attempts, saved progress or completion records. External links explicitly leave
+the file. The existing worker, limits and recipient projection require no provider, dependency,
+migration, content version or entitlement change. Existing PDF/PNG/readable HTML retain their
+meanings. See the [offline record](evidence/presentation-offline-export.md). Editable PPTX,
+full visual-stage interaction and richer portability remain separately scoped; local software
+verification does not close deployment, device, usability or operating-cost gates.
 
 ### E14 Fund advanced media and ecosystem features
 

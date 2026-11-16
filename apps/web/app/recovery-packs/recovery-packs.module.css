@@ -84,3 +84,26 @@
     padding: 18px;
   }
 }
+
+/* Action labels must remain usable with long translations in the narrow editor. */
+.page :global(.button),
+.page :global(.button-quiet) {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.page :global(.input),
+.page :global(.textarea),
+.page :global(.select) {
+  min-width: 0;
+  max-width: 100%;
+}
+.builderLink {
+  max-width: 100%;
+  margin-inline-start: 0;
+}
+.packButton:focus-visible,
+.panel h2:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 3px;
+}

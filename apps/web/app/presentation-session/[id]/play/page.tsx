@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeTextResponse } from "@openround/contracts";
 import type {
   ConfidenceValue,
   PresentationParticipantQuestionBlock,
@@ -14,10 +15,18 @@ import { useLocale } from "../../../../components/locale-provider";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
 import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-live-card";
-import styles from "../../../../components/presentation-live/presentation-live.module.css";
+import styles from "../../../../components/presentation-live/audience-workspace.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
+import { presentationDeliveryCopy } from "../../../../lib/i18n/presentation-delivery-copy";
+import { presentationAudienceCopy } from "../../../../lib/i18n/presentation-audience-copy";
+import {
+  focusModal,
+  handleModalKeyDown,
+} from "../../../../components/presentation/presentation-modal-focus";
 import {
   createPresentationRealtimeController,
   presentationRemainingSeconds,
@@ -27,9 +36,28 @@ import {
   type PresentationSaveStatus,
 } from "../../../../lib/presentation-realtime";
 import { clientUuid } from "../../../../lib/uuid";
+import { RankingChoices } from "../../../../components/ranking-choices";
+import { TextResponseControl } from "../../../../components/text-response-control";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import {
+  isTextQuestion,
+  textResponseError,
+  textResponseReceipt,
+} from "../../../../lib/text-response";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import {
+  initialPresentationChoiceIds,
+  presentationOpinionSummaryFor,
+  presentationChoiceLimit,
+  presentationChoiceResponse,
+  togglePresentationChoice,
+  validPresentationChoiceSelection,
+} from "../../../../lib/presentation-opinion-response";
 
 export default function PresentationParticipantPage() {
   const { locale, t } = useLocale();
+  const copy = presentationDeliveryCopy(locale);
+  const audienceCopy = presentationAudienceCopy(locale);
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<PresentationParticipantSnapshot | null>(null);
@@ -37,6 +65,7 @@ export default function PresentationParticipantPage() {
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
   const [numericValue, setNumericValue] = useState("");
   const [ratingValue, setRatingValue] = useState<number | null>(null);
+  const [textValue, setTextValue] = useState("");
   const [confidence, setConfidence] = useState<ConfidenceValue | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -46,24 +75,84 @@ export default function PresentationParticipantPage() {
     blockId: null,
     state: "idle",
   });
+  const [questionsOpen, setQuestionsOpen] = useState(true);
+  const [questionsAvailable, setQuestionsAvailable] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  const pageRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
+  const questionsRef = useRef<HTMLElement>(null);
+  const questionsButtonRef = useRef<HTMLButtonElement>(null);
+  const questionsVisible = questionsOpen && questionsAvailable;
+  const questionsModal = narrow && questionsVisible;
   const blockId = useRef<string | null>(null);
   const snapshotReceivedAt = useRef(Date.now());
   const controllerRef =
     useRef<PresentationRealtimeController<PresentationParticipantSnapshot> | null>(null);
 
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 980px)");
+    const update = () => {
+      setNarrow(query.matches);
+      setQuestionsOpen(!query.matches);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () =>
+      pageRef.current?.style.setProperty(
+        "--presentation-audience-header-height",
+        `${header.getBoundingClientRect().bottom + 8}px`,
+      );
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(header);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!questionsModal) return;
+    const restore = focusModal(questionsRef.current);
+    return () => {
+      restore();
+      questionsButtonRef.current?.focus({ preventScroll: true });
+    };
+  }, [questionsModal]);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [snapshot?.currentBlock?.id]);
+
+  useEffect(() => setQuestionsAvailable(false), [id]);
+
   const applySnapshot = useCallback((incoming: PresentationParticipantSnapshot) => {
     snapshotReceivedAt.current = Date.now();
     if (incoming.currentBlock?.id !== blockId.current) {
       blockId.current = incoming.currentBlock?.id ?? null;
-      setSelectedChoiceIds([]);
+      setSelectedChoiceIds(
+        incoming.currentBlock?.kind === "question"
+          ? initialPresentationChoiceIds(incoming.currentBlock.question, incoming.responseSubmitted)
+          : [],
+      );
       setNumericValue("");
       setRatingValue(null);
+      setTextValue("");
       setConfidence(null);
       setSaveStatus({
         blockId: incoming.currentBlock?.id ?? null,
         state: incoming.responseSubmitted ? "saved" : "idle",
       });
     }
+    if (incoming.responseSubmitted) setTextValue("");
     setSnapshot(incoming);
   }, []);
 
@@ -130,15 +219,7 @@ export default function PresentationParticipantPage() {
     question: PresentationParticipantQuestionBlock["question"],
     choiceId: string,
   ) {
-    if (question.type !== "multi_select") {
-      setSelectedChoiceIds([choiceId]);
-      return;
-    }
-    setSelectedChoiceIds((current) =>
-      current.includes(choiceId)
-        ? current.filter((candidate) => candidate !== choiceId)
-        : [...current, choiceId],
-    );
+    setSelectedChoiceIds((current) => togglePresentationChoice(question, current, choiceId));
   }
 
   async function submitResponse() {
@@ -149,16 +230,22 @@ export default function PresentationParticipantPage() {
     const currentSnapshot = snapshot;
     if (!currentSnapshot) return;
     const question = block.question;
-    const response =
-      question.type === "numeric"
-        ? { numericValue, ...(confidence ? { confidence } : {}) }
-        : question.type === "rating"
-          ? { ratingValue: ratingValue!, ...(confidence ? { confidence } : {}) }
-          : { choiceIds: selectedChoiceIds, ...(confidence ? { confidence } : {}) };
     setBusy(true);
     setError("");
     const idempotencyKey = `${id}:${block.id}:${clientUuid()}`;
     try {
+      const response = isTextQuestion(question.type)
+        ? { textValue: normalizeTextResponse(textValue, question.type) }
+        : question.type === "numeric"
+          ? { numericValue, ...(confidence ? { confidence } : {}) }
+          : question.type === "rating"
+            ? { ratingValue: ratingValue!, ...(confidence ? { confidence } : {}) }
+            : {
+                ...presentationChoiceResponse(question, selectedChoiceIds),
+                ...(question.type !== "poll" && question.type !== "ranking" && confidence
+                  ? { confidence }
+                  : {}),
+              };
       await controller.submitResponse(
         {
           sessionId: id,
@@ -188,6 +275,18 @@ export default function PresentationParticipantPage() {
           return accepted;
         },
       );
+      // The receipt is already durable. A best-effort result refresh must not turn it into
+      // a failed save when an optional closed-result read was temporarily unavailable.
+      const confirmed = controller.latest();
+      if (
+        confirmed?.currentBlock?.kind === "question" &&
+        (confirmed.currentBlock.question.type === "ranking" ||
+          (confirmed.currentBlock.question.type === "poll" &&
+            (confirmed.currentBlock.question.maxSelections ?? 1) > 1)) &&
+        ["question_reveal", "intervention", "finished"].includes(confirmed.phase) &&
+        !presentationOpinionSummaryFor(confirmed)
+      )
+        void controller.reconcile().catch(() => undefined);
     } catch (caught) {
       setError(humanError(caught));
     } finally {
@@ -196,265 +295,463 @@ export default function PresentationParticipantPage() {
   }
 
   const block = snapshot?.currentBlock ?? null;
+  const opinionSummary = presentationOpinionSummaryFor(snapshot);
   const saveState = presentationSaveStateForBlock(saveStatus, block?.id ?? null);
   const canSubmit =
     block?.kind === "question" &&
     snapshot?.phase === "question_open" &&
     snapshot.acceptingResponses &&
     !snapshot.responseSubmitted &&
-    (block.question.type === "numeric"
-      ? numericValue.trim() !== ""
-      : block.question.type === "rating"
-        ? ratingValue !== null
-        : selectedChoiceIds.length > 0) &&
+    (isTextQuestion(block.question.type)
+      ? textResponseError(block.question.type, textValue) === null
+      : block.question.type === "numeric"
+        ? numericValue.trim() !== ""
+        : block.question.type === "rating"
+          ? ratingValue !== null
+          : validPresentationChoiceSelection(block.question, selectedChoiceIds)) &&
     (block.question.confidence !== "required" || confidence !== null);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
+  const inputDisabled =
+    !snapshot?.acceptingResponses ||
+    snapshot.responseSubmitted ||
+    busy ||
+    saveState === "saving" ||
+    saveState === "reconnecting_not_saved";
   const deliveryStatus =
     saveState === "saving"
-      ? "Saving…"
+      ? t("live.common.saving")
       : saveState === "reconnecting_not_saved"
-        ? "Reconnecting—not yet saved"
+        ? copy("notSaved")
         : saveState === "saved" || snapshot?.responseSubmitted
-          ? "Saved"
+          ? copy("saved")
           : connection === "connected" || connection === "fallback"
-            ? "Connected"
-            : "Reconnecting—not yet saved";
+            ? t("live.common.connected")
+            : copy("notSaved");
 
   return (
-    <main className={styles.page}>
-      <header className={styles.topbar}>
+    <main ref={pageRef} className={styles.participantPage} lang={locale} data-audience-workspace>
+      <header ref={headerRef} className={styles.topbar} data-audience-header inert={questionsModal}>
         <Brand />
-        <span>
-          {snapshot
-            ? t("live.common.joinedCount", {
-                count: formatNumber(locale, snapshot.participantCount),
-              })
-            : t("live.common.connecting")}
-        </span>
-      </header>
-      <div className={styles.stage}>
-        <p aria-live="polite" className="muted" role="status">
-          {deliveryStatus}
-        </p>
-        {error ? (
-          <p className="error" lang="en-CA" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <section className={styles.canvas} aria-live="polite">
-          <div className={styles.canvasContent}>
-            {!snapshot ? <p>{t("live.presentationPlay.restoring")}</p> : null}
-            {snapshot?.phase === "lobby" ? (
-              <>
-                <span className={styles.statusPill}>{t("live.presentationPlay.youreIn")}</span>
-                <h1 lang="">{snapshot.title}</h1>
-                <p>{t("live.presentationPlay.facilitatorStarts")}</p>
-              </>
-            ) : null}
-            {block?.kind === "content" ? (
-              <>
-                <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
-                <ContentSlideView
-                  block={block}
-                  renderSceneImage={(mediaId, altText) => (
-                    <PresentationMedia
-                      key={mediaId}
-                      sessionId={id}
-                      mediaId={mediaId}
-                      altText={altText}
-                      participant
-                    />
-                  )}
-                  media={
-                    <PresentationMedia
-                      altText={block.mediaAlt}
-                      mediaId={block.mediaId}
-                      participant
-                      sessionId={id}
-                    />
-                  }
-                  variant="live"
-                />
-                <p className="muted">{t("live.presentationPlay.noResponse")}</p>
-              </>
-            ) : null}
-            {block?.kind === "question" ? (
-              <>
-                <span className={styles.statusPill}>
-                  {snapshot?.phase === "intervention"
-                    ? t("live.presentationPlay.reviewRecover")
-                    : snapshot?.acceptingResponses
-                      ? t("live.presentationPlay.respondNow")
-                      : t("live.presentationPlay.responseClosed")}
-                </span>
-                {remainingSeconds !== null ? (
-                  <p className={styles.timer} aria-live="off">
-                    {formatNumber(locale, remainingSeconds, {
-                      style: "unit",
-                      unit: "second",
-                      unitDisplay: "narrow",
+        <div className={styles.viewControls}>
+          {snapshot?.spatial ? (
+            <PresentationSpatialDelivery
+              placement="header"
+              spatial={snapshot.spatial}
+              currentBlockIndex={snapshot.currentBlockIndex}
+              phase={snapshot.phase}
+              sourceKey={`${id}:${snapshot.presentationVersionId}`}
+            />
+          ) : snapshot ? (
+            <span className={styles.progress}>
+              {snapshot.phase === "lobby"
+                ? copy("ready")
+                : snapshot.phase === "finished"
+                  ? copy("complete")
+                  : copy("progress", {
+                      current: formatNumber(locale, snapshot.currentBlockIndex + 1),
+                      total: formatNumber(locale, snapshot.blockCount),
                     })}
-                  </p>
-                ) : snapshot?.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
-                  <p className="muted" lang={locale} role="status">
-                    {t("live.common.flexOpen")}
-                  </p>
-                ) : null}
-                <h1 lang="">{block.question.prompt}</h1>
-                <PresentationMedia
-                  altText={block.question.mediaAlt}
-                  mediaId={block.question.mediaId}
-                  participant
-                  sessionId={id}
-                />
-                {block.question.choices.length ? (
-                  <div className={styles.choiceGrid}>
-                    {block.question.choices.map((choice) => (
+            </span>
+          ) : null}
+          {questionsAvailable ? (
+            <button
+              ref={questionsButtonRef}
+              className={styles.questionsToggle}
+              type="button"
+              aria-label={t("live.qna.title")}
+              aria-controls="presentation-audience-qna"
+              aria-expanded={questionsVisible}
+              onClick={() => setQuestionsOpen((value) => !value)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 4h16v12H9l-5 4V4Z" />
+              </svg>
+              <span>{t("live.qna.title")}</span>
+            </button>
+          ) : null}
+        </div>
+        <div className={styles.headerStatus}>
+          <span>
+            {snapshot
+              ? t("live.common.joinedCount", {
+                  count: formatNumber(locale, snapshot.participantCount),
+                })
+              : t("live.common.connecting")}
+          </span>
+          <p
+            aria-live="polite"
+            className={styles.connectionStatus}
+            data-state={saveState === "idle" ? connection : saveState}
+            role="status"
+          >
+            {deliveryStatus}
+          </p>
+        </div>
+      </header>
+      <div
+        className={styles.stage}
+        data-questions-open={questionsVisible && !narrow ? "true" : "false"}
+      >
+        <div className={styles.contentPane} inert={questionsModal}>
+          {error ? (
+            <p className="error" lang="en-CA" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <section
+            ref={contentRef}
+            className={styles.canvas}
+            data-kind={block?.kind ?? snapshot?.phase ?? "connecting"}
+            aria-live="polite"
+            role="region"
+            aria-label={audienceCopy.currentPresentation}
+            tabIndex={0}
+            data-audience-content
+          >
+            <div className={styles.canvasContent}>
+              {!snapshot ? <p>{t("live.presentationPlay.restoring")}</p> : null}
+              {snapshot?.phase === "lobby" ? (
+                <>
+                  <span className={styles.statusPill}>{t("live.presentationPlay.youreIn")}</span>
+                  <h1 lang="">{snapshot.title}</h1>
+                  <p>{t("live.presentationPlay.facilitatorStarts")}</p>
+                </>
+              ) : null}
+              {block?.kind === "content" ? (
+                <>
+                  <div className={styles.contentStatus}>
+                    <span className={styles.statusPill}>{t("live.presentationPlay.content")}</span>
+                    <p>{t("live.presentationPlay.noResponse")}</p>
+                  </div>
+                  <div className={styles.slideFrame}>
+                    <ContentSlideView
+                      block={block}
+                      designOverride={block.design}
+                      interactionRuntime={presentationInteractionRuntime(snapshot, {
+                        mode: "live_audience",
+                      })}
+                      interactionSourceKey={JSON.stringify([
+                        id,
+                        audienceToken,
+                        connection === "fallback",
+                      ])}
+                      renderSceneImage={(mediaId, altText) => (
+                        <PresentationMedia
+                          key={mediaId}
+                          sessionId={id}
+                          mediaId={mediaId}
+                          altText={altText}
+                          participant
+                        />
+                      )}
+                      media={
+                        <PresentationMedia
+                          altText={block.mediaAlt}
+                          mediaId={block.mediaId}
+                          participant
+                          sessionId={id}
+                        />
+                      }
+                      variant="live"
+                    />
+                  </div>
+                </>
+              ) : null}
+              {block?.kind === "question" ? (
+                <>
+                  <div className={styles.questionStatus}>
+                    <span className={styles.statusPill}>
+                      {snapshot?.phase === "intervention"
+                        ? t("live.presentationPlay.reviewRecover")
+                        : snapshot?.acceptingResponses
+                          ? t("live.presentationPlay.respondNow")
+                          : t("live.presentationPlay.responseClosed")}
+                    </span>
+                    {remainingSeconds !== null ? (
+                      <p className={styles.timer} aria-live="off">
+                        {formatNumber(locale, remainingSeconds, {
+                          style: "unit",
+                          unit: "second",
+                          unitDisplay: "narrow",
+                        })}
+                      </p>
+                    ) : snapshot?.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
+                      <p className="muted" lang={locale} role="status">
+                        {t("live.common.flexOpen")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <h1 lang="">{block.question.prompt}</h1>
+                  <PresentationMedia
+                    altText={block.question.mediaAlt}
+                    mediaId={block.question.mediaId}
+                    participant
+                    sessionId={id}
+                  />
+                  {isTextQuestion(block.question.type) ? (
+                    !snapshot?.responseSubmitted ? (
+                      <TextResponseControl
+                        type={block.question.type}
+                        value={textValue}
+                        disabled={inputDisabled}
+                        onChange={setTextValue}
+                      />
+                    ) : null
+                  ) : block.question.type === "ranking" ? (
+                    snapshot?.responseSubmitted ? (
+                      <>
+                        <p lang={locale}>{copy("rankingSaved")}</p>
+                        <ul aria-label={copy("rankingChoices")}>
+                          {block.question.choices.map((choice) => (
+                            <li key={choice.id} lang="">
+                              {choice.label}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : (
+                      <RankingChoices
+                        question={block.question}
+                        selectedChoiceIds={selectedChoiceIds}
+                        disabled={inputDisabled}
+                        onChange={setSelectedChoiceIds}
+                      />
+                    )
+                  ) : block.question.choices.length ? (
+                    <>
+                      {block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1 ? (
+                        <p lang={locale} role="status">
+                          {copy("selectionCount", {
+                            max: formatNumber(locale, block.question.maxSelections ?? 1),
+                            count: formatNumber(locale, selectedChoiceIds.length),
+                          })}
+                        </p>
+                      ) : null}
+                      <div className={styles.choiceGrid}>
+                        {block.question.choices.map((choice) => (
+                          <button
+                            aria-pressed={selectedChoiceIds.includes(choice.id)}
+                            className={styles.choiceButton}
+                            disabled={
+                              inputDisabled ||
+                              (block.question.type === "poll" &&
+                                (block.question.maxSelections ?? 1) > 1 &&
+                                !selectedChoiceIds.includes(choice.id) &&
+                                selectedChoiceIds.length >= presentationChoiceLimit(block.question))
+                            }
+                            key={choice.id}
+                            lang=""
+                            onClick={() => toggleChoice(block.question, choice.id)}
+                            type="button"
+                          >
+                            {choice.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : block.question.type === "numeric" ? (
+                    <label className={styles.formStack}>
+                      {t("live.presentationPlay.numericResponse")}
+                      <input
+                        disabled={inputDisabled}
+                        inputMode="decimal"
+                        onChange={(event) => setNumericValue(event.target.value)}
+                        value={numericValue}
+                      />
+                    </label>
+                  ) : (
+                    <label className={styles.formStack}>
+                      {t("live.presentationPlay.rating")}
+                      <select
+                        disabled={inputDisabled}
+                        onChange={(event) => setRatingValue(Number(event.target.value))}
+                        value={ratingValue ?? ""}
+                      >
+                        <option disabled value="">
+                          {t("live.presentationPlay.chooseRating")}
+                        </option>
+                        {Array.from(
+                          {
+                            length:
+                              (block.question.rating?.max ?? 5) -
+                              (block.question.rating?.min ?? 1) +
+                              1,
+                          },
+                          (_, index) => (block.question.rating?.min ?? 1) + index,
+                        ).map((value) => (
+                          <option key={value} value={value}>
+                            {formatNumber(locale, value)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {!isTextQuestion(block.question.type) &&
+                  block.question.confidence !== "off" &&
+                  snapshot?.acceptingResponses ? (
+                    <label className={styles.formStack}>
+                      {t("live.presentationPlay.confidence", {
+                        requirement:
+                          block.question.confidence === "required"
+                            ? t("live.presentationPlay.required")
+                            : t("live.presentationPlay.optional"),
+                      })}
+                      <select
+                        disabled={inputDisabled}
+                        onChange={(event) =>
+                          setConfidence(
+                            event.target.value
+                              ? (Number(event.target.value) as ConfidenceValue)
+                              : null,
+                          )
+                        }
+                        value={confidence ?? ""}
+                      >
+                        <option value="">{t("live.presentationPlay.chooseConfidence")}</option>
+                        <option value="1">{t("live.presentationPlay.low")}</option>
+                        <option value="2">{t("live.presentationPlay.medium")}</option>
+                        <option value="3">{t("live.presentationPlay.high")}</option>
+                      </select>
+                    </label>
+                  ) : null}
+                  <div className={styles.responseActions}>
+                    {isTextQuestion(block.question.type) && snapshot?.responseSubmitted ? (
+                      <p className="notice" role="status">
+                        {snapshot.ownTextResponse?.blockId === block.id
+                          ? t(textResponseReceipt(snapshot.ownTextResponse.status))
+                          : t("live.presentationPlay.responseSaved")}
+                      </p>
+                    ) : snapshot?.responseResult ? (
+                      <p className="notice" role="status">
+                        {snapshot.responseResult.correct === null
+                          ? t("live.presentationPlay.responseRecorded")
+                          : snapshot.responseResult.correct
+                            ? t("live.presentationPlay.correctPoints", {
+                                score: formatNumber(locale, snapshot.responseResult.score),
+                              })
+                            : t("live.presentationPlay.notQuite")}
+                        {snapshot.standing &&
+                        block.question.type !== "poll" &&
+                        block.question.type !== "ranking" &&
+                        block.question.type !== "rating"
+                          ? t("live.presentationPlay.rankPoints", {
+                              rank: formatNumber(locale, snapshot.standing.rank),
+                              score: formatNumber(locale, snapshot.standing.score),
+                            })
+                          : ""}
+                      </p>
+                    ) : snapshot?.responseSubmitted ? (
+                      <p className="notice" role="status">
+                        {t("live.presentationPlay.responseSaved")}
+                      </p>
+                    ) : snapshot?.acceptingResponses ? (
                       <button
-                        aria-pressed={selectedChoiceIds.includes(choice.id)}
-                        className={styles.choiceButton}
-                        disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
-                        key={choice.id}
-                        lang=""
-                        onClick={() => toggleChoice(block.question, choice.id)}
+                        className="button"
+                        disabled={!canSubmit || busy || !controllerRef.current?.canMutate()}
+                        onClick={() => void submitResponse()}
                         type="button"
                       >
-                        {choice.label}
+                        {busy ? t("live.common.saving") : t("live.presentationPlay.submit")}
                       </button>
-                    ))}
+                    ) : (
+                      <p className="muted">{t("live.presentationPlay.closed")}</p>
+                    )}
                   </div>
-                ) : block.question.type === "numeric" ? (
-                  <label className={styles.formStack}>
-                    {t("live.presentationPlay.numericResponse")}
-                    <input
-                      disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
-                      inputMode="decimal"
-                      onChange={(event) => setNumericValue(event.target.value)}
-                      value={numericValue}
+                  {opinionSummary ? <PresentationOpinionResults summary={opinionSummary} /> : null}
+                  {isTextQuestion(block.question.type) && snapshot && audienceToken ? (
+                    <PresentationTextResults
+                      sessionId={id}
+                      blockId={block.id}
+                      type={block.question.type}
+                      revision={snapshot.revision}
+                      seq={snapshot.seq}
+                      phase={snapshot.phase}
+                      projection="participant"
+                      credential={audienceToken}
                     />
-                  </label>
-                ) : (
-                  <label className={styles.formStack}>
-                    {t("live.presentationPlay.rating")}
-                    <select
-                      disabled={!snapshot?.acceptingResponses || snapshot.responseSubmitted}
-                      onChange={(event) => setRatingValue(Number(event.target.value))}
-                      value={ratingValue ?? ""}
-                    >
-                      <option disabled value="">
-                        {t("live.presentationPlay.chooseRating")}
-                      </option>
-                      {Array.from(
-                        {
-                          length:
-                            (block.question.rating?.max ?? 5) -
-                            (block.question.rating?.min ?? 1) +
-                            1,
-                        },
-                        (_, index) => (block.question.rating?.min ?? 1) + index,
-                      ).map((value) => (
-                        <option key={value} value={value}>
-                          {formatNumber(locale, value)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {block.question.confidence !== "off" && snapshot?.acceptingResponses ? (
-                  <label className={styles.formStack}>
-                    {t("live.presentationPlay.confidence", {
-                      requirement:
-                        block.question.confidence === "required"
-                          ? t("live.presentationPlay.required")
-                          : t("live.presentationPlay.optional"),
-                    })}
-                    <select
-                      disabled={snapshot.responseSubmitted}
-                      onChange={(event) =>
-                        setConfidence(
-                          event.target.value
-                            ? (Number(event.target.value) as ConfidenceValue)
-                            : null,
-                        )
-                      }
-                      value={confidence ?? ""}
-                    >
-                      <option value="">{t("live.presentationPlay.chooseConfidence")}</option>
-                      <option value="1">{t("live.presentationPlay.low")}</option>
-                      <option value="2">{t("live.presentationPlay.medium")}</option>
-                      <option value="3">{t("live.presentationPlay.high")}</option>
-                    </select>
-                  </label>
-                ) : null}
-                <div className={styles.responseActions}>
-                  {snapshot?.responseResult ? (
-                    <p className="notice" role="status">
-                      {snapshot.responseResult.correct === null
-                        ? t("live.presentationPlay.responseRecorded")
-                        : snapshot.responseResult.correct
-                          ? t("live.presentationPlay.correctPoints", {
-                              score: formatNumber(locale, snapshot.responseResult.score),
-                            })
-                          : t("live.presentationPlay.notQuite")}
-                      {snapshot.standing
-                        ? t("live.presentationPlay.rankPoints", {
-                            rank: formatNumber(locale, snapshot.standing.rank),
-                            score: formatNumber(locale, snapshot.standing.score),
-                          })
-                        : ""}
+                  ) : null}
+                  {snapshot?.phase === "intervention" && snapshot.recoveryPackIntervention ? (
+                    <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+                  ) : null}
+                </>
+              ) : null}
+              {snapshot?.phase === "finished" ? (
+                <>
+                  <span className={styles.statusPill}>{t("live.common.complete")}</span>
+                  <h1>{t("live.presentationPlay.thanks")}</h1>
+                  <p>{t("live.presentationSession.finished")}</p>
+                  {snapshot.standing ? (
+                    <p className="notice">
+                      {t("live.presentationPlay.rankPoints", {
+                        rank: formatNumber(locale, snapshot.standing.rank),
+                        score: formatNumber(locale, snapshot.standing.score),
+                      })}
                     </p>
-                  ) : snapshot?.responseSubmitted ? (
-                    <p className="notice" role="status">
-                      {t("live.presentationPlay.responseSaved")}
-                    </p>
-                  ) : snapshot?.acceptingResponses ? (
-                    <button
-                      className="button"
-                      disabled={!canSubmit || busy || !controllerRef.current?.canMutate()}
-                      onClick={() => void submitResponse()}
-                      type="button"
-                    >
-                      {busy ? t("live.common.saving") : t("live.presentationPlay.submit")}
-                    </button>
-                  ) : (
-                    <p className="muted">{t("live.presentationPlay.closed")}</p>
-                  )}
-                </div>
-                {snapshot?.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-                  <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
-                ) : null}
-              </>
-            ) : null}
-            {snapshot?.phase === "finished" ? (
-              <>
-                <span className={styles.statusPill}>{t("live.common.complete")}</span>
-                <h1>{t("live.presentationPlay.thanks")}</h1>
-                <p>{t("live.presentationSession.finished")}</p>
-                {snapshot.standing ? (
-                  <p className="notice">
-                    {t("live.presentationPlay.rankPoints", {
-                      rank: formatNumber(locale, snapshot.standing.rank),
-                      score: formatNumber(locale, snapshot.standing.score),
-                    })}
-                  </p>
-                ) : null}
-                <Link className="button" href="/">
-                  {t("live.presentationPlay.leave")}
-                </Link>
-              </>
+                  ) : null}
+                  <Link className="button" href="/">
+                    {t("live.presentationPlay.leave")}
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </section>
+        </div>
+        {questionsModal ? (
+          <div
+            className={styles.questionsScrim}
+            onPointerDown={() => setQuestionsOpen(false)}
+            aria-hidden="true"
+          />
+        ) : null}
+        <aside
+          ref={questionsRef}
+          id="presentation-audience-qna"
+          className={styles.questions}
+          data-audience-qna
+          data-open={questionsVisible ? "true" : "false"}
+          role={questionsModal ? "dialog" : "complementary"}
+          aria-modal={questionsModal || undefined}
+          aria-label={t("live.qna.title")}
+          hidden={!questionsVisible}
+          inert={!questionsVisible}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (questionsModal) {
+              if (event.key === "Escape") event.stopPropagation();
+              handleModalKeyDown(event, () => setQuestionsOpen(false));
+            }
+          }}
+        >
+          <div className={styles.questionsHeading}>
+            <h2>{t("live.qna.title")}</h2>
+            <button
+              type="button"
+              aria-label={audienceCopy.closeQuestions}
+              onClick={() => {
+                setQuestionsOpen(false);
+                questionsButtonRef.current?.focus({ preventScroll: true });
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 6 12 12M6 18 18 6" />
+              </svg>
+            </button>
+          </div>
+          <div className={styles.questionsBody} data-audience-qna-scroll>
+            {snapshot && audienceToken ? (
+              <PresentationQnaPanel
+                key={id}
+                sessionId={id}
+                token={audienceToken}
+                role="participant"
+                layout="sidebar"
+                onAvailabilityChange={setQuestionsAvailable}
+                closed={snapshot.phase === "finished"}
+              />
             ) : null}
           </div>
-        </section>
+        </aside>
       </div>
-      {snapshot && audienceToken ? (
-        <PresentationQnaPanel
-          key={id}
-          sessionId={id}
-          token={audienceToken}
-          role="participant"
-          closed={snapshot.phase === "finished"}
-        />
-      ) : null}
     </main>
   );
 }

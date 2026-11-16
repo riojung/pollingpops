@@ -2,25 +2,36 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AuthoringAssistant } from "../../../components/authoring-assistant";
 import { useLocale } from "../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../lib/api";
 import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
+import { PresentationDesignGallery } from "../../../components/workspace/presentation-design-gallery";
+import { presentationDesignCopy } from "../../../lib/i18n/presentation-design-copy";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
-import styles from "../../../components/workspace/workspace-hub.module.css";
+import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
+import { presentationStartCopy } from "../../../components/workspace/presentation-start-copy";
+import { creatorWorkflowCopy } from "../../../components/editor/creator-workflow-copy";
+import styles from "./presentation-launcher.module.css";
 
 function PresentationLauncher() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const designCopy = presentationDesignCopy(locale);
+  const workflowCopy = creatorWorkflowCopy(locale);
+  const startCopy = presentationStartCopy(locale);
   const { canEdit } = useWorkspace();
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
   const [error, setError] = useState("");
 
   async function createBlankPresentation() {
+    if (!canEdit || creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     setError("");
     recordCreationEvent("creation_started", "blank", "presentation");
@@ -28,7 +39,7 @@ function PresentationLauncher() {
       const response = await apiFetch<{ presentation: { id: string } }>("/v1/presentations", {
         method: "POST",
         body: JSON.stringify({
-          title: "Untitled presentation",
+          title: t("delivery.presentationBuilder.untitled"),
           description: "",
           initialSlide: "native",
         }),
@@ -37,11 +48,17 @@ function PresentationLauncher() {
       router.push(`/presentation/${response.presentation.id}`);
     } catch (caught) {
       setError(humanError(caught));
+      creatingRef.current = false;
       setCreating(false);
     }
   }
 
-  const selectedStart = searchParams.get("start");
+  const requestedStarts = searchParams.getAll("start");
+  const selectedStart =
+    requestedStarts.length === 1 &&
+    ["source", "template", "outline", "design"].includes(requestedStarts[0]!)
+      ? requestedStarts[0]
+      : null;
 
   return (
     <WorkspaceShell
@@ -76,54 +93,116 @@ function PresentationLauncher() {
               <Link className="button-quiet small-button" href="/create/presentation">
                 {t("create.common.allStartingPoints")}
               </Link>
-              <span>
+              <span lang={locale}>
                 {selectedStart === "source"
                   ? t("create.common.sourceGrounded")
-                  : t("create.common.presentationTemplate")}
+                  : selectedStart === "design"
+                    ? designCopy.fromDesign
+                    : selectedStart === "outline"
+                      ? startCopy.fromOutline
+                      : t("create.common.presentationTemplate")}
               </span>
             </div>
           ) : null}
           {!selectedStart ? (
-            <div className={styles.methodGrid}>
-              <Link className={styles.methodCard} href="/create/presentation?start=source">
-                <span className={styles.cardIcon} data-tone="violet">
-                  S
-                </span>
-                <small>{t("create.presentation.method.source.kicker")}</small>
-                <h2>{t("create.presentation.method.source.title")}</h2>
-                <p>{t("create.presentation.method.source.description")}</p>
-                <span className={styles.cardLink}>
-                  {t("create.presentation.method.source.action")}
-                </span>
-              </Link>
-              <Link className={styles.methodCard} href="/create/presentation?start=template">
-                <span className={styles.cardIcon}>T</span>
-                <small>{t("create.common.fastestStart")}</small>
-                <h2>{t("create.presentation.method.template.title")}</h2>
-                <p>{t("create.presentation.method.template.description")}</p>
-                <span className={styles.cardLink}>
-                  {t("create.presentation.method.template.action")}
-                </span>
-              </Link>
+            <section className={styles.blankStart}>
+              <span className={styles.blankMark} aria-hidden="true">
+                <svg viewBox="0 0 72 52" fill="none">
+                  <rect x="2" y="2" width="68" height="48" rx="5" />
+                  <path d="M28 26h16M36 18v16" />
+                </svg>
+              </span>
+              <div className={styles.blankCopy}>
+                <p className={styles.kicker}>{t("create.common.fullControl")}</p>
+                <h2>{t("create.presentation.method.blank.title")}</h2>
+                <p>{t("create.presentation.method.blank.description")}</p>
+              </div>
               <button
-                className={styles.methodCard}
+                className="button"
                 disabled={creating}
                 onClick={() => void createBlankPresentation()}
                 type="button"
               >
-                <span className={styles.cardIcon} data-tone="coral">
-                  B
-                </span>
-                <small>{t("create.common.fullControl")}</small>
-                <h2>{t("create.presentation.method.blank.title")}</h2>
-                <p>{t("create.presentation.method.blank.description")}</p>
-                <span className={styles.cardLink}>
-                  {creating
-                    ? t("create.presentation.method.blank.creating")
-                    : t("create.presentation.method.blank.action")}
-                </span>
+                {creating
+                  ? t("create.presentation.method.blank.creating")
+                  : t("create.presentation.method.blank.action")}
               </button>
-            </div>
+            </section>
+          ) : null}
+
+          {error ? (
+            <p className="error" lang="en-CA" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          {!selectedStart ? (
+            <details className={styles.alternatives}>
+              <summary>{workflowCopy.otherStartingPoints}</summary>
+              <div className={styles.methodGrid}>
+                <Link className={styles.methodCard} href="/create/presentation?start=source">
+                  <small>{startCopy.sourceAssistance}</small>
+                  <h3>{t("create.presentation.method.source.title")}</h3>
+                  <p>{startCopy.sourceWarning}</p>
+                  <span className={styles.cardLink}>
+                    {t("create.presentation.method.source.action")}
+                  </span>
+                </Link>
+                <Link
+                  className={styles.methodCard}
+                  href="/create/presentation?start=outline"
+                  lang={locale}
+                  aria-label={startCopy.fromOutline}
+                >
+                  <small>{startCopy.optionalAI}</small>
+                  <h3>{startCopy.fromOutline}</h3>
+                  <p>{startCopy.outlineCard}</p>
+                  <span className={styles.cardLink}>{startCopy.outlineAction}</span>
+                </Link>
+              </div>
+            </details>
+          ) : null}
+
+          {!selectedStart || selectedStart === "design" ? (
+            <section className={styles.templates} aria-labelledby="presentation-designs-title">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p className={styles.kicker}>{designCopy.fromDesign}</p>
+                  <h2 id="presentation-designs-title">{designCopy.title}</h2>
+                  <p>{designCopy.description}</p>
+                </div>
+                {!selectedStart ? (
+                  <Link
+                    className="button-quiet small-button"
+                    href="/create/presentation?start=design"
+                  >
+                    {designCopy.browseDesigns}
+                  </Link>
+                ) : null}
+              </div>
+              {selectedStart === "design" ? <PresentationDesignGallery /> : null}
+            </section>
+          ) : null}
+
+          {!selectedStart || selectedStart === "template" ? (
+            <section className={styles.templates} aria-labelledby="presentation-templates-title">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p className={styles.kicker}>{t("create.common.fastestStart")}</p>
+                  <h2 id="presentation-templates-title">{designCopy.contentTemplates}</h2>
+                  <p>{t("create.presentation.method.template.description")}</p>
+                </div>
+                {!selectedStart ? (
+                  <Link
+                    className="button-quiet small-button"
+                    href="/create/presentation?start=template"
+                  >
+                    <span>{startCopy.browseTemplates}</span>
+                  </Link>
+                ) : null}
+              </div>
+              <PresentationTemplateGallery />
+            </section>
           ) : null}
 
           {selectedStart === "source" ? (
@@ -131,7 +210,7 @@ function PresentationLauncher() {
               <p className="eyebrow">{t("create.presentation.source.eyebrow")}</p>
               <h2>{t("create.presentation.source.title")}</h2>
               <p>{t("create.presentation.source.description")}</p>
-              <div lang="en-CA">
+              <div lang={locale}>
                 <AuthoringAssistant
                   artifactType="presentation"
                   canEdit
@@ -143,23 +222,10 @@ function PresentationLauncher() {
             </section>
           ) : null}
 
-          {selectedStart === "template" ? (
-            <section className={styles.panel}>
-              <p className="eyebrow">{t("create.presentation.templates.eyebrow")}</p>
-              <h2>{t("create.presentation.templates.title")}</h2>
-              <PresentationTemplateGallery />
-            </section>
-          ) : null}
+          {selectedStart === "outline" ? <PresentationOutlineStart /> : null}
 
-          {error ? (
-            <p className="error" lang="en-CA" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <p className={styles.notice}>
-            <strong>{t("create.presentation.notice.title")}</strong>{" "}
-            {t("create.presentation.notice.description")}
+          <p className={styles.notice} lang={locale}>
+            {startCopy.privateDraft}
           </p>
         </>
       )}

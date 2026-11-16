@@ -10,6 +10,9 @@ The Core-Parity foundation includes gated Presentation Q&A and a gated self-pace
 using single- or multiple-selection opinion polls and ratings. Presentation replies/chat/Pulse,
 Q&A-only feedback rooms and advanced feedback exports remain pending. Live Rounds support gated
 multiple-selection polls, ranking, moderated open text and word clouds.
+Presentations also support multiple-selection opinion polls and full/top-N rankings after the
+matching release is deployed. Moderated open text and word clouds additionally require the
+document-v10/response-v3/report-V5 release and migration 092.
 Existing learning Q&A's Anonymous public display still lets
 moderators see the session alias; it is not organizer-blind feedback. Track availability in the
 [implementation status](implementation-status.md), not by enabling reserved future flags.
@@ -24,8 +27,18 @@ later in the Round editor. A live poll is not a self-paced Survey.
 Open **Templates** and choose **Rounds**, **Presentations**, or **Surveys**. Search original
 Round and Survey templates and filter by category/type. **Preview questions** shows prompts
 and options without creating content. **Use this starter** makes an independent draft with fresh IDs.
-Presentation templates provide ready-to-edit slides and interactions for meetings, training,
-reviews, and workshops. Survey templates contain opinion polls and ratings for self-paced feedback.
+The 21-template Presentation catalogue contains 12 native scenario decks and the nine retained facilitated
+templates. Each native scenario has eight editable slides and works without an audience activity:
+startup pitch, client proposal, project update, quarterly strategy, portfolio case study, event talk,
+product demo, customer onboarding, practical workshop, lesson/explainer, research findings and
+business decision brief. Their worked examples and data are explicitly illustrative; review the
+speaker notes and replace example assumptions with your own sourced information.
+**Preview structure** opens a read-only, shared-renderer deck preview. Use **Previous slide**,
+**Next slide**, Left/Right arrow keys, Home or End to navigate, and Escape or **Close preview** to
+return to the chooser. Only the current preview slide is mounted. **Use presentation template**
+creates an independent draft with fresh IDs; viewing the preview creates no content. The existing
+facilitated templates retain their slides, questions and linked rechecks. Survey templates contain
+opinion polls and ratings for self-paced feedback.
 Review every answer, explanation and recheck for your audience before publishing. Original template
 content is English; chooser/filter controls are localized.
 
@@ -573,6 +586,462 @@ facilitation timeline. It does not assign quiz standings or learning outcomes to
 Ordinary content slides retain the existing text/image layout tools. Native slides add independently
 positioned text, images, labeled shapes and connectors in the same deck.
 
+### Turn an outline into editable slides
+
+To start a new deck, choose **Create → Presentation → From outline**. Enter a **Presentation
+title** and choose **Create draft and continue**. This saves a draft before opening the outline
+panel; creating the draft uses no AI job. Closing the panel or a failed generation leaves the
+draft available for normal editing. If draft creation is interrupted, **Retry draft creation**
+recovers the same draft. Returning to this starting point offers **Open saved draft** or an
+explicit **Start another**; it does not silently create another deck.
+
+In the Presentation map, choose **Outline to slides**. The editor saves pending changes before
+opening the panel. Enter an **Outline name** and **Outline text**, choose 3–8 slides and review
+the available AI allowance before **Create slide proposal**. This optional action shares the
+existing authoring allowance; normal editing remains available when AI is unavailable.
+
+Review every proposed slide and its **Exact outline excerpts**. Generated claims are unverified;
+citations identify source wording rather than prove the generated statements. Choose the slides
+to include, confirm that you reviewed their wording and excerpts, then select **Insert N reviewed
+slides**. Edit the inserted native text and layout on the canvas. Publish explicitly when ready.
+
+If a response is interrupted, use **Recover proposal** or **Retry exact insertion** to recover
+the same action. Per-tab recovery keeps identities and review choices without storing the pasted
+outline. When another editor changes the saved deck, use **Reload saved deck**, check the
+insertion point and confirm the proposal review again. Private proposals expire after 24 hours.
+
+### Create a question starter from a slide
+
+On a visible native slide, choose **Question starters**. Review a **Discussion** prompt, a
+**Clarity rating** or an eligible **Priority poll**, then choose **Insert reviewed question**.
+**Cancel** leaves the deck unchanged. These are optional local English templates quoting your
+slide text; no AI service or allowance is used. They do not analyze images, tables/charts or
+closed interaction details, and do not invent facts or correct answers.
+
+Priority polls use every complete authored body point when there are 2–6 distinct points of up
+to 180 characters each. Longer, duplicate or unsuitable lists keep discussion/clarity starters
+available; points are never silently cut or selected. The review shows the complete question,
+options/settings and private source context. All starters are opinions with zero points,
+confidence off and no correct answer.
+
+Insertion creates one independently undoable, editable question immediately after the source,
+in the same section. The question prompt receives focus for editing. The source stays intact;
+later source changes do not rewrite an inserted question. Source attribution is private creator
+context and does not independently verify the slide. Wait for **Saved** before leaving, and
+publish separately when ready. Use the existing **Add question** control for other formats or
+when a source is hidden, classic or incomplete. Starters currently support up to eight body text
+objects with at most 4,000 total body characters.
+
+### Suggest discussion questions with AI
+
+On an eligible native slide, choose **Suggest discussion questions**. The editor saves your
+selected slide first. Review the complete source and shared AI allowance, then choose
+**Generate discussion suggestions**. Opening the panel does not start a job. One generation
+uses one AI job; reviewing and inserting the result use no further allowance.
+
+Review both complete English questions and their exact source excerpts, choose **Discussion
+question** or **Reflection question**, and confirm the review checkbox. **Insert reviewed
+question** adds one independently editable open-text opinion immediately after the source, in
+the same section. It has zero points, confidence off and no correct answer or linked recheck.
+One fresh insertion is one Undo step. Your source stays intact, and publishing remains separate.
+
+AI wording and framing are unverified. Only visible title/body text is used, including rich
+text and declared language. Images, table/chart data, notes and closed details are not
+interpreted. The current limit is one title, up to eight nonblank body objects and 4,000 total
+body characters. **Question starters** and **Add question** remain available without AI.
+
+If a response is lost, reopen **Resume discussion suggestions** after reload, then use
+**Recover saved request** or **Retry exact insertion**; do not start a replacement job. Recovery is tied to this account, deck and exact source. **Reload exact
+source** can refresh a revision while its text/language/list/order is unchanged. If that source
+changed, discard the old proposal and generate from the current slide. A pending insertion must
+be recovered before other edits. If recovery cannot be verified, review the warning and reload
+the saved deck before clearing that invalid record. Private proposals expire after 24 hours;
+accepted insertion receipts remain recoverable.
+
+### Translate selected native text
+
+Select one plain native title/body object and choose **Translate text**. Pick a **Target
+language**, review the available authoring allowance, then choose **Generate translation
+proposal**. Opening the panel or choosing a language does not generate or consume allowance.
+Translation shares the existing outline/rewrite/shorten allowance and provider configuration.
+
+Compare complete original and translated wording, the requested language and previous citations.
+Check meaning, terminology, unsupported claims and slide fit, confirm the review, then choose
+**Apply reviewed translation**. Only the selected text and its language change, together with
+the latest AI-edit record; notes, citations, other objects and publication remain intact.
+Previous citations do not verify a translation. Proper nouns can retain identical wording while
+their language changes. Use normal Undo/Redo after a fresh application and **Resume text
+assistance** for interrupted generation/application; recovery retains the exact language intent.
+
+The initial options are English, French, Spanish, German, Italian, Portuguese, Dutch, Polish,
+Japanese, Korean, Simplified Chinese and Traditional Chinese. Translation supports one plain
+text object at a time. Formatted text remains manually editable. **Text language** lets you
+correct an object's language or clear it to **Unspecified** without AI use. The annotation stays
+with that object through later edits and formatting and helps screen readers pronounce it.
+Changing a source language during review requires a new request. Review expanded text in the
+slide preview before publishing; translation does not resize frames automatically.
+
+### Rewrite or shorten selected native text
+
+Select a plain text object in a saved native slide, then choose **Rewrite text** or **Shorten
+text**. Rich text with formatting or links remains available for manual editing; this assistance
+does not flatten it. The editor saves pending changes before opening the review panel.
+
+Check the shared AI allowance, then explicitly request a proposal. Only the selected text, its
+title/body role and the requested operation are sent to the configured provider. Notes, other
+objects and citation excerpts are excluded. Compare the complete original and proposed text,
+review the unsupported-claims warning, confirm the review and choose **Apply reviewed text**.
+Existing citations and original source disclosure stay intact; they do not verify the new
+wording. The slide records its **latest AI text edit** separately. Generation never publishes
+or changes the deck by itself.
+
+Use **Resume text assistance** to reopen an interrupted workflow. **Recover or retry saved
+request** recovers the original proposal job; **Retry exact text application** recovers an
+uncertain Apply without repeating the edit. Per-tab assistance recovery stores identities and
+digests, not original or proposed text. **Reload exact target and review** refreshes the saved
+revision only while the same object, role and original text remain unchanged. If that text has
+changed or disappeared, discard the proposal and reload before creating one from the current
+text; the proposal never switches to another object.
+
+A fresh Apply supports **Undo** and **Redo** in the current tab. Page reload resets local undo
+history. A recovered old Apply preserves later edits rather than undoing another author's work.
+Private proposals expire after 24 hours. Accepted wording remains in the saved deck. Ordinary
+editing remains available without AI.
+
+If a saved text request cannot be read, choose **Resume text assistance**, review the warning
+and acknowledge that an edit may already have been applied. Choose **Reload saved deck and clear
+invalid recovery** to load the current saved deck and remove this tab's unreadable text request.
+Valid requests and other recovery copies are kept. If loading the saved deck or clearing tab
+storage fails, the editor keeps its protection and offers the same action to retry.
+
+### Organize sections and navigate live
+
+In the Builder, choose **Enable sections and navigation**, then **Add section**. Rename sections
+and assign each selected block with **Selected block section**. Section names are published, so
+use audience-appropriate labels. Sections group blocks; numbered slide order remains the default
+presentation path. Deleting a section keeps its blocks. Hidden slides are omitted when published.
+Wait for **Saved**, publish, and start a new session to use the new map.
+
+On the host or Companion, choose **Open navigation** to see current, visited and not-visited
+blocks. Choose an available slide or activity to jump there. The map explains unavailable targets.
+Close and reveal an open activity before navigating, and complete any linked recheck first.
+Revisiting an activity shows its saved closed phase/results without collecting another response
+or awarding points again.
+
+The first jump retains your original block as **Return target**. Further jumps keep that anchor;
+**Return to path** restores it. A jump from the lobby anchors the first published block. Ordinary
+**Next** continues in numbered order. If confirmation is lost, use the offered retry to confirm the
+same action; reload preserves that pending action in the same browser tab. Finished reports and
+CSV distinguish presented and skipped blocks without treating skipped activities as wrong answers.
+
+### Arrange a spatial presentation map
+
+In the Builder, choose **Arrange space**, then **Enable spatial layout**. This creates a bounded
+story map of the same slides and activities. It provides frame positions and an overview rather
+than an unrestricted drawing canvas. Sections outline their existing members; the numbered
+filmstrip still defines playback order. Reorder blocks in that filmstrip to change the path,
+keeping linked diagnostic and recheck activities in their permitted order.
+
+Choose a frame on the map or use **Selected frame**. On a wide screen, drag the frame or
+**Move selected frame**. On any screen, including a phone, edit **Frame X**, **Frame Y** and
+**Frame width**, or use the readable list of frames. With **Move selected frame** focused, arrow
+keys move by 16 units; hold Shift to move by 160. Frames keep a 16:9 aspect ratio. Widths range
+from 320 to 3,200 in steps of 16; positions stay nonnegative and keep the complete frame inside
+the 20,000-by-20,000 map. **Fit all**, **Fit selected** and the zoom buttons help locate frames.
+Press Enter or leave a numeric field to apply its value; Escape cancels that field edit.
+Each completed numeric edit has its own undo step.
+
+A drag previews locally until release, then becomes one undoable edit. Press Escape during a drag
+to cancel it. Position changes use the ordinary autosave and recovery flow; close the arrangement
+dialog to use the Builder's **Undo** or **Redo**. **Reset selected frame** restores one frame's
+default position and size; **Auto layout** resets all frames. **Disable spatial layout** returns
+the deck to linear delivery without removing its slides or activities.
+
+Hidden planning slides retain their positions in the draft. They are excluded from publication
+and **Preview path**, including their map frames and any section left empty. **Preview path**
+shows the visible path that will be published; use its **Next** and **Previous** controls to inspect
+the order.
+Wait for **Saved**, then publish and start a new session to use the layout. That session keeps its
+published content and positions even if the draft is edited or published again later.
+
+During live delivery, the spatial path shows numbered frame positions above the complete,
+readable current page. Choose **Show overview**, **Focus current page** or **Use linear view** on
+your own screen. These view controls do not broadcast a camera change or advance the room. The
+facilitator's existing activity and navigation controls still govern the shared current page,
+including closing open activities and completing linked rechecks before jumping. Participant
+content and response controls remain outside the scaled map.
+
+Private review links and static PDF, PNG and HTML exports retain their existing linear page
+order. Spatial arrangement does not turn them into an interactive spatial package.
+
+### Add reveal panels and safe links
+
+On a native slide, open **Interactions**, then choose **Add reveal panel** or **Add link**. The
+new action opens in the Content inspector. Give each control a short,
+descriptive label. For a panel, enter **Revealed audience content**; for a link, enter a complete
+HTTP or HTTPS address without embedded credentials. An invalid address stays in the editor with
+a correction message until it can be saved safely. Complete labels, content and links before
+publishing. Position, duplicate, group and reorder these objects using the ordinary native tools.
+
+In Preview or live delivery, activate a panel to show or hide its content **on this screen**.
+Participants and the presenter operate their own panels independently; opening one does not
+broadcast a reveal, submit an answer, change scores or call an AI provider. Panel text is audience
+content, so put confidential facilitator cues in speaker notes. Use activity controls when you
+want the host to reveal an assessment answer to the room.
+
+Use **Show accessible outline** for a readable layout in the slide's semantic order; the same
+panels and links work there. Buttons support touch, Enter and Space, and links announce that they
+open a new tab. Editing previews do not navigate. Page reloads or a new slide/source begin with
+panels collapsed. The additional interactions below use the same picker.
+
+In the Content inspector, expand **How this interaction works** to see the trigger, result
+and audience. Complete the requested fields, then choose **Preview this slide** to try the current
+visible slide. Preview starts there even when earlier slides are hidden. Reveals stay local to
+your screen, including broadcast reveals; slide links navigate through the preview. Escape closes
+open details first, then the preview and returns to the invoking tools. Correct unsaved link
+entries before using this action. The regular header Preview still starts at the first visible
+slide. Trying an action does not publish changes or start a live session.
+
+### Add hotspots, detail dialogs and shared reveals
+
+Use **Add native image** with a complete image description, then **Add image hotspot**. Choose its
+image, label, detail title and audience content. Keep the hotspot inside its unrotated image;
+moving or resizing the image carries its hotspots. **Add detail dialog** provides the same local
+detail without an image anchor. Viewers can open these details by touch or keyboard, close with
+Escape and return focus to the activating button. The accessible outline offers the same actions.
+Keep private facilitator cues in speaker notes.
+
+For a reveal panel, choose **This screen only** or **Facilitator reveals for everyone** under
+**Reveal audience**. During live delivery, a shared reveal waits for host/Companion confirmation.
+Its body is withheld from audience snapshots while closed, and its state survives reload and
+revisits. Shared review links make these reveals local to each reader. Reveals never submit an
+answer, change scores or call an AI provider.
+
+Use **Add slide link**, enter a label and choose **Target slide or activity**. The host/Companion
+uses this link to navigate the live room through the same safe jump rules as the map. A private
+review reader follows it only on their own screen. Hidden slides, rechecks and the current slide
+cannot be selected. Fix missing targets before publication.
+
+On an unlinked main activity, choose **Add answer branch**. Set its label, an accepted-choice or
+correct-response percentage, minimum response count and a forward target. After closing/revealing
+the activity, the server enables matching branch buttons for the facilitator. Choose one to
+follow it. **Next block** keeps the numbered path. Branches never create another response or reset
+points; linked diagnostic/recheck sequences stay indivisible.
+
+### Share a private review link
+
+Publish the deck, then choose **Share review link**. Select a one-, seven- or thirty-day expiry,
+choose **Create link**, and copy the private link. It grants access to anyone who has it, without
+requiring a recipient account. Use **Retry link creation** after uncertain confirmation to recover
+the original request and link, including after reload.
+
+If the server confirms that an unaccepted request has expired, the expiry selector and **Create
+link** become available again. Choose an expiry and create a fresh link. A connection failure
+continues to retain the original request for an exact retry.
+
+Save or copy the link before closing the dialog; the server keeps only its hash and cannot show
+the secret again later. Create another link if you need a replacement, and revoke unused links.
+
+Every link stays on its published version. Later draft edits or publications do not update it;
+create a new link to share a newer version. Reviewers can move through pages/sections and use local
+details or links, but questions are for reading and responses are not collected. Speaker notes,
+answer keys, explanations, private provenance, scores and live state are excluded.
+
+Open **Share review link** again and choose **Revoke link** to stop subsequent access. The reader
+checks authorization before moving to another page and before image access. A temporary network
+failure keeps the current page and offers retry. Expiry, removal of the publisher's editing
+authority or source deletion also ends access. Archiving blocks new links while existing links
+remain valid until revoked or expired. Already delivered content cannot be recalled.
+
+Each deck permits twenty active and one hundred retained links; expired metadata is removed after
+seven days. These review links do not create assignments, learner attempts or completion records.
+
+### Collect comments and approve a review
+
+Open **Share review link**, choose **Review feedback** for a link, then **Enable comments**.
+That link stays on its published version. Anyone with the link can still read anonymously;
+signed-in people with the link can read its feedback and comment. Reviewing requires no paid
+creator seat and does not add the reviewer to the author's workspace.
+
+Recipients choose **Sign in to comment** and return to the same review. Keep the original review
+tab or reopen the original private link if a different browser tab cannot recover access. Link
+credentials are not included in the sign-in address. Reviewers appear as **Reviewer 1**,
+**Reviewer 2**, and so on; other reviewers do not see their account email addresses.
+
+Use **Comment on this page** and **Post comment** to start a thread. The composer keeps the page
+where the comment began, even if you navigate before posting. Threads show their published page
+number. Reply to an open thread, or edit/delete your own messages. An author must reopen a
+resolved thread before it accepts replies. These actions affect feedback, while slide content
+and questions remain for reading.
+
+Authors use **Resolve** or **Reopen** in the link's feedback panel. **Approve this review** becomes
+available when no threads are open. Approval records sign-off for that link's review of that
+published version. Publishing continues to use the existing author controls. A later comment,
+edit or reopen makes the prior approval stale until the author reviews and approves again.
+Another link or later publication has its own review state.
+
+Use **Refresh feedback** to fetch newer discussion. A conflict retains unsent text so you can
+refresh before trying again. Returning to the tab also preserves unsubmitted reply/edit text
+while the same link revalidates. Changing accounts or losing link access clears these drafts.
+After an uncertain acknowledgement, **Retry pending action** recovers the same submitted action,
+including after reload. Switching accounts cannot replay the previous account's pending action.
+Revocation or expiry ends recipient access and future writes; authors can read retained closed
+feedback. Deleted messages have their text erased.
+
+### Download a static presentation
+
+Publish the deck, then choose **Export**. Choose **PDF** for the published deck, **PNG** for one
+published page, or **HTML** for a self-contained visual and readable copy. For PNG, choose the
+**Published page**, then choose **Download export**. Draft edits are excluded until published;
+the dialog keeps the published version selected when it was opened.
+
+PDF and PNG preserve the slide layout and flatten interactive controls. Overflowing authored
+frames may clip text. HTML includes the complete readable text, data tables and public panel or
+dialog details. Live responses, results, speaker notes and answer keys are excluded. PDF is a
+visual document rather than a tagged accessible PDF; use HTML for the semantic reading version.
+
+A downloaded file is a separate copy that cannot be revoked. Protect and distribute it yourself.
+Large decks or images can exceed the export limits; split the deck or reduce image sizes if the
+dialog asks. You can cancel an export or retry after a temporary failure. These static downloads
+do not create learner attempts or completion records.
+
+### Download an offline interactive presentation
+
+Publish the deck, choose **Export**, then select **Offline interactive HTML — whole
+presentation** and **Download export**. Open the downloaded
+`polling-pops-presentation-offline.html` in a browser. Its published visual snapshots, readable
+text and images are embedded in one file. Draft changes are excluded.
+
+Use the page index, section links, previous/next links and authored page links to move within
+the file. Below each visual snapshot, labeled reveal, detail and hotspot controls open native
+disclosure panels in the readable content. They work without JavaScript or an internet
+connection. The visual snapshots stay flat. Public content originally authored for broadcast
+reveal becomes a local disclosure in the file; it does not broadcast to other viewers.
+
+Activities are readable previews. This file never submits answers, awards points, records
+completion or saves learner progress. External links are labeled as leaving the file and may
+require an internet connection. The file contains every included public detail body, even when
+its panel is closed. Downloaded copies cannot be revoked; protect and distribute them yourself.
+Use the existing accessible HTML format when you want all details expanded for reading.
+
+### Import a PDF or a set of slide images
+
+In the Builder, choose **Import visual slides**. Export PowerPoint, Google Slides or Canva slides
+as PDF first, or choose PNG/JPEG/WebP images. This conversion does not call an AI provider and is
+separate from source-grounded content proposals. Use one PDF up to 6 MB/40 pages, or at most forty
+images totaling 20 MB, each no larger than 10 MiB. If import is unavailable, an operator must
+configure the required conversion and scanned private-media services.
+
+Wait for the conversion preview, select the pages you want and use the page controls to reorder
+them. Review the fidelity report: pages become fitted images, while source objects, animations,
+active links, audio and video are not imported. Check each title and image description, then write
+or correct its accessible reading version. Extracted PDF text may omit diagrams, reorder content
+or contain mistakes; scanned pages/images have no OCR. Confirm reading order and meaning yourself.
+
+Each selected page inserts a visual slide followed by an editable reading slide after the chosen
+block. You can add, edit and reorder other native slides and activities between them. A new deck's
+empty starting placeholder is replaced; meaningful existing content is preserved. Preview and
+publish the resulting deck normally. A pending insert retry keeps its exact request until the
+receipt is known, including after a reload. If another editor changed the deck, reload the latest
+draft and review the insertion point again.
+
+You can cancel a queued conversion or discard its preview. Originals are erased after successful
+conversion, terminal failure or cancellation; unfinished work expires after 24 hours for cleanup.
+Previews expire after 24 hours, so keep the source yourself if you may need another conversion.
+Canceling a preview does not remove slides already inserted into the deck.
+
+### Collect Presentation polls and rankings
+
+Add an interactive question and choose **Poll** or **Ranking** under **Question type**. For a poll,
+set **Maximum selections** from one to the number of choices. A limit above one lets each
+participant choose up to that many options and then explicitly **Submit response**. Unselected
+options stop accepting selections at the limit; participants can deselect an option to change
+their selection before submitting.
+
+For a ranking, add two to six choices and set **Choices to rank**. Choosing the full number asks
+for a complete order; a smaller number asks for exactly that many priorities. Participants use
+the **Add**, **Remove**, **Move up** and **Move down** controls, including the keyboard, before
+submitting. The first position is the highest priority. Reducing the number of authored choices
+also reduces a selection/ranking limit that would otherwise exceed the remaining choices.
+
+These new opinion formats have no correct answer, confidence prompt, participant points or
+paired recovery question. Their opinion/scoring/recovery controls are locked. Changing an
+assessment into a poll or ranking clears its correctness and incompatible recovery links while
+preserving compatible choice text. **From published Round** can copy multiple-selection polls
+and rankings with fresh destination IDs; later source edits do not update those independent
+copies. Moderated open text and word clouds use the separate workflow below.
+
+Wait for **Saved**, preview and publish, then host the immutable version. Later draft edits or a
+new publication do not change a running session's question, choices or limits. Participants
+should wait for **Saved** after submission. **Saving…** or **Reconnecting—not yet saved** means
+confirmation is still pending; leave the tab open while it reconciles. Refresh recovers an
+accepted response rather than submitting another vote or ranking.
+
+Use **Reveal and close question** to show **Poll results** or **Ranking results**. The host,
+participant and audience stage show results for the current revealed activity only; Companion
+opens them through **Show results**. Before reveal, a submitted response does not expose the
+aggregate. The tables contain aggregate choices, not participant identities, private notes or
+source citations.
+
+After reveal, the audience stage puts the results before question media and explanations so
+repeated choices do not hide the data. Wide tables scroll horizontally; focus **Opinion result
+table** and use Left/Right Arrow, or swipe, to reach every column.
+
+Poll percentages use the number of respondents who submitted an accepted response as the
+denominator. With two respondents, a choice selected by both shows 100%, even if each respondent
+also selected another choice. Multiple-selection percentages can therefore total more than
+100%; they are not percentages of all selections or of everyone who joined the room.
+
+Ranking results use the total number of available choices as the first-place weight, decreasing
+by one at each ranked position. Ranking three of six choices gives weights **6, 5, 4**, with zero
+for unranked choices. **Ranked by**, **Average rank** and rank-position counts describe submitted
+orders. These result weights are not participant scores or evidence of learning accuracy.
+
+At the end, open the session report for anonymous choice evidence and select **Export evidence
+CSV** to download poll counts/percentages and ranking weights/rank-position counts. An opinion-only
+session has no scored leaderboard, accuracy result or paired recovery outcome. Existing
+assessment questions in a mixed deck retain their own scoring and recovery behavior.
+
+Operators must complete the [document-v9/report-v4 rollout](runbooks/upgrade.md#presentation-opinion-formats-compatibility)
+before enabling these writes. See the [first-family implementation record](evidence/presentation-e04-opinion-formats.md)
+for verification status and remaining scope.
+
+### Collect moderated Presentation text
+
+Add an interactive question and select **Open text** or **Word cloud**. Open text accepts one
+response up to 1,000 characters; a word cloud accepts one short phrase up to 80. Both are
+unscored opinions without correct answers, confidence or recovery links. **From published Round**
+can copy these questions independently. Save, preview and publish before starting the session.
+
+Participants type on their own device and select **Submit response**. Wait for **Saved**;
+**Saving…** and **Reconnecting—not yet saved** mean receipt confirmation is pending. Reload
+restores saved/moderation status without restoring the private body into the input. The session
+accepts one response per person and question, including after the facilitator removes it.
+
+In the host tab, use **Text response moderation**, choose the current or all questions, and select
+**Pending**, **Approved** or **Removed**. The facilitator can see aliases and pending bodies.
+Choose **Approve response** to make a response eligible for public results, or **Remove response**
+to erase the body permanently. An approval can later be removed. If an update is unconfirmed,
+use **Retry review acknowledgement** to check the original operation before reviewing another.
+Moderation leaves the question's response window open until the host closes it.
+
+Use **Reveal and close question** to show approved results. The host, participant and audience
+stage show the current question; Companion uses **Show results**. At least five approved
+respondents are required. Pending and removed bodies never appear there. Removing an approved
+response below five hides all text and cloud counts. Cloud grouping ignores case, composes
+Unicode characters and collapses whitespace. The decorative cloud has an equivalent **Word-cloud
+counts** table; focus the table region to scroll its columns with the keyboard.
+
+Use queue filters and pagination for larger rooms. Text activities support at most 250 people
+and ten text questions in a room. Finish after reviewing: new moderation closes when the
+session ends. The report and **Export evidence CSV** contain only revealed results meeting the
+five-approval threshold. Raw pending and removed responses are excluded. These results do not
+establish learning accuracy or participant scores; aliases remain visible to the facilitator.
+
+Operators must complete the [migration-092 rollout](runbooks/upgrade.md#presentation-moderated-text-compatibility)
+before accepting these formats. The [verification record](evidence/presentation-e04-moderated-text.md)
+distinguishes executed checks from remaining manual/device and cost acceptance.
+
 ### Collect Presentation Q&A
 
 An operator must enable `FEATURE_AUDIENCE_SCOPES=true` and include the workspace UUID in
@@ -603,6 +1072,40 @@ This is not organizer-blind feedback. Presentation replies remain unavailable; u
 answered** after addressing a question verbally. At Presentation end, retained Q&A is read-only
 until credential expiry/revocation or session retention/deletion. Disabling new activation does
 not remove previously activated Q&A.
+
+### Present with private notes and an audience stage
+
+In an eligible live Presentation, the presenter workspace shows **Current slide**, **Private
+speaker notes** and **Next slide preview**. These use the version frozen when the session began.
+Editing or republishing the deck later does not change those live cues. Hidden planning slides
+are excluded. Notes remain read-only in this workspace; edit the deck for a future session.
+
+Choose **Open audience stage**, then share that separate window with the audience. If your browser
+blocks it, follow **Open audience stage in a new tab**. The stage shows the current public slide
+or question and keeps the join code, visible address and QR available. **Enter full screen** is
+optional; the stage remains usable when the browser does not permit it. Share only the audience
+stage window because the presenter workspace contains private information.
+Native slides fit the available canvas. Use Tab to focus **Audience slide** when you need to
+scroll dense content; the header keeps the join code accessible in short windows.
+
+The stage pass expires within one hour. Opening a replacement stage invalidates the previous
+stage pass; **Revoke audience stage access** closes access without changing host controls.
+If another host tab has replaced the pass, revoking from the older tab shows a warning instead
+of reporting success. Use the tab that opened the current stage, or open a replacement stage
+here and then revoke it. The older tab cannot silently revoke a different tab's newer pass.
+Refreshing the stage retains access in that tab when browser storage is available. On a lost
+connection it labels the last confirmed slide; expired or revoked access clears that content.
+
+The **Presentation timer** measures local elapsed time with **Start**, **Pause** and **Reset**.
+It recovers running/paused time after refresh when tab storage is available. It does not change
+the response deadline or advance the room. Right Arrow, Page Down and Space advance the current
+phase using the same server confirmation as the main button. Shortcuts pause while an action is
+pending and leave focused controls, scrollable data, editing and modal dialogs alone.
+
+See the [stage rollout instructions](runbooks/upgrade.md#presentation-stage-credential-compatibility)
+before enabling these routes in a deployment. Joining as a participant or receiving a stage pass
+does not grant presenter control or deck editing. The existing Companion remains a separate
+scoped control surface.
 
 ### Organize Presentation slides and recover edits
 
@@ -670,20 +1173,27 @@ when you need several images, shapes or connectors.
 
 ### Build a native slide
 
-Choose **Add native slide** in the Presentation builder. Select a node in the slide or its reading
-order list to edit its text, image description, shape or connector. The position and size fields
-use percentages of the slide. Focus a move or resize button and use arrow keys for 1% steps,
+Choose **New slide** above the canvas for a designed native starter; **Add native slide** in the
+map still adds a plain native starter. Select a node in the slide, its reading order list or the
+**Canvas object** selector above the slide to edit its text, image description, shape or connector.
+The selected object's **Move** and **Resize** controls stay outside the authored slide so they do
+not cover content. The position and size fields use percentages of the slide. Focus Move or
+Resize and use arrow keys for 1% steps,
 or hold Shift for 5% steps.
 Give shapes meaningful labels and images useful descriptions for people who cannot see them.
 
 On a desktop, drag an object or its move button to reposition it. Drag its resize button to change
-its width and height from the bottom-right corner. Release to save the change as one **Undo** step;
-press Escape before releasing to cancel. Movement stays inside the slide.
+its width and height from the bottom-right corner, even though the control sits above the slide.
+Release to save the change as one **Undo** step;
+press Escape before releasing to cancel. Movement stays inside the slide. During movement, local
+snap guides appear within six screen pixels of nearby object or slide edges/centres. Hold Alt to
+move freely. Guides are temporary editor feedback and are not saved in the slide.
 
 Hold Shift while clicking objects or use their **Include … in selection** checkboxes to select
 several. Drag a selected object's move button, use its arrow keys, or use the **Move selection**
 buttons to move them together. They keep their spacing when reaching a slide edge. Resize and
-numeric fields apply to the object being inspected. **Delete selected objects** removes selected
+numeric fields apply to the object being inspected, except that a stored group's resize handle
+resizes its members proportionally. **Delete selected objects** removes selected
 objects and their connectors while keeping the required slide title. Selection is temporary and
 does not create a saved group. On phones, use selection, movement buttons and numeric fields;
 the reading column keeps ordinary scrolling and does not support geometric dragging.
@@ -704,26 +1214,82 @@ that refer to it. Duplicating a slide creates independent nodes and reconnects i
 Native edits use the same autosave, **Undo**, **Redo**, recovery and conflict review as the existing
 builder. Wait for **Saved**, reload to verify the saved slide, then preview and publish. Publication
 freezes that version; later draft edits do not change a running Presentation. Speaker notes and
-source information remain private. Persistent grouping, charts and advanced layout tools remain later work.
+source information remain private.
 
-In **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
+Open the **Layout** inspector, then in **Design**, choose **Enable slide design** to select a color theme, system font and spacing.
 **Apply design to all native slides** applies those choices to existing native slides, including
 hidden ones. Ordinary slides and activities keep their current appearance. Undo/Redo restores
 the complete design change. System fonts use those available on the viewer's device; review fit
 feedback after changing the font or layout.
 
+In the **Layout** inspector, choose **Suggest layouts** for a slide with one title and one body,
+optionally with one table. Compare up to three alternatives with the current slide, check the fit
+feedback and read the complete content below the previews. **Apply reviewed layout** changes only
+the object positions and sizes in one undoable edit. **Cancel** or Escape keeps the current slide.
+These alternatives use no AI credits. Grouped, rotated and other mixed-object slides keep their
+manual layout tools.
+
 Choose an available layout button to reposition existing text and images. Presets require the
 shown object combination and never delete content to make it fit. Use **Undo** to restore the
 previous positions. Select multiple objects to align them or distribute at least three evenly.
 Distribution is unavailable when their sizes cannot fit without overlap. Layer controls move the
-last selected object in front of or behind other visual objects; reading order stays unchanged.
+last selected object, or its stored group, in front of or behind other visual objects; reading order stays unchanged.
 Connectors follow their objects and stay behind them.
 
 For an image, **Contain** shows the whole image; **Cover** crops it to fill the frame. Adjust its
 focal X/Y position to keep the important area in view. Narrow screens show the complete image in
 the reading column. Cropping never changes the source image or its access permissions. Preview
 and published delivery use the same design; later draft changes leave existing sessions unchanged.
-Grouping, rotation, tables/charts and complete deck templates remain later E02 work.
+
+In **Group and rotate**, choose **Group selected objects** to save a group, or
+**Ungroup selected objects** to release its members. Groups are flat: an object belongs to at most
+one group, and connectors are not members. Selecting a member selects its group for movement,
+proportional resizing, alignment and layering. **Grow selection 5%** and **Shrink selection 5%**
+provide resize controls. Grouping leaves reading order and connector references intact; duplicating
+a slide gives its copied groups and members fresh IDs.
+
+Use **Rotate selection left 15°**, **Rotate selection right 15°**, or
+**Last selected angle (degrees)**. The angle field sets the last selected object's angle while
+preserving relative angles in the selection. Rotation follows the physical 16:9 slide shape;
+both the object's frame and its rotated visible bounds must remain inside the slide. If the
+selection would leave the slide, move it away from the edge or reduce its size before retrying.
+Narrow reading views retain semantic order and show unrotated content.
+
+### Add a table or chart
+
+Choose **Add table**, **Add bar chart**, **Add line chart**, or **Add pie chart** on a native slide,
+then select the object in **Slide objects · reading order**. A table supports up to 20 data rows
+and six columns. Give it a **Table caption** and readable column headings. Charts support up to
+20 categories and four numeric series; provide a **Chart title** and **Chart description** that
+explain the important pattern. A pie chart uses one nonnegative series with a positive total.
+
+Edit the staged cells or use **Paste CSV or TSV data**, then **Preview pasted data**. The first
+row supplies headings; chart data starts with category labels followed by numeric series. Quoted
+cells and quoted newlines are supported. Table cells remain literal text; no spreadsheet formula
+or live spreadsheet connection is executed. A new paste replaces the staged grid.
+
+Choose **Apply table changes** or **Apply chart changes** to update the slide as one **Undo** step.
+Until then, edits remain local to the data editor and do not change the saved object. Choose
+**Discard staged changes** to return to the object's current data. Invalid or over-limit input
+shows an error and retains the staged work; correct it before applying. Apply before switching
+objects or leaving when you want to keep a staged edit.
+
+Charts use local SVG geometry and show their full data table and description. Tables retain all
+cells, with a readable narrow-screen presentation. Review both the plot and its data alternative
+after changing values, fonts or size; update the description when the message changes. The editor,
+preview and live delivery share these renderers.
+
+### Link to an external video
+
+In **External video**, enter **Video title**, **Video HTTPS link**, and
+**Captions or transcript HTTPS link**, then choose **Add external video link**. Both destinations
+appear on the slide with a fallback explanation. The audience chooses whether to open the
+external site; use the captions/transcript link if playback is unavailable. Destination availability
+is not checked by the editor.
+
+These are ordinary rich-text links, not an embedded player. Opening a link uses a new tab without
+opener/referrer access. Adding or previewing the slide does not load provider scripts, iframes,
+remote thumbnails or video bytes. Uploaded-video hosting/transcoding is not part of this feature.
 
 To add formatting, select a native text object and choose **Format text**. Select characters in its
 text field, then choose **Bold** or **Italic**. **Paragraph style** changes the current or selected
@@ -988,6 +1554,29 @@ completed attempts out of all recorded attempts. Presentation response counts su
 shown. These counts do not identify unique people across runs. Survey widgets show runs and
 the Surveys they represent; open an individual report for response counts and question results.
 No-evidence states remain separate from a measured zero.
+
+Finished Presentation reports include **Session insights** for the session's frozen published
+version. Section and block delivery show what the facilitator presented, skipped, or did not
+record. Revisiting a block counts once. These measures describe delivery, not learner completion
+or understanding; elapsed time is wall-clock time.
+
+Response coverage compares accepted responses with participant identities joined by the original
+answer reveal. Someone who joined later is excluded from that activity's denominator. Joined
+identities are not verified people, devices or attendance, and response records across activities
+are not unique respondents. Older sessions without a reveal roster show **Not recorded**, rather
+than substituting the final participant count. Positive activity samples below five are hidden.
+Opinion distributions stay separate from assessed evidence, which remains in the detailed report.
+Recovery uses initially incorrect participants who also submitted the linked recheck.
+
+Q&A counts reflect currently published or answered questions, with their own snapshot time;
+pending, dismissed and removed questions are excluded. They may change after the session finishes,
+while the delivery and response evidence stays frozen. Question bodies, participant names and
+presenter notes are excluded from insights. Private review-link views are not tracked.
+
+Use **Export coverage CSV** or **Download readable summary** in Session insights for private
+aggregate copies. The HTML summary works offline without scripts or remote assets. These files
+are deliberate copies and cannot be revoked after download. The existing detailed-report CSV,
+versioned JSON and **Share summary** controls keep their existing behavior.
 
 Reports are generated asynchronously from durable answers and should be ready within 60 seconds.
 Report v3 includes initial accuracy, confidence-versus-correctness, misconception distribution,

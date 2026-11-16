@@ -1,7 +1,13 @@
-import type { FolderArtifactType } from "@openround/contracts";
+import {
+  DEFAULT_SESSION_POLICY,
+  SessionPolicySchema,
+  type FolderArtifactType,
+  type SessionPolicy,
+} from "@openround/contracts";
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
 import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
+import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
@@ -36,6 +42,7 @@ import type {
   ChatReactionRecord,
   ChatReactionSummaryRecord,
   CreatorContext,
+  CreatorSessionRecord,
   EmailPinChallengeRecord,
   EmailPinIdentityResult,
   MagicLinkIdentity,
@@ -184,6 +191,7 @@ interface MemoryWorkspace {
   segment: CreatorContext["segment"];
   homeRegion: string;
   embedAllowedOrigins: string[];
+  sessionPolicy?: SessionPolicy;
 }
 
 function normalizeQuizRecord(input: QuizRecord): QuizRecord {
@@ -241,6 +249,7 @@ export interface MemoryRepositoryLifecycleContext {
 }
 
 export interface MemoryRepositoryLifecycleExtension {
+  activePresentationAssistanceJobs?(workspaceId: string, now: Date): number;
   deleteCollaborationGroupMetadata?(groupId: string): void;
   deleteCanvasBoardMetadata?(boardId: string): void;
   syncCanvasArtifactLinks?(boardId: string, versionIds: ReadonlySet<string>): void;
@@ -304,10 +313,7 @@ export class MemoryRepository implements Repository {
   private nextInitialPlan: Plan | undefined;
   readonly magicTokens = new Map<string, MagicTokenRecord>();
   readonly emailPinChallenges = new Map<string, EmailPinChallengeRecord>();
-  readonly creatorSessions = new Map<
-    string,
-    { userId: string; activeWorkspaceId: string; expiresAt: Date; revoked: boolean }
-  >();
+  readonly creatorSessions = new Map<string, CreatorSessionRecord & { revoked: boolean }>();
   readonly users = new Map<string, UserRecord>();
   readonly workspaces = new Map<string, MemoryWorkspace>();
   readonly workspaceMembers = new Map<
@@ -387,6 +393,38 @@ export class MemoryRepository implements Repository {
   readonly followupAttempts = new Map<string, FollowupAttemptRecord>();
   readonly followupAnswers = new Map<string, FollowupAnswerRecord>();
   readonly authoringJobs = new Map<string, AuthoringJobRecord>();
+  /** Compact admission receipts survive private source/job/deck retention. Kind prevents UUID collisions across queues. */
+  readonly authoringAdmissions = new Map<string, { workspaceId: string; createdAt: Date }>();
+  recordAuthoringAdmission(
+    kind: "legacy" | "presentation",
+    workspaceId: string,
+    jobId: string,
+    createdAt: Date,
+  ) {
+    this.authoringAdmissions.set(`${workspaceId}:${kind}:${jobId}`, {
+      workspaceId,
+      createdAt: new Date(createdAt),
+    });
+  }
+  authoringUsageSince(workspaceId: string, since: Date) {
+    // Include legacy rows seeded directly by fixtures and restored snapshots, without double counting receipts.
+    const receipts = new Map(this.authoringAdmissions);
+    for (const job of this.authoringJobs.values())
+      receipts.set(`${job.workspaceId}:legacy:${job.id}`, {
+        workspaceId: job.workspaceId,
+        createdAt: job.createdAt,
+      });
+    return [...receipts.values()].filter(
+      (receipt) => receipt.workspaceId === workspaceId && receipt.createdAt >= since,
+    ).length;
+  }
+  activePresentationAssistanceJobs(workspaceId: string, now: Date): number {
+    return [...this.lifecycleExtensions.values()].reduce(
+      (total, { lifecycle }) =>
+        total + (lifecycle.activePresentationAssistanceJobs?.(workspaceId, now) ?? 0),
+      0,
+    );
+  }
   readonly reportJobs = new Map<
     string,
     { workspaceId: string; attempts: number; availableAt: Date; lastError: string | null }
@@ -811,26 +849,119 @@ export class MemoryRepository implements Repository {
     tokenHash: string;
     expiresAt: Date;
     activeWorkspaceId?: string;
+    createdAt?: Date;
   }) {
     const user = this.users.get(input.userId);
     if (!user) throw new Error("Creator not found");
+    const activeWorkspaceId =
+      input.activeWorkspaceId ??
+      [...this.workspaceMembers.values()].find((membership) => membership.userId === user.userId)
+        ?.workspaceId ??
+      null;
+    const policy =
+      (activeWorkspaceId ? this.workspaces.get(activeWorkspaceId)?.sessionPolicy : null) ??
+      DEFAULT_SESSION_POLICY;
+    const now = input.createdAt ?? new Date();
     this.creatorSessions.set(input.tokenHash, {
+      id: input.id,
       userId: input.userId,
-      activeWorkspaceId: input.activeWorkspaceId ?? user.workspaceId,
+      activeWorkspaceId,
+      lastActivityAt: now,
+      idleTimeoutMinutes: policy.idleTimeoutMinutes,
+      idleExpiresAt: new Date(now.getTime() + (policy.idleTimeoutMinutes * 60 + 60) * 1_000),
       expiresAt: input.expiresAt,
       revoked: false,
     });
   }
 
-  async getCreatorBySession(tokenHash: string, now: Date) {
+  private liveCreatorSession(tokenHash: string, now: Date) {
     const session = this.creatorSessions.get(tokenHash);
-    if (!session || session.revoked || session.expiresAt <= now) return null;
+    // A deleted workspace leaves an identity-only login until explicit selection.
+    // It must not inherit the deleted workspace's potentially longer timeout.
+    if (
+      session &&
+      (!session.activeWorkspaceId || !this.workspaces.has(session.activeWorkspaceId))
+    ) {
+      session.activeWorkspaceId = null;
+      session.idleTimeoutMinutes = DEFAULT_SESSION_POLICY.idleTimeoutMinutes;
+      session.idleExpiresAt = new Date(
+        Math.min(session.idleExpiresAt.getTime(), session.lastActivityAt.getTime() + 360_000),
+      );
+    }
+    const user = session ? this.users.get(session.userId) : null;
+    return session &&
+      !session.revoked &&
+      session.expiresAt > now &&
+      session.idleExpiresAt > now &&
+      user &&
+      !user.deletedAt
+      ? session
+      : null;
+  }
+
+  async getCreatorSession(tokenHash: string, now: Date): Promise<CreatorSessionRecord | null> {
+    const session = this.liveCreatorSession(tokenHash, now);
+    return session ? structuredClone(session) : null;
+  }
+
+  async creatorSessionExists(tokenHash: string) {
+    return this.creatorSessions.has(tokenHash);
+  }
+
+  async renewCreatorSession(tokenHash: string, now: Date, intent: "activity" | "continue") {
+    const session = this.liveCreatorSession(tokenHash, now);
+    if (!session) return null;
+    const warningAt =
+      Math.min(session.idleExpiresAt.getTime(), session.expiresAt.getTime()) - 60_000;
+    if (intent === "continue" || now.getTime() < warningAt) {
+      const policy =
+        (session.activeWorkspaceId
+          ? this.workspaces.get(session.activeWorkspaceId)?.sessionPolicy
+          : null) ?? DEFAULT_SESSION_POLICY;
+      session.lastActivityAt = now;
+      session.idleTimeoutMinutes = policy.idleTimeoutMinutes;
+      session.idleExpiresAt = new Date(
+        Math.min(
+          session.expiresAt.getTime(),
+          now.getTime() + (policy.idleTimeoutMinutes * 60 + 60) * 1_000,
+        ),
+      );
+    }
+    return structuredClone(session);
+  }
+
+  async getWorkspaceSessionPolicy(workspaceId: string): Promise<SessionPolicy> {
+    return { ...(this.workspaces.get(workspaceId)?.sessionPolicy ?? DEFAULT_SESSION_POLICY) };
+  }
+
+  async updateWorkspaceSessionPolicy(workspaceId: string, input: SessionPolicy) {
+    const policy = SessionPolicySchema.parse(input);
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) throw new PlatformError("NOT_FOUND", "Workspace not found");
+    workspace.sessionPolicy = policy;
+    for (const session of this.creatorSessions.values()) {
+      if (session.activeWorkspaceId !== workspaceId || session.revoked) continue;
+      session.idleTimeoutMinutes = policy.idleTimeoutMinutes;
+      session.idleExpiresAt = new Date(
+        Math.min(
+          session.idleExpiresAt.getTime(),
+          session.lastActivityAt.getTime() + (policy.idleTimeoutMinutes * 60 + 60) * 1_000,
+        ),
+      );
+    }
+  }
+
+  async getCreatorBySession(tokenHash: string, now: Date) {
+    const session = this.liveCreatorSession(tokenHash, now);
+    if (!session) return null;
     const user = this.users.get(session.userId);
-    return user && !user.deletedAt ? this.contextFor(user, session.activeWorkspaceId) : null;
+    return user && !user.deletedAt && session.activeWorkspaceId
+      ? this.contextFor(user, session.activeWorkspaceId)
+      : null;
   }
   async getUserPrincipalBySession(tokenHash: string, now: Date) {
-    const session = this.creatorSessions.get(tokenHash);
-    if (!session || session.revoked || session.expiresAt <= now) return null;
+    const session = this.liveCreatorSession(tokenHash, now);
+    if (!session) return null;
     return this.getUserPrincipalById(session.userId);
   }
   async getUserPrincipalById(userId: string) {
@@ -883,14 +1014,27 @@ export class MemoryRepository implements Repository {
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  async setCreatorSessionWorkspace(tokenHash: string, userId: string, workspaceId: string) {
-    const session = this.creatorSessions.get(tokenHash);
+  async setCreatorSessionWorkspace(
+    tokenHash: string,
+    userId: string,
+    workspaceId: string,
+    now = new Date(),
+  ) {
+    const session = this.liveCreatorSession(tokenHash, now);
     const user = this.users.get(userId);
     if (!session || session.userId !== userId || !user) return false;
     const member =
       user.workspaceId === workspaceId || this.workspaceMembers.has(`${workspaceId}:${userId}`);
     if (!member) return false;
     session.activeWorkspaceId = workspaceId;
+    const policy = this.workspaces.get(workspaceId)?.sessionPolicy ?? DEFAULT_SESSION_POLICY;
+    session.idleTimeoutMinutes = policy.idleTimeoutMinutes;
+    session.idleExpiresAt = new Date(
+      Math.min(
+        session.idleExpiresAt.getTime(),
+        session.lastActivityAt.getTime() + (policy.idleTimeoutMinutes * 60 + 60) * 1_000,
+      ),
+    );
     return true;
   }
 
@@ -932,8 +1076,18 @@ export class MemoryRepository implements Repository {
         const fallback = [...this.workspaceMembers.values()].find(
           (candidate) => candidate.userId === userId,
         );
-        if (fallback) session.activeWorkspaceId = fallback.workspaceId;
-        else session.revoked = true;
+        if (fallback) {
+          session.activeWorkspaceId = fallback.workspaceId;
+          const policy =
+            this.workspaces.get(fallback.workspaceId)?.sessionPolicy ?? DEFAULT_SESSION_POLICY;
+          session.idleTimeoutMinutes = policy.idleTimeoutMinutes;
+          session.idleExpiresAt = new Date(
+            Math.min(
+              session.idleExpiresAt.getTime(),
+              session.lastActivityAt.getTime() + (policy.idleTimeoutMinutes * 60 + 60) * 1_000,
+            ),
+          );
+        } else session.revoked = true;
       }
     }
     return true;
@@ -1056,9 +1210,10 @@ export class MemoryRepository implements Repository {
     return this.contextFor(user, invitation.workspaceId);
   }
 
-  async revokeCreatorSession(tokenHash: string) {
+  async revokeCreatorSession(tokenHash: string, expectedSessionId?: string) {
     const session = this.creatorSessions.get(tokenHash);
-    if (session) session.revoked = true;
+    if (session && (expectedSessionId === undefined || session.id === expectedSessionId))
+      session.revoked = true;
   }
 
   async getCreatorByUserId(userId: string, workspaceId: string) {
@@ -4367,10 +4522,7 @@ export class MemoryRepository implements Repository {
             title: session.state.quiz.title,
             status: report.status,
             participantCount: report.metrics.participantCount,
-            initialAccuracyPercent:
-              "initialAccuracy" in report
-                ? report.initialAccuracy.percent
-                : report.metrics.accuracyPercent,
+            initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
             recovery: {
               recovered,
               eligible,
@@ -4975,6 +5127,7 @@ export class MemoryRepository implements Repository {
   async createAuthoringJob(input: AuthoringJobRecord) {
     if (this.authoringJobs.has(input.id)) throw new Error("Authoring job already exists");
     this.authoringJobs.set(input.id, structuredClone(input));
+    this.recordAuthoringAdmission("legacy", input.workspaceId, input.id, input.createdAt);
     return structuredClone(input);
   }
 
@@ -4983,17 +5136,13 @@ export class MemoryRepository implements Repository {
     since: Date,
     monthlyLimit: number | null,
   ) {
-    const used = [...this.authoringJobs.values()].filter(
-      (job) => job.workspaceId === input.workspaceId && job.createdAt >= since,
-    ).length;
+    const used = this.authoringUsageSince(input.workspaceId, since);
     if (monthlyLimit !== null && used >= monthlyLimit) return null;
     return this.createAuthoringJob(input);
   }
 
   async countAuthoringJobsSince(workspaceId: string, since: Date) {
-    return [...this.authoringJobs.values()].filter(
-      (job) => job.workspaceId === workspaceId && job.createdAt >= since,
-    ).length;
+    return this.authoringUsageSince(workspaceId, since);
   }
 
   async getAuthoringJob(workspaceId: string, jobId: string) {
@@ -5589,6 +5738,8 @@ export class MemoryRepository implements Repository {
     for (const [id, job] of this.authoringJobs) {
       if (ownedWorkspaceIds.has(job.workspaceId)) this.authoringJobs.delete(id);
     }
+    for (const [key, receipt] of this.authoringAdmissions)
+      if (ownedWorkspaceIds.has(receipt.workspaceId)) this.authoringAdmissions.delete(key);
     for (let index = this.productEvents.length - 1; index >= 0; index -= 1) {
       if (ownedWorkspaceIds.has(this.productEvents[index]!.workspaceId)) {
         this.productEvents.splice(index, 1);

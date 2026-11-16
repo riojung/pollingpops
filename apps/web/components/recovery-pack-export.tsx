@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { RecoveryPackExportReport } from "@openround/contracts";
+import type { RecoveryPackExportReport, SupportedLocale } from "@openround/contracts";
 import {
   createPackExportReview,
   type PackExportFormat,
@@ -9,48 +9,73 @@ import {
   type PackExportSource,
 } from "../lib/recovery-pack-export";
 
-export function PackExportReportView({ report }: { report: RecoveryPackExportReport }) {
+import {
+  packExportCopy,
+  packExportFeedback,
+  packExportDisposition,
+  packExportFindingReason,
+} from "../lib/i18n/pack-export-copy";
+
+export function PackExportReportView({
+  report,
+  locale = "en-CA",
+}: {
+  report: RecoveryPackExportReport;
+  locale?: SupportedLocale;
+}) {
+  const t = packExportCopy(locale);
   return (
-    <div style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+    <div lang={locale} style={{ minWidth: 0, overflowWrap: "anywhere" }}>
       <p lang="">{report.source.title}</p>
       <dl>
-        <dt>Frozen published version</dt>
-        <dd>
+        <dt>{t("Frozen published version")}</dt>
+        <dd lang="">
           {report.source.packVersion} · {report.source.packVersionId}
         </dd>
-        <dt>Content hash (SHA-256)</dt>
+        <dt>{t("Content hash (SHA-256)")}</dt>
         <dd>
-          <code>{report.source.contentHash}</code>
+          <code lang="">{report.source.contentHash}</code>
         </dd>
-        <dt>Checkpoint projection</dt>
+        <dt>{t("Checkpoint projection")}</dt>
         <dd>
-          {report.exportedCheckpointCount} of {report.checkpointCount} checkpoints exportable ·{" "}
-          {report.format === "csv" ? "CSV" : "QTI 3"}
+          {t("{exported} of {total} checkpoints exportable", {
+            exported: report.exportedCheckpointCount,
+            total: report.checkpointCount,
+          })}{" "}
+          · {report.format === "csv" ? "CSV" : "QTI 3"}
         </dd>
       </dl>
-      <h4>Export findings</h4>
+      <h4>{t("Export findings")}</h4>
       {report.findings.length ? (
-        <ul aria-label="Export findings">
+        <ul aria-label={t("Export findings")}>
           {report.findings.map((finding, index) => (
             <li key={index}>
               <strong>
-                {finding.severity === "error" ? "Error" : "Warning"}: {finding.code}
+                {t(finding.severity === "error" ? "Error" : "Warning")}:{" "}
+                <code lang="">{finding.code}</code>
               </strong>
               <p>
-                <code>{finding.fieldPath}</code> · {finding.disposition.replaceAll("_", " ")} ·{" "}
-                {finding.affectedItems} affected {finding.affectedItems === 1 ? "item" : "items"}
+                <code lang="">{finding.fieldPath}</code> ·{" "}
+                {packExportDisposition(locale, finding.disposition)} ·{" "}
+                {t(
+                  finding.affectedItems === 1 ? "{count} affected item" : "{count} affected items",
+                  { count: finding.affectedItems },
+                )}
               </p>
-              <p lang="">{finding.reason}</p>
+              <p lang={packExportFindingReason(locale, finding).lang}>
+                {packExportFindingReason(locale, finding).text}
+              </p>
             </li>
           ))}
         </ul>
       ) : (
-        <p>No findings for this checkpoint projection.</p>
+        <p>{t("No findings for this checkpoint projection.")}</p>
       )}
       {!report.canExport ? (
         <p className="notice">
-          This format cannot export all checkpoints. Review the errors; the artifact download is
-          unavailable. You can still download this report.
+          {t(
+            "This format cannot export all checkpoints. Review the errors; the artifact download is unavailable. You can still download this report.",
+          )}
         </p>
       ) : null}
     </div>
@@ -60,10 +85,13 @@ export function PackExportReportView({ report }: { report: RecoveryPackExportRep
 export function RecoveryPackExportPanel({
   source,
   disabled = false,
+  locale = "en-CA",
 }: {
   source: PackExportSource;
   disabled?: boolean;
+  locale?: SupportedLocale;
 }) {
+  const t = packExportCopy(locale);
   const formatId = useId();
   const headingId = useId();
   const [state, setState] = useState<PackExportReviewState>({
@@ -98,70 +126,81 @@ export function RecoveryPackExportPanel({
   }, [state.error, state.report]);
   return (
     <section
+      lang={locale}
       aria-labelledby={headingId}
       style={{ minWidth: 0, overflowWrap: "anywhere", marginTop: 24 }}
     >
-      <h3 id={headingId}>Checkpoint portability</h3>
+      <h3 id={headingId}>{t("Checkpoint portability")}</h3>
       <p>
-        CSV and QTI 3 export checkpoint projections, not the whole Recovery Pack workflow. Review
-        each format’s structured losses first. Polling Pops JSON keeps the complete Pack content;
-        media references are included, not the private media files.
+        {t(
+          "CSV and QTI 3 export checkpoint projections, not the whole Recovery Pack workflow. Review each format’s structured losses first. Polling Pops JSON keeps the complete Pack content; media references are included, not the private media files.",
+        )}
       </p>
       <label className="field" htmlFor={formatId}>
-        <span>Published Pack export format</span>
+        <span>{t("Published Pack export format")}</span>
         <select
           id={formatId}
           className="select"
+          style={{ minWidth: 0, maxWidth: "100%" }}
           value={state.format}
           disabled={disabled || state.busy === "artifact"}
           onChange={(event) =>
             manager.current!.selectFormat(event.target.value as PackExportFormat)
           }
         >
-          <option value="csv">CSV checkpoints</option>
-          <option value="qti3">QTI 3 checkpoint package</option>
+          <option value="csv">{t("CSV checkpoints")}</option>
+          <option value="qti3">{t("QTI 3 checkpoint package")}</option>
         </select>
       </label>
       <button
         className="button-quiet"
+        style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
         type="button"
         disabled={disabled || Boolean(state.busy)}
         onClick={() => void manager.current!.preview()}
       >
-        Review export losses
+        {t("Review export losses")}
       </button>
-      <p role="status" aria-live="polite">
-        {state.status}
+      <p role="status" aria-live="polite" lang={packExportFeedback(locale, state.status).lang}>
+        {packExportFeedback(locale, state.status).text}
       </p>
       {state.error ? (
-        <p className="error" role="alert" tabIndex={-1} ref={errorParagraph}>
-          {state.error}
+        <p
+          className="error"
+          role="alert"
+          tabIndex={-1}
+          ref={errorParagraph}
+          lang={packExportFeedback(locale, state.error).lang}
+        >
+          {packExportFeedback(locale, state.error).text}
         </p>
       ) : null}
       {state.report ? (
         <>
           <h4 tabIndex={-1} ref={reportHeading}>
-            Reviewed {state.format === "csv" ? "CSV" : "QTI 3"} export
+            {t("Reviewed {format} export", { format: state.format === "csv" ? "CSV" : "QTI 3" })}
           </h4>
-          <PackExportReportView report={state.report} />
+          <PackExportReportView report={state.report} locale={locale} />
         </>
       ) : null}
       <div className="button-row">
         <button
           className="button"
+          style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
           type="button"
           disabled={disabled || Boolean(state.busy) || !state.report?.canExport}
           onClick={() => void manager.current!.artifact()}
         >
-          {state.format === "csv" ? "Download CSV checkpoints" : "Download QTI 3 package"}
+          {t(state.format === "csv" ? "Download CSV checkpoints" : "Download QTI 3 package")}
         </button>
         <button
           className="button-quiet"
+          style={{ minWidth: 0, maxWidth: "100%", whiteSpace: "normal" }}
           type="button"
           disabled={disabled || Boolean(state.busy) || !state.report}
           onClick={() => manager.current!.report()}
         >
-          Download export report JSON
+          {t("Download export report JSON")}
         </button>
       </div>
     </section>

@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PresentationContentSchema } from "@openround/contracts";
+import {
+  PresentationContentSchema,
+  PresentationDraftSchema,
+  preparePresentationPublication,
+  type PresentationSceneDesign,
+} from "@openround/contracts";
 import type {
   PresentationParticipantSnapshotProjection,
   PresentationSessionParticipantRecord,
@@ -14,12 +19,19 @@ import {
   buildPresentationListSnapshot,
   buildPresentationParticipantSnapshot,
   buildPresentationProjectionData,
+  buildPresentationStageSnapshot,
   buildTargetedPresentationParticipantSnapshot,
   presentationAcceptingResponses,
   presentationParticipantBlock,
 } from "../src/presentation-session-projections.js";
+import { designSceneBlock } from "./support/presentation-native-scene.js";
 
 const NOW = new Date("2026-09-24T18:00:30.000Z");
+
+function themedSceneBlock(theme: PresentationSceneDesign["theme"]) {
+  const block = designSceneBlock();
+  return { ...block, scene: { ...block.scene, design: { ...block.scene.design, theme } } };
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -269,6 +281,159 @@ function fixture() {
 }
 
 describe("Presentation session projections", () => {
+  it("copies nearby frozen scene tokens to every live activity projection without private data", () => {
+    const { session, participants, ids } = fixture();
+    const activity = session.content.blocks[0]!;
+    const native = themedSceneBlock("sunset");
+    const draft = PresentationDraftSchema.parse({
+      ...session.content,
+      schemaVersion: 7,
+      blocks: [native, activity],
+    });
+    const publication = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    const frozenSession = {
+      ...session,
+      content: structuredClone(publication),
+      currentBlockIndex: 1,
+    };
+    const data = buildPresentationProjectionData(frozenSession, participants, []);
+    const host = buildPresentationHostSnapshot(frozenSession, data);
+    const stage = buildPresentationStageSnapshot(frozenSession, data);
+    const participant = buildPresentationParticipantSnapshot(
+      frozenSession,
+      ids.participantId,
+      data,
+    );
+    const companion = buildPresentationCompanionSnapshot(frozenSession, data);
+    const list = buildPresentationListSnapshot(frozenSession, participants, []);
+    const legacy = presentationParticipantBlock(frozenSession.content.blocks[1]!, frozenSession);
+    const next = buildPresentationHostSnapshot(
+      { ...frozenSession, phase: "content", currentBlockIndex: 0 },
+      data,
+    ).presenter?.nextBlock;
+    const design = { theme: "sunset", font: "serif", spacing: "relaxed" };
+    for (const block of [
+      host.currentBlock,
+      stage.currentBlock,
+      participant.currentBlock,
+      companion.currentBlock,
+      list.currentBlock,
+      legacy,
+      next,
+    ]) {
+      expect(block).toMatchObject({ kind: "question", design });
+      expect(Object.keys(block?.design ?? {}).sort()).toEqual(["font", "spacing", "theme"]);
+      const serialized = JSON.stringify(block);
+      for (const privateField of [
+        "isCorrect",
+        "correctChoiceIds",
+        "sourceCitations",
+        "citations",
+        "speakerNotes",
+        "sourceDisclosure",
+      ])
+        expect(serialized).not.toContain(`"${privateField}"`);
+      expect(serialized).not.toContain("private answer explanation");
+      expect(serialized).not.toContain("PRIVATE native speaker note");
+    }
+    const frozenScene = frozenSession.content.blocks[0];
+    if (frozenScene?.kind !== "content") throw new Error("Expected native content");
+    expect(host.currentBlock?.design).not.toBe(frozenScene.scene?.design);
+    for (const authored of [draft, publication]) {
+      const block = authored.blocks[0];
+      if (block?.kind !== "content" || !block.scene?.design)
+        throw new Error("Expected explicit native design");
+      block.scene.design.theme = "ocean";
+    }
+    expect(buildPresentationHostSnapshot(frozenSession, data).currentBlock?.design).toEqual(design);
+    expect(buildPresentationStageSnapshot(frozenSession, data).currentBlock?.design).toEqual(
+      design,
+    );
+    const revealed = buildPresentationStageSnapshot(
+      { ...frozenSession, phase: "question_reveal", questionClosesAt: null },
+      data,
+    );
+    expect(revealed.revealedAnswer).toMatchObject({ kind: "choice" });
+    expect(revealed.currentBlock?.design).toEqual(design);
+  });
+
+  it("uses each visible block's nearest explicit design, with following and legacy fallbacks", () => {
+    const { session, participants } = fixture();
+    const activity = session.content.blocks[0]!;
+    if (activity.kind !== "question" || !("choices" in activity.question))
+      throw new Error("Expected choice question fixture");
+    const question = activity.question;
+    const duplicateActivity = () => ({
+      ...activity,
+      id: randomUUID(),
+      question: {
+        ...question,
+        id: randomUUID(),
+        choices: question.choices.map((choice) => ({ ...choice, id: randomUUID() })),
+      },
+    });
+    const sunset = themedSceneBlock("sunset");
+    const midnight = designSceneBlock();
+    const hidden = { ...themedSceneBlock("ocean"), hidden: true as const };
+    const legacyContent = {
+      id: randomUUID(),
+      kind: "content",
+      layout: "title",
+      textElements: [
+        { id: "title", role: "title", text: "Imported text", region: "top_center", order: 0 },
+      ],
+      mediaId: null,
+      mediaAlt: null,
+      speakerNotes: "Private imported cue",
+      citations: [{ locator: "Private imported locator", excerpt: "Private imported excerpt" }],
+    };
+    const draft = PresentationDraftSchema.parse({
+      ...session.content,
+      schemaVersion: 7,
+      blocks: [
+        duplicateActivity(),
+        sunset,
+        hidden,
+        legacyContent,
+        activity,
+        midnight,
+        duplicateActivity(),
+      ],
+    });
+    const content = PresentationContentSchema.parse(preparePresentationPublication(draft));
+    expect(content.blocks).toHaveLength(6);
+    expect(content.blocks.some(({ id }) => id === hidden.id)).toBe(false);
+    const themedSession = { ...session, content };
+    for (const [index, theme] of [
+      [0, "sunset"],
+      [1, "sunset"],
+      [2, "sunset"],
+      [3, "sunset"],
+      [4, "midnight"],
+      [5, "midnight"],
+    ] as const) {
+      const current = { ...themedSession, currentBlockIndex: index };
+      const data = buildPresentationProjectionData(current, participants, []);
+      const projected = presentationParticipantBlock(content.blocks[index]!, current);
+      expect(projected?.design?.theme).toBe(theme);
+      expect(buildPresentationHostSnapshot(current, data).currentBlock?.design?.theme).toBe(theme);
+      if (projected?.kind === "content") {
+        expect(JSON.stringify(projected)).not.toContain("Private imported");
+        expect(projected).not.toHaveProperty("speakerNotes");
+        expect(projected).not.toHaveProperty("citations");
+      }
+    }
+    const oldSession = {
+      ...session,
+      content: PresentationContentSchema.parse({
+        ...session.content,
+        blocks: [legacyContent, activity],
+      }),
+    };
+    for (const block of oldSession.content.blocks)
+      expect(presentationParticipantBlock(block, oldSession)).not.toHaveProperty("design");
+  });
+
   it("keeps content-only rosters without inventing standings or an assessment dashboard", () => {
     const { session, participants, currentResponse, ids } = fixture();
     const slideId = randomUUID();
@@ -1024,4 +1189,130 @@ it("keeps Presentation recognition on revealed checkpoints and breaks missed-que
     lastScoreDelta: 0,
     correctStreak: 0,
   });
+});
+
+it("keeps v12 standings on actual closed visit order across backward jumps and skipped questions", () => {
+  const { session, participants, currentResponse } = fixture();
+  const original = session.content.blocks[0]!;
+  if (original.kind !== "question" || !("choices" in original.question))
+    throw new Error("Expected scored question");
+  const originalQuestion = original.question;
+  const question = () => ({
+    ...original,
+    id: randomUUID().toUpperCase(),
+    question: {
+      ...originalQuestion,
+      id: randomUUID(),
+      choices: originalQuestion.choices.map((choice) => ({ ...choice, id: randomUUID() })),
+    },
+  });
+  const skipped = question();
+  const firstVisited = question();
+  const lastVisited = question();
+  const content = PresentationContentSchema.parse({
+    ...session.content,
+    schemaVersion: 12,
+    blocks: [skipped, lastVisited, firstVisited],
+  });
+  const progress = (blockId: string) => ({
+    blockId,
+    phase: "question_reveal" as const,
+    questionOpenedAt: session.questionOpenedAt!.toISOString(),
+    questionClosesAt: session.questionClosesAt!.toISOString(),
+  });
+  const closed = {
+    ...session,
+    content,
+    phase: "question_reveal" as const,
+    currentBlockIndex: 2,
+    eventSeq: 20,
+    navigationState: { returnBlockId: null, blocks: [progress(firstVisited.id)] },
+  };
+  const response = {
+    ...currentResponse,
+    blockId: firstVisited.id.toLowerCase(),
+    questionId: firstVisited.question.id,
+    score: 600,
+  };
+  const timeline: PresentationSessionTimelineRecord[] = [
+    {
+      id: randomUUID(),
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      sequence: 10,
+      type: "question.revealed",
+      blockIndex: 2,
+      blockId: firstVisited.id.toLowerCase(),
+      occurredAt: NOW,
+      revealedParticipantIds: participants.map((participant) => participant.id),
+    },
+  ];
+  const first = buildPresentationHostSnapshot(
+    closed,
+    buildPresentationProjectionData(closed, participants, [response], timeline),
+  );
+  expect(first.competitionStandings).toMatchObject({
+    completedScoredQuestions: 1,
+    totalScoredQuestions: 3,
+  });
+  expect(first.competitionStandings!.entries[0]).toMatchObject({
+    score: 600,
+    lastScoreDelta: 600,
+    correctStreak: 1,
+  });
+  // Jump backward to an unvisited question: the earlier closed answer stays published.
+  const open = {
+    ...closed,
+    phase: "question_open" as const,
+    currentBlockIndex: 1,
+    navigationState: {
+      ...closed.navigationState,
+      blocks: [
+        ...closed.navigationState.blocks,
+        { ...progress(lastVisited.id), phase: "question_open" as const },
+      ],
+    },
+  };
+  const hiddenResponse = {
+    ...currentResponse,
+    id: randomUUID(),
+    blockId: lastVisited.id.toLowerCase(),
+    questionId: lastVisited.question.id,
+    score: 1000,
+  };
+  const openSnapshot = buildPresentationHostSnapshot(
+    open,
+    buildPresentationProjectionData(open, participants, [response, hiddenResponse], timeline),
+  );
+  expect(openSnapshot.competitionStandings).toMatchObject({ completedScoredQuestions: 1 });
+  expect(openSnapshot.competitionStandings!.entries[0]).toMatchObject({
+    score: 600,
+    lastScoreDelta: 600,
+  });
+  expect(openSnapshot.participants[0]!.score).toBe(600);
+  const revealed = {
+    ...open,
+    phase: "question_reveal" as const,
+    navigationState: {
+      ...open.navigationState,
+      blocks: [progress(firstVisited.id), progress(lastVisited.id)],
+    },
+  };
+  const last = buildPresentationHostSnapshot(
+    revealed,
+    buildPresentationProjectionData(revealed, participants, [response, hiddenResponse], timeline),
+  );
+  expect(last.competitionStandings).toMatchObject({ completedScoredQuestions: 2 });
+  expect(last.competitionStandings!.entries[0]).toMatchObject({
+    score: 1600,
+    lastScoreDelta: 1000,
+    previousRank: 1,
+    correctStreak: 2,
+  });
+  const revisit = { ...revealed, currentBlockIndex: 2 };
+  const revisited = buildPresentationHostSnapshot(
+    revisit,
+    buildPresentationProjectionData(revisit, participants, [response, hiddenResponse], timeline),
+  );
+  expect(revisited.competitionStandings).toEqual(last.competitionStandings);
 });

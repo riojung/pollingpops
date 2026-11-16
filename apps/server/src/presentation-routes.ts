@@ -1,16 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   ApplyPresentationAuthoringJobSchema,
   CopyRoundQuestionsToPresentationSchema,
   CreatePresentationSchema,
+  CreateOutlinePresentationSchema,
   createPresentationDesignScene,
   InsertAuthoringProposalsIntoPresentationSchema,
   PresentationContentSchema,
   PresentationDraftSchema,
   PresentationDraftMutationSchema,
   preparePresentationPublication,
+  presentationQuestionSupported,
+  requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
   PublishPresentationSchema,
   type AuthoringDraft,
   type ContentSlideRegion,
@@ -23,6 +27,7 @@ import {
   PresentationArchivedError,
   PresentationDraftConflictError,
   PresentationMutationConflictError,
+  PresentationCreationError,
   type CreatorContext,
   type PresentationRecord,
   type PresentationRepository,
@@ -411,12 +416,30 @@ export async function registerPresentationRoutes(
     return { presentations: list.map(presentationSummaryView) };
   });
 
-  app.post("/v1/presentations", async (request, reply) => {
+  const createPresentation = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    outline = false,
+  ) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if ((await requirePresentationWorkspace(creator, reply, request.id)) !== true) return;
     if (requireEditor(creator, reply, request.id) !== true) return;
-    const input = CreatePresentationSchema.parse(request.body);
+    const input = (outline ? CreateOutlinePresentationSchema : CreatePresentationSchema).parse(
+      request.body,
+    );
+    if (
+      input.creationContext &&
+      (input.creationContext.actorId !== creator.userId.toLowerCase() ||
+        input.creationContext.workspaceId !== creator.workspaceId.toLowerCase())
+    )
+      return apiError(
+        reply,
+        409,
+        "CONFLICT",
+        "This creation request belongs to a different account or workspace",
+        request.id,
+      );
     const now = new Date();
     const firstBlockId = randomUUID();
     const draft: PresentationDraft = {
@@ -442,7 +465,7 @@ export async function registerPresentationRoutes(
         },
       ],
     };
-    const presentation = await presentations.createPresentation({
+    const record: PresentationRecord = {
       id: randomUUID(),
       workspaceId: creator.workspaceId,
       title: input.title,
@@ -457,17 +480,50 @@ export async function registerPresentationRoutes(
       lastEditedBy: creator.userId,
       createdAt: now,
       updatedAt: now,
-    });
-    await repository.recordAudit({
-      workspaceId: creator.workspaceId,
-      actorId: creator.userId,
-      action: "presentation.create",
-      targetType: "presentation",
-      targetId: presentation.id,
-      requestId: request.id,
-    });
-    return reply.code(201).send({ presentation: presentationView(presentation) });
-  });
+    };
+    let presentation: PresentationRecord;
+    let created = true;
+    if (input.creationRequestId && input.creationContext) {
+      reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+      try {
+        const result = await presentations.createPresentationIdempotently(record, {
+          creationRequestId: input.creationRequestId,
+          creationContext: input.creationContext,
+          ...(input.initialSlide ? { initialSlide: input.initialSlide } : {}),
+        });
+        presentation = result.presentation;
+        created = result.status === "created";
+      } catch (error) {
+        if (error instanceof PresentationCreationError)
+          return apiError(
+            reply,
+            error.code === "DELETED" ? 410 : error.code === "UNAUTHORIZED" ? 403 : 409,
+            error.code === "DELETED" ? "CREATION_TARGET_DELETED" : error.code,
+            error.code === "DELETED"
+              ? "The draft created by this request was deleted"
+              : error.code === "UNAUTHORIZED"
+                ? "Your current account or workspace cannot create presentations"
+                : "This creation request belongs to a different presentation intent",
+            request.id,
+          );
+        throw error;
+      }
+    } else presentation = await presentations.createPresentation(record);
+    if (created)
+      await repository.recordAudit({
+        workspaceId: creator.workspaceId,
+        actorId: creator.userId,
+        action: "presentation.create",
+        targetType: "presentation",
+        targetId: presentation.id,
+        requestId: request.id,
+      });
+    return reply.code(created ? 201 : 200).send({ presentation: presentationView(presentation) });
+  };
+  app.post("/v1/presentations", (request, reply) => createPresentation(request, reply));
+  app.post("/v1/presentations/outline-drafts", (request, reply) =>
+    createPresentation(request, reply, true),
+  );
 
   app.get("/v1/presentations/:id", async (request, reply) => {
     reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
@@ -480,6 +536,31 @@ export async function registerPresentationRoutes(
     }
     reply.header("etag", `"draft-${presentation.draftRevision}"`);
     return { presentation: presentationView(presentation) };
+  });
+
+  // Creator-only metadata for the immutable publication; draft timestamps never substitute.
+  app.get("/v1/presentations/:id/publication", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    const { id } = IdParamsSchema.parse(request.params);
+    const presentation = await presentations.getPresentation(creator.workspaceId, id);
+    if (!presentation)
+      return apiError(reply, 404, "NOT_FOUND", "Presentation not found", request.id);
+    if (!presentation.currentVersionId) return { publication: null };
+    const version = await presentations.getPresentationVersion(
+      creator.workspaceId,
+      presentation.currentVersionId,
+    );
+    if (!version || version.presentationId !== presentation.id)
+      return apiError(reply, 404, "NOT_FOUND", "Publication not found", request.id);
+    return {
+      publication: {
+        id: version.id,
+        version: version.version,
+        publishedAt: version.publishedAt.toISOString(),
+      },
+    };
   });
 
   app.put("/v1/presentations/:id/draft", { bodyLimit: 4_000_000 }, async (request, reply) => {
@@ -692,13 +773,7 @@ export async function registerPresentationRoutes(
     const selected: QuestionDraft[] = source.content.questions.filter((question) =>
       selectedQuestionIds.has(question.id),
     );
-    if (
-      selected.some(
-        (question) =>
-          ["ranking", "open_text", "word_cloud"].includes(question.type) ||
-          (question.type === "poll" && (question.maxSelections ?? 1) > 1),
-      )
-    ) {
+    if (selected.some((question) => !presentationQuestionSupported(question))) {
       return apiError(
         reply,
         422,
@@ -742,7 +817,15 @@ export async function registerPresentationRoutes(
       }
       blocks.splice(insertionIndex, 0, ...imported);
     }
-    const nextDraft = PresentationDraftSchema.parse({ ...presentation.draft, blocks });
+    const nextDraft = PresentationDraftSchema.parse({
+      ...presentation.draft,
+      ...(requiresPresentationTextOpinions({ blocks }) && presentation.draft.schemaVersion < 10
+        ? { schemaVersion: 10 }
+        : requiresPresentationOpinionFormats({ blocks }) && presentation.draft.schemaVersion < 9
+          ? { schemaVersion: 9 }
+          : {}),
+      blocks,
+    });
     const draftHash = jsonHash({
       kind: "round-question-import",
       sourceQuizVersionId: input.sourceQuizVersionId,

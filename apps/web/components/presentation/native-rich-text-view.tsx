@@ -1,3 +1,6 @@
+"use client";
+
+import { useNativeTextOverflow } from "./use-native-text-overflow";
 import { Fragment, type ReactNode } from "react";
 import {
   isSafePresentationLink,
@@ -33,14 +36,19 @@ export function NativeRichTextView({
   richText,
   title = false,
   editing = false,
+  layoutKey = "",
+  lang,
 }: {
   richText: PresentationRichText;
   title?: boolean;
   editing?: boolean;
+  layoutKey?: string;
+  lang?: string;
 }) {
+  const scroll = useNativeTextOverflow(JSON.stringify([richText, title, layoutKey, lang]));
   if (title) {
     return (
-      <h1 className={styles.richTitle}>
+      <h1 className={styles.richTitle} lang={lang} {...scroll}>
         {richText.paragraphs.map((paragraph, index) => (
           <Fragment key={index}>
             {index ? <br /> : null}
@@ -76,5 +84,9 @@ export function NativeRichTextView({
       paragraph.kind === "bullet" ? <ul key={start}>{items}</ul> : <ol key={start}>{items}</ol>,
     );
   }
-  return <div className={styles.richBody}>{content}</div>;
+  return (
+    <div className={styles.richBody} lang={lang} {...scroll}>
+      {content}
+    </div>
+  );
 }

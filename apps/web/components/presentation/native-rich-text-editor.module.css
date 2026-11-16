@@ -1,0 +1,219 @@
+.editor {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.editor .heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.editor label.textLabel,
+.editor label.linkLabel {
+  display: block;
+  margin: 0;
+  color: var(--ui-text-strong, #102a43);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.characterCount {
+  color: var(--ui-text-muted, #526579);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.writingSurface {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border-strong, #aab9c7);
+  border-radius: 9px;
+  background: var(--ui-surface, #fff);
+}
+
+.writingSurface:focus-within {
+  border-color: var(--ui-focus, #1769aa);
+  box-shadow: 0 0 0 2px var(--ui-canvas-glow, #1769aa1f);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px;
+  border-bottom: 1px solid var(--ui-border, #cbd5e1);
+  background: var(--ui-surface-soft, #f6f8fb);
+}
+
+.editor button.iconButton {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  min-width: 32px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--ui-text-strong, #102a43);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor button.iconButton svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+}
+
+.editor button.iconButton:hover:not(:disabled) {
+  background: var(--ui-surface-hover, #e8eff6);
+}
+
+.editor button.iconButton[aria-pressed="true"] {
+  border-color: var(--ui-accent, #1769aa);
+  color: var(--ui-accent-ink, #12548a);
+  background: var(--ui-surface, #fff);
+}
+
+.editor button.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.editor button.iconButton:focus-visible,
+.editor .toolbar select.paragraphSelect:focus-visible,
+.editor .linkRow input.linkInput:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: 2px;
+}
+
+.editor .toolbar label.paragraphField {
+  display: block;
+  flex: 1 1 100px;
+  min-width: 0;
+  margin: 0 0 0 3px;
+}
+
+.editor .toolbar select.paragraphSelect {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--ui-text-strong, #102a43);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.divider {
+  flex: 0 0 1px;
+  height: 20px;
+  margin-inline: 3px;
+  background: var(--ui-border, #cbd5e1);
+}
+
+.editor .writingSurface textarea.textInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 300px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.editor .writingSurface textarea.textInput[data-text-role="title"] {
+  min-height: 180px;
+}
+
+.editor .writingSurface textarea.textInput:focus-visible {
+  outline: 2px solid var(--ui-focus, #1769aa);
+  outline-offset: -2px;
+}
+
+.linkControls {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+}
+
+.editor .linkRow input.linkInput {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--ui-border-strong, #aab9c7);
+  border-radius: 6px;
+  color: var(--ui-text-strong, #102a43);
+  background: var(--ui-surface, #fff);
+  font: inherit;
+  font-size: 12px;
+}
+
+.editor .linkRow button.iconButton {
+  border-color: var(--ui-border, #cbd5e1);
+}
+
+.editor .help,
+.editor .formatError {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.help {
+  color: var(--ui-text-muted, #526579);
+}
+
+.formatError {
+  color: var(--ui-danger, #a42828);
+}
+
+.screenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

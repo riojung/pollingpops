@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import {
   type PresentationSessionResponse,
   type QuestionDraft,
+  presentationQuestionSupported,
+  isPresentationOpinionResultQuestion,
+  isPresentationTextResultQuestion,
+  normalizeTextResponse,
   questionTypeDefinition,
-  requiresExtendedRoundResponses,
 } from "@openround/contracts";
 import type { PresentationSessionRecord } from "@openround/db";
 import { presentationCurrentBlock } from "./presentation-session-projections.js";
@@ -16,13 +19,61 @@ export interface PresentationResponseTiming {
 /**
  * Canonical fingerprint for response idempotency. Choice order is intentionally normalized so a
  * retry of one multi-select answer cannot conflict merely because the client serialized it in a
- * different order.
+ * different order. Ranking order is meaningful. Keep the legacy object shape unchanged whenever
+ * no ordered response was submitted, so accepted pre-E04 receipts retain their fingerprint.
  */
-export function presentationResponseRequestHash(input: {
-  blockId: string;
-  expectedRevision: number;
-  response: PresentationSessionResponse;
-}) {
+export function presentationResponseRequestHash(
+  input: {
+    blockId: string;
+    expectedRevision: number;
+    response: PresentationSessionResponse;
+  },
+  semanticIds = false,
+) {
+  if (semanticIds) {
+    input = {
+      ...input,
+      blockId: input.blockId.toLowerCase(),
+      response: {
+        ...input.response,
+        ...(input.response.choiceIds !== undefined
+          ? { choiceIds: input.response.choiceIds.map((id) => id.toLowerCase()) }
+          : {}),
+        ...(input.response.orderedChoiceIds !== undefined
+          ? { orderedChoiceIds: input.response.orderedChoiceIds.map((id) => id.toLowerCase()) }
+          : {}),
+      },
+    };
+  }
+  // Text has a separate versioned fingerprint. Keep every existing response byte-for-byte.
+  if (input.response.textValue !== undefined) {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          blockId: input.blockId,
+          expectedRevision: input.expectedRevision,
+          response: {
+            textValue: input.response.textValue.normalize("NFC").trim(),
+            ...(input.response.choiceIds !== undefined
+              ? { choiceIds: [...input.response.choiceIds].sort() }
+              : {}),
+            ...(input.response.orderedChoiceIds !== undefined
+              ? { orderedChoiceIds: input.response.orderedChoiceIds }
+              : {}),
+            ...(input.response.numericValue !== undefined
+              ? { numericValue: input.response.numericValue }
+              : {}),
+            ...(input.response.ratingValue !== undefined
+              ? { ratingValue: input.response.ratingValue }
+              : {}),
+            ...(input.response.confidence !== undefined
+              ? { confidence: input.response.confidence }
+              : {}),
+          },
+        }),
+      )
+      .digest("hex");
+  }
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -33,6 +84,9 @@ export function presentationResponseRequestHash(input: {
           numericValue: input.response.numericValue ?? null,
           ratingValue: input.response.ratingValue ?? null,
           confidence: input.response.confidence ?? null,
+          ...(input.response.orderedChoiceIds !== undefined
+            ? { orderedChoiceIds: [...input.response.orderedChoiceIds] }
+            : {}),
         },
       }),
     )
@@ -76,9 +130,49 @@ export function presentationResponseValidationMessage(
   question: QuestionDraft,
   response: PresentationSessionResponse,
 ): string | null {
-  if (requiresExtendedRoundResponses({ questions: [question] })) {
+  if (!presentationQuestionSupported(question)) {
     return "This response format currently supports Live Rounds only";
   }
+  if (
+    (isPresentationOpinionResultQuestion(question) || isPresentationTextResultQuestion(question)) &&
+    response.confidence != null
+  ) {
+    return "Confidence is not collected for opinion responses";
+  }
+  if (isPresentationTextResultQuestion(question)) {
+    if (
+      response.textValue === undefined ||
+      response.choiceIds !== undefined ||
+      response.orderedChoiceIds !== undefined ||
+      response.numericValue !== undefined ||
+      response.ratingValue !== undefined
+    )
+      return "Enter a valid text response";
+    try {
+      normalizeTextResponse(response.textValue, question.type);
+    } catch {
+      return "Enter a valid text response";
+    }
+    return null;
+  }
+  if (response.textValue !== undefined) return "Choose a valid response option";
+  if (question.type === "ranking") {
+    const selected = response.orderedChoiceIds ?? [];
+    const validIds = new Set(question.choices.map((choice) => choice.id.toLowerCase()));
+    const selectedKeys = selected.map((choiceId) => choiceId.toLowerCase());
+    const rankCount = question.rankCount ?? question.choices.length;
+    if (
+      response.choiceIds !== undefined ||
+      response.numericValue !== undefined ||
+      response.ratingValue !== undefined ||
+      selected.length !== rankCount ||
+      new Set(selectedKeys).size !== selected.length ||
+      selectedKeys.some((choiceId) => !validIds.has(choiceId))
+    )
+      return `Rank exactly ${rankCount} different response options`;
+    return null;
+  }
+  if (response.orderedChoiceIds !== undefined) return "Choose a valid response option";
   if (question.confidence === "required" && response.confidence == null) {
     return "Choose a confidence level before submitting";
   }
@@ -105,9 +199,31 @@ export function presentationResponseValidationMessage(
   }
   const selected = response.choiceIds ?? [];
   if (!("choices" in question)) return "Unsupported Presentation response format";
-  const validIds = new Set(question.choices.map((choice) => choice.id));
-  if (!selected.length || selected.some((choiceId) => !validIds.has(choiceId))) {
+  const choiceKey = isPresentationOpinionResultQuestion(question)
+    ? (id: string) => id.toLowerCase()
+    : (id: string) => id;
+  const selectedKeys = selected.map(choiceKey);
+  const validIds = new Set(question.choices.map((choice) => choiceKey(choice.id)));
+  if (
+    !selected.length ||
+    (isPresentationOpinionResultQuestion(question) &&
+      new Set(selectedKeys).size !== selected.length) ||
+    selectedKeys.some((choiceId) => !validIds.has(choiceId))
+  ) {
     return "Choose a valid response option";
+  }
+  if (question.type === "poll") {
+    const maxSelections = question.maxSelections ?? 1;
+    if (
+      maxSelections > 1 &&
+      (response.numericValue !== undefined || response.ratingValue !== undefined)
+    )
+      return "Choose a valid response option";
+    return selected.length > maxSelections
+      ? maxSelections === 1
+        ? "Choose one response option"
+        : `Choose up to ${maxSelections} response options`
+      : null;
   }
   if (question.type !== "multi_select" && selected.length !== 1) {
     return "Choose one response option";
@@ -119,8 +235,14 @@ export function presentationResponseCorrect(
   question: QuestionDraft,
   response: PresentationSessionResponse,
 ): boolean | null {
-  if (requiresExtendedRoundResponses({ questions: [question] })) return null;
-  if (question.type === "poll" || question.type === "rating") return null;
+  if (
+    !presentationQuestionSupported(question) ||
+    question.type === "poll" ||
+    question.type === "rating" ||
+    question.type === "ranking" ||
+    isPresentationTextResultQuestion(question)
+  )
+    return null;
   if (question.type === "numeric") {
     const actual = Number(response.numericValue);
     const expected = Number(question.correctValue);

@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationDraftSchema,
+  PresentationHostSnapshotSchema,
   preparePresentationPublication,
   type PresentationDraft,
 } from "@openround/contracts";
@@ -16,7 +17,9 @@ import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import {
+  compositionSceneBlock,
   designSceneBlock,
+  interactionSceneBlock,
   nativeSceneBlock,
   richTextSceneBlock,
 } from "./support/presentation-native-scene.js";
@@ -89,8 +92,19 @@ async function saveDraft(target: FastifyInstance, cookie: string, draft: Present
 
 function expectPublicScene(snapshot: unknown, scene: unknown) {
   expect(snapshot).toMatchObject({ currentBlock: { scene } });
-  expect(JSON.stringify(snapshot)).not.toContain("PRIVATE");
-  expect(JSON.stringify(snapshot)).not.toContain("downloadUrl");
+  let audienceFields = snapshot;
+  if ((snapshot as { projection?: unknown }).projection === "host") {
+    const host = PresentationHostSnapshotSchema.parse(snapshot);
+    expect(host.presenter?.speakerNotes).toBe("PRIVATE native speaker note");
+    // Only the current private notes are permitted. Keep the full next-block preview and every
+    // other host field in the same privacy assertions as audience snapshots.
+    const checked = structuredClone(host);
+    checked.presenter!.speakerNotes = "";
+    audienceFields = checked;
+  }
+  for (const privateMarker of ["PRIVATE", "HIDDEN", "UNPUBLISHED", "downloadUrl"]) {
+    expect(JSON.stringify(audienceFields)).not.toContain(privateMarker);
+  }
 }
 
 describe("native Presentation scenes API", () => {
@@ -135,7 +149,7 @@ describe("native Presentation scenes API", () => {
     }
   });
 
-  it.each([4, 5, 6, 7] as const)(
+  it.each([4, 5, 6, 7, 8, 11, 17] as const)(
     "saves exact retries and delivers immutable v%s scenes through completion",
     async (schemaVersion) => {
       const built = await setup();
@@ -172,11 +186,27 @@ describe("native Presentation scenes API", () => {
       const hiddenImage = hidden.scene.nodes.find((node) => node.type === "image")!;
       if (hiddenImage.type === "image") hiddenImage.altText = "";
       const sceneBlock =
-        schemaVersion === 7
-          ? designSceneBlock
-          : schemaVersion >= 5
-            ? richTextSceneBlock
-            : nativeSceneBlock;
+        schemaVersion === 17
+          ? (ids: string[], title?: string) => {
+              const motion = interactionSceneBlock(ids, title);
+              return {
+                ...motion,
+                scene: {
+                  ...motion.scene,
+                  schemaVersion: 8 as const,
+                  design: { ...motion.scene.design, motionBackground: "aurora" as const },
+                },
+              };
+            }
+          : schemaVersion === 11
+            ? interactionSceneBlock
+            : schemaVersion === 8
+              ? compositionSceneBlock
+              : schemaVersion === 7
+                ? designSceneBlock
+                : schemaVersion >= 5
+                  ? richTextSceneBlock
+                  : nativeSceneBlock;
       const draft = PresentationDraftSchema.parse({
         title: "Native content-only deck",
         schemaVersion,
@@ -306,6 +336,8 @@ describe("native Presentation scenes API", () => {
         headers: { authorization: `Bearer ${participantToken}` },
       });
       expectPublicScene(participant.json().snapshot, originalScene);
+      if (schemaVersion === 17)
+        expect(participant.json().snapshot.currentBlock.design).toEqual(originalScene.design);
       const pass = await built.presentationService.createCompanionPass({
         workspaceId,
         userId: built.creator.userId,
@@ -376,7 +408,7 @@ describe("native Presentation scenes API", () => {
       await built.presentationReportWorker.runUntilIdle();
       const report = await target.inject({
         method: "GET",
-        url: `/v1/presentation-sessions/${sessionId}/report`,
+        url: `/v1/presentation-sessions/${sessionId}/report${schemaVersion >= 13 ? "?includeInteractions=true&includeNavigation=true" : ""}`,
         headers: { cookie },
       });
       expect(report.json()).toMatchObject({
@@ -398,6 +430,141 @@ describe("native Presentation scenes API", () => {
       ).toMatchObject({ content, contentHash: version.contentHash });
     },
   );
+
+  it("keeps incomplete interaction drafts but rejects unsafe actions and inaccessible publication atomically", async () => {
+    const built = await setup();
+    const visible = interactionSceneBlock();
+    visible.scene.nodes = visible.scene.nodes.map((node) =>
+      node.type === "reveal"
+        ? { ...node, label: "", body: "" }
+        : node.type === "link"
+          ? { ...node, href: "" }
+          : node,
+    );
+    const draft = PresentationDraftSchema.parse({
+      title: "Interactive validation",
+      schemaVersion: 11,
+      blocks: [visible],
+    });
+    const { id } = await saveDraft(built.app, built.cookie, draft);
+    for (const invalid of [
+      "unsafe-link",
+      "script-action",
+      "broadcast",
+      "old-scene",
+      "old-document",
+    ]) {
+      const malformed = structuredClone(draft);
+      const block = malformed.blocks[0]!;
+      if (block.kind !== "content" || !block.scene) throw new Error("Expected scene");
+      if (invalid === "old-scene") block.scene.schemaVersion = 4;
+      else if (invalid === "old-document") malformed.schemaVersion = 10;
+      else
+        block.scene.nodes = block.scene.nodes.map((node) =>
+          node.type === "link" && invalid === "unsafe-link"
+            ? { ...node, href: "javascript:alert(1)" }
+            : node.type === "reveal" && invalid === "script-action"
+              ? { ...node, onClick: "alert(1)" }
+              : node.type === "reveal" && invalid === "broadcast"
+                ? { ...node, scope: "broadcast" }
+                : node,
+        ) as typeof block.scene.nodes;
+      const rejected = await built.app.inject({
+        method: "PUT",
+        url: `/v1/presentations/${id}/draft`,
+        headers: { cookie: built.cookie },
+        payload: {
+          schemaVersion: 2,
+          draft: malformed,
+          expectedRevision: 1,
+          mutationId: randomUUID(),
+        },
+      });
+      expect(rejected.statusCode, invalid).toBe(400);
+      expect((await built.presentations.getPresentation(workspaceId, id))?.draftRevision).toBe(1);
+    }
+    const rejectedPublication = await built.app.inject({
+      method: "POST",
+      url: `/v1/presentations/${id}/publish`,
+      headers: { cookie: built.cookie },
+      payload: { expectedDraftRevision: 1 },
+    });
+    expect(rejectedPublication.statusCode, rejectedPublication.body).toBe(422);
+    expect(rejectedPublication.json().validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockId: visible.id, field: "label" }),
+        expect.objectContaining({ blockId: visible.id, field: "body" }),
+        expect.objectContaining({ blockId: visible.id, field: "href" }),
+      ]),
+    );
+    expect(await built.presentations.getPresentation(workspaceId, id)).toMatchObject({
+      draft,
+      draftRevision: 1,
+      currentVersionId: null,
+    });
+  });
+
+  it("retains incomplete v8 information drafts but rejects malformed data and inaccessible publication atomically", async () => {
+    const built = await setup();
+    const visible = compositionSceneBlock();
+    const table = visible.scene.nodes.find((node) => node.type === "table")!;
+    const chart = visible.scene.nodes.find((node) => node.type === "chart")!;
+    if (table.type !== "table" || chart.type !== "chart")
+      throw new Error("Expected information nodes");
+    table.caption = "";
+    chart.summary = "";
+    const hidden = {
+      ...compositionSceneBlock([], "PRIVATE hidden information"),
+      hidden: true as const,
+    };
+    const draft = PresentationDraftSchema.parse({
+      title: "Information validation",
+      schemaVersion: 8,
+      blocks: [visible, hidden],
+    });
+    const { id } = await saveDraft(built.app, built.cookie, draft);
+    const malformed = structuredClone(draft);
+    const first = malformed.blocks[0]!;
+    if (first.kind !== "content" || !first.scene) throw new Error("Expected content");
+    const malformedTable = first.scene.nodes.find((node) => node.type === "table")!;
+    if (malformedTable.type !== "table") throw new Error("Expected table");
+    malformedTable.rows = [["Wrong column count"]];
+    const rejected = await built.app.inject({
+      method: "PUT",
+      url: `/v1/presentations/${id}/draft`,
+      headers: { cookie: built.cookie },
+      payload: {
+        draft: malformed,
+        expectedRevision: 1,
+        mutationId: randomUUID(),
+        schemaVersion: 2,
+      },
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect((await built.presentations.getPresentation(workspaceId, id))?.draftRevision).toBe(1);
+    const published = await built.app.inject({
+      method: "POST",
+      url: `/v1/presentations/${id}/publish`,
+      headers: { cookie: built.cookie },
+      payload: { expectedDraftRevision: 1 },
+    });
+    expect(published.statusCode).toBe(422);
+    expect(published.json().validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockId: visible.id, field: "caption" }),
+        expect.objectContaining({ blockId: visible.id, field: "summary" }),
+      ]),
+    );
+    expect(
+      published
+        .json()
+        .validation.issues.some((issue: { blockId: string | null }) => issue.blockId === hidden.id),
+    ).toBe(false);
+    expect(
+      (await built.presentations.getPresentation(workspaceId, id))?.currentVersionId,
+    ).toBeNull();
+    expect((await built.presentations.getPresentation(workspaceId, id))?.draft).toEqual(draft);
+  });
 
   it("maps visible publication errors to stable IDs and rejects an all-hidden deck", async () => {
     const built = await setup();

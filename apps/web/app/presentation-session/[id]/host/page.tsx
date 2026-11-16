@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CompetitionDashboard } from "../../../../components/competition-dashboard";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
   PresentationCommand,
   PresentationHostSnapshot,
@@ -11,10 +11,12 @@ import type {
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../../components/brand";
 import { useLocale } from "../../../../components/locale-provider";
+import { LanguageMenu } from "../../../../components/workspace/language-menu";
 import { PresentationMedia } from "../../../../components/presentation-live/presentation-media";
 import { PresentationCompanionLauncher } from "../../../../components/presentation-live/companion-launcher";
 import { PresentationQnaPanel } from "../../../../components/presentation-live/presentation-qna";
 import { ContentSlideView } from "../../../../components/presentation/content-slide-view";
+import { PresentationActivitySlide } from "../../../../components/presentation/presentation-activity-slide";
 import {
   RecoveryPackCardPicker,
   RecoveryPackLiveCardView,
@@ -25,8 +27,10 @@ import {
 } from "../../../../components/workspace/workspace-provider";
 import { recordAuthoringEvent } from "../../../../components/workspace/product-events";
 import styles from "../../../../components/presentation-live/presentation-live.module.css";
+import presenter from "../../../../components/presentation-live/presentation-presenter.module.css";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { formatNumber } from "../../../../lib/i18n/format";
+import { presentationWorkspaceCopy } from "../../../../lib/i18n/presentation-workspace-copy";
 import {
   createPresentationRealtimeController,
   presentationRemainingSeconds,
@@ -39,6 +43,31 @@ import {
   type PresentationCommandRecoveryState,
 } from "../../../../lib/presentation-command-recovery";
 import { createPresentationHostPassManager } from "../../../../lib/presentation-host-pass";
+import { presentationPresenterAction } from "../../../../lib/presentation-presenter-controls";
+import { PresenterTimer } from "../../../../components/presentation-live/presenter-timer";
+import { PresentationOpinionResults } from "../../../../components/presentation-live/opinion-results";
+import { PresentationTextResults } from "../../../../components/presentation-live/text-results";
+import { PresentationTextModerationPanel } from "../../../../components/presentation-live/text-moderation";
+import { isTextQuestion } from "../../../../lib/text-response";
+import { presentationOpinionSummaryFor } from "../../../../lib/presentation-opinion-response";
+import { PresentationStageLauncher } from "../../../../components/presentation-live/stage-launcher";
+import { PresentationDeliveryBlock } from "../../../../components/presentation-live/delivery-block";
+import { PresentationDeliveryJoinAccess } from "../../../../components/presentation-live/delivery-join-access";
+import delivery from "../../../../components/presentation-live/presentation-delivery.module.css";
+import { PresentationNavigationDialog } from "../../../../components/presentation-live/presentation-navigation";
+import {
+  isPresentationRecoverableCommand,
+  persistPresentationNavigationCommand,
+  restorePresentationNavigationCommand,
+} from "../../../../lib/presentation-navigation";
+import {
+  branchNavigationCopy,
+  branchNavigationRetryLabel,
+} from "../../../../components/presentation/branch-navigation-copy";
+import { companionCopy } from "../../../../lib/i18n/domains/live-delivery/companion-translations";
+import { presentationInteractionRuntime } from "../../../../lib/presentation-interaction-runtime";
+import { PresentationBranches } from "../../../../components/presentation-live/presentation-branches";
+import { PresentationSpatialDelivery } from "../../../../components/presentation-live/presentation-spatial-delivery";
 
 function advanceMessageKey(
   snapshot: PresentationHostSnapshot,
@@ -73,6 +102,9 @@ function advanceMessageKey(
 
 function PresentationHostContent() {
   const { locale, t } = useLocale();
+  const workspaceCopy = presentationWorkspaceCopy(locale);
+  const navigationCopy = branchNavigationCopy(locale);
+  const sharedCopy = companionCopy(locale);
   const { productFeatures, canEdit } = useWorkspace();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -92,6 +124,8 @@ function PresentationHostContent() {
   const passManagerRef = useRef<ReturnType<typeof createPresentationHostPassManager> | null>(null);
   const passManagerSessionId = useRef<string | null>(null);
   const [error, setError] = useState("");
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationButtonRef = useRef<HTMLButtonElement>(null);
   const [now, setNow] = useState(() => Date.now());
   const [connection, setConnection] = useState<PresentationConnectionState>("connecting");
   const connectionState = useRef({ hadSuccess: false, failedAfterSuccess: false, tracked: false });
@@ -182,14 +216,17 @@ function PresentationHostContent() {
           setHasControlPass(false);
           setAudienceToken(null);
           setControlPassError(
-            "This host control pass is no longer valid. Reacquire it to use live card controls.",
+            "This host control pass is no longer valid. Reacquire it to use live controls.",
           );
           setControlPassAttempt((attempt) => attempt + 1);
         },
       });
       controllerRef.current = controller;
-      if (!commandsRef.current || commandsSessionId.current !== id) {
+      if (controlToken && (!commandsRef.current || commandsSessionId.current !== id)) {
         commandsRef.current = createPresentationCommandRecovery<PresentationHostSnapshot>({
+          pendingCommand: restorePresentationNavigationCommand(sessionStorage, id, {
+            controlToken,
+          }),
           execute: (command) => {
             const activeController = controllerRef.current;
             if (!activeController)
@@ -207,6 +244,7 @@ function PresentationHostContent() {
             });
           },
           onState: (next) => {
+            persistPresentationNavigationCommand(sessionStorage, id, "host", next.pendingCommand);
             if (commandsSessionId.current === id) setCommandState(next);
           },
         });
@@ -249,7 +287,7 @@ function PresentationHostContent() {
       return;
     setError("");
     try {
-      await commands.run(command);
+      return await commands.run(command);
     } catch (caught) {
       setError(humanError(caught));
       await controller.reconcile();
@@ -263,6 +301,74 @@ function PresentationHostContent() {
       commandId: clientUuid(),
       expectedRevision: snapshot!.revision,
     };
+  }
+
+  async function navigate(action: "jump_to_block" | "return_to_path", targetBlockId?: string) {
+    const controlToken = passManagerRef.current?.token();
+    if (!snapshot?.navigation || !controlToken) return;
+    if (
+      action === "jump_to_block" &&
+      !snapshot.navigation.entries.some(
+        (entry) => entry.blockId === targetBlockId && entry.status !== "current" && entry.canJump,
+      )
+    )
+      return;
+    if (action === "return_to_path" && !snapshot.navigation.canReturn) return;
+    const command: PresentationCommand =
+      action === "jump_to_block"
+        ? { ...commandCredentials(controlToken), action, targetBlockId: targetBlockId! }
+        : { ...commandCredentials(controlToken), action };
+    if (await runCommand(command)) setNavigationOpen(false);
+  }
+
+  async function sceneAction(nodeId: string, revealed?: boolean) {
+    const controlToken = passManagerRef.current?.token();
+    const block = snapshot?.currentBlock;
+    if (!snapshot || block?.kind !== "content" || !controlToken) return;
+    const node = block.scene?.nodes.find((entry) => entry.id === nodeId);
+    if (typeof revealed === "boolean") {
+      if (node?.type !== "reveal" || node.scope !== "broadcast") return;
+      return runCommand({
+        ...commandCredentials(controlToken),
+        action: "set_reveal",
+        blockId: block.id,
+        nodeId,
+        revealed,
+      });
+    }
+    if (
+      node?.type !== "navigation" ||
+      !snapshot.navigation?.entries.some(
+        (entry) =>
+          entry.blockId.toLowerCase() === node.targetBlockId?.toLowerCase() &&
+          entry.canJump &&
+          entry.status !== "current",
+      )
+    )
+      return;
+    return runCommand({
+      ...commandCredentials(controlToken),
+      action: "navigate_scene",
+      blockId: block.id,
+      nodeId,
+    });
+  }
+
+  async function followBranch(branchId: string) {
+    const controlToken = passManagerRef.current?.token();
+    if (
+      !snapshot ||
+      snapshot.currentBlock?.kind !== "question" ||
+      !controlToken ||
+      !snapshot.branches?.some((branch) => branch.id === branchId && branch.available)
+    )
+      return;
+    return runCommand({
+      ...commandCredentials(controlToken),
+      action: "follow_branch",
+      blockId: snapshot.currentBlock.id,
+      branchId,
+    });
   }
 
   async function advance() {
@@ -331,7 +437,8 @@ function PresentationHostContent() {
       return;
     setError("");
     try {
-      await commands.retry();
+      const response = await commands.retry();
+      if (response) setNavigationOpen(false);
     } catch (caught) {
       setError(humanError(caught));
       await controller.reconcile();
@@ -367,33 +474,83 @@ function PresentationHostContent() {
   }
 
   const block = snapshot?.currentBlock ?? null;
-  const joinUrl = snapshot
-    ? `${typeof window === "undefined" ? "" : window.location.origin}/join?code=${snapshot.code}`
-    : "";
+  const opinionSummary = presentationOpinionSummaryFor(snapshot);
   const remainingSeconds = presentationRemainingSeconds(snapshot, snapshotReceivedAt.current, now);
   const busy = commandState.busy || legacyAdvanceBusy || controlPassBusy;
+  const interactionRuntime = presentationInteractionRuntime(snapshot, {
+    mode: "live_staff",
+    disabled:
+      busy ||
+      !!commandState.pendingCommand ||
+      !hasControlPass ||
+      !controllerRef.current?.canMutate(),
+    onNavigate: (nodeId) => void sceneAction(nodeId),
+    onSetReveal: (nodeId, revealed) => void sceneAction(nodeId, revealed),
+  });
+
+  const onPresenterKey = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      !snapshot ||
+      snapshot.phase === "finished" ||
+      busy ||
+      commandState.pendingCommand ||
+      legacyAdvanceInFlight.current ||
+      controlPassInFlight.current ||
+      !controllerRef.current?.canMutate()
+    )
+      return;
+    if (
+      presentationPresenterAction(event, {
+        // Language options can temporarily lose focus while their choice is saved.
+        // Keep presenter shortcuts out of the open menu for that entire interval.
+        dialogOpen: !!document.querySelector(
+          'dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"], header details[open]',
+        ),
+      }) !== "advance"
+    )
+      return;
+    event.preventDefault();
+    void advance();
+  });
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => onPresenterKey(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} lang={locale}>
       <header className={styles.topbar}>
         <CreatorBrand productFeatures={productFeatures} />
-        <div className="button-row">
+        <div className={`button-row ${presenter.headerActions}`}>
+          <p aria-live="polite" className={presenter.headerStatus} role="status">
+            {connection === "connected"
+              ? workspaceCopy("Connected")
+              : connection === "fallback"
+                ? workspaceCopy("Connected using compatibility mode")
+                : connection === "connecting"
+                  ? t("live.common.connecting")
+                  : workspaceCopy("Reconnecting…")}
+          </p>
           <Link href="/sessions">{t("live.common.sessions")}</Link>
           {snapshot?.phase === "finished" ? (
             <Link className="button small-button" href={`/presentation-session/${id}/report`}>
               {t("live.presentationSession.viewReport")}
             </Link>
           ) : null}
+          <LanguageMenu />
+          {snapshot ? (
+            <PresentationStageLauncher
+              key={id}
+              sessionId={id}
+              canEdit={canEdit}
+              finished={snapshot.phase === "finished"}
+              compact
+            />
+          ) : null}
         </div>
       </header>
       <div className={styles.stage}>
-        <p aria-live="polite" className="muted" role="status">
-          {connection === "connected"
-            ? "Connected"
-            : connection === "fallback"
-              ? "Connected using compatibility mode"
-              : "Reconnecting…"}
-        </p>
         {error ? (
           <p className="error" lang="en-CA" role="alert">
             {error}
@@ -402,183 +559,69 @@ function PresentationHostContent() {
         {!snapshot ? (
           <section className={styles.canvas}>{t("live.presentationSession.loading")}</section>
         ) : (
-          <div className={styles.hostGrid}>
-            <section className={styles.canvas} aria-live="polite">
-              <div className={styles.canvasContent}>
-                {snapshot.phase === "lobby" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {t("live.presentationSession.waitingRoom")}
-                    </span>
-                    <h1 lang="">{snapshot.title}</h1>
-                    <p>{t("live.presentationSession.participantsCanJoin")}</p>
-                  </>
-                ) : null}
-                {block?.kind === "content" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {t("live.presentationSession.contentSlide")}
-                    </span>
-                    <ContentSlideView
-                      block={block}
-                      renderSceneImage={(mediaId, altText) => (
-                        <PresentationMedia
-                          key={mediaId}
-                          sessionId={id}
-                          mediaId={mediaId}
-                          altText={altText}
-                        />
-                      )}
-                      media={
-                        <PresentationMedia
-                          altText={block.mediaAlt}
-                          mediaId={block.mediaId}
-                          sessionId={id}
-                        />
+          <>
+            <p className={delivery.privateNotice}>
+              {workspaceCopy(
+                "Private presenter workspace. Share the audience stage window with your audience.",
+              )}
+            </p>
+            <section
+              className={presenter.commandBar}
+              aria-label={workspaceCopy("Facilitation controls")}
+            >
+              <div className={presenter.commandRow}>
+                <div className={presenter.commandContext}>
+                  <h1 lang="">{snapshot.title}</h1>
+                  <p>
+                    {t("live.presentationSession.blockProgress", {
+                      current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
+                      total: formatNumber(locale, snapshot.blockCount),
+                    })}
+                  </p>
+                </div>
+                <div className={presenter.commandActions}>
+                  {snapshot.navigation ? (
+                    <button
+                      className="button-quiet full-width"
+                      type="button"
+                      lang={locale}
+                      ref={navigationButtonRef}
+                      aria-haspopup="dialog"
+                      aria-expanded={navigationOpen}
+                      onClick={(event) => {
+                        event.currentTarget.focus({ preventScroll: true });
+                        setNavigationOpen(true);
+                      }}
+                    >
+                      {sharedCopy("Open navigation")}
+                    </button>
+                  ) : null}
+                  {snapshot.phase !== "finished" ? (
+                    <button
+                      className="button full-width"
+                      disabled={
+                        busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
                       }
-                      variant="live"
-                    />
-                  </>
-                ) : null}
-                {block?.kind === "question" ? (
-                  <>
-                    <span className={styles.statusPill}>
-                      {snapshot.phase === "intervention"
-                        ? t("live.presentationSession.recoveryIntervention")
-                        : snapshot.phase === "question_reveal"
-                          ? t("live.presentationSession.responseReview")
-                          : snapshot.acceptingResponses
-                            ? t("live.presentationSession.questionOpen")
-                            : t("live.presentationSession.timeEnded")}
-                    </span>
-                    {remainingSeconds !== null ? (
-                      <p className={styles.timer} aria-live="off">
-                        {formatNumber(locale, remainingSeconds, {
-                          style: "unit",
-                          unit: "second",
-                          unitDisplay: "narrow",
-                        })}
-                      </p>
-                    ) : snapshot.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
-                      <p className="muted" lang={locale} role="status">
-                        {t("live.common.flexOpen")}
-                      </p>
-                    ) : null}
-                    <h1 lang="">{block.question.prompt}</h1>
-                    <PresentationMedia
-                      altText={block.question.mediaAlt}
-                      mediaId={block.question.mediaId}
-                      sessionId={id}
-                    />
-                    {block.question.choices.length ? (
-                      <div className={styles.choiceGrid}>
-                        {block.question.choices.map((choice) => (
-                          <div
-                            className={styles.choice}
-                            data-correct={
-                              block.revealedAnswer?.kind === "choice"
-                                ? block.revealedAnswer.correctChoiceIds.includes(choice.id)
-                                : undefined
-                            }
-                            key={choice.id}
-                            lang=""
-                          >
-                            {choice.label}
-                          </div>
-                        ))}
-                      </div>
-                    ) : block.question.type === "numeric" ? (
-                      <p>{t("live.presentationSession.numericResponse")}</p>
-                    ) : (
-                      <p>{t("live.presentationSession.ratingResponse")}</p>
-                    )}
-                    {block.revealedAnswer?.kind === "numeric" ? (
-                      <p className="notice" lang="">
-                        {block.revealedAnswer.correctValue}
-                        {block.revealedAnswer.tolerance !== "0"
-                          ? ` ± ${block.revealedAnswer.tolerance}`
-                          : ""}
-                        {block.revealedAnswer.unit ? ` ${block.revealedAnswer.unit}` : ""}
-                      </p>
-                    ) : null}
-                    {block.revealedAnswer?.explanation ? (
-                      <p className="notice" lang="">
-                        {block.revealedAnswer.explanation}
-                      </p>
-                    ) : null}
-                    {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
-                      <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
-                    ) : null}
-                  </>
-                ) : null}
-                {snapshot.phase === "finished" ? (
-                  <>
-                    <span className={styles.statusPill}>{t("live.common.complete")}</span>
-                    <h1>{t("live.presentationSession.finished")}</h1>
-                    <p>
-                      {t("live.common.joinedCount", {
-                        count: formatNumber(locale, snapshot.participantCount),
-                      })}
-                    </p>
-                    <Link className="button" href={`/presentation-session/${id}/report`}>
-                      {t("live.presentationSession.openReport")}
-                    </Link>
-                  </>
-                ) : null}
-              </div>
-            </section>
-            <aside className={styles.sideCard}>
-              <h2 className="sr-only" lang="en-CA">
-                Facilitation controls
-              </h2>
-              <div>
-                <span className={styles.statusPill}>{t("live.presentationSession.joinCode")}</span>
-                <p className={styles.joinCode}>{snapshot.code}</p>
-                <Link href={`/join?code=${snapshot.code}`}>
-                  {t("live.presentationSession.openJoin")}
-                </Link>
-              </div>
-              <div className={styles.metricRow}>
-                <div className={styles.metric}>
-                  <strong>{formatNumber(locale, snapshot.roomStatus.joinedCount)}</strong>
-                  <span>{t("live.common.participants")}</span>
-                </div>
-                <div className={styles.metric}>
-                  <strong>{formatNumber(locale, snapshot.roomStatus.responseCount)}</strong>
-                  <span>{t("live.presentationSession.responsesNow")}</span>
+                      onClick={() => void advance()}
+                      type="button"
+                    >
+                      {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
+                    </button>
+                  ) : null}
                 </div>
               </div>
-              <p className="muted" aria-live="polite">
-                {formatNumber(locale, snapshot.roomStatus.connectedCount)} connected ·{" "}
-                {formatNumber(locale, snapshot.roomStatus.notCurrentlyConnectedCount)} not currently
-                connected
-              </p>
-              <p>
-                {t("live.presentationSession.blockProgress", {
-                  current: formatNumber(locale, Math.max(snapshot.currentBlockIndex + 1, 0)),
-                  total: formatNumber(locale, snapshot.blockCount),
-                })}
-              </p>
-              {snapshot.phase !== "finished" ? (
-                <button
-                  className="button full-width"
-                  disabled={
-                    busy || !!commandState.pendingCommand || !controllerRef.current?.canMutate()
-                  }
-                  onClick={() => void advance()}
-                  type="button"
-                >
-                  {busy ? t("live.common.updating") : t(advanceMessageKey(snapshot))}
-                </button>
-              ) : null}
               {!hasControlPass &&
               (snapshot.phase !== "finished" || !!commandState.pendingCommand) ? (
-                <div lang="en-CA">
+                <div lang={locale}>
                   <p className="muted" role="status">
                     {commandState.pendingCommand
-                      ? "Reacquire a host control pass to confirm the pending action."
-                      : "Recovery Pack card actions require a host control pass. You can still advance using compatibility mode."}
-                    {controlPassError ? ` ${controlPassError}` : ""}
+                      ? navigationCopy(
+                          "Reacquire a host control pass to confirm the pending action.",
+                        )
+                      : navigationCopy(
+                          "Live navigation and Recovery Pack card actions require a host control pass. You can still advance using compatibility mode.",
+                        )}
+                    {controlPassError ? <span lang="en-CA"> {controlPassError}</span> : null}
                   </p>
                   <button
                     className="button-quiet full-width"
@@ -586,16 +629,20 @@ function PresentationHostContent() {
                     onClick={() => void retryControlPass()}
                     type="button"
                   >
-                    {controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass"}
+                    {navigationCopy(
+                      controlPassBusy ? "Acquiring host control pass…" : "Retry host control pass",
+                    )}
                   </button>
                 </div>
               ) : null}
               {commandState.pendingCommand ? (
-                <div lang="en-CA">
+                <div lang={locale}>
                   <p className="muted" role="status" aria-live="polite">
                     {commandState.busy
-                      ? "Waiting for server confirmation…"
-                      : "Action not yet confirmed. Retry to confirm the original action."}
+                      ? sharedCopy("Waiting for server confirmation…")
+                      : sharedCopy(
+                          "Action not yet confirmed. Retry to confirm the original action.",
+                        )}
                   </p>
                   {!commandState.busy ? (
                     <button
@@ -604,51 +651,350 @@ function PresentationHostContent() {
                       onClick={() => void retryCommand()}
                       type="button"
                     >
-                      {commandState.pendingCommand.action === "start_recovery_card"
-                        ? "Retry card action acknowledgement"
-                        : "Retry advance acknowledgement"}
+                      {isPresentationRecoverableCommand(commandState.pendingCommand)
+                        ? branchNavigationRetryLabel(locale, commandState.pendingCommand)
+                        : commandState.pendingCommand.action === "start_recovery_card"
+                          ? sharedCopy("Retry card action acknowledgement")
+                          : sharedCopy("Retry advance acknowledgement")}
                     </button>
                   ) : null}
                 </div>
               ) : null}
-              {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
-                <RecoveryPackCardPicker
-                  key={snapshot.currentBlock?.id}
-                  cards={snapshot.recoveryPackCards}
+            </section>
+            <div className={`${styles.hostGrid} ${presenter.hostGrid}`}>
+              <div className={delivery.presenterColumn}>
+                <PresentationSpatialDelivery
+                  spatial={snapshot.spatial}
+                  currentBlockIndex={snapshot.currentBlockIndex}
+                  phase={snapshot.phase}
+                  sourceKey={`${id}:${snapshot.presentationVersionId}`}
+                  navigation={snapshot.navigation}
                   disabled={
-                    !hasControlPass ||
                     busy ||
                     !!commandState.pendingCommand ||
+                    !hasControlPass ||
                     !controllerRef.current?.canMutate()
                   }
-                  onStart={(selection, type) => void startRecoveryCard(selection, type)}
+                  onJump={(blockId) => void navigate("jump_to_block", blockId)}
                 />
-              ) : null}
-              <button
-                className="button-quiet full-width"
-                disabled={!joinUrl}
-                onClick={() => void navigator.clipboard?.writeText(joinUrl)}
-                type="button"
-              >
-                {t("live.presentationSession.copyJoinLink")}
-              </button>
-              <PresentationCompanionLauncher
-                sessionId={id}
-                enabled={productFeatures?.presentationCompanion === true}
-                canEdit={canEdit}
-              />
-              {snapshot.competitionStandings ? (
-                <CompetitionDashboard
-                  variant="host"
-                  standings={snapshot.competitionStandings}
-                  finished={snapshot.phase === "finished"}
-                  compact={snapshot.phase !== "finished"}
-                />
-              ) : null}
-            </aside>
-          </div>
+                <section
+                  className={styles.canvas}
+                  aria-live="polite"
+                  aria-label={workspaceCopy("Current slide")}
+                >
+                  <div className={styles.canvasContent}>
+                    {snapshot.phase === "lobby" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {t("live.presentationSession.waitingRoom")}
+                        </span>
+                        <h1 lang="">{snapshot.title}</h1>
+                        <p>{t("live.presentationSession.participantsCanJoin")}</p>
+                      </>
+                    ) : null}
+                    {block?.kind === "content" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {t("live.presentationSession.contentSlide")}
+                        </span>
+                        <ContentSlideView
+                          block={block}
+                          designOverride={block.design}
+                          interactionRuntime={interactionRuntime}
+                          interactionSourceKey={JSON.stringify([
+                            id,
+                            audienceToken,
+                            connection === "fallback",
+                          ])}
+                          renderSceneImage={(mediaId, altText) => (
+                            <PresentationMedia
+                              key={mediaId}
+                              sessionId={id}
+                              mediaId={mediaId}
+                              altText={altText}
+                            />
+                          )}
+                          media={
+                            <PresentationMedia
+                              altText={block.mediaAlt}
+                              mediaId={block.mediaId}
+                              sessionId={id}
+                            />
+                          }
+                          variant="live"
+                        />
+                      </>
+                    ) : null}
+                    {block?.kind === "question" ? (
+                      <>
+                        <span className={styles.statusPill}>
+                          {snapshot.phase === "intervention"
+                            ? t("live.presentationSession.recoveryIntervention")
+                            : snapshot.phase === "question_reveal"
+                              ? t("live.presentationSession.responseReview")
+                              : snapshot.acceptingResponses
+                                ? t("live.presentationSession.questionOpen")
+                                : t("live.presentationSession.timeEnded")}
+                        </span>
+                        {remainingSeconds !== null ? (
+                          <p className={styles.timer} aria-live="off">
+                            {formatNumber(locale, remainingSeconds, {
+                              style: "unit",
+                              unit: "second",
+                              unitDisplay: "narrow",
+                            })}
+                          </p>
+                        ) : snapshot.acceptingResponses && snapshot.settings.timeMode === "flex" ? (
+                          <p className="muted" lang={locale} role="status">
+                            {t("live.common.flexOpen")}
+                          </p>
+                        ) : null}
+                        <PresentationActivitySlide
+                          question={block.question}
+                          design={block.design}
+                          media={
+                            block.question.mediaId ? (
+                              <PresentationMedia
+                                altText={block.question.mediaAlt}
+                                mediaId={block.question.mediaId}
+                                sessionId={id}
+                              />
+                            ) : undefined
+                          }
+                          revealedChoiceIds={
+                            block.revealedAnswer?.kind === "choice"
+                              ? block.revealedAnswer.correctChoiceIds
+                              : undefined
+                          }
+                        />
+                        {block.revealedAnswer?.kind === "numeric" ? (
+                          <p className="notice" lang="">
+                            {block.revealedAnswer.correctValue}
+                            {block.revealedAnswer.tolerance !== "0"
+                              ? ` ± ${block.revealedAnswer.tolerance}`
+                              : ""}
+                            {block.revealedAnswer.unit ? ` ${block.revealedAnswer.unit}` : ""}
+                          </p>
+                        ) : null}
+                        {block.revealedAnswer?.explanation ? (
+                          <p className="notice" lang="">
+                            {block.revealedAnswer.explanation}
+                          </p>
+                        ) : null}
+                        {opinionSummary ? (
+                          <PresentationOpinionResults summary={opinionSummary} />
+                        ) : null}
+                        {isTextQuestion(block.question.type) ? (
+                          <PresentationTextResults
+                            sessionId={id}
+                            blockId={block.id}
+                            type={block.question.type}
+                            revision={snapshot.revision}
+                            seq={snapshot.seq}
+                            phase={snapshot.phase}
+                            projection="creator"
+                          />
+                        ) : null}
+                        {snapshot.phase === "intervention" && snapshot.recoveryPackIntervention ? (
+                          <RecoveryPackLiveCardView card={snapshot.recoveryPackIntervention.card} />
+                        ) : null}
+                      </>
+                    ) : null}
+                    {snapshot.phase === "finished" ? (
+                      <>
+                        <span className={styles.statusPill}>{t("live.common.complete")}</span>
+                        <h1>{t("live.presentationSession.finished")}</h1>
+                        <p>
+                          {t("live.common.joinedCount", {
+                            count: formatNumber(locale, snapshot.participantCount),
+                          })}
+                        </p>
+                        <Link className="button" href={`/presentation-session/${id}/report`}>
+                          {t("live.presentationSession.openReport")}
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+                <div className={delivery.backstage}>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Private speaker notes")}
+                  >
+                    <h2>{workspaceCopy("Private speaker notes")}</h2>
+                    <div
+                      className={delivery.notes}
+                      tabIndex={0}
+                      role="group"
+                      aria-label={workspaceCopy("Speaker notes text")}
+                    >
+                      <p lang={snapshot.presenter?.speakerNotes ? "" : locale}>
+                        {snapshot.presenter?.speakerNotes ||
+                          workspaceCopy("No speaker notes for this slide.")}
+                      </p>
+                    </div>
+                  </section>
+                  <section
+                    className={delivery.panel}
+                    aria-label={workspaceCopy("Next slide preview")}
+                  >
+                    <h2>{workspaceCopy("Next slide preview")}</h2>
+                    {snapshot.presenter?.nextBlock ? (
+                      <div
+                        className={delivery.nextPreview}
+                        tabIndex={0}
+                        role="group"
+                        aria-label={workspaceCopy("Next slide content")}
+                      >
+                        <PresentationDeliveryBlock
+                          accessibilityContext="preview"
+                          block={snapshot.presenter.nextBlock}
+                          interactionRuntime={{ mode: "live_audience" }}
+                          interactionSourceKey={JSON.stringify([
+                            id,
+                            audienceToken,
+                            connection === "fallback",
+                          ])}
+                          renderMedia={(mediaId, altText) => (
+                            <PresentationMedia
+                              key={`${snapshot.presenter?.nextBlock?.id}:${mediaId}`}
+                              sessionId={id}
+                              mediaId={mediaId}
+                              altText={altText}
+                            />
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <p>
+                        {snapshot.phase === "finished"
+                          ? workspaceCopy("Presentation complete.")
+                          : workspaceCopy("No further slides or activities.")}
+                      </p>
+                    )}
+                  </section>
+                </div>
+              </div>
+              <aside className={`${styles.sideCard} ${presenter.tools}`}>
+                <details className={presenter.toolGroup}>
+                  <summary>
+                    {t("live.presentationSession.joinCode")}{" "}
+                    <strong lang="">{snapshot.code}</strong>
+                  </summary>
+                  <PresentationDeliveryJoinAccess code={snapshot.code} />
+                </details>
+                <PresenterTimer sessionId={id} />
+                <div className={`${styles.metricRow} ${presenter.liveMetrics}`}>
+                  <div className={styles.metric}>
+                    <strong>{formatNumber(locale, snapshot.roomStatus.joinedCount)}</strong>
+                    <span>{t("live.common.participants")}</span>
+                  </div>
+                  <div className={styles.metric}>
+                    <strong>{formatNumber(locale, snapshot.roomStatus.responseCount)}</strong>
+                    <span>{t("live.presentationSession.responsesNow")}</span>
+                  </div>
+                </div>
+                <p className={presenter.roomStatus} aria-live="polite">
+                  {workspaceCopy("{connected} connected · {disconnected} not currently connected", {
+                    connected: formatNumber(locale, snapshot.roomStatus.connectedCount),
+                    disconnected: formatNumber(
+                      locale,
+                      snapshot.roomStatus.notCurrentlyConnectedCount,
+                    ),
+                  })}
+                </p>
+                {snapshot.phase === "question_reveal" && snapshot.recoveryPackCards?.length ? (
+                  <RecoveryPackCardPicker
+                    key={snapshot.currentBlock?.id}
+                    cards={snapshot.recoveryPackCards}
+                    disabled={
+                      !hasControlPass ||
+                      busy ||
+                      !!commandState.pendingCommand ||
+                      !controllerRef.current?.canMutate()
+                    }
+                    onStart={(selection, type) => void startRecoveryCard(selection, type)}
+                  />
+                ) : null}
+                {snapshot.branches ? (
+                  <PresentationBranches
+                    locale={locale}
+                    branches={snapshot.branches}
+                    disabled={
+                      busy ||
+                      !!commandState.pendingCommand ||
+                      !hasControlPass ||
+                      !controllerRef.current?.canMutate()
+                    }
+                    onFollow={(branchId) => void followBranch(branchId)}
+                  />
+                ) : null}
+                <p className={presenter.keyboardHint}>
+                  {workspaceCopy(
+                    "Advance with Right Arrow, Page Down or Space when no control or dialog is focused. Each action waits for server confirmation.",
+                  )}
+                </p>
+                <div className={presenter.companionTools}>
+                  <PresentationCompanionLauncher
+                    sessionId={id}
+                    enabled={productFeatures?.presentationCompanion === true}
+                    canEdit={canEdit}
+                  />
+                </div>
+                {snapshot.competitionStandings ? (
+                  <CompetitionDashboard
+                    variant="host"
+                    standings={snapshot.competitionStandings}
+                    finished={snapshot.phase === "finished"}
+                    compact={snapshot.phase !== "finished"}
+                  />
+                ) : null}
+              </aside>
+            </div>
+          </>
         )}
       </div>
+      {navigationOpen && snapshot?.navigation ? (
+        <PresentationNavigationDialog
+          locale={locale}
+          navigation={snapshot.navigation}
+          disabled={
+            busy ||
+            !!commandState.pendingCommand ||
+            !hasControlPass ||
+            !controllerRef.current?.canMutate()
+          }
+          onJump={(blockId) => void navigate("jump_to_block", blockId)}
+          onReturn={() => void navigate("return_to_path")}
+          onClose={() => setNavigationOpen(false)}
+          returnFocusRef={navigationButtonRef}
+          pendingCommand={commandState.pendingCommand}
+          busy={commandState.busy}
+          onRetry={() => void retryCommand()}
+          retryDisabled={!hasControlPass || busy || !controllerRef.current?.canMutate()}
+        />
+      ) : null}
+      {snapshot?.textModerationAvailable && audienceToken ? (
+        <PresentationTextModerationPanel
+          sessionId={id}
+          blockId={
+            block?.kind === "question" && isTextQuestion(block.question.type) ? block.id : null
+          }
+          revision={snapshot.revision}
+          seq={snapshot.seq}
+          phase={snapshot.phase}
+          credential={audienceToken}
+          disabled={
+            busy ||
+            !hasControlPass ||
+            !!commandState.pendingCommand ||
+            !controllerRef.current?.canMutate()
+          }
+          onChanged={() => {
+            void controllerRef.current?.reconcile();
+          }}
+        />
+      ) : null}
       {snapshot && audienceToken ? (
         <PresentationQnaPanel
           key={id}

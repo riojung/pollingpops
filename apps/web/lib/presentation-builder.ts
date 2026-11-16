@@ -1,4 +1,8 @@
 import {
+  copyPresentationSpatialFrame,
+  reconcilePresentationSpatialBlocks,
+} from "./presentation-spatial-authoring";
+import {
   PresentationContentSchema,
   PresentationDraftSchema,
   migratePresentationV1,
@@ -10,6 +14,9 @@ import {
   starterContentSlideFrames,
   presentationSceneTitle,
   preparePresentationPublication,
+  requiresPresentationOpinionFormats,
+  requiresPresentationTextOpinions,
+  questionTypeDefinition,
   type ContentSlideDraft,
   type ContentSlideFrame,
   type ContentSlideLayout,
@@ -18,16 +25,60 @@ import {
   type InteractiveQuestionBlockDraft,
   type PresentationBlockDraft,
   type PresentationDraft,
+  type PresentationSection,
   type QuestionDraft,
   type QuestionType,
+  type SupportedLocale,
 } from "@openround/contracts";
 import { clientUuid } from "./uuid";
+import { creationContent } from "./i18n/creation-content";
 import { duplicateNativeScene } from "./presentation-native-scene";
 
 export interface PresentationIssue {
   blockId: string | null;
   field: string;
   message: string;
+}
+
+export function presentationInteractionTargets(
+  draft: PresentationDraft,
+  sourceId: string,
+  forwardOnly = false,
+) {
+  const sourceIndex = draft.blocks.findIndex(
+    (block) => block.id.toLowerCase() === sourceId.toLowerCase(),
+  );
+  const intervals = draft.blocks.flatMap((block, index) => {
+    if (block.kind !== "question" || !block.question.linkedRecheckQuestionId) return [];
+    const end = draft.blocks.findIndex(
+      (target) =>
+        target.kind === "question" &&
+        target.question.id.toLowerCase() === block.question.linkedRecheckQuestionId!.toLowerCase(),
+    );
+    return end > index ? [{ start: index, end }] : [];
+  });
+  return draft.blocks.flatMap((block, index) => {
+    if (
+      index === sourceIndex ||
+      (forwardOnly && index <= sourceIndex) ||
+      (block.kind === "content" && block.hidden) ||
+      (block.kind === "question" && block.question.delivery === "recheck") ||
+      intervals.some((pair) => index > pair.start && index < pair.end)
+    )
+      return [];
+    const title =
+      block.kind === "question"
+        ? block.question.prompt
+        : block.scene
+          ? presentationSceneTitle(block.scene)
+          : (block.textElements.find((element) => element.role === "title")?.text ?? "");
+    return [
+      {
+        id: block.id,
+        title: title.trim() || `${block.kind === "question" ? "Activity" : "Slide"} ${index + 1}`,
+      },
+    ];
+  });
 }
 
 export function normalizePresentationRecoveryDraft(value: unknown): PresentationDraft {
@@ -37,36 +88,38 @@ export function normalizePresentationRecoveryDraft(value: unknown): Presentation
 }
 
 function choiceSet(
-  type: Extract<QuestionType, "single_select" | "true_false" | "multi_select" | "poll">,
+  type: Extract<QuestionType, "single_select" | "true_false" | "multi_select" | "poll" | "ranking">,
+  locale: SupportedLocale,
 ) {
   if (type === "true_false") {
     return [
-      { id: clientUuid(), label: "True", isCorrect: true },
-      { id: clientUuid(), label: "False", isCorrect: false },
+      { id: clientUuid(), label: creationContent(locale)("true"), isCorrect: true },
+      { id: clientUuid(), label: creationContent(locale)("false"), isCorrect: false },
     ];
   }
   return [
-    { id: clientUuid(), label: "", isCorrect: type !== "poll" },
+    { id: clientUuid(), label: "", isCorrect: type !== "poll" && type !== "ranking" },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
     { id: clientUuid(), label: "", isCorrect: false },
   ];
 }
 
-export function createPresentationQuestion(type: QuestionType): QuestionDraft {
-  if (type === "open_text" || type === "word_cloud")
-    throw new Error("Moderated text polls currently support live Rounds only.");
-  if (type === "ranking") throw new Error("Ranking polls currently support live Rounds only.");
+export function createPresentationQuestion(
+  type: QuestionType,
+  locale: SupportedLocale = "en-CA",
+): QuestionDraft {
+  const opinionOnly = !questionTypeDefinition(type).scored;
   const common = {
     id: clientUuid(),
     prompt: "",
-    purpose: type === "rating" || type === "poll" ? ("opinion" as const) : ("diagnostic" as const),
+    purpose: opinionOnly ? ("opinion" as const) : ("diagnostic" as const),
     confidence: "off" as const,
     delivery: "main" as const,
     conceptKeys: [],
     linkedRecheckQuestionId: null,
     timeLimitSeconds: 20,
-    basePoints: type === "rating" || type === "poll" ? 0 : 1_000,
+    basePoints: opinionOnly ? 0 : 1_000,
     explanation: "",
     mediaId: null,
     mediaAlt: null,
@@ -75,9 +128,211 @@ export function createPresentationQuestion(type: QuestionType): QuestionDraft {
     return { ...common, type, correctValue: "", tolerance: "0", unit: null };
   }
   if (type === "rating") {
-    return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
+    return {
+      ...common,
+      type,
+      min: 1,
+      max: 5,
+      minLabel: creationContent(locale)("low"),
+      maxLabel: creationContent(locale)("high"),
+    };
   }
-  return { ...common, type, choices: choiceSet(type) };
+  if (type === "open_text" || type === "word_cloud") return { ...common, type };
+  return { ...common, type, choices: choiceSet(type, locale) };
+}
+
+/** New formats opt in on write; edits and history retain the highest document version. */
+export function promotePresentationOpinionFormats(
+  draft: PresentationDraft,
+  currentVersion: PresentationDraft["schemaVersion"] = draft.schemaVersion,
+): PresentationDraft {
+  const requiredVersion = requiresPresentationTextOpinions(draft)
+    ? 10
+    : requiresPresentationOpinionFormats(draft)
+      ? 9
+      : draft.schemaVersion;
+  const advanced = draft.blocks.some((block) =>
+    block.kind === "question"
+      ? block.branches !== undefined
+      : (block.scene?.schemaVersion ?? 0) >= 6,
+  );
+  const schemaVersion = Math.max(
+    draft.schemaVersion,
+    currentVersion,
+    requiredVersion,
+    advanced ? 13 : 2,
+    draft.sections === undefined ? 2 : 12,
+    draft.spatial === undefined ? 2 : 14,
+    draft.blocks.some(
+      (block) =>
+        block.kind === "content" &&
+        ((block.scene?.schemaVersion ?? 0) >= 7 || block.textAssistance?.operation === "translate"),
+    )
+      ? 16
+      : 2,
+    draft.blocks.some((block) => block.kind === "content" && (block.scene?.schemaVersion ?? 0) >= 8)
+      ? 17
+      : 2,
+    draft.blocks.some((block) => block.kind === "content" && (block.scene?.schemaVersion ?? 0) >= 9)
+      ? 18
+      : 2,
+  ) as PresentationDraft["schemaVersion"];
+  if (draft.schemaVersion === schemaVersion) return draft;
+  return {
+    ...draft,
+    schemaVersion,
+    ...(schemaVersion >= 12 && draft.sections === undefined ? { sections: [] } : {}),
+  };
+}
+
+/** Sections annotate the existing block sequence; enabling them never rewrites that sequence. */
+export function enablePresentationSections(draft: PresentationDraft): PresentationDraft {
+  if (draft.schemaVersion >= 12 && draft.sections !== undefined) return draft;
+  return {
+    ...draft,
+    schemaVersion: draft.schemaVersion >= 12 ? draft.schemaVersion : 12,
+    sections: draft.sections ?? [],
+  };
+}
+
+export function presentationSectionForBlock(
+  sections: PresentationSection[] | undefined,
+  blockId: string | null,
+) {
+  return blockId
+    ? sections?.find((section) =>
+        section.blockIds.some((id) => id.toLowerCase() === blockId.toLowerCase()),
+      )
+    : undefined;
+}
+
+function presentationSectionTitle(title: string) {
+  return [...title]
+    .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+    .join("")
+    .trim()
+    .slice(0, 120);
+}
+
+export function addPresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+  title = "New section",
+): PresentationDraft {
+  const sections = draft.sections ?? [];
+  if (
+    sections.length >= 50 ||
+    sections.some((section) => section.id.toLowerCase() === sectionId.toLowerCase())
+  )
+    return draft;
+  return {
+    ...enablePresentationSections(draft),
+    sections: [
+      ...sections,
+      { id: sectionId, title: presentationSectionTitle(title), blockIds: [] },
+    ],
+  };
+}
+
+export function renamePresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+  title: string,
+): PresentationDraft {
+  const section = draft.sections?.find(
+    (section) => section.id.toLowerCase() === sectionId.toLowerCase(),
+  );
+  const nextTitle = presentationSectionTitle(title);
+  if (!section || section.title === nextTitle) return draft;
+  return {
+    ...draft,
+    sections: draft.sections?.map((section) =>
+      section.id.toLowerCase() === sectionId.toLowerCase()
+        ? { ...section, title: nextTitle }
+        : section,
+    ),
+  };
+}
+
+export function removePresentationSection(
+  draft: PresentationDraft,
+  sectionId: string,
+): PresentationDraft {
+  if (!draft.sections?.some((section) => section.id.toLowerCase() === sectionId.toLowerCase()))
+    return draft;
+  return {
+    ...draft,
+    sections: draft.sections.filter(
+      (section) => section.id.toLowerCase() !== sectionId.toLowerCase(),
+    ),
+  };
+}
+
+export function assignPresentationBlockToSection(
+  draft: PresentationDraft,
+  blockId: string,
+  sectionId: string | null,
+): PresentationDraft {
+  const block = draft.blocks.find((block) => block.id.toLowerCase() === blockId.toLowerCase());
+  const targetSection = draft.sections?.find(
+    (section) => section.id.toLowerCase() === sectionId?.toLowerCase(),
+  );
+  if (!block || !draft.sections || (sectionId !== null && !targetSection)) return draft;
+  const currentSection = presentationSectionForBlock(draft.sections, block.id);
+  if ((currentSection?.id ?? null) === (targetSection?.id ?? null)) return draft;
+  return {
+    ...draft,
+    sections: draft.sections.map((section) => {
+      if (section === targetSection)
+        return { ...section, blockIds: [...section.blockIds, block.id] };
+      if (section !== currentSection) return section;
+      return {
+        ...section,
+        blockIds: section.blockIds.filter((id) => id.toLowerCase() !== block.id.toLowerCase()),
+      };
+    }),
+  };
+}
+
+/** Insert a prepared copy once, preserving its source's section without reusing its identity. */
+export function insertPresentationBlockDuplicate(
+  draft: PresentationDraft,
+  sourceId: string,
+  copy: PresentationBlockDraft,
+): PresentationDraft {
+  const sourceIndex = draft.blocks.findIndex(
+    (block) => block.id.toLowerCase() === sourceId.toLowerCase(),
+  );
+  if (
+    sourceIndex < 0 ||
+    draft.blocks.length >= 200 ||
+    draft.blocks.some((block) => block.id.toLowerCase() === copy.id.toLowerCase())
+  )
+    return draft;
+  const blocks = [...draft.blocks];
+  blocks.splice(sourceIndex + 1, 0, copy);
+  return copyPresentationSpatialFrame(
+    draft,
+    {
+      ...draft,
+      blocks,
+      ...(draft.sections
+        ? {
+            sections: draft.sections.map((section) => {
+              const sourceIndex = section.blockIds.findIndex(
+                (id) => id.toLowerCase() === sourceId.toLowerCase(),
+              );
+              if (sourceIndex < 0) return section;
+              const blockIds = [...section.blockIds];
+              blockIds.splice(sourceIndex + 1, 0, copy.id);
+              return { ...section, blockIds };
+            }),
+          }
+        : {}),
+    },
+    sourceId,
+    copy.id,
+  );
 }
 
 export function createContentBlock(layout: ContentSlideLayout = "title_body"): ContentSlideDraft {
@@ -413,14 +668,16 @@ export function contentSlideTitle(block: ContentSlideDraft): string {
 
 export function createQuestionBlock(
   type: QuestionType = "single_select",
+  locale: SupportedLocale = "en-CA",
 ): InteractiveQuestionBlockDraft {
-  return { id: clientUuid(), kind: "question", question: createPresentationQuestion(type) };
+  return { id: clientUuid(), kind: "question", question: createPresentationQuestion(type, locale) };
 }
 
 export function changePresentationQuestionType(
   draft: PresentationDraft,
   blockId: string,
   type: QuestionType,
+  locale: SupportedLocale = "en-CA",
 ): PresentationDraft {
   const selected = draft.blocks.find(
     (block): block is InteractiveQuestionBlockDraft =>
@@ -429,15 +686,16 @@ export function changePresentationQuestionType(
   if (!selected || selected.question.type === type) return draft;
 
   const previous = selected.question;
-  const opinionOnly = type === "poll" || type === "rating";
+  const opinionOnly = !questionTypeDefinition(type).scored;
+  const previousOpinionOnly = !questionTypeDefinition(previous.type).scored;
   const next: QuestionDraft = {
-    ...createPresentationQuestion(type),
+    ...createPresentationQuestion(type, locale),
     id: previous.id,
     prompt: previous.prompt,
     explanation: previous.explanation,
     delivery: opinionOnly ? "main" : previous.delivery,
     conceptKeys: previous.conceptKeys,
-    purpose: opinionOnly ? "opinion" : previous.purpose,
+    purpose: opinionOnly ? "opinion" : previousOpinionOnly ? "diagnostic" : previous.purpose,
     confidence: opinionOnly ? "off" : previous.confidence,
     linkedRecheckQuestionId: opinionOnly ? null : previous.linkedRecheckQuestionId,
     mediaId: previous.mediaId,
@@ -445,6 +703,70 @@ export function changePresentationQuestionType(
     sourceCitations: previous.sourceCitations,
     recoveryPackSource: previous.recoveryPackSource,
   };
+  if ("choices" in previous && "choices" in next && type !== "true_false") {
+    const firstCorrect = Math.max(
+      0,
+      previous.choices.findIndex((choice) => choice.isCorrect),
+    );
+    next.choices = previous.choices.map((choice, index) => ({
+      ...choice,
+      isCorrect: opinionOnly
+        ? false
+        : type === "multi_select"
+          ? choice.isCorrect || (index === 0 && !previous.choices.some((item) => item.isCorrect))
+          : index === firstCorrect,
+    }));
+  }
+  return updatePresentationQuestion(draft, blockId, () => next);
+}
+
+/** Keep opinion settings and recovery topology valid when a response or limit is edited. */
+export function updatePresentationQuestion(
+  draft: PresentationDraft,
+  blockId: string,
+  updater: (question: QuestionDraft) => QuestionDraft,
+): PresentationDraft {
+  const selected = draft.blocks.find(
+    (block): block is InteractiveQuestionBlockDraft =>
+      block.id === blockId && block.kind === "question",
+  );
+  if (!selected) return draft;
+  const previous = selected.question;
+  const next = updater(previous);
+  if (next === previous) return draft;
+  const opinionOnly = !questionTypeDefinition(next.type).scored;
+  const normalized: QuestionDraft =
+    next.type === "open_text" || next.type === "word_cloud"
+      ? {
+          id: next.id,
+          type: next.type,
+          prompt: next.prompt,
+          purpose: "opinion",
+          confidence: "off",
+          basePoints: 0,
+          delivery: "main",
+          linkedRecheckQuestionId: null,
+          conceptKeys: next.conceptKeys,
+          timeLimitSeconds: next.timeLimitSeconds,
+          explanation: next.explanation,
+          mediaId: next.mediaId,
+          mediaAlt: next.mediaAlt,
+          ...(next.sourceCitations ? { sourceCitations: next.sourceCitations } : {}),
+          ...(next.recoveryPackSource ? { recoveryPackSource: next.recoveryPackSource } : {}),
+        }
+      : opinionOnly
+        ? {
+            ...next,
+            purpose: "opinion",
+            confidence: "off",
+            basePoints: 0,
+            delivery: "main",
+            linkedRecheckQuestionId: null,
+            ...("choices" in next
+              ? { choices: next.choices.map((choice) => ({ ...choice, isCorrect: false })) }
+              : {}),
+          }
+        : next;
   const detachedRecheck = opinionOnly && (previous.delivery ?? "main") === "recheck";
   const detachedTargetId = opinionOnly ? previous.linkedRecheckQuestionId : null;
   const detachedTargetHasAnotherSource =
@@ -457,10 +779,10 @@ export function changePresentationQuestionType(
         )
       : false;
 
-  return {
+  return promotePresentationOpinionFormats({
     ...draft,
     blocks: draft.blocks.map((block) => {
-      if (block.id === blockId) return { ...selected, question: next };
+      if (block.id === blockId) return { ...selected, question: normalized };
       if (
         detachedRecheck &&
         block.kind === "question" &&
@@ -484,7 +806,7 @@ export function changePresentationQuestionType(
       }
       return block;
     }),
-  };
+  });
 }
 
 export function movePresentationBlock(
@@ -557,8 +879,22 @@ export function removePresentationBlock(
         block.kind === "question" &&
         block.question.linkedRecheckQuestionId === orphanTarget,
     );
-  return {
+  return reconcilePresentationSpatialBlocks(draft, {
     ...draft,
+    ...(draft.sections
+      ? {
+          sections: draft.sections.map((section) =>
+            section.blockIds.some((id) => id.toLowerCase() === blockId.toLowerCase())
+              ? {
+                  ...section,
+                  blockIds: section.blockIds.filter(
+                    (id) => id.toLowerCase() !== blockId.toLowerCase(),
+                  ),
+                }
+              : section,
+          ),
+        }
+      : {}),
     blocks: draft.blocks
       .filter((block) => block.id !== blockId)
       .map((block) =>
@@ -576,7 +912,7 @@ export function removePresentationBlock(
               }
             : block,
       ),
-  };
+  });
 }
 
 export function duplicatePresentationBlock(block: PresentationBlockDraft): PresentationBlockDraft {
@@ -596,11 +932,32 @@ export function duplicatePresentationBlock(block: PresentationBlockDraft): Prese
   if ("choices" in question) {
     question.choices = question.choices.map((choice) => {
       const id = clientUuid();
-      choiceIds.set(choice.id, id);
+      choiceIds.set(choice.id.toLowerCase(), id);
       return { ...choice, id };
     });
   }
-  return { id: clientUuid(), kind: "question", question };
+  return {
+    id: clientUuid(),
+    kind: "question",
+    question,
+    ...(block.branches
+      ? {
+          branches: block.branches.map((branch) => ({
+            ...structuredClone(branch),
+            id: clientUuid(),
+            condition:
+              branch.condition.kind === "choice_share"
+                ? {
+                    ...branch.condition,
+                    choiceId:
+                      choiceIds.get(branch.condition.choiceId.toLowerCase()) ??
+                      branch.condition.choiceId,
+                  }
+                : { ...branch.condition },
+          })),
+        }
+      : {}),
+  };
 }
 
 export function presentationReadiness(draft: PresentationDraft): PresentationIssue[] {
@@ -650,14 +1007,19 @@ export function presentationReadiness(draft: PresentationDraft): PresentationIss
         });
       }
       const correct = question.choices.filter((choice) => choice.isCorrect).length;
-      if (question.type !== "poll" && correct === 0) {
+      if (question.type !== "poll" && question.type !== "ranking" && correct === 0) {
         issues.push({
           blockId: block.id,
           field: "choices",
           message: "Mark at least one correct answer.",
         });
       }
-      if (question.type !== "poll" && question.type !== "multi_select" && correct > 1) {
+      if (
+        question.type !== "poll" &&
+        question.type !== "ranking" &&
+        question.type !== "multi_select" &&
+        correct > 1
+      ) {
         issues.push({
           blockId: block.id,
           field: "choices",

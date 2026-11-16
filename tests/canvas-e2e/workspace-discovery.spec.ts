@@ -31,23 +31,24 @@ test("universal creation opens board setup and Home includes every authoring for
     await expect(menu.getByRole("link", { name })).toHaveAttribute("href", href);
   await create.click();
   const homeCreation = page.getByRole("main").getByRole("link", { name: "Create", exact: true });
-  await expect(homeCreation).toHaveCount(2);
+  await expect(homeCreation).toHaveCount(1);
   for (const link of await homeCreation.all())
     await expect(link).toHaveAttribute("href", "/create");
   await homeCreation.first().click();
   await expect(page).toHaveURL(/\/create$/);
-  const choices = page.getByRole("navigation", {
-    name: "What would you like to create?",
+  const primaryChoices = page.getByRole("navigation", {
+    name: "What would you like to do?",
     exact: true,
   });
-  for (const label of [
-    "Live quiz",
-    "Live poll",
-    "Custom Round",
-    "Presentation",
-    "Survey",
-    "Idea board",
-  ])
+  await expect(primaryChoices.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+  for (const label of ["Check understanding", "Build a presentation"])
+    await expect(primaryChoices.getByRole("heading", { name: label, exact: true })).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^More formats$/ })
+    .click();
+  const choices = page.getByRole("navigation", { name: "More formats", exact: true });
+  for (const label of ["Custom Round", "Survey", "Idea board"])
     await expect(choices.getByRole("heading", { name: label, exact: true })).toBeVisible();
   await accessibleTheme(page, "light");
   await page.screenshot({

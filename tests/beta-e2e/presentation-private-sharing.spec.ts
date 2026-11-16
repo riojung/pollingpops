@@ -85,6 +85,7 @@ for (const suffix of ["", " @mobile"]) {
     const narrow = (info.project.use.viewport?.width ?? 1280) <= 700;
     await enterE01Editor(page, record.id, narrow);
     await openE01Inspector(page, "Media");
+    await page.locator('[data-native-inspector-group="add-image"] > summary').click();
     await page
       .getByRole("textbox", { name: "New image description", exact: true })
       .fill("Synthetic review diagram");
@@ -248,6 +249,8 @@ for (const suffix of ["", " @mobile"]) {
       current.getByRole("heading", { name: "Review closing", exact: true }),
     ).toBeVisible();
     const map = reader.getByRole("navigation", { name: "Presentation pages", exact: true });
+    if (!(await map.isVisible()))
+      await reader.getByRole("button", { name: "Slides", exact: true }).click();
     await map.getByRole("button", { name: /Read-only review question/ }).click();
     await expect(
       current.getByText("Review only. Responses are not collected.", { exact: true }),
@@ -309,6 +312,8 @@ for (const suffix of ["", " @mobile"]) {
         await reader.request.get(mediaUrl!, { headers: { authorization: `Bearer ${token}` } })
       ).status(),
     ).toBe(404);
+    if (!(await map.isVisible()))
+      await reader.getByRole("button", { name: "Slides", exact: true }).click();
     await map.getByRole("button", { name: /Review closing/ }).click();
     await expect(reader.getByText(/unavailable|expired|revoked/i).first()).toBeVisible();
     await expect(reader.getByRole("region", { name: "Current presentation page" })).toHaveCount(0);

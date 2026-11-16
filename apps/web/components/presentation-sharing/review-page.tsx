@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PresentationReview, PresentationReviewBlock } from "@openround/contracts";
 import { ContentSlideView } from "../presentation/content-slide-view";
 import { Brand } from "../brand";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
 import {
   capturePresentationReviewToken,
   clearPresentationReviewToken,
@@ -11,7 +12,7 @@ import {
   fetchPresentationShareAccess,
   PresentationReviewImageError,
 } from "../../lib/presentation-sharing-client";
-import styles from "./sharing.module.css";
+import styles from "./review-workspace.module.css";
 import { ApiClientError } from "../../lib/api";
 import { PresentationFeedbackPanel, clearPresentationFeedbackRecovery } from "./feedback-panel";
 export function PresentationReviewImageFallback({
@@ -126,6 +127,11 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
   const [review, setReview] = useState<PresentationReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [index, setIndex] = useState(0);
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  const [readableOpen, setReadableOpen] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(max-width: 760px)").matches) setOutlineOpen(false);
+  }, []);
   const [navigationBusy, setNavigationBusy] = useState(false);
   const [navigationError, setNavigationError] = useState("");
   const navigationAbort = useRef<AbortController | null>(null),
@@ -273,24 +279,72 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
   const block = review?.blocks[index];
   return (
     <div className={styles.review} lang="en-CA">
-      <header className="shell topbar">
-        <Brand />
-      </header>
-      <main className="shell page-main" id="main">
-        {review && block && token.current ? (
-          <>
+      <header className={styles.header}>
+        <div className={styles.brand}>
+          <Brand />
+        </div>
+        {review ? (
+          <div className={styles.heading}>
             <h1>{review.title}</h1>
             <p>
-              Private review · Published version {review.version} · Expires{" "}
-              {new Date(review.expiresAt).toLocaleDateString("en-CA")}
+              Published version {review.version}
+              <span aria-hidden="true"> · </span>
+              <span>
+                Expires{" "}
+                <time dateTime={review.expiresAt}>
+                  {new Date(review.expiresAt).toLocaleDateString("en-CA")}
+                </time>
+              </span>
             </p>
-            <div className={styles.reviewLayout}>
-              <nav aria-label="Presentation pages" className={styles.pageMap}>
+          </div>
+        ) : null}
+        <span className={styles.privateBadge}>
+          <EditorIcon name="eye-off" /> Private review
+        </span>
+      </header>
+      <main className={styles.main} id="main">
+        {review && block && token.current ? (
+          <>
+            <div className={styles.workspaceBar}>
+              <button
+                type="button"
+                className={styles.outlineToggle}
+                aria-label="Slides"
+                aria-expanded={outlineOpen}
+                aria-controls="review-page-outline"
+                onClick={() => setOutlineOpen((open) => !open)}
+              >
+                <EditorIcon name="slides" />
+                <span>Slides</span>
+              </button>
+              <p className={styles.reviewHint}>
+                Explore at your own pace. Questions are read-only.
+              </p>
+            </div>
+            <div className={styles.reviewLayout} data-outline-open={outlineOpen}>
+              <nav
+                id="review-page-outline"
+                aria-label="Presentation pages"
+                className={styles.pageMap}
+                hidden={!outlineOpen}
+              >
+                <div className={styles.outlineHeading}>
+                  <h2>Slide outline</h2>
+                  <span>{review.blocks.length} pages</span>
+                </div>
+
                 {review.sections.length ? (
                   <label>
                     Section
                     <select
-                      defaultValue=""
+                      value={
+                        review.sections.find((section) =>
+                          section.blockIds.some(
+                            (id) => id.toLowerCase() === block.id.toLowerCase(),
+                          ),
+                        )?.id ?? ""
+                      }
+                      disabled={navigationBusy}
                       onChange={(event) => {
                         const section = review.sections.find(
                           (section) => section.id === event.target.value,
@@ -317,11 +371,26 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
                     <li key={page.id}>
                       <button
                         type="button"
+                        aria-label={`${pageIndex + 1}. ${presentationReviewBlockTitle(page, pageIndex)}`}
                         aria-current={index === pageIndex ? "page" : undefined}
                         disabled={navigationBusy}
                         onClick={() => void changePage(pageIndex)}
                       >
-                        {pageIndex + 1}. {presentationReviewBlockTitle(page, pageIndex)}
+                        <span className={styles.pageNumber} aria-hidden="true">
+                          {pageIndex + 1}
+                        </span>
+                        <span className={styles.pageLabel}>
+                          <span className="sr-only">{pageIndex + 1}. </span>
+                          <span className={styles.pageTitle}>
+                            {presentationReviewBlockTitle(page, pageIndex)}
+                          </span>
+                          <span className={styles.pageKind} aria-hidden="true">
+                            <EditorIcon
+                              name={page.kind === "content" ? "content" : "interaction"}
+                            />
+                            {page.kind === "content" ? "Slide" : "Question"}
+                          </span>
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -332,11 +401,17 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
                 className={styles.viewer}
                 key={block.id}
               >
-                <p role="status">
-                  Page {index + 1} of {review.blocks.length}
-                </p>
-                {block.kind === "content" ? (
-                  <>
+                <div className={styles.viewerBar}>
+                  <p role="status">
+                    Page {index + 1} of {review.blocks.length}
+                  </p>
+                  <span className={styles.viewerKind}>
+                    <EditorIcon name={block.kind === "content" ? "content" : "interaction"} />
+                    {block.kind === "content" ? "Content slide" : "Read-only question"}
+                  </span>
+                </div>
+                <div className={styles.slideFrame}>
+                  {block.kind === "content" ? (
                     <ContentSlideView
                       block={block}
                       variant="preview"
@@ -374,48 +449,63 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
                         />
                       )}
                     />
-                    <details open className={styles.readable}>
-                      <summary>Readable text</summary>
-                      {block.scene
-                        ? block.scene.nodes
-                            .filter((node) => node.type === "text")
-                            .map((node) =>
-                              node.type === "text" ? <p key={node.id}>{node.text}</p> : null,
-                            )
-                        : block.textElements.map((element) => (
-                            <p key={element.id}>{element.text}</p>
-                          ))}
-                    </details>
-                  </>
-                ) : (
-                  <>
-                    {block.question.mediaId ? (
-                      <ReviewImage
-                        shareId={shareId}
-                        token={token.current}
-                        mediaId={block.question.mediaId}
-                        alt={block.question.mediaAlt}
-                      />
-                    ) : null}
-                    <PresentationReviewQuestion block={block} />
-                  </>
-                )}
+                  ) : (
+                    <>
+                      {block.question.mediaId ? (
+                        <ReviewImage
+                          shareId={shareId}
+                          token={token.current}
+                          mediaId={block.question.mediaId}
+                          alt={block.question.mediaAlt}
+                        />
+                      ) : null}
+                      <PresentationReviewQuestion block={block} />
+                    </>
+                  )}
+                </div>
                 <div className={styles.controls}>
                   <button
                     type="button"
                     disabled={navigationBusy || index === 0}
                     onClick={() => void changePage(index - 1)}
                   >
-                    Previous page
+                    <EditorIcon name="back" />
+                    <span>Previous page</span>
                   </button>
+                  <span className={styles.progress} aria-hidden="true">
+                    <span style={{ width: `${((index + 1) / review.blocks.length) * 100}%` }} />
+                  </span>
                   <button
                     type="button"
                     disabled={navigationBusy || index === review.blocks.length - 1}
                     onClick={() => void changePage(index + 1)}
                   >
-                    Next page
+                    <span>Next page</span>
+                    <span className={styles.nextIcon}>
+                      <EditorIcon name="back" />
+                    </span>
                   </button>
                 </div>
+                {block.kind === "content" ? (
+                  <details
+                    open={readableOpen}
+                    onToggle={(event) => setReadableOpen(event.currentTarget.open)}
+                    className={styles.readable}
+                  >
+                    <summary>
+                      <EditorIcon name="text" />
+                      <span>Readable text</span>
+                      <EditorIcon name="chevron-down" />
+                    </summary>
+                    {block.scene
+                      ? block.scene.nodes
+                          .filter((node) => node.type === "text")
+                          .map((node) =>
+                            node.type === "text" ? <p key={node.id}>{node.text}</p> : null,
+                          )
+                      : block.textElements.map((element) => <p key={element.id}>{element.text}</p>)}
+                  </details>
+                ) : null}
                 {navigationBusy ? <p role="status">Checking link access…</p> : null}
                 {navigationError ? (
                   <div role="alert">
@@ -432,25 +522,30 @@ export function PresentationReviewPage({ shareId }: { shareId: string }) {
                 ) : null}
               </section>
             </div>
-            <PresentationFeedbackPanel
-              mode="reviewer"
-              shareId={shareId}
-              versionId={review.versionId}
-              token={token.current}
-              blockId={block.id}
-              blockIndex={index}
-              onAccessLost={clearAccess}
-            />
+            <div className={styles.feedback}>
+              <PresentationFeedbackPanel
+                mode="reviewer"
+                shareId={shareId}
+                versionId={review.versionId}
+                token={token.current}
+                blockId={block.id}
+                blockIndex={index}
+                onAccessLost={clearAccess}
+              />
+            </div>
           </>
         ) : (
-          <>
+          <section className={styles.emptyState}>
+            <span className={styles.emptyIcon}>
+              <EditorIcon name="eye-off" />
+            </span>
             <h1>Private presentation review</h1>
             <p role={loading ? "status" : "alert"}>
               {loading
                 ? "Opening presentation…"
                 : "This presentation link is unavailable or has expired."}
             </p>
-          </>
+          </section>
         )}
       </main>
     </div>

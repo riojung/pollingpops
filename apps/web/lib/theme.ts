@@ -10,6 +10,7 @@ type ThemeProperties = CSSProperties & {
   "--experience-text"?: string;
   "--experience-muted"?: string;
   "--experience-primary"?: string;
+  "--experience-primary-fill"?: string;
   "--experience-accent"?: string;
   "--choice-1"?: string;
   "--choice-2"?: string;
@@ -39,6 +40,7 @@ export function experienceThemeStyle(
     "--experience-text": theme.tokens.text,
     "--experience-muted": theme.tokens.mutedText,
     "--experience-primary": theme.tokens.primary,
+    "--experience-primary-fill": theme.tokens.primaryFill ?? theme.tokens.primary,
     "--experience-accent": theme.tokens.accent,
     "--choice-1": theme.tokens.choiceColors[0],
     "--choice-2": theme.tokens.choiceColors[1],

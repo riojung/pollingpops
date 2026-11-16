@@ -58,19 +58,23 @@ describe("customer settings permissions", () => {
       selectedSettingsSection("#security", visibleSettingsSections(organizationWorkspace, "owner")),
     ).toBe("security");
   });
-  it("keeps legacy viewers read-only and personal owners able to configure their workspace", () => {
+  it("lets every role personalize appearance while workspace management stays authoritative", () => {
     expect(visibleSettingsSections(null, "viewer")).toEqual([
       "overview",
+      "appearance",
       "plan",
       "security",
       "data",
     ]);
     expect(visibleSettingsSections(null, "editor")).toEqual([
       "overview",
+      "appearance",
       "plan",
       "security",
       "data",
     ]);
+    expect(accountPermissions(null, "viewer").manageWorkspace).toBe(false);
+    expect(accountPermissions(null, "editor").manageWorkspace).toBe(false);
     expect(visibleSettingsSections(null, "owner")).toEqual([
       "overview",
       "people",

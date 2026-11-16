@@ -1696,6 +1696,24 @@ safe Round Experience surfaces. Account export includes owned collaboration, Q&A
 moderation, recovery, follow-up, and authoring data without bearer-token hashes. Permanent
 deletion requires typing `DELETE` and removes private objects before durable workspace records.
 
+### Choose and preview a theme
+
+Open **Appearance** in Account, or choose **Explore themes** from the header Appearance
+menu. Classic, Candy Pop, Ocean, Forest, Violet, Sunset, Slate, and Sand each include
+light and dark versions.
+
+**Your interface** changes the app on this device. Browse theme cards, compare light
+and dark examples side by side, and choose Light, Dark, or System for everyday use.
+Previewing is safe to explore: choose **Apply to my interface** to use the selection or **Discard changes** to
+return to your current preference. This personal setting is available to workspace
+members without granting permission to change their workspace's brand.
+
+**Workspace live brand** controls the brand name, colors, and light/dark mode copied
+into newly created Rounds. Review both presenter and participant examples before saving.
+Authorized workspace managers with the branding entitlement can save a preset or custom
+colors. Existing Rounds keep their frozen theme, and authored Presentation slides keep
+their own design. High-contrast and reduced-motion preferences remain available.
+
 ### Institution-enabled workspaces
 
 An operator-approved institution workspace also shows its permanent home region, capability

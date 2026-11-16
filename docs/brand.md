@@ -24,9 +24,9 @@ See the [asset register](asset-register.md) for distribution details.
 | Butter yellow | `#FFC857` | Decorations; never white-text buttons                  |
 | Plum          | `#39243C` | Logo outline and original experience artwork           |
 
-### Neutral interface palette
+### Classic interface palette
 
-The application uses a neutral-first palette: the logo carries the candy colors, while
+The default Classic interface uses a neutral-first palette: the logo carries the candy colors, while
 working surfaces, forms, secondary controls, and borders stay quiet. Mint connects
 selected navigation, recommendations, links, and focus states to the logo's idea rays.
 Primary actions are graphite in light mode and near-white in dark mode, not pink.
@@ -54,6 +54,43 @@ on desktop and phone templates.
 This interface update does not rewrite versioned experience presets or frozen live
 session themes. Explicit Candy Pop and other preset selections keep their authored
 colors; participant high-contrast and reduced-motion preferences still take precedence.
+
+### Theme gallery and previews
+
+Appearance offers eight original color families: **Classic**, **Candy Pop**, **Ocean**,
+**Forest**, **Violet**, **Sunset**, **Slate**, and **Sand**. Each has a light and dark
+version. Working surfaces stay quiet, while actions, selection, navigation, and hero
+accents distinguish the families. Status colors retain their existing meaning.
+
+**Your interface** is a personal browser preference covering the application shell,
+Library, settings, and editor controls. Choose a family and a Light, Dark, or System
+preference. Inspect Light, Dark, or side-by-side previews before applying. Browsing a
+preview does not change the live page; Apply commits the choice and Discard returns
+to the current preference. The header Appearance menu links to the gallery. The saved
+palette is applied before hydration and follows subsequent system-mode and storage
+changes. When browser storage is blocked, the selection still works in the current tab.
+
+**Workspace Round branding** remains a separately authorized workspace setting. Its
+presenter and participant examples use the same resolver as newly created Rounds,
+including custom colors and the chosen light/dark mode. Saving requires the existing
+workspace management permission and branding entitlement. Saving a new explicit mode
+captures the complete palette in future room snapshots; running and historical rooms
+retain their frozen theme. Authored Presentation slides retain their authored design.
+
+Legacy brand records without a mode retain their original resolution. The optional
+`colorMode` field is stored in the existing JSONB brand object, so no migration is
+needed. The optional experience `primaryFill` token separates a dark white-label fill
+from readable primary ink on dark surfaces. Older snapshots fall back to their original
+primary. Deploy compatible server and web versions together when enabling new modes.
+
+Contrast checks cover every family in both modes. Participant high-contrast and
+reduced-motion controls continue to take precedence over branding.
+
+Design references inform the interaction model rather than supplying copied palettes
+or assets: [Slack theme and appearance choices](https://slack.com/intl/en-gb/help/articles/205166337-Change-your-Slack-theme),
+[Notion Light/Dark/System preferences](https://www.notion.com/en-gb/help/account-settings),
+and [Mentimeter presenter and audience previews](https://help.mentimeter.com/en/articles/5784859-preview-your-mentis).
+Text contrast follows the [WCAG contrast minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
 
 ## Assets
 

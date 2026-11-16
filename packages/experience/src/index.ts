@@ -7,6 +7,9 @@ import {
   type ExperienceThemeSnapshot,
   type RoundCategory,
 } from "@openround/contracts";
+import { workspaceThemeTokens } from "./workspace-themes";
+
+export { workspaceThemePresets } from "./workspace-themes";
 
 const presetDefinitions = [
   {
@@ -215,11 +218,7 @@ export function resolveExperienceTheme(input: {
     soundCue: preset.soundCue,
     soundEnabled: Boolean(input.soundEnabled && preset.soundCue !== "none"),
     tokens: input.brandTheme
-      ? {
-          ...preset.tokens,
-          primary: input.brandTheme.primaryColor,
-          accent: input.brandTheme.accentColor,
-        }
+      ? workspaceThemeTokens(preset.tokens, input.brandTheme)
       : preset.tokens,
   };
 }

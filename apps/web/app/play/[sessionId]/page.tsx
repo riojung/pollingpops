@@ -686,6 +686,7 @@ export default function PlayerPage() {
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
       data-typography={snapshot?.experienceTheme.tokens.typography}
       data-ux-beta={uxBeta}
+      data-workspace-color-mode={snapshot?.brandTheme?.colorMode}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
       <header className="shell live-topbar">

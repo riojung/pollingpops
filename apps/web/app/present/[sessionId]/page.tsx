@@ -31,6 +31,7 @@ import {
 import { experienceThemeStyle } from "../../../lib/theme";
 import { playPresenterCue } from "../../../lib/sound";
 import { clientUuid } from "../../../lib/uuid";
+import liveTheme from "../../../components/round-live-theme.module.css";
 
 type Ack<T> = { data?: T; error?: { message: string } };
 
@@ -175,11 +176,12 @@ export default function PresenterPage() {
 
   return (
     <div
-      className="live-shell"
+      className={`live-shell${snapshot?.brandTheme?.colorMode ? ` ${liveTheme.shell}` : ""}`}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
       data-typography={snapshot?.experienceTheme.tokens.typography}
+      data-workspace-color-mode={snapshot?.brandTheme?.colorMode}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
       <header className="shell live-topbar">

@@ -54,6 +54,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html
       data-color-mode="light"
       data-color-mode-preference="system"
+      data-interface-theme="classic"
       data-scroll-behavior="smooth"
       dir={localeDirection(locale)}
       lang={locale}

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { expectRecoveryPackDraftUndoConformance } from "./support/recovery-pack-draft-undo-conformance.js";
-import type { Report } from "@openround/contracts";
+import type { BrandTheme, Report } from "@openround/contracts";
 import { applyHostCommand, createGameState } from "@openround/game-engine";
 import {
   FollowupAccessLimitError,
@@ -63,6 +63,27 @@ async function finalizedMediaForCleanup(
 }
 
 describe("memory repository", () => {
+  it("round-trips optional workspace theme modes and preserves legacy absence", async () => {
+    const repository = new MemoryRepository();
+    const workspaceId = randomUUID();
+    const legacy: BrandTheme = {
+      organizationName: "Northern Learning",
+      primaryColor: "#0B2239",
+      accentColor: "#087375",
+    };
+    for (const theme of [
+      legacy,
+      { ...legacy, colorMode: "light" as const },
+      { ...legacy, colorMode: "dark" as const },
+    ]) {
+      expect(await repository.updateBrandTheme(workspaceId, theme)).toEqual(theme);
+      expect(await repository.getBrandTheme(workspaceId)).toEqual(theme);
+      expect(await repository.getBrandTheme(randomUUID())).toBeNull();
+    }
+    await repository.updateBrandTheme(workspaceId, null);
+    expect(await repository.getBrandTheme(workspaceId)).toBeNull();
+  });
+
   it("keeps old Recovery Pack update sources immediately undoable and fences stale undo", async () => {
     await expectRecoveryPackDraftUndoConformance({
       repository: new MemoryRepository(),

@@ -333,6 +333,7 @@ export const BrandThemeSchema = z
     organizationName: z.string().trim().min(1).max(80),
     primaryColor: HexColorSchema,
     accentColor: HexColorSchema,
+    colorMode: z.enum(["light", "dark"]).optional(),
   })
   .superRefine((theme, ctx) => {
     for (const field of ["primaryColor", "accentColor"] as const) {
@@ -384,6 +385,7 @@ export const ExperienceThemeTokensSchema = z.object({
   text: HexColorSchema,
   mutedText: HexColorSchema,
   primary: HexColorSchema,
+  primaryFill: HexColorSchema.optional(),
   accent: HexColorSchema,
   choiceColors: z.array(HexColorSchema).length(6),
   pattern: z.enum(["none", "dots", "grid", "stripes", "signals", "confetti"]),

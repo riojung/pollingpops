@@ -406,6 +406,8 @@ describe("professional workspace shell", () => {
     expect(markup).toContain('aria-label="Appearance: System"');
     expect(markup).toMatch(/aria-label="Appearance: System"[^>]*role="button"/);
     expect(markup).toContain('aria-label="Interface appearance"');
+    expect(markup).toContain('href="/account#appearance"');
+    expect(markup).toContain("Explore themes");
     expect(markup).toContain('role="radio"');
     expect(markup).toMatch(
       /aria-label="Interface appearance"[^]*?aria-checked="true"[^>]*role="radio" tabindex="0"/,

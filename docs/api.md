@@ -410,7 +410,12 @@ workspaceName,segment}` and creates a user-license organization and its owner's 
   and switches to the invited workspace.
 - `DELETE /v1/workspace/invitations/{invitationId}`
 - `PATCH|DELETE /v1/workspace/members/{userId}`
-- `GET|PUT|DELETE /v1/account/theme`
+- `GET|PUT|DELETE /v1/account/theme` — workspace Round branding. The existing
+  `{organizationName, primaryColor, accentColor}` object accepts optional
+  `colorMode: "light" | "dark"`; omitted mode preserves legacy rendering. PUT retains
+  workspace-management and branding-entitlement checks. New rooms freeze the resolved
+  mode/palette, while existing room snapshots remain unchanged. Interface theme preferences
+  are browser-local and do not use this endpoint.
 - `GET|PUT /v1/account/embed-origins`
 - `GET /v1/account/export`
 - `GET /v1/workspace/audit-export?since=...` — contract-gated owner export, at most 10,000

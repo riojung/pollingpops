@@ -108,6 +108,26 @@
   font-weight: 900;
 }
 
+.galleryLink {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-accent-ink);
+  padding: 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.galleryLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .trigger {
     transition: none;

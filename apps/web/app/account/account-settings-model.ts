@@ -30,11 +30,7 @@ export function visibleSettingsSections(
 ): SettingsSection[] {
   const permissions = accountPermissions(workspace, role);
   return settingsSections.filter((section) =>
-    section === "people"
-      ? permissions.managePeople
-      : section === "appearance"
-        ? permissions.manageWorkspace
-        : true,
+    section === "people" ? permissions.managePeople : true,
   );
 }
 
@@ -94,8 +90,5 @@ export function personalBillingAction(
   return billing.customerId && (plan === "pro" || plan === "team") ? "portal" : null;
 }
 
-export const workspaceThemePresets = [
-  { id: "pop", primaryColor: "#39243C", accentColor: "#AC2855" },
-  { id: "ocean", primaryColor: "#17334A", accentColor: "#006B80" },
-  { id: "forest", primaryColor: "#183C31", accentColor: "#176B50" },
-] as const;
+// Retain this export for existing account-settings consumers.
+export { workspaceThemePresets } from "@openround/experience";

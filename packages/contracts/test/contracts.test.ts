@@ -844,6 +844,25 @@ describe("public contracts", () => {
     ).toBe(false);
   });
 
+  it("accepts an optional workspace colour mode without changing legacy themes", () => {
+    const legacy = {
+      organizationName: "Northern Learning",
+      primaryColor: "#0B2239",
+      accentColor: "#087375",
+    };
+    expect(BrandThemeSchema.parse(legacy)).toEqual(legacy);
+    for (const colorMode of ["light", "dark"] as const) {
+      expect(BrandThemeSchema.parse({ ...legacy, colorMode })).toEqual({
+        ...legacy,
+        colorMode,
+      });
+    }
+    expect(BrandThemeSchema.safeParse({ ...legacy, colorMode: "system" }).success).toBe(false);
+    expect(
+      BrandThemeSchema.safeParse({ ...legacy, primaryColor: "#FFFFFF", colorMode: "dark" }).success,
+    ).toBe(false);
+  });
+
   it("rejects questions with more than one correct choice", () => {
     const result = QuestionSchema.safeParse({
       id: randomUUID(),

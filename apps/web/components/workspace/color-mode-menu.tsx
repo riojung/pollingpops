@@ -8,15 +8,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
-  applyColorMode,
+  applyColorModePreference,
   COLOR_MODE_APPLIED_EVENT,
-  COLOR_MODE_CHANGE_EVENT,
-  COLOR_MODE_STORAGE_KEY,
-  normalizeColorModePreference,
+  getColorModePreference,
+  resolveColorMode,
   type ColorModeAppliedDetail,
   type ColorModePreference,
   type ResolvedColorMode,
 } from "../../lib/color-mode";
+import { appearanceMessages } from "../../lib/i18n/appearance-messages";
 import type { MessageKey } from "../../lib/i18n/catalog";
 import { useLocale } from "../locale-provider";
 import styles from "./color-mode-menu.module.css";
@@ -26,22 +26,6 @@ const options: Array<{ value: ColorModePreference; label: MessageKey }> = [
   { value: "light", label: "appearance.light" },
   { value: "dark", label: "appearance.dark" },
 ];
-
-function readPreference(): ColorModePreference {
-  try {
-    return normalizeColorModePreference(window.localStorage.getItem(COLOR_MODE_STORAGE_KEY));
-  } catch {
-    return "system";
-  }
-}
-
-function applyPreference(preference: ColorModePreference): ResolvedColorMode {
-  return applyColorMode(
-    preference,
-    window.matchMedia("(prefers-color-scheme: dark)").matches,
-    document.documentElement,
-  );
-}
 
 function ModeIcon({ mode }: { mode: ColorModePreference | ResolvedColorMode }) {
   if (mode === "dark") {
@@ -68,7 +52,7 @@ function ModeIcon({ mode }: { mode: ColorModePreference | ResolvedColorMode }) {
 }
 
 export function ColorModeMenu() {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const triggerRef = useRef<HTMLElement>(null);
@@ -79,9 +63,11 @@ export function ColorModeMenu() {
   );
 
   useLayoutEffect(() => {
-    const current = readPreference();
+    const current = getColorModePreference();
     setPreference(current);
-    setResolved(applyPreference(current));
+    setResolved(
+      resolveColorMode(current, window.matchMedia("(prefers-color-scheme: dark)").matches),
+    );
   }, []);
 
   useEffect(() => {
@@ -106,16 +92,8 @@ export function ColorModeMenu() {
   }, []);
 
   function select(next: ColorModePreference) {
-    let stored = false;
-    try {
-      window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, next);
-      stored = true;
-    } catch {
-      // The preference still applies to this tab when storage is unavailable.
-    }
     setPreference(next);
-    setResolved(applyPreference(next));
-    if (stored) window.dispatchEvent(new Event(COLOR_MODE_CHANGE_EVENT));
+    setResolved(applyColorModePreference(next));
   }
 
   function choose(next: ColorModePreference) {
@@ -195,6 +173,10 @@ export function ColorModeMenu() {
             </button>
           ))}
         </div>
+        <a className={styles.galleryLink} href="/account#appearance">
+          {appearanceMessages(locale).openGallery}
+          <span aria-hidden="true">↗</span>
+        </a>
       </div>
     </details>
   );

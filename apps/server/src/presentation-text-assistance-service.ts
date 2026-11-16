@@ -308,7 +308,7 @@ export class PresentationTextAssistanceService {
     node.text = proposal.text;
     if (proposal.operation === "translate") {
       node.lang = proposal.targetLanguage!;
-      block.scene.schemaVersion = 7;
+      if (block.scene.schemaVersion < 7) block.scene.schemaVersion = 7;
     }
     block.textAssistance = {
       schemaVersion: 1,

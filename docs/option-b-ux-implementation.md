@@ -5,6 +5,273 @@ default and existing locale choices remain available. The product owner deferred
 launch-facing pricing, availability, legal, contact and public status content until
 official release preparation; it is tracked below and in the release ledger.
 
+## Audience workspace and second-screen presentation — November 15, 2026
+
+Joined audiences now have page progress and a collapsed spatial-path control in the top
+navigation bar. Opening the path reveals a bounded popup; changing its camera or linear view
+stays local. On wide screens, questions and answers sit beside the current slide or activity
+in an independently scrolling sidebar. Closing and reopening Q&A preserves the unfinished
+question and activity response. Phones use a full-height drawer with background isolation,
+keyboard focus containment, Escape and focus restoration. Unavailable Q&A leaves the slide
+the full workspace width. Long content and activities retain their own scrolling area.
+
+The host header now exposes **Present on another screen** with **Second-screen setup**
+instructions. It opens the existing isolated, read-only audience-stage window. Move that
+window to the projector or other monitor, then choose **Enter full screen** there; the host's
+notes, timer and controls remain in the original window. Fullscreen is requested from the
+user's click on the audience stage only. **Slide-only view** also works when browser fullscreen
+is unavailable or denied. Display controls fade after inactivity and return with a pointer,
+tap or keyboard focus; Exit or Escape restores the normal stage. The focus view hides the
+navigation, join footer and app header and fits native slides to the available screen.
+
+Both setup popups clamp to the visible viewport, including translated phone layouts and
+short windows. New audience and display labels cover all ten existing locales. Stage pass
+isolation, revocation, published snapshots, response submission and server authority retain
+their existing boundaries. No automatic monitor selection or physical second-monitor
+qualification is claimed. Browser fullscreen requires user activation and may be refused
+by the browser; see the [Fullscreen API guidance](https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen).
+
+Verification: 130 focused tests across nine suites pass, along with web type checks, lint,
+formatting and fresh production/Docker web builds. Eight new production browser journeys
+pass across Chromium/Firefox desktop and Chromium/WebKit phones. They cover independent
+Q&A scrolling, preserved drafts and quiz selections, exactly-once response submission,
+header popup geometry and keyboard dismissal, isolated audience-stage launch, user-activated
+fullscreen and denied/unsupported fallback, touch control recovery, Korean 320px layouts,
+short windows, unchanged saved records and Axe checks. Visual review corrected phone
+fullscreen proportions; WebKit qualification corrected body-targeted Escape handling.
+Normal phone reading flow remains separate from fixed slide-only artwork, whose live
+links, media and interactions stay enabled. Local captures and source-bound build evidence
+are under `artifacts/presentation-audience-stage/`.
+
+Eight existing production lifecycle journeys also pass on Chromium desktop and WebKit phones,
+with summary sharing enabled in the test configuration. They retain private-note and frozen
+preview checks, read-only stage access, refresh recovery, pass rotation/revocation, blocked
+popup handling, disconnect/fullscreen-denial recovery, expiry and stale-host fences. This is
+16 selected browser journeys in total, rather than a rerun of the full browser matrix. The
+existing local Docker project received a web-only update and is healthy; the Home route
+returns HTTP 200. Existing services, runtime selection and data volumes were preserved.
+
+The review follow-up initializes the compact setup popup when edit access becomes available.
+A delayed-account regression reproduces the previous missing initialization, then verifies
+positioning, body-focused Escape and outside dismissal after the real session snapshot has
+already rendered. The expanded stage journeys pass on production Chromium desktop and
+WebKit phones after the fix, retaining their fullscreen, isolation and privacy checks. All
+130 focused tests, scoped lint, type checks, formatting and fresh production/Docker builds
+also pass.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,229 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Presenter preview layout — November 14, 2026
+
+The editor preview now reserves space explicitly for its header, optional spatial path, slide
+workspace and navigation footer. The path starts collapsed; expanding it reveals a bounded,
+scrollable map and controls. Linear mode removes the map without reserving an empty main row.
+These preferences stay local to preview; live spatial delivery keeps its existing default UI.
+
+Wide previews fit the slide within the available width and height, including short windows.
+Presenter notes have an independent scroll area, with privacy and publication guidance in a
+disclosure. Phones retain readable slide flow and a bounded notes panel. Changing pages resets
+the reading position and notes, and Audience view removes private notes from the DOM. Preview
+uses native modal isolation, keyboard navigation and focus restoration. Source and Round import
+dialogs retain their separate backdrop styles.
+
+Verification: 68 focused tests across four suites pass, along with web type checks, lint,
+formatting and a fresh production build. Twelve selected production browser journeys pass
+across Chromium/Firefox desktop and Chromium/WebKit phones, covering combined spatial preview
+and private notes, 1280×800/1280×500/320px layouts, linear-mode space reclamation, scroll reset,
+native focus/Escape handling, Axe checks and unchanged saved records. Existing notes-authoring
+and live spatial-delivery cases retain their publication, privacy and response checks. Visual
+inspection added actual-slide containment and notes-heading reachability checks; all six phone
+journeys were rerun after the final phone-only reading-flow correction. The Docker web build passes. Local
+captures and source-bound build evidence are under `artifacts/presenter-preview/`.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,188 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Editor delivery dialogs and Arrange space — November 14, 2026
+
+Private review, reading assignment, practice assignment and export dialogs share a scoped visual
+system: compact icon headers, an aligned Close action, bounded scrolling, grouped setup controls
+and a distinct primary action. Publication and privacy context stays near the top. Longer reading,
+practice and export guidance is available in disclosures. Created links, status badges, dates,
+management actions and compact empty states follow the same layout. Export explains the selected
+format before download. Existing request intents, retries, authorization fences, API calls and
+download handling retain their behavior; the readers and standalone insights pages keep their
+existing styles.
+
+Arrange space uses grouped icon controls, a smaller organized inspector and a single-row numbered
+thumbnail filmstrip. Selecting a slide keeps its filmstrip card reachable. The initial view focuses
+the selection when a whole-deck view would make frames unreadably small; Fit all remains available.
+These view changes preserve stored positions and playback order. Filmstrip thumbnails disable media
+fetches and remain separate from selection buttons. Numeric drafts still apply on Enter or blur,
+cancel on Escape, and flow through the existing save and Undo behavior. Help and layout settings
+are collapsible; the three added spatial labels cover the existing ten locales. The canvas can
+shrink in short desktop windows while the inspector scrolls and the filmstrip remains reachable.
+Phone layouts retain the filmstrip while the inspector scrolls internally. Arrange uses the same
+native modal behavior as the delivery dialogs, keeping the background inactive and restoring its
+launcher on close. Native selectors have explicit 40px heights, including in WebKit.
+
+Initial verification: 5,146 web tests across 427 files and 24 production browser cases pass. The browser
+matrix runs Chromium/Firefox desktop and Chromium/WebKit phones in fresh API phases, covering all
+five dialogs, default and populated lists, creation/revocation, HTML download, native focus and
+Escape, 320px layouts, short desktop windows, Axe checks, numeric edits, immutable reading/practice
+and frozen spatial delivery. The spatial fixture now uses the current section navigator and closes
+the restored More menu before Undo. Web and browser-fixture type checks, web lint, formatting,
+production compilation and the Docker web build pass. Captures and source-bound build evidence are under
+`artifacts/presentation-editor-dialogs/`.
+
+The review follow-up keeps Layout settings right-aligned when translated controls wrap on phones,
+so its popup stays inside the viewport. Both production Chromium and WebKit Arrange journeys pass
+at 320px in French, German and Portuguese. They open the full popup, click Disable spatial layout
+and verify Undo restores the exact saved draft, including frame geometry and playback order.
+Fixture type checks, formatting and fresh production/Docker web builds pass after this correction.
+
+Before PR creation, `VITEST_MAX_WORKERS=1 pnpm check` passes with 9,175 tests and 530
+standard opt-in skips. Formatting, lint, type checks, Docker-context validation, all four
+production build tasks and compiled-server startup/configuration verification pass.
+
+## Compact canvas controls — November 14, 2026
+
+The canvas insert toolbar and object-selection area now use tighter spacing. A compact,
+icon-led picker replaces the separate Canvas object heading, Move/Resize buttons and permanent
+instruction paragraph. Group and multiple-selection counts remain visible. Object shortcuts
+are available from a collapsed help control, with labels and instructions in all ten locales.
+The desktop object strip measures 53px high and stays usable at 320px without page overflow.
+
+Selected objects still move and resize directly. Focusing the canvas enables arrow-key nudges
+(1%, or 5% with Shift), with Undo/Redo and the normal save path. Native form controls, links,
+scrollable content, modified key combinations and read-only scenes keep their own behavior.
+Arrange opens Layout, expands Position and size if needed, and focuses the first numeric field
+for precise edits. This replaces the earlier standalone Move/Resize keyboard controls.
+
+Verification: 24 production browser journeys pass across Chromium/Firefox desktop and
+Chromium/WebKit phone layouts. They cover direct editing, canvas versus picker arrow keys,
+Undo, saved geometry, Arrange focus, reload persistence, rich-text recovery/publication,
+toolbar accessibility and page overflow. Focused unit tests, web/browser type checks, web
+lint and formatting pass; the full web suite passes 5,143 tests across 427 files. The local
+Docker web build is deployed and healthy at port 8080. An independent read-only review found
+no actionable issues.
+Captures and browser-build evidence are retained under `artifacts/presentation-canvas-toolbar/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with 9,172 tests and 530
+standard opt-in skips, all four build tasks, and compiled-server startup verification. The first
+run hit the unchanged build-guard test's 250ms child-startup timing limit; the full rerun passed
+without code changes.
+
+## Presentation save precision repair — November 14, 2026
+
+An object dragged or resized to the slide edge could pass the browser's binary64 frame
+calculation and fail PostgreSQL's exact-decimal extent check. The failed transaction preserved
+the pending edit, but every Retry save encountered the same constraint failure.
+
+Forward migration 109 aligns frame extents and image-hotspot containment sums with the contract's
+JavaScript arithmetic. Scalar bounds, rotated-frame checks, content/target validation and stored
+publication bytes retain their existing rules. Existing failed mutations recover through Retry
+save after the migration. The local repair was verified against the original open editor: its
+preserved request saved successfully, and the server reported no further errors.
+
+PostgreSQL 17 Alpine verification passed **233 tests across five suites**. Coverage reproduces
+the constraint failure on migration 108, upgrades to 109, retries the exact failed mutation,
+checks draft/history/publication persistence, preserves existing frozen content, exercises legacy
+scenes and rejects invalid geometry and targets. DB type checks, lint and formatting pass. The
+PostgreSQL CI job now explicitly runs the frame, styled-scene and advanced-interaction suites
+under a restricted runtime account.
+
+## Editor interactions follow-up — November 14, 2026
+
+The `codex/presentation-editor-interactions` slice replaces the detached section forms with
+section headers beside their slides. Authors can create a section at the selected slide,
+rename it, collapse its thumbnails, move a whole contiguous section, or remove its heading
+while preserving the slides. Older noncontiguous memberships remain in their actual playback
+order and show continued headers. Section moves validate paired checks and interaction targets.
+The desktop slide rail has a pointer- and keyboard-operable width separator; its preference
+stays in browser storage. Narrow screens retain the existing drawer and reading-order layout.
+
+Content and Layout tools use independent collapsible groups. Selected text has a persistent
+font-family and font-size toolbar, an expanded writing area, and the existing paragraph,
+emphasis and link controls. Typography uses the existing version-9 scene contract and the
+device's sans, serif and monospace families; it does not rewrite rich-text runs. Staged table
+and chart data has readable column widths, bounded horizontal scrolling and explicit Apply and
+Discard actions. Collapsing a group retains its mounted controls and uncommitted data.
+
+On the wide editing canvas, object bodies can be dragged immediately; selection borders also
+move objects whose interior needs scrolling or links. Border hit areas stay outside the frame
+to preserve native scrollbars. Selected objects have
+eight handles: circular corners and square edge midpoints. Resizing anchors the opposite edge
+or corner; grouped/multiple selections scale together. Rotated geometry remains within the
+slide. Pointer preview stays local, release commits one edit, and cancellation/source changes
+discard the gesture. The normal-flow keyboard Move/Resize controls remain available. Audience,
+preview and static-thumbnail rendering does not gain editing handles.
+
+Interaction references are the documented [PowerPoint section workflow](https://support.microsoft.com/en-us/powerpoint/training/organize-your-powerpoint-slides-into-sections),
+[Google Slides arranging controls](https://support.google.com/docs/answer/1696521?co=GENIE.Platform%3DDesktop&hl=en-gh),
+and [Google's proportional group resizing](https://workspaceupdates.googleblog.com/2025/03/proportional-scaling-objects-in-google-slides.html).
+These inform behavior only. Implementation, icons and layouts are repository-native; no
+competitor assets, copied code, new dependencies or external fonts were added.
+
+Verification: the full web suite passed **5,072 tests across 426 files**. The final border-drag
+refinement also passed **69 canvas/view tests**. **20 production browser journeys** pass across
+Chromium and Firefox desktop and Chromium/WebKit at 320px. They cover direct and border dragging,
+eight anchored handles, multiple selection, preview-versus-save, cancellation and Undo/Redo,
+rail pointer/keyboard resizing and persistence, section creation/rename/reorder/removal,
+last-section reachability, preserved rich text with saved/rendered fonts, mounted staged tables,
+rich-text recovery/publication, panel Axe checks and document overflow. Web and browser-fixture
+type checks, web lint, formatting, production compilation and the local Docker web build pass.
+The refreshed local web service is healthy at port 8080. Captures and the source/artifact-bound
+browser receipt are under `artifacts/presentation-editor-interactions/`. Independent review
+identified the fixed phone selection outline, final-section reachability and scrollbar hit-area
+issues; no outstanding findings remain. This does not replace human or hosted release acceptance.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,101 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. A fresh
+delegated read-only review of the branch diff and staged, unstaged and untracked files found no
+actionable issues.
+
+## Presenter workflow follow-up — November 14, 2026
+
+The `codex/option-b-presenter-localization` slice closes an English-only gap in the refreshed
+private Presentation workspace. Connection status, facilitation landmarks, private notes and
+next-slide guidance, connected counts, timer controls and audience-stage access now use the
+selected language across all ten existing locales. Initial connection is labelled Connecting
+rather than Reconnecting. The clock retains its elapsed-time format and session-local state.
+
+The existing language menu is available in the host header, so a presenter can change language
+without leaving the live session. An open language menu suppresses presentation shortcuts even
+when its focused option becomes disabled during a slow save. Language changes preserve the
+running or paused timer, current slide, stage credential and fragment URL, authored slide text,
+private speaker notes and immutable saved draft. The existing credential, command and retry
+handlers retain their session identities. Raw service diagnostics remain explicitly attributed
+to their original English text; authored notes retain their unknown/original language boundary.
+
+The source-bound native-review workflow now includes the 32 private-workspace phrases. Fresh
+packets contain 590 items for each of the ten locales, including English reference material;
+all 5,900 decisions remain pending. No native-language or release acceptance is inferred from
+these translations or automated checks. Previous human decision files are preserved.
+
+Verification: **4,979 web tests across 422 files**, **32 review-tool tests** and **8 production
+browser cases** pass. Browser journeys cover German and Korean on Chromium/Firefox desktop and
+320px Chromium/WebKit phone emulation. They exercise live language changes, running/paused timer
+and refresh continuity, literal authored text, unchanged room revision and saved draft, delayed
+language persistence with keyboard shortcuts, stage popup recovery/revocation, Axe and document
+overflow. The browser fixture counts both realtime and REST commands without logging credential
+payloads. Web/fixture/review-tool type checks, focused lint, formatting and the production build
+pass. Independent review found and verified the open-menu shortcut guard. Local source/artifact
+provenance and captures are under `artifacts/option-b-presenter-localization/`.
+
+Before PR creation, full `VITEST_MAX_WORKERS=1 pnpm check` passed with **9,008 tests passing**
+and **526 standard opt-in skips**, including formatting, Docker workspace-dependency checks,
+lint, type checks, all four build tasks and compiled-server startup/configuration smoke. The
+subsequent independent review found no actionable issues in tracked or untracked changes.
+
+This is a local software follow-up. Customer observation, native-language editorial acceptance,
+manual accessibility and physical-device review, exact-candidate hosted qualification and the
+user-deferred public launch content remain release work. No staging environment is selected,
+and the release-readiness ledger remains valid at **0 complete / 15 pending** gates.
+
 ## Scope and implementation
 
 | Concern                         | Source implementation                                                                                                                                                                                                                                                                                                                                          |
@@ -745,6 +1012,257 @@ Validation:
   manual accessibility/physical-device checks and hosted qualification remain release work.
   The release ledger remains valid and unchanged at **0 complete / 15 pending**.
 
+## Pack practice follow-up — November 11, 2026
+
+The `codex/option-b-pack-practice` slice extends the ten configured UI locales to Pack
+practice setup, frozen content previews, private-link receipts and Pack source attribution
+in Assignments and Results. English remains the default. Its 85 display-copy entries cover
+setup and its known diagnostics, mode explanations, previews, receipt guidance and actions,
+and source attribution. Unknown diagnostics retain their exact English content rather than
+matching a translated substring or an unrelated UI key.
+
+- Switching language preserves entered titles, personal labels, pacing and schedule values,
+  selected mode, source/version identity, pending state and exact retry bytes. The existing
+  English default assignment titles remain unchanged. Dates and counters use the selected
+  locale; schedule guidance identifies device time and retention limits.
+- Delayed-probe and full-sequence previews preserve frozen authored text, choices, cards and
+  their order. Permission, feature, plan, missing-content, conflict and loading states retain
+  their existing controllers and explicit actions. Scoped spacing, wrapping and focus styles
+  support long values and translated controls.
+- Private-link receipts retain exact URLs, CSV bytes and filenames. Canonical copy/download
+  feedback is rendered in the current locale; changing locale does not copy, download, move
+  focus or record a share event. Authored labels remain separate from translated templates,
+  including labels that happen to match UI keys. The receipt still focuses its heading once.
+- Attribution uses the current workspace locale while preserving the frozen source title,
+  published version and role in both collections. It does not fetch the live Pack, disclose
+  source bodies/answers or expose private links. Existing search, layout and pagination state
+  survive language changes.
+
+Validation:
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **8,160 tests**, with 513 standard opt-in
+  integration skips. Formatting, Docker-context checks, lint, type checks, all four production
+  build tasks and compiled-server startup pass. All **394 web suites / 4,277 tests** pass,
+  including setup/catalog, receipt/preview/attribution and Results integration cases. A fresh
+  beta production web build also passes.
+- The first repository-gate attempt exposed the pre-existing beta-sign-in fixture convention
+  failure in two Round browser helpers. Naming their local page parameter `page` satisfies
+  the existing contract without changing authentication, routes or storage behavior. The
+  unchanged contract test and the final complete repository gate pass after this correction.
+- The initial browser run caught German collection controls whose short visible labels did
+  not match their accessible names. Results, Sessions, Library and the shared Round view
+  switcher now display their existing full accessible labels. All ten locales retain matching
+  text/names and both pressed states. The affected page/switcher tests pass **98 cases**;
+  fixture selectors use the intentional full visible label. Final web types, scoped lint and
+  fresh normal/beta production web builds pass after this correction. The final complete web
+  suite passes **394 suites / 4,287 tests**.
+- **12 distinct selected production-browser cases pass** on the final bundle: three new
+  localized cases and nine unchanged Pack practice cases across desktop Chromium and 320px
+  phone Chromium/WebKit. The localized phase and each legacy profile use a fresh API fixture.
+  Checks retain both assignment modes, English title defaults, populated form/schedule values, exact mutation
+  identity and serialized retry bytes after a lost acknowledgement, a single created
+  assignment, clipboard/CSV bytes and filenames, one-time focus, canonical status feedback,
+  and nine explicit share events per localized case with no language-change events. Original
+  Pack deletion, collection attribution, participant privacy, card replay, accountless recovery and scoped
+  Axe/overflow assertions pass. Corrected fixture reruns count once; the stale-source alert
+  assertion is scoped to the actual main region rather than Next's empty route announcer.
+- Desktop and 320px screenshot review covers populated Korean setup and Korean/German/English
+  receipts. Controls align, long original content wraps, raw labels remain unchanged and
+  translated actions remain legible. Captures reset scroll so sticky chrome does not obscure
+  page content. Changed-file formatting/diff checks pass; the release ledger remains valid
+  and unchanged at **0 complete / 15 pending** gates.
+
+Shared `/practice/[id]` management and creation-locale templates/default content remain
+implementation follow-ups. Native-language review, customer observation, manual
+accessibility/physical-device checks, exact-candidate hosted qualification and deferred
+public launch content remain release work. This slice does not complete release readiness.
+
+## Report evidence and recovery — November 12, 2026
+
+The `codex/option-b-report-clarity` follow-up closes concrete gaps found during
+local qualification of Option B’s report scope.
+
+- **Missing evidence:** Round history, Results and Home now return no initial accuracy
+  when the assessed-response denominator is zero. A measured zero with actual assessed
+  responses remains `0%`. Both repository implementations use the same pure projection.
+  Legacy V1 reports use their recorded answer count only to recognize no-answer evidence;
+  positive-count V1 grading meaning remains unchanged. The projection preserves stored
+  reports, schema versions and retention behavior; it adds no migration or background
+  regeneration. Recovery already used its eligible denominator and stays unchanged.
+- **Private report scope:** Presentation report reads, views and captured CSV callbacks
+  follow canonical session/user/workspace/role, account loading/error, feature and CSV
+  entitlement context. Auth and workspace events synchronously invalidate prior authority,
+  clear private view state and wait for canonical account resolution before re-reading.
+  Queued timers, held responses and old callbacks cannot revive prior evidence, including
+  when context values later return. Server authorization remains authoritative for reading
+  retained reports when creation features change.
+- **Read recovery:** transient failures use one bounded retry loop. After exhaustion,
+  unavailable status and a keyboard-operable Try again action replace an indefinite
+  loading announcement. A manual retry resets the budget once; pending reads disable
+  duplicate actions. Access-revoked/not-found/unauthenticated reads clear evidence, while
+  transient errors may retain safe evidence only within the same scope.
+- **Report labels:** 44 typed UI labels cover all ten locales, including CSV feedback,
+  navigation/interaction counts, assessment distinctions, nine question types and all
+  eleven known timeline events. The embedded Session insights panel adds 120 typed labels
+  for its actions, facts, evidence statuses, table headings and scope notes. Its shared projection
+  translates known UI literals at construction, preserving authored titles, sections and
+  answer labels even when they match a UI phrase. Authored cells and mixed headings retain
+  separate language boundaries. Dates, counts and response durations use locale formats.
+  Stored evidence notes and unknown service diagnostics keep their original language.
+  The dark report header uses the inverted brand treatment for readable product text.
+
+Main report evidence CSV bytes are unchanged by UI locale. Coverage CSV and readable HTML
+downloads retain their existing labels, locale formatting and data; the UI translator is
+not passed to download generation. A one-time comparison against the prior implementation
+matched all 40 format/fixture/locale combinations: both formats across all ten locales,
+using ordinary evidence and authored strings that collide with UI/template/formula text.
+
+The native-review CLI now includes both report phrase groups in its source-bound packet
+and invalidates a packet when either helper changes. All generated decisions remain
+pending; adding translated software does not establish native-language acceptance.
+
+Focused checks exercise retained schema versions, empty/pending/failed assessed reports,
+current and historical polls, mixed evidence, genuine zero, and stored-payload immutability.
+The Home API uses generated report fixtures, and the browser journey finishes real empty
+and incorrectly answered Rounds before inspecting Home. Presentation cases exhaust six
+failed reads, recover by keyboard, compare CSV bytes across English/German/Korean, and
+release an old held response after a revoked workspace transition. Focused independent
+read-only audits found no actionable issues in the loader/UI authority implementation or
+the insights projection, authored-language boundaries and captured-download guards.
+
+Validation: `VITEST_MAX_WORKERS=1 pnpm check` passes with **8,459 tests passing** and
+**514 opt-in skips**, including lint, type checks, production builds and compiled-server
+startup smoke. The report/insights subset passes **113 focused tests**. All **16 distinct
+selected production-browser cases** pass across desktop Chromium/Firefox and phone
+Chromium/WebKit, including keyboard recovery, Axe, 320-pixel overflow, German/Korean
+controls and unchanged evidence CSV bytes. Both browser specs pass a separate strict
+TypeScript check. Ten current-source review packets each contain **538 pending items**,
+including the 164 new report phrases; all CLI checks return the expected pending status.
+Local captures and the qualification receipt are under `artifacts/option-b-report-clarity/`.
+
+Actual PostgreSQL conformance is wired into its existing restricted-runtime suite but
+requires the usual opt-in database credentials. Native-language, observed customer,
+manual assistive-technology, physical-device and hosted acceptance remain pending. The
+product owner still has no staging environment selected; no release gate is advanced.
+
+## Local acceptance preparation — November 11, 2026
+
+The `codex/option-b-acceptance` follow-up adds repeatable local qualification and
+native-language review preparation after the named software follow-ups were completed.
+The product owner has no staging environment selected; hosted qualification stays pending.
+
+The shared browser-test runner now supplies invocation-owned Firefox application-data
+paths on macOS while preserving existing overrides, the stock browser and its sandbox.
+It forwards cancellation to its owned process group and removes temporary data after
+child shutdown. Core/beta commands and the existing Presentation-scene entry point use
+this helper. This resolves the local pre-page Firefox profile failure recorded in the
+historical checkpoints below; selected Firefox application journeys can now run.
+
+New production-browser coverage walks sequential keyboard order through template
+selection/preview, private speaker notes, Undo/Redo, audience-preview privacy, inspector
+close/return and Create menus. It checks visible focus, dialog containment/return,
+reduced-motion preference, light/dark/forced-colors modes, Axe and narrow-screen reflow.
+The 640px/320px viewports model space available at 200%/400% zoom; these are not manual
+browser-zoom, screen-reader or physical-device results. Mobile WebKit uses its native
+macOS Option-Tab convention for all-controls keyboard navigation.
+
+That work corrects two existing UI defects: Create-menu entries could be clipped at
+640px, and Escape did not close the menu and return focus to its summary. Template
+preview now shares the existing modal keyboard handler for contained Tab traversal.
+Results card headers now wrap at every viewport: German status badges previously escaped
+narrow three-column cards in Firefox even when the full viewport was desktop-sized.
+
+`pnpm localization:review` exports source-bound bilingual review packets and checks
+separately recorded decisions. Each of the ten locales has 374 entries covering the
+21 Presentation templates and generated drafts, 36 Round starters, 17 Survey projections,
+creation/practice copy and action-created examples. The inert HTML is searchable,
+escaped and readable at desktop/320px widths; an actual hash/grid overflow discovered
+in Firefox and Chromium was corrected. Source and content hashes reject stale records,
+and exports preserve existing decisions. Every generated decision starts pending.
+See the [human review workflow](evidence/native-language-review.md).
+
+Validation on the final software source: `VITEST_MAX_WORKERS=1 pnpm check` passes
+**8,377 tests** with 513 standard opt-in skips, formatting, workspace/build lint, types,
+all four production builds and compiled-server startup. This includes 401 web suites /
+4,440 tests, 149 server suites / 1,488 tests and 45 support suites / 461 passing tests.
+Separate strict TypeScript checks cover the review CLI and new browser fixtures.
+The fresh beta production artifact passes all **28 distinct selected application-browser
+cases**: eight each on desktop Chromium/Firefox and six each on phone Chromium/WebKit.
+All eight standalone review-HTML cases pass separately. Final artifact/source/environment
+provenance validates. The [local qualification record](evidence/option-b-local-qualification.md)
+records commands, corrected reruns and limits; this is not the entire hosted matrix.
+
+These are supporting engineering checks. The 15 release gates remain pending, including
+native-language review, observed customer tasks, manual accessibility/assistive technology,
+physical devices, hosted performance and the deferred public launch content. Existing
+human evidence forms remain unfilled. Automated record validation cannot establish
+native quality or reviewer identity and does not remove language Preview labels.
+
+## Remaining software follow-ups — November 11, 2026
+
+The `codex/option-b-remaining` source preserves the Pack practice work above and closes
+its two named implementation follow-ups: shared `/practice/[id]` management and
+creation-locale templates/default content. English remains the default and all ten
+configured locale choices are retained.
+
+- **Shared practice management:** grouped source/schedule, progress, private-access,
+  timing-accommodation and close sections use scoped responsive theme styles. Known
+  diagnostics, confirmations, counts and dates follow the UI locale; unknown diagnostics
+  remain verbatim English. Actor/route changes isolate private receipts and pending work;
+  role/feature/entitlement changes invalidate stale mutation, clipboard and focus callbacks.
+  Existing access remains manageable under the existing server-authoritative permissions.
+- **Presentation creation:** all 21 templates (12 native scenarios and nine facilitated
+  sequences) have localized titles, descriptions, slide copy, speaker notes, columns,
+  tables/charts and audience-question content. The nine translated catalogs contain 864
+  native slides and 3,114 data/column strings. Only the requested creation-language catalog
+  loads; English does not download translated catalogs. Explicit load failure/retry never
+  advertises English fallback as localized content. Gallery metadata, thumbnails and new
+  drafts agree; an open preview retains its reviewed content and language.
+- **Round and Survey creation:** all 36 Round starters, including 17 Survey-compatible
+  starters, have localized metadata, prompts, choices, explanations and scale labels.
+  Optional validated locale inputs default to English. Localized catalog provenance is
+  additive; existing artifact/schema versions, correct answers and recheck relationships
+  remain intact. Explicit Survey retries retain the original request language and bytes.
+- **Small authored defaults:** newly inserted true/false and rating questions, Survey
+  options, native tables/charts and added data rows/columns use their action language.
+  Blank Round titles, generated Pack-card headings and Pack practice title prefixes follow
+  creation language. Existing titles and edited defaults are preserved when UI language
+  changes. Local discussion/clarity/priority starters capture the review-opening language,
+  quote exact original source text, and retain reviewed wording until insertion or dismissal.
+- **Content boundaries:** no locale change rewrites a saved draft, published snapshot,
+  source excerpt, numeric answer, scoring rule, citation, private URL or existing retry
+  envelope. Imported/source-authored content retains its original language and provenance.
+  These deterministic catalogs make no model requests and consume no AI allowance.
+
+Validation:
+
+- `VITEST_MAX_WORKERS=1 pnpm check` passes **8,339 tests**, with 513 standard opt-in
+  skips, all four production build tasks and compiled-server startup/configuration smoke.
+  The final web suite contains **401 suites / 4,440 tests**; the server suite contains
+  **149 passing suites / 1,488 passing tests**, plus its standard opt-in skips.
+- Pure content checks validate all **210 Presentation / locale combinations**, **360 Round
+  combinations** and **170 Survey combinations**. Numbers, answer keys, recheck identities,
+  schema versions, clone independence, English compatibility and immutable source records
+  are checked. Selected-template derivation avoids rebuilding unrelated decks for thumbnails.
+- A fresh beta production artifact on loopback ports 3294/4294 passes **12 distinct selected
+  browser cases**: Pack practice setup/receipt recovery, shared practice private-access
+  management, Presentation creation/recovery, and Round/Survey creation/recovery, each on
+  desktop Chromium and 320px Chromium/WebKit phone viewports. Corrected fixture path/selector
+  reruns count once. Axe and document-overflow assertions pass for these cases.
+- Browser checks exercise a deliberately unavailable template catalog followed by explicit
+  retry, accepted writes with lost responses, byte-identical creation retries after a UI
+  language change, private link copy/revoke/close, unchanged saved content/revisions, and
+  retained labels/accommodation settings. Mobile access cells use a bounded scroll region
+  instead of squeezing translated actions into individual characters.
+- Desktop/phone captures were reviewed with private URLs masked and scroll reset so sticky
+  chrome does not obscure the content. The two selected browser specs pass a separate strict
+  TypeScript check. See local captures under `artifacts/option-b-remaining/`.
+
+Native-language editorial review, customer observation, manual assistive-technology and
+physical-device checks, exact-candidate hosted qualification and the user-deferred public
+launch content remain release work. The release ledger stays at **0 complete / 15 pending**;
+software completion does not satisfy release acceptance.
+
 ## Release readiness checklist
 
 Local source/browser verification does not complete these checks.
@@ -764,6 +1282,9 @@ Local source/browser verification does not complete these checks.
       operations and release-governance gates in `release-readiness.json`.
 
 ## Completion verification
+
+These counts describe the original Option B completion gate. Later follow-up validation
+is recorded in the dated sections above.
 
 - `VITEST_MAX_WORKERS=1 pnpm check` passes: **7,217 tests pass**, with 513 standard
   opt-in integration skips. Formatting, lint, type checks, Docker-context checks, all
@@ -786,7 +1307,7 @@ Local source/browser verification does not complete these checks.
   all ten configured locales; actual-render regressions include Korean and French.
 - The release-readiness ledger remains at 15 pending gates. Local checks do not
   establish customer satisfaction, manual accessibility or hosted release acceptance.
-- Firefox remains unqualified locally because its runtime exits before opening a page
+- At this historical checkpoint, Firefox was unqualified locally because its runtime exited before opening a page
   with `Could not find profile folder`; no Firefox result is inferred from other engines.
 
 ## Initial merged verification
@@ -804,7 +1325,7 @@ Local source/browser verification does not complete these checks.
   geometry are checked in the final cases.
 - The WebKit publication case exposed touch activation not restoring focus to Present;
   the application now explicitly retains that opener and the final case passes.
-- Firefox qualification remains open: the installed and a fresh official Playwright
+- At this historical checkpoint, Firefox qualification remained open: the installed and a fresh official Playwright
   Firefox runtime both exit before opening a page with `Could not find profile folder`.
   Alternate temporary-directory paths did not resolve that local execution problem.
 - The release-readiness ledger validates and retains all 15 pending gates. Final public

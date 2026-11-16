@@ -50,7 +50,6 @@ import {
 import { formatDateTime } from "../../lib/i18n/format";
 import {
   addContentTextElement,
-  addPresentationSection,
   applyContentSlideLayout,
   assignPresentationBlockToSection,
   changePresentationQuestionType,
@@ -67,7 +66,6 @@ import {
   normalizePresentationRecoveryDraft,
   presentationReadiness,
   presentationInteractionTargets,
-  presentationSectionForBlock,
   promotePresentationOpinionFormats,
   removeContentTextElement,
   reorderContentTextElement,
@@ -87,6 +85,18 @@ import { PresentationShareButton } from "../presentation-sharing/share-dialog";
 import { PresentationAssignmentButton } from "../presentation-assignments/assignment-dialog";
 import { PresentationPracticeButton } from "../presentation-practice/practice-dialog";
 import { PresentationExportButton } from "../presentation-export/export-dialog";
+import { PresentationDesignGallery } from "../workspace/presentation-design-gallery";
+import {
+  presentationDesignCopy,
+  presentationDesignDraftCopy,
+} from "../../lib/i18n/presentation-design-copy";
+import {
+  applyPresentationDesign,
+  createDesignSlide,
+  type DesignLayoutId,
+  type PresentationDesignApplicationMode,
+  type PresentationDesignId,
+} from "../../lib/presentation-designs";
 import {
   applyNativeDesignToDeck,
   applyNativeSceneToDeck,
@@ -161,7 +171,14 @@ import {
   type TextAssistanceTarget,
   type TextAssistanceRecovery,
 } from "../../lib/presentation-text-assistance-client";
-import { PresentationSections } from "./presentation-sections";
+import { PresentationSectionHeader, PresentationSections } from "./presentation-sections";
+import { PresentationNavigatorResize } from "./presentation-navigator-resize";
+import {
+  addPresentationSectionAtBlock,
+  canMovePresentationSection,
+  movePresentationSection,
+  presentationSectionRuns,
+} from "../../lib/presentation-sections";
 import { sectionsSpatialCopy } from "../../lib/i18n/sections-spatial-copy";
 import { PresentationBranchEditor } from "./presentation-branch-editor";
 import { focusModal, handleModalKeyDown } from "./presentation-modal-focus";
@@ -313,13 +330,30 @@ function PresentationPreview({
       ),
     ),
   );
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const block = publication.blocks[index];
-  useEffect(() => focusModal(dialogRef.current), []);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.showModal();
+    const restoreFocus = focusModal(dialog);
+    return () => {
+      restoreFocus();
+      dialog.close();
+      previous?.focus({ preventScroll: true });
+    };
+  }, []);
+  useEffect(() => {
+    workspaceRef.current?.scrollTo({ top: 0, left: 0 });
+    canvasRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [block?.id, mode]);
   return (
-    <div
+    <dialog
       ref={dialogRef}
-      className={styles.previewBackdrop}
+      className={styles.previewModal}
       role="dialog"
       aria-modal="true"
       aria-label={authoring.preview}
@@ -327,6 +361,10 @@ function PresentationPreview({
       data-preview-origin={origin ?? (initialBlockId ? "interaction" : undefined)}
       data-preview-mode={mode}
       lang={locale}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") event.stopPropagation();
         handleModalKeyDown(event, onClose);
@@ -334,11 +372,14 @@ function PresentationPreview({
       tabIndex={-1}
     >
       <div className={styles.previewStage}>
-        <div className={styles.previewBar}>
-          <strong lang={draft.title ? "" : locale}>
+        <div className={styles.previewBar} data-preview-header>
+          <strong
+            lang={draft.title ? "" : locale}
+            title={draft.title || t("delivery.presentationBuilder.untitled")}
+          >
             {draft.title || t("delivery.presentationBuilder.untitled")}
           </strong>
-          <span>
+          <span role="status" aria-atomic="true">
             {publication.blocks.length
               ? `${index + 1} / ${publication.blocks.length}`
               : authoring.noSlides}
@@ -364,6 +405,7 @@ function PresentationPreview({
           </button>
         </div>
         <PresentationSpatialDelivery
+          compact
           spatial={
             publication.spatial
               ? {
@@ -382,93 +424,102 @@ function PresentationPreview({
           sourceKey={`builder-preview:${JSON.stringify(publication.spatial)}:${publication.blocks.map((block) => block.id).join(":")}`}
         />
         <div
+          ref={workspaceRef}
+          data-preview-body
           className={
             mode === "presenter" ? styles.previewWorkspacePresenter : styles.previewWorkspace
           }
         >
           <div
+            ref={canvasRef}
             className={styles.previewCanvas}
             role="region"
             aria-label="Slide preview"
             tabIndex={0}
+            data-preview-slide-viewport
           >
-            {!block ? (
-              <p>{authoring.emptyPreview}</p>
-            ) : block.kind === "content" ? (
-              <ContentSlideView
-                block={block}
-                media={
-                  block.mediaId ? (
-                    <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
-                  ) : undefined
-                }
-                renderSceneImage={(mediaId, altText) => (
-                  <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
-                )}
-                variant="preview"
-                designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
-                interactionRuntime={{
-                  mode: "review",
-                  navigationTargets: presentationInteractionTargets(publication, block.id).map(
-                    (target) => ({ blockId: target.id, available: true, blockedReason: null }),
-                  ),
-                  onNavigate: (_nodeId, targetId) => {
-                    const target = publication.blocks.findIndex(
-                      (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
-                    );
-                    if (target >= 0) {
-                      // The link is about to unmount. The surviving region remains in
-                      // the dialog's Tab order, including reverse keyboard navigation.
-                      dialogRef.current
-                        ?.querySelector<HTMLElement>('[role="region"][aria-label="Slide preview"]')
-                        ?.focus({ preventScroll: true });
-                      setIndex(target);
-                    }
-                  },
-                }}
-              />
-            ) : (
-              <PresentationActivitySlide
-                accessibilityContext="preview"
-                question={block.question}
-                design={resolvePresentationActivityDesign(publication.blocks, block.id)}
-                media={
-                  block.question.mediaId ? (
-                    <AuthenticatedMedia
-                      mediaId={block.question.mediaId}
-                      altText={block.question.mediaAlt}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
+            <div className={styles.previewSlide} key={block?.id ?? "empty"} data-preview-slide>
+              {!block ? (
+                <p>{authoring.emptyPreview}</p>
+              ) : block.kind === "content" ? (
+                <ContentSlideView
+                  block={block}
+                  media={
+                    block.mediaId ? (
+                      <AuthenticatedMedia altText={block.mediaAlt} mediaId={block.mediaId} />
+                    ) : undefined
+                  }
+                  renderSceneImage={(mediaId, altText) => (
+                    <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+                  )}
+                  variant="preview"
+                  designOverride={resolvePresentationContentDesign(publication.blocks, block.id)}
+                  interactionRuntime={{
+                    mode: "review",
+                    navigationTargets: presentationInteractionTargets(publication, block.id).map(
+                      (target) => ({ blockId: target.id, available: true, blockedReason: null }),
+                    ),
+                    onNavigate: (_nodeId, targetId) => {
+                      const target = publication.blocks.findIndex(
+                        (candidate) => candidate.id.toLowerCase() === targetId.toLowerCase(),
+                      );
+                      if (target >= 0) {
+                        // The link is about to unmount. The surviving region remains in
+                        // the dialog's Tab order, including reverse keyboard navigation.
+                        dialogRef.current
+                          ?.querySelector<HTMLElement>(
+                            '[role="region"][aria-label="Slide preview"]',
+                          )
+                          ?.focus({ preventScroll: true });
+                        setIndex(target);
+                      }
+                    },
+                  }}
+                />
+              ) : (
+                <PresentationActivitySlide
+                  accessibilityContext="preview"
+                  question={block.question}
+                  design={resolvePresentationActivityDesign(publication.blocks, block.id)}
+                  media={
+                    block.question.mediaId ? (
+                      <AuthenticatedMedia
+                        mediaId={block.question.mediaId}
+                        altText={block.question.mediaAlt}
+                      />
+                    ) : undefined
+                  }
+                />
+              )}
+            </div>
           </div>
           {mode === "presenter" ? (
             <PresenterNotesPanel
+              key={block?.id ?? "empty"}
               notes={block?.kind === "content" ? block.speakerNotes : ""}
               slideNumber={block ? index + 1 : undefined}
               totalSlides={publication.blocks.length}
             />
           ) : null}
         </div>
-        <div className={styles.previewControls}>
+        <div className={styles.previewControls} data-preview-footer>
           <button
             disabled={index === 0}
             onClick={() => setIndex((value) => value - 1)}
             type="button"
           >
-            {authoring.previous}
+            <EditorIcon name="back" /> {authoring.previous}
           </button>
           <button
             disabled={index >= publication.blocks.length - 1}
             onClick={() => setIndex((value) => value + 1)}
             type="button"
           >
-            {authoring.next}
+            {authoring.next} <EditorIcon name="back" />
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -515,6 +566,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const { locale, t } = useLocale();
   const authoring = authoringWorkflowCopy(locale);
   const commands = presentationCommandCopy(locale);
+  const designLibraryCopy = presentationDesignCopy(locale);
   const sectionsSpatial = sectionsSpatialCopy(locale);
   const nativeEditorUi = nativeEditorCopy(locale);
   const nativeControlUi = nativeControlsCopy(locale);
@@ -577,10 +629,26 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [presentChoiceOpen, setPresentChoiceOpen] = useState(false);
   const [draft, setDraft] = useState<PresentationDraft | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+  const lastNavigatorSelection = useRef<string | null>(null);
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(null);
   const [showLayoutGuides, setShowLayoutGuides] = useState(true);
   const [mapOpen, setMapOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [designLibraryOpen, setDesignLibraryOpen] = useState(false);
+  const designLibraryTrigger = useRef<HTMLButtonElement>(null);
+  const designLibraryPanel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!designLibraryOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const panel = designLibraryPanel.current;
+      panel?.scrollIntoView({ block: "start" });
+      panel
+        ?.querySelector<HTMLInputElement>('input[type="search"]')
+        ?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [designLibraryOpen]);
   const [compactEditor, setCompactEditor] = useState(false);
   const [nativeInspectorTarget, setNativeInspectorTarget] = useState<HTMLDivElement | null>(null);
   const mapTrigger = useRef<HTMLButtonElement>(null);
@@ -837,6 +905,41 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   }, []);
 
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  const sectionRuns = useMemo(
+    () => presentationSectionRuns(draft?.blocks ?? [], draft?.sections),
+    [draft?.blocks, draft?.sections],
+  );
+  useEffect(() => {
+    if (!selectedBlockId || lastNavigatorSelection.current === selectedBlockId) return;
+    const run = sectionRuns.find((run) => run.blocks.some((block) => block.id === selectedBlockId));
+    if (!run) return;
+    lastNavigatorSelection.current = selectedBlockId;
+    const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+    setCollapsedSections((current) => {
+      if (!current.has(collapseKey)) return current;
+      const next = new Set(current);
+      next.delete(collapseKey);
+      return next;
+    });
+    const frame = requestAnimationFrame(() => {
+      if (mapOpen)
+        mapPanel.current
+          ?.querySelector<HTMLElement>('[aria-current="step"]')
+          ?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Section changes may change a run. Only a new slide selection expands it;
+    // the author may deliberately collapse the section containing the current slide.
+  }, [mapOpen, sectionRuns, selectedBlockId]);
+  useEffect(() => {
+    if (!mapOpen) return;
+    const frame = requestAnimationFrame(() =>
+      mapPanel.current
+        ?.querySelector<HTMLElement>('[aria-current="step"]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [mapOpen]);
   const questionSuggestionSource = selectedBlock
     ? presentationQuestionSuggestionSource(selectedBlock)
     : null;
@@ -1512,6 +1615,67 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
     });
     setSelectedBlockId(block.id);
     setInspectorTab(block.kind === "content" ? "content" : "build");
+  }
+
+  function applyDesignFromLibrary(
+    id: PresentationDesignId,
+    scope: "deck" | "slide",
+    application: PresentationDesignApplicationMode,
+  ) {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const options = {
+      scope,
+      application,
+      ...(selectedBlockId ? { blockId: selectedBlockId } : {}),
+    };
+    // Preflight the latest local document before closing a preview. The functional commit
+    // repeats validation against its authoritative snapshot rather than replacing later edits.
+    applyPresentationDesign(JSON.parse(latestDraftJson.current) as PresentationDraft, id, options);
+    commit((current) => {
+      try {
+        return applyPresentationDesign(current, id, options).draft;
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    return true;
+  }
+
+  function insertDesignLayout(id: PresentationDesignId, layout: DesignLayoutId) {
+    if (!canEdit || !assistancePermission.current || builderMutationBlocked || preparingImport)
+      return false;
+    const block = createDesignSlide(
+      id,
+      layout,
+      presentationDesignDraftCopy(id, locale).slides[layout],
+    );
+    const insert = (current: PresentationDraft): PresentationDraft => {
+      const selectedIndex = current.blocks.findIndex((item) => item.id === selectedBlockId);
+      const blocks = [...current.blocks];
+      blocks.splice(selectedIndex < 0 ? blocks.length : selectedIndex + 1, 0, block);
+      const next = reconcilePresentationSpatialBlocks(current, {
+        ...current,
+        blocks,
+        schemaVersion: nativeSceneDocumentVersion(current.schemaVersion, block.scene!),
+      });
+      PresentationDraftSchema.parse(next);
+      return next;
+    };
+    insert(JSON.parse(latestDraftJson.current) as PresentationDraft);
+    // Unlike a generic blank slide, a chosen layout keeps the design the user previewed.
+    commit((current) => {
+      try {
+        return insert(current);
+      } catch (caught) {
+        setError(humanError(caught));
+        return current;
+      }
+    });
+    setSelectedBlockId(block.id);
+    setInspectorTab("content");
+    return true;
   }
 
   function undo() {
@@ -2856,6 +3020,17 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </div>
         </div>
         <div className={styles.commandActions}>
+          <button
+            ref={designLibraryTrigger}
+            aria-expanded={designLibraryOpen}
+            aria-controls="presentation-design-library"
+            onClick={() => setDesignLibraryOpen((open) => !open)}
+            type="button"
+            data-presentation-designs
+            lang={locale}
+          >
+            <EditorIcon name="palette" /> {designLibraryCopy.title}
+          </button>
           <div className={styles.historyActions} data-editor-history>
             <button
               className={styles.iconButton}
@@ -3214,6 +3389,44 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         </section>
       ) : null}
 
+      {designLibraryOpen ? (
+        <section
+          ref={designLibraryPanel}
+          id="presentation-design-library"
+          className={styles.designLibrary}
+          aria-labelledby="presentation-design-library-title"
+          inert={builderMutationBlocked || preparingImport}
+          lang={locale}
+        >
+          <div className={styles.designLibraryHeading}>
+            <div>
+              <h2 id="presentation-design-library-title">{designLibraryCopy.title}</h2>
+              <p>{designLibraryCopy.description}</p>
+            </div>
+            <button
+              type="button"
+              aria-label={commands.closePanel}
+              onClick={() => {
+                setDesignLibraryOpen(false);
+                designLibraryTrigger.current?.focus();
+              }}
+            >
+              <EditorIcon name="close" />
+            </button>
+          </div>
+          <PresentationDesignGallery
+            draft={draft}
+            selectedBlockId={selectedBlockId ?? undefined}
+            onApply={applyDesignFromLibrary}
+            onInsert={insertDesignLayout}
+            renderSceneImage={(mediaId, altText) => (
+              <AuthenticatedMedia key={mediaId} mediaId={mediaId} altText={altText} />
+            )}
+            disabled={!canEdit || builderMutationBlocked || preparingImport}
+          />
+        </section>
+      ) : null}
+
       {compactEditor && (mapOpen || inspectorOpen) ? (
         <button
           type="button"
@@ -3263,12 +3476,17 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
             onEnable={() => {
               if (canEdit) commit(enablePresentationSections);
             }}
-            onAdd={() => {
+            onAdd={(title) => {
               if (!canEdit) return;
               const sectionId = clientUuid();
               // A generated title is authored exactly once, in the creation locale.
               commit((current) =>
-                addPresentationSection(current, sectionId, sectionsSpatial("New section")),
+                addPresentationSectionAtBlock(
+                  current,
+                  sectionId,
+                  title ?? sectionsSpatial("New section"),
+                  selectedBlockId,
+                ),
               );
             }}
             onRename={(sectionId, title) =>
@@ -3282,96 +3500,160 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               commit((current) => assignPresentationBlockToSection(current, blockId, sectionId))
             }
           />
-          <ol className={styles.blockList}>
-            {draft.blocks.map((block, index) => (
-              <li key={block.id} className={styles.filmstripItem}>
-                <PresentationSlideThumbnail
-                  block={block}
-                  design={resolvePresentationContentDesign(draft.blocks, block.id)}
-                  priority={index < 3 || selectedBlockId === block.id}
-                  mediaEnabled={mapOpen}
-                  mediaScope={{
-                    actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
-                    presentationId,
-                  }}
-                />
-                <button
-                  aria-current={selectedBlockId === block.id ? "step" : undefined}
-                  className={selectedBlockId === block.id ? styles.blockActive : styles.blockButton}
-                  onClick={() => setSelectedBlockId(block.id)}
-                  type="button"
-                >
-                  <span className={styles.thumbnailSpace} aria-hidden="true" />
-                  <span className={styles.blockNumber}>{index + 1}</span>
-                  <span className={styles.blockText}>
-                    <small>
-                      {block.kind === "content"
-                        ? t("delivery.presentation.contentSlide")
-                        : `${t(
-                            (block.question.delivery ?? "main") === "recheck"
-                              ? "delivery.builder.recheck"
-                              : "delivery.presentation.interactiveQuestion",
-                          )} · ${t(questionTypeMessageKeys[block.question.type])}`}
-                    </small>
-                    <strong
-                      lang={
-                        (block.kind === "content"
-                          ? contentSlideTitle(block)
-                          : block.question.prompt
-                        ).trim()
-                          ? (nativeSlideTitleLanguage(block) ?? "")
-                          : undefined
-                      }
-                    >
-                      {(block.kind === "content"
-                        ? contentSlideTitle(block)
-                        : block.question.prompt
-                      ).trim() ||
-                        t(
-                          block.kind === "content"
-                            ? "delivery.builder.slide"
-                            : "delivery.builder.question",
-                          { number: index + 1 },
-                        )}
-                    </strong>
-                    {presentationSectionForBlock(draft.sections, block.id) ? (
-                      <span
-                        className={styles.sectionBadge}
-                        lang={
-                          presentationSectionForBlock(draft.sections, block.id)?.title ? "" : locale
-                        }
-                      >
-                        {presentationSectionForBlock(draft.sections, block.id)?.title ||
-                          sectionsSpatial("Unnamed section")}
-                      </span>
-                    ) : null}
-                  </span>
-                  {block.kind === "content" && block.hidden ? (
-                    <span className={styles.hiddenBadge} lang={locale}>
-                      {commands.hidden}
-                    </span>
-                  ) : issuesByBlock.has(block.id) ? (
-                    <span
-                      className={styles.issueBadge}
-                      aria-label={t(
-                        issuesByBlock.get(block.id) === 1
-                          ? "delivery.builder.issueCount.one"
-                          : "delivery.builder.issueCount.other",
-                        { count: issuesByBlock.get(block.id) ?? 0 },
+          <div className={styles.filmstripScroll} data-slide-filmstrip="true">
+            {sectionRuns.map((run) => {
+              const collapseKey = (run.section?.id ?? run.key).toLowerCase();
+              // The last removed section may merge unsectioned runs. Without a
+              // remaining header, an old collapse preference must not hide slides.
+              const collapsed =
+                Boolean(draft.sections?.length) && collapsedSections.has(collapseKey);
+              return (
+                <div key={run.key} data-section-run={run.section?.id ?? "unsectioned"}>
+                  {draft.sections?.length ? (
+                    <PresentationSectionHeader
+                      section={run.section}
+                      runKey={run.key}
+                      count={run.blocks.length}
+                      continued={run.continued}
+                      collapsed={collapsed}
+                      disabled={!canEdit}
+                      fragmented={Boolean(
+                        run.section &&
+                        sectionRuns.filter(
+                          (candidate) =>
+                            candidate.section?.id === run.section?.id && candidate.blocks.length,
+                        ).length > 1,
                       )}
-                    >
-                      {issuesByBlock.get(block.id)}
-                    </span>
+                      canMove={(direction) =>
+                        Boolean(
+                          run.section &&
+                          canMovePresentationSection(draft, run.section.id, direction),
+                        )
+                      }
+                      onToggle={() =>
+                        setCollapsedSections((current) => {
+                          const next = new Set(current);
+                          if (next.has(collapseKey)) next.delete(collapseKey);
+                          else next.add(collapseKey);
+                          return next;
+                        })
+                      }
+                      onRename={(sectionId, title) =>
+                        canEdit &&
+                        commit((current) => renamePresentationSection(current, sectionId, title))
+                      }
+                      onDelete={(sectionId) => {
+                        if (!canEdit) return;
+                        commit((current) => removePresentationSection(current, sectionId));
+                        requestAnimationFrame(() =>
+                          mapPanel.current
+                            ?.querySelector<HTMLElement>('[aria-current="step"]')
+                            ?.focus({ preventScroll: true }),
+                        );
+                      }}
+                      onMove={(sectionId, direction) =>
+                        canEdit &&
+                        commit((current) => movePresentationSection(current, sectionId, direction))
+                      }
+                    />
                   ) : null}
-                </button>
-                {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
-                  <span className={styles.recoveryLink}>
-                    ↳ {t("delivery.presentationBuilder.pairedRecovery")}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ol>
+                  <ol
+                    className={styles.blockList}
+                    id={`section-slides-${run.key}`}
+                    start={run.startIndex + 1}
+                    hidden={collapsed}
+                  >
+                    {run.blocks.map((block, runIndex) => {
+                      const index = run.startIndex + runIndex;
+                      return (
+                        <li
+                          key={block.id}
+                          className={styles.filmstripItem}
+                          data-slide-id={block.id}
+                        >
+                          <PresentationSlideThumbnail
+                            block={block}
+                            design={resolvePresentationContentDesign(draft.blocks, block.id)}
+                            priority={index < 3 || selectedBlockId === block.id}
+                            mediaEnabled={mapOpen && !collapsed}
+                            mediaScope={{
+                              actorKey: `${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`,
+                              presentationId,
+                            }}
+                          />
+                          <button
+                            aria-current={selectedBlockId === block.id ? "step" : undefined}
+                            className={
+                              selectedBlockId === block.id ? styles.blockActive : styles.blockButton
+                            }
+                            onClick={() => setSelectedBlockId(block.id)}
+                            type="button"
+                          >
+                            <span className={styles.thumbnailSpace} aria-hidden="true" />
+                            <span className={styles.blockNumber}>{index + 1}</span>
+                            <span className={styles.blockText}>
+                              <small>
+                                {block.kind === "content"
+                                  ? t("delivery.presentation.contentSlide")
+                                  : `${t(
+                                      (block.question.delivery ?? "main") === "recheck"
+                                        ? "delivery.builder.recheck"
+                                        : "delivery.presentation.interactiveQuestion",
+                                    )} · ${t(questionTypeMessageKeys[block.question.type])}`}
+                              </small>
+                              <strong
+                                lang={
+                                  (block.kind === "content"
+                                    ? contentSlideTitle(block)
+                                    : block.question.prompt
+                                  ).trim()
+                                    ? (nativeSlideTitleLanguage(block) ?? "")
+                                    : undefined
+                                }
+                              >
+                                {(block.kind === "content"
+                                  ? contentSlideTitle(block)
+                                  : block.question.prompt
+                                ).trim() ||
+                                  t(
+                                    block.kind === "content"
+                                      ? "delivery.builder.slide"
+                                      : "delivery.builder.question",
+                                    { number: index + 1 },
+                                  )}
+                              </strong>
+                            </span>
+                            {block.kind === "content" && block.hidden ? (
+                              <span className={styles.hiddenBadge} lang={locale}>
+                                {commands.hidden}
+                              </span>
+                            ) : issuesByBlock.has(block.id) ? (
+                              <span
+                                className={styles.issueBadge}
+                                aria-label={t(
+                                  issuesByBlock.get(block.id) === 1
+                                    ? "delivery.builder.issueCount.one"
+                                    : "delivery.builder.issueCount.other",
+                                  { count: issuesByBlock.get(block.id) ?? 0 },
+                                )}
+                              >
+                                {issuesByBlock.get(block.id)}
+                              </span>
+                            ) : null}
+                          </button>
+                          {block.kind === "question" && block.question.linkedRecheckQuestionId ? (
+                            <span className={styles.recoveryLink}>
+                              ↳ {t("delivery.presentationBuilder.pairedRecovery")}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              );
+            })}
+          </div>
           <div className={styles.addActions}>
             <button
               className={styles.newSlideButton}
@@ -3412,7 +3694,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                   </span>
                 </button>
                 <button
-                  onClick={(event) => addBlock(createQuestionBlock(), event.currentTarget)}
+                  onClick={(event) =>
+                    addBlock(createQuestionBlock("single_select", locale), event.currentTarget)
+                  }
                   type="button"
                 >
                   <EditorIcon name="interaction" />
@@ -3471,6 +3755,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           </div>
         </aside>
 
+        <PresentationNavigatorResize enabled={mapOpen && !compactEditor} />
         <main className={styles.canvasArea} id="presentation-canvas">
           <div className={styles.compactCommands} inert={builderMutationBlocked || preparingImport}>
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">
@@ -3698,7 +3983,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 <button onClick={() => addBlock(createDesignedNativeContentBlock())} type="button">
                   {t("delivery.presentationBuilder.addContentSlide")}
                 </button>
-                <button onClick={() => addBlock(createQuestionBlock())} type="button">
+                <button
+                  onClick={() => addBlock(createQuestionBlock("single_select", locale))}
+                  type="button"
+                >
                   {t("delivery.presentationBuilder.addAudienceQuestion")}
                 </button>
                 <button
@@ -3744,6 +4032,11 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                     if (compactEditor) setMapOpen(false);
                     setInspectorOpen(true);
                   }
+                }}
+                onArrangeSelection={() => {
+                  setInspectorTab("layout");
+                  if (compactEditor) setMapOpen(false);
+                  setInspectorOpen(true);
                 }}
                 onTextAssistance={(nodeId, operation) => void openTextAssistance(nodeId, operation)}
                 textAssistanceDisabled={!canEdit || preparingImport || textAssistancePending}
@@ -4129,10 +4422,10 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         >
           <div className={styles.inspectorHeading}>
             <div>
-              <span className={styles.inspectorEyebrow}>
-                {nativeEditorUi("Customize your slide")}
-              </span>
               <h2>{nativeEditorUi("Slide tools")}</h2>
+              <span className={styles.inspectorCurrentSection}>
+                {inspectorTabs.find((tab) => tab.id === inspectorTab)?.label}
+              </span>
             </div>
             <button
               type="button"
@@ -4145,6 +4438,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
           <div
             className={styles.inspectorTabs}
             role="tablist"
+            aria-orientation="horizontal"
             aria-label={t("delivery.presentationBuilder.inspectorSections")}
             onKeyDown={moveInspectorTab}
           >
@@ -4153,6 +4447,9 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 id={`inspector-tab-${tab.id}`}
                 aria-controls="inspector-panel"
                 aria-selected={inspectorTab === tab.id}
+                aria-label={tab.label}
+                title={tab.label}
+                data-state={tab.id === "readiness" && issues.length ? "attention" : undefined}
                 className={
                   inspectorTab === tab.id ? styles.inspectorTabActive : styles.inspectorTab
                 }
@@ -4163,7 +4460,15 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                 type="button"
               >
                 <EditorIcon name={inspectorTabIcons[tab.id]} />
-                <span>{tab.label}</span>
+                {tab.id === "readiness" && issues.length ? (
+                  <span
+                    className={styles.inspectorTabBadge}
+                    data-inspector-tab-badge
+                    aria-hidden="true"
+                  >
+                    {new Intl.NumberFormat(locale).format(issues.length)}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -4565,7 +4870,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
                         onChange={(event) => {
                           const type = event.target.value as QuestionType;
                           commit((current) =>
-                            changePresentationQuestionType(current, selectedBlock.id, type),
+                            changePresentationQuestionType(current, selectedBlock.id, type, locale),
                           );
                         }}
                         value={selectedBlock.question.type}

@@ -258,7 +258,9 @@ for (const suffix of ["", " @mobile"]) {
     await expectNoHorizontalOverflow(page);
     await page.emulateMedia({ colorScheme: "dark" });
     await openE01Inspector(page, "Layout");
-    await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
+    await page
+      .getByRole("combobox", { name: "Base color theme", exact: true })
+      .selectOption("midnight");
     await expect(stage).toHaveCSS("background-color", "rgb(17, 27, 46)");
     await expect(stage.getByRole("table", { name: tableCaption, exact: true })).toHaveCSS(
       "color",

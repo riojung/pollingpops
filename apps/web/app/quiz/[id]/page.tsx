@@ -1,5 +1,8 @@
 "use client";
 
+import { SupportedLocaleSchema, type SupportedLocale } from "@openround/contracts";
+import { creationContent } from "../../../lib/i18n/creation-content";
+
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -105,11 +108,11 @@ interface EditorProductFeatures {
   wordCloudPolls?: boolean;
 }
 
-function newChoices(type: ChoiceQuestionDraft["type"]): ChoiceDraft[] {
+function newChoices(type: ChoiceQuestionDraft["type"], locale: SupportedLocale): ChoiceDraft[] {
   if (type === "true_false") {
     return [
-      { id: clientUuid(), label: "True", isCorrect: true },
-      { id: clientUuid(), label: "False", isCorrect: false },
+      { id: clientUuid(), label: creationContent(locale)("true"), isCorrect: true },
+      { id: clientUuid(), label: creationContent(locale)("false"), isCorrect: false },
     ];
   }
   return [
@@ -138,16 +141,23 @@ function commonQuestion(type: QuestionType) {
   };
 }
 
-function newQuestion(type: QuestionType): QuestionDraft {
+function newQuestion(type: QuestionType, locale: SupportedLocale = "en-CA"): QuestionDraft {
   const common = commonQuestion(type);
   if (isTextQuestion(type)) return { ...common, type };
   if (type === "numeric") {
     return { ...common, type, correctValue: "", tolerance: "0", unit: null };
   }
   if (type === "rating") {
-    return { ...common, type, min: 1, max: 5, minLabel: "Low", maxLabel: "High" };
+    return {
+      ...common,
+      type,
+      min: 1,
+      max: 5,
+      minLabel: creationContent(locale)("low"),
+      maxLabel: creationContent(locale)("high"),
+    };
   }
-  return { ...common, type, choices: newChoices(type) };
+  return { ...common, type, choices: newChoices(type, locale) };
 }
 
 export default function QuizEditorPage() {
@@ -683,7 +693,10 @@ export default function QuizEditorPage() {
       draft.questions.length === 0 &&
       supportedTypes.includes(requestedType as QuestionType)
     ) {
-      const inserted = newQuestion(requestedType as QuestionType);
+      const inserted = newQuestion(
+        requestedType as QuestionType,
+        SupportedLocaleSchema.safeParse(searchParams.get("creationLocale")).data ?? locale,
+      );
       setDraft({ ...draft, questions: [inserted] });
       setSelectedQuestionId(inserted.id);
       initialInsertNeedsFocus.current = true;
@@ -694,6 +707,7 @@ export default function QuizEditorPage() {
     id,
     router,
     searchParams,
+    locale,
     uxBeta,
     productFeatures?.rankingPolls,
     productFeatures?.openTextPolls,
@@ -847,7 +861,7 @@ export default function QuizEditorPage() {
       setErrorIsRaw(false);
       return;
     }
-    const inserted = newQuestion(type);
+    const inserted = newQuestion(type, locale);
     applyStructuralChange({ ...draft, questions: [...draft.questions, inserted] }, inserted.id, {
       draft,
       selectedQuestionId,
@@ -961,7 +975,7 @@ export default function QuizEditorPage() {
     if (!draft) return;
     const source = draft.questions[selectedIndex];
     if (!source || !questionTypeDefinition(source.type).supportsRecovery) return;
-    const recheck = newQuestion(source.type);
+    const recheck = newQuestion(source.type, locale);
     const linked: QuestionDraft = {
       ...recheck,
       delivery: "recheck",

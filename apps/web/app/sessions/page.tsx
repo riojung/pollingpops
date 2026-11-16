@@ -5,10 +5,16 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
+import { saveCreatorHostCredential } from "../../lib/host-credential-recovery";
 import { formatDateTime } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { SessionPhaseLabel } from "../../components/workspace/session-phase-label";
+import {
+  WorkspaceKindIcon,
+  WorkspaceStatus,
+  workspaceStateTone,
+} from "../../components/workspace/workspace-signals";
 import type { CursorPage, SessionSummary } from "../../components/workspace/workspace-types";
 import {
   filterSessionRows,
@@ -31,6 +37,7 @@ import {
 import contentStyles from "../../components/workspace/workspace-content.module.css";
 import styles from "./sessions.module.css";
 import controls from "../../components/workspace/workspace-history-controls.module.css";
+import signals from "../../components/workspace/workspace-signals.module.css";
 
 type SessionCounts = Record<SessionType, number>;
 type SourceOption = { id: string; title: string };
@@ -48,6 +55,23 @@ const EMPTY_DATA: SessionData = {
   surveys: [],
   nextCursor: null,
 };
+
+function DeleteIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      focusable="false"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" />
+    </svg>
+  );
+}
 
 function SessionsContent() {
   const router = useRouter();
@@ -391,7 +415,7 @@ function SessionsContent() {
       );
       if (controller.signal.aborted || activeQueryKey.current !== requestedKey || !mounted.current)
         return;
-      window.sessionStorage.setItem(`openround:host:${session.id}`, response.token);
+      saveCreatorHostCredential(window.sessionStorage, session.id, response.token);
       router.push(`/host/${session.id}`);
     } catch (caught) {
       if (!controller.signal.aborted && activeQueryKey.current === requestedKey && mounted.current)
@@ -575,7 +599,10 @@ function SessionsContent() {
             <button
               aria-controls={`${value}-panel`}
               aria-selected={type === value}
-              className={type === value ? controls.tabActive : controls.tab}
+              className={`${type === value ? controls.tabActive : controls.tab} ${signals.kindTab}`}
+              data-kind={
+                value === "rounds" ? "round" : value === "presentations" ? "presentation" : "survey"
+              }
               id={`${value}-tab`}
               key={value}
               onClick={() => updateFilters(sessionFiltersForType(filters, value), true)}
@@ -584,6 +611,15 @@ function SessionsContent() {
               tabIndex={type === value ? 0 : -1}
               type="button"
             >
+              <WorkspaceKindIcon
+                kind={
+                  value === "rounds"
+                    ? "round"
+                    : value === "presentations"
+                      ? "presentation"
+                      : "survey"
+                }
+              />
               {t(
                 value === "rounds"
                   ? "pages.common.rounds"
@@ -688,7 +724,7 @@ function SessionsContent() {
             onClick={() => chooseView("grid")}
             type="button"
           >
-            {t("pages.library.grid")}
+            {t("pages.library.gridView")}
           </button>
           <button
             aria-label={t("pages.library.listView")}
@@ -696,7 +732,7 @@ function SessionsContent() {
             onClick={() => chooseView("list")}
             type="button"
           >
-            {t("pages.library.list")}
+            {t("pages.library.listView")}
           </button>
         </div>
       </section>
@@ -752,7 +788,12 @@ function SessionsContent() {
             )}
           >
             {current.rounds.map((session) => (
-              <article className={styles.card} key={session.id}>
+              <article
+                className={`${styles.card} ${signals.surface}`}
+                data-kind="round"
+                data-state-tone={workspaceStateTone(session.status)}
+                key={session.id}
+              >
                 <div className={styles.cardTopline}>
                   <div>
                     <h2 lang="">{session.title}</h2>
@@ -771,9 +812,9 @@ function SessionsContent() {
                       )}
                     </p>
                   </div>
-                  <span className={contentStyles.status} data-tone={session.status}>
+                  <WorkspaceStatus status={session.status}>
                     {statusLabel(session.status)}
-                  </span>
+                  </WorkspaceStatus>
                 </div>
                 <div className={styles.metrics}>
                   <div>
@@ -802,7 +843,8 @@ function SessionsContent() {
                 <div className={styles.actions}>
                   {sessionActions("rounds", session.status, role).canResume ? (
                     <button
-                      className="button small-button"
+                      className={`button small-button ${signals.action}`}
+                      data-action="resume"
                       disabled={mutationBusy}
                       onClick={() => void resumeSession(session)}
                       type="button"
@@ -814,28 +856,44 @@ function SessionsContent() {
                   ) : null}
                   {session.reportId ? (
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="result"
                       href={`/report/${session.reportId}`}
                     >
                       {t("pages.sessions.viewResult")}
                     </Link>
                   ) : null}
                   <Link
-                    className="button-quiet small-button"
+                    className={`button-quiet small-button ${signals.action}`}
+                    data-action="view"
                     href={`/quiz/${session.quizId}/preview`}
                   >
                     {t("pages.sessions.viewRound")}
                   </Link>
                   {sessionActions("rounds", session.status, role).canDelete ? (
                     <button
-                      className="button-quiet small-button"
+                      aria-label={
+                        deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")
+                      }
+                      className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                      data-action="delete"
                       disabled={mutationBusy}
                       onClick={() => void deleteSession(session, session.status)}
+                      title={
+                        deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")
+                      }
                       type="button"
                     >
-                      {deletingId === session.id
-                        ? t("pages.sessions.deleting")
-                        : t("pages.sessions.delete")}
+                      <DeleteIcon />
+                      <span aria-live="polite" className="sr-only">
+                        {deletingId === session.id
+                          ? t("pages.sessions.deleting")
+                          : t("pages.sessions.delete")}
+                      </span>
                     </button>
                   ) : null}
                 </div>
@@ -845,7 +903,12 @@ function SessionsContent() {
               const value = presentationSessionStatus(session, now);
               const actions = sessionActions("presentations", value, role);
               return (
-                <article className={styles.card} key={session.id}>
+                <article
+                  className={`${styles.card} ${signals.surface}`}
+                  data-kind="presentation"
+                  data-state-tone={workspaceStateTone(value)}
+                  key={session.id}
+                >
                   <div className={styles.cardTopline}>
                     <div>
                       <h2 lang="">{session.title}</h2>
@@ -856,9 +919,7 @@ function SessionsContent() {
                         })}
                       </p>
                     </div>
-                    <span className={contentStyles.status} data-tone={value}>
-                      {statusLabel(value)}
-                    </span>
+                    <WorkspaceStatus status={value}>{statusLabel(value)}</WorkspaceStatus>
                   </div>
                   <div className={styles.metrics}>
                     <div>
@@ -887,34 +948,51 @@ function SessionsContent() {
                   <div className={styles.actions}>
                     {actions.canResume ? (
                       <Link
-                        className="button small-button"
+                        className={`button small-button ${signals.action}`}
+                        data-action="resume"
                         href={`/presentation-session/${session.id}/host`}
                       >
                         {t("pages.sessions.resumePresentation")}
                       </Link>
                     ) : null}
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="result"
                       href={`/presentation-session/${session.id}/report`}
                     >
                       {t("pages.sessions.viewReport")}
                     </Link>
                     <Link
-                      className="button-quiet small-button"
+                      className={`button-quiet small-button ${signals.action}`}
+                      data-action="view"
                       href={`/presentation/${session.presentationId}`}
                     >
                       {t("pages.sessions.viewPresentation")}
                     </Link>
                     {actions.canDelete ? (
                       <button
-                        className="button-quiet small-button"
+                        aria-label={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")
+                        }
+                        className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                        data-action="delete"
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
+                        title={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")
+                        }
                         type="button"
                       >
-                        {deletingId === session.id
-                          ? t("pages.sessions.deleting")
-                          : t("pages.sessions.delete")}
+                        <DeleteIcon />
+                        <span aria-live="polite" className="sr-only">
+                          {deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.delete")}
+                        </span>
                       </button>
                     ) : null}
                   </div>
@@ -925,7 +1003,12 @@ function SessionsContent() {
               const value = surveySessionStatus(session, now);
               const actions = sessionActions("surveys", value, role);
               return (
-                <article className={styles.card} key={session.id}>
+                <article
+                  className={`${styles.card} ${signals.surface}`}
+                  data-kind="survey"
+                  data-state-tone={workspaceStateTone(value)}
+                  key={session.id}
+                >
                   <div className={styles.cardTopline}>
                     <div>
                       <h2 lang="">{session.title}</h2>
@@ -944,19 +1027,22 @@ function SessionsContent() {
                         )}
                       </p>
                     </div>
-                    <span className={contentStyles.status} data-tone={value}>
-                      {statusLabel(value)}
-                    </span>
+                    <WorkspaceStatus status={value}>{statusLabel(value)}</WorkspaceStatus>
                   </div>
                   <div className={styles.actions}>
                     {actions.canManageSharing ? (
-                      <Link className="button small-button" href={`/surveys/rooms/${session.id}`}>
+                      <Link
+                        className={`button small-button ${signals.action}`}
+                        data-action="view"
+                        href={`/surveys/rooms/${session.id}`}
+                      >
                         {t("pages.sessions.surveySharing")}
                       </Link>
                     ) : null}
                     {actions.canViewSurveyResults ? (
                       <Link
-                        className="button-quiet small-button"
+                        className={`button-quiet small-button ${signals.action}`}
+                        data-action="result"
                         href={`/results/surveys/${session.id}`}
                       >
                         {t("pages.common.viewResults")}
@@ -964,14 +1050,28 @@ function SessionsContent() {
                     ) : null}
                     {actions.canDelete ? (
                       <button
-                        className="button-quiet small-button"
+                        aria-label={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")
+                        }
+                        className={`button-quiet small-button ${styles.deleteButton} ${signals.action}`}
+                        data-action="delete"
                         disabled={mutationBusy}
                         onClick={() => void deleteSession(session, value)}
+                        title={
+                          deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")
+                        }
                         type="button"
                       >
-                        {deletingId === session.id
-                          ? t("pages.sessions.deleting")
-                          : t("pages.sessions.deleteSurvey")}
+                        <DeleteIcon />
+                        <span aria-live="polite" className="sr-only">
+                          {deletingId === session.id
+                            ? t("pages.sessions.deleting")
+                            : t("pages.sessions.deleteSurvey")}
+                        </span>
                       </button>
                     ) : null}
                   </div>

@@ -5,6 +5,7 @@ import { MemoryRepository, createPresentationAssignmentRepository } from "@openr
 import { presentationSharingFixture } from "../../../packages/db/test/support/presentation-sharing-conformance.js";
 import { registerPresentationAssignmentRoutes } from "../src/presentation-assignment-routes.js";
 import { ConfigSchema } from "../src/config.js";
+import { publishMotionBackgroundFixture } from "./support/presentation-motion-backgrounds.js";
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -13,10 +14,11 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 const token = () => randomBytes(32).toString("base64url");
-async function fixture() {
+async function fixture(motionBackground = false) {
   const repository = new MemoryRepository();
   const mediaId = randomUUID();
-  const source = await presentationSharingFixture(repository, "assignment-api", mediaId);
+  const original = await presentationSharingFixture(repository, "assignment-api", mediaId);
+  const source = motionBackground ? await publishMotionBackgroundFixture(original) : original;
   const assignments = createPresentationAssignmentRepository(repository);
   const enabled = { value: true };
   const admitted = { value: true };
@@ -120,6 +122,25 @@ async function fixture() {
 }
 
 describe("self-paced reading assignment APIs", () => {
+  it("keeps frozen motion backgrounds in assignment previews and resumed reading without private fields", async () => {
+    const f = await fixture(true);
+    const created = await f.create();
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json().assignment.id;
+    const input = { attemptId: randomUUID(), token: token() };
+    expect((await f.start(id, input)).statusCode).toBe(201);
+    for (const response of [
+      await f.preview(id),
+      await f.resume(id, input.attemptId, input.token),
+    ]) {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().review.blocks[0]).toMatchObject({
+        scene: { schemaVersion: 8, design: { motionBackground: "ribbons" } },
+      });
+      expect(response.body).not.toMatch(/PRIVATE_|speakerNotes|citations|correctValue|explanation/);
+    }
+  });
+
   it("reports anonymous explicit acknowledgements once and keeps preview visits out of totals", async () => {
     const f = await fixture();
     const { assignment } = (await f.create()).json();

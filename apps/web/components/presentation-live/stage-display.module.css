@@ -1,0 +1,186 @@
+.screen {
+  position: relative;
+  min-width: 0;
+}
+
+.screen:focus {
+  outline: none;
+}
+
+.chrome[hidden],
+.focusTools[hidden] {
+  display: none;
+}
+
+.layout {
+  min-width: 0;
+}
+
+.setup {
+  position: relative;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.setup > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--ui-text);
+  list-style: none;
+  cursor: pointer;
+}
+
+.setup > summary::-webkit-details-marker {
+  display: none;
+}
+
+.setup > div {
+  position: fixed;
+  top: 64px;
+  left: 12px;
+  z-index: 10;
+  display: grid;
+  gap: 12px;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(540px, calc(100dvh - 76px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+  line-height: 1.5;
+}
+
+.setup > summary:focus-visible,
+.focusTools button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.focusTools {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 20;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(520px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-lg);
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.focusTools > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.focusTools button {
+  min-height: 40px;
+  max-width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.focusTools p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.screen[data-stage-controls-visible="true"] .focusTools,
+.focusTools:hover,
+.focusTools:focus-within,
+.focusTools[data-error="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen[data-stage-focus="true"] {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: #101217;
+}
+
+.screen[data-stage-focus="true"] .layout {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+}
+
+.screen[data-stage-focus="true"] .canvas {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+  border-radius: 0;
+  padding: 0;
+  container-type: size;
+  overflow: auto;
+  background: transparent;
+  color: #f1f4f9;
+}
+
+.screen[data-stage-focus="true"] .body {
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  max-width: 100%;
+}
+
+.screen[data-stage-focus="true"] :global([data-motion-controls]) {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 15;
+  max-width: calc(100% - 24px);
+  border-radius: 8px;
+  padding: 6px;
+  background: var(--ui-surface);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.screen[data-stage-focus="true"][data-stage-controls-visible="true"]
+  :global([data-motion-controls]),
+.screen[data-stage-focus="true"] :global([data-motion-controls]):hover,
+.screen[data-stage-focus="true"] :global([data-motion-controls]):focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focusTools {
+    transition: none;
+  }
+}

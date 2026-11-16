@@ -2,8 +2,9 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { PresentationSceneDesign, QuestionType, SupportedLocale } from "@openround/contracts";
+import { presentationDesignPalette } from "@openround/contracts";
 import { copyPresentationSceneDesign } from "../../lib/presentation-activity-design";
-import { NATIVE_DESIGN_FONTS, NATIVE_DESIGN_THEMES } from "../../lib/presentation-native-design";
+import { NATIVE_DESIGN_FONTS } from "../../lib/presentation-native-design";
 import { TextResponseControl } from "../text-response-control";
 import { useLocale } from "../locale-provider";
 import {
@@ -12,6 +13,10 @@ import {
 } from "./presentation-activity-copy";
 import { useNativeTextOverflow } from "./use-native-text-overflow";
 import styles from "./presentation-activity-slide.module.css";
+import {
+  PresentationMotionBackground,
+  PresentationMotionControls,
+} from "./presentation-motion-background";
 
 /** Audience-safe shape shared by draft artwork and phase-fenced delivery projections. */
 export interface PresentationActivityQuestion {
@@ -135,7 +140,7 @@ export function PresentationActivitySlide({
   const numberFormatter = new Intl.NumberFormat(locale);
   const formatNumber = (value: number) => numberFormatter.format(value);
   const design = copyPresentationSceneDesign(suppliedDesign);
-  const palette = NATIVE_DESIGN_THEMES[design.theme];
+  const palette = presentationDesignPalette(design);
   const [readingView, setReadingView] = useState(false);
   const choices = question.choices ?? [];
   const rating = question.rating ?? {
@@ -200,6 +205,11 @@ export function PresentationActivitySlide({
       lang={locale}
     >
       <div className={styles.stage}>
+        <PresentationMotionBackground
+          preset={design.motionBackground}
+          theme={design.theme}
+          static={staticThumbnail || readingView}
+        />
         <article
           {...(staticThumbnail ? {} : overflow)}
           className={styles.surface}
@@ -314,6 +324,9 @@ export function PresentationActivitySlide({
           </div>
         </article>
       </div>
+      {!staticThumbnail && !readingView ? (
+        <PresentationMotionControls preset={design.motionBackground} locale={locale} />
+      ) : null}
       {!staticThumbnail && needsRoom ? (
         <div className={styles.fitGuidance}>
           <span>{copy.fitGuidance}</span>

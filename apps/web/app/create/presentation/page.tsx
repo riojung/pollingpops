@@ -9,6 +9,8 @@ import { apiFetch, humanError } from "../../../lib/api";
 import { WorkspaceProvider, useWorkspace } from "../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../components/workspace/workspace-shell";
 import { recordCreationEvent } from "../../../components/workspace/product-events";
+import { PresentationDesignGallery } from "../../../components/workspace/presentation-design-gallery";
+import { presentationDesignCopy } from "../../../lib/i18n/presentation-design-copy";
 import { PresentationTemplateGallery } from "../../../components/workspace/presentation-template-gallery";
 import { PresentationOutlineStart } from "../../../components/workspace/presentation-outline-start";
 import { presentationStartCopy } from "../../../components/workspace/presentation-start-copy";
@@ -19,6 +21,7 @@ function PresentationLauncher() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t, locale } = useLocale();
+  const designCopy = presentationDesignCopy(locale);
   const workflowCopy = creatorWorkflowCopy(locale);
   const startCopy = presentationStartCopy(locale);
   const { canEdit } = useWorkspace();
@@ -52,7 +55,8 @@ function PresentationLauncher() {
 
   const requestedStarts = searchParams.getAll("start");
   const selectedStart =
-    requestedStarts.length === 1 && ["source", "template", "outline"].includes(requestedStarts[0]!)
+    requestedStarts.length === 1 &&
+    ["source", "template", "outline", "design"].includes(requestedStarts[0]!)
       ? requestedStarts[0]
       : null;
 
@@ -92,9 +96,11 @@ function PresentationLauncher() {
               <span lang={locale}>
                 {selectedStart === "source"
                   ? t("create.common.sourceGrounded")
-                  : selectedStart === "outline"
-                    ? startCopy.fromOutline
-                    : t("create.common.presentationTemplate")}
+                  : selectedStart === "design"
+                    ? designCopy.fromDesign
+                    : selectedStart === "outline"
+                      ? startCopy.fromOutline
+                      : t("create.common.presentationTemplate")}
               </span>
             </div>
           ) : null}
@@ -157,14 +163,33 @@ function PresentationLauncher() {
             </details>
           ) : null}
 
+          {!selectedStart || selectedStart === "design" ? (
+            <section className={styles.templates} aria-labelledby="presentation-designs-title">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p className={styles.kicker}>{designCopy.fromDesign}</p>
+                  <h2 id="presentation-designs-title">{designCopy.title}</h2>
+                  <p>{designCopy.description}</p>
+                </div>
+                {!selectedStart ? (
+                  <Link
+                    className="button-quiet small-button"
+                    href="/create/presentation?start=design"
+                  >
+                    {designCopy.browseDesigns}
+                  </Link>
+                ) : null}
+              </div>
+              {selectedStart === "design" ? <PresentationDesignGallery /> : null}
+            </section>
+          ) : null}
+
           {!selectedStart || selectedStart === "template" ? (
             <section className={styles.templates} aria-labelledby="presentation-templates-title">
               <div className={styles.sectionHeading}>
                 <div>
                   <p className={styles.kicker}>{t("create.common.fastestStart")}</p>
-                  <h2 id="presentation-templates-title">
-                    {t("create.presentation.templates.title")}
-                  </h2>
+                  <h2 id="presentation-templates-title">{designCopy.contentTemplates}</h2>
                   <p>{t("create.presentation.method.template.description")}</p>
                 </div>
                 {!selectedStart ? (

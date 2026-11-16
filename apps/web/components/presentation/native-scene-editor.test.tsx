@@ -13,6 +13,8 @@ import { NativeSceneEditor } from "./native-scene-editor";
 import { EditorDisclosure, EditorIcon } from "./presentation-editor-chrome";
 import { NativeSceneCanvas } from "./native-scene-canvas";
 import { NativeRichTextEditor } from "./native-rich-text-editor";
+import { NativeSceneTypographyControls } from "./native-scene-typography-controls";
+import { NativeInspectorSection } from "./native-inspector-section";
 import { NativeSceneVideoControls } from "./native-scene-video-controls";
 import { NativeSceneLayoutSuggestions } from "./native-scene-layout-suggestions";
 import type {
@@ -92,6 +94,7 @@ function editorHarness(
     inspectorTarget?: HTMLElement | null;
     inspectorSection?: "content" | "layout" | "media" | "accessibility";
     onInspectSelection?: () => void;
+    onArrangeSelection?: () => void;
   } = {},
 ) {
   const hooks = { cursor: 0, slots: [] as unknown[] };
@@ -148,6 +151,39 @@ afterEach(() => {
 });
 
 describe("interaction insertion picker", () => {
+  it("opens and focuses precise arrangement without modifying the selected object", () => {
+    const arrange = vi.fn();
+    const focus = vi.fn();
+    const position = {
+      open: false,
+      querySelector: vi.fn((selector: string) =>
+        selector === ":scope > summary"
+          ? {
+              click: () => {
+                position.open = true;
+              },
+            }
+          : { focus },
+      ),
+    };
+    const target = { nodeType: 1, querySelector: vi.fn(() => position) } as unknown as HTMLElement;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    const editor = editorHarness({ inspectorTarget: target, onArrangeSelection: arrange });
+    editor.render("idle");
+    const before = structuredClone(editor.scene);
+    const canvas = editor.find((element) => element.type === NativeSceneCanvas);
+    (canvas.props.onArrangeSelection as () => void)();
+    expect(arrange).toHaveBeenCalledOnce();
+    expect(target.querySelector).toHaveBeenCalledWith('[data-native-inspector-group="position"]');
+    expect(position.open).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(editor.scene).toEqual(before);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["Add reveal panel", true],
     ["Add reveal panel", false],
@@ -186,6 +222,29 @@ describe("interaction insertion picker", () => {
 });
 
 describe("native editor control hierarchy", () => {
+  it("starts a decorated template on its title while keeping the background selectable", () => {
+    const editor = editorHarness();
+    const titleId = editor.scene.nodes[0]!.id;
+    editor.scene.schemaVersion = 9;
+    editor.scene.nodes.unshift({
+      id: "collection-art",
+      type: "shape",
+      shape: "rectangle",
+      color: "sky",
+      label: "",
+      decorative: true,
+      frame: { x: 0, y: 0, width: 100, height: 100 },
+    });
+    editor.scene.readingOrder.unshift("collection-art");
+    editor.render("idle");
+    expect(editor.find((node) => node.props["aria-label"] === "Native slide title")).toBeDefined();
+    let canvas = editor.find((node) => node.type === NativeSceneCanvas);
+    expect(canvas.props.selectedNodeIds).toEqual([titleId]);
+    (canvas.props.onSelect as (id: string) => void)("collection-art");
+    editor.render("idle");
+    canvas = editor.find((node) => node.type === NativeSceneCanvas);
+    expect(canvas.props.selectedNodeIds).toEqual(["collection-art"]);
+  });
   it("pairs native insertion actions with representative icons and shared disclosure controls", () => {
     const editor = editorHarness();
     editor.render("idle");
@@ -440,7 +499,119 @@ describe("native upload capacity guard", () => {
   });
 });
 
+describe("shape label accessibility", () => {
+  it.each([
+    { decorative: true, label: "Meaningful label", expected: false, schemaVersion: 9 },
+    { decorative: true, label: "  Meaningful label  ", expected: false, schemaVersion: 9 },
+    { decorative: true, label: "", expected: true, schemaVersion: 9 },
+    { decorative: true, label: "  \t  ", expected: true, schemaVersion: 9 },
+    { decorative: false, label: "", expected: false, schemaVersion: 9 },
+    { decorative: undefined, label: "", expected: undefined, schemaVersion: 1 },
+    { decorative: undefined, label: "Meaningful label", expected: undefined, schemaVersion: 1 },
+  ] as const)(
+    "retains shape semantics when decorative=$decorative is labeled '$label'",
+    ({ decorative, label, expected, schemaVersion }) => {
+      const editor = editorHarness();
+      editor.scene.schemaVersion = schemaVersion;
+      const shape = {
+        id: "collection-art",
+        type: "shape" as const,
+        shape: "rectangle" as const,
+        color: "blue" as const,
+        label: decorative ? "" : "Previous label",
+        ...(decorative === undefined ? {} : { decorative }),
+        ...(schemaVersion === 9
+          ? { appearance: { fill: "accent" as const, stroke: "none" as const, strokeWidth: 1 } }
+          : {}),
+        frame: { x: 70, y: 10, width: 20, height: 30 },
+      };
+      editor.scene.nodes.push(shape);
+      editor.scene.readingOrder.push(shape.id);
+      const before = structuredClone(editor.scene);
+      editor.render("idle");
+      const canvas = editor.find((node) => node.type === NativeSceneCanvas);
+      (canvas.props.onSelect as (id: string) => void)(shape.id);
+      editor.render("idle");
+      const field = editor.find(
+        (node) => node.type === "label" && controlText(node) === "Shape label",
+      );
+      const input = elements(field).find((node) => node.type === "input")!;
+      (input.props.onChange as (event: unknown) => void)({ target: { value: label } });
+      expect(editor.onChange).toHaveBeenCalledOnce();
+      const [updated, historyField] = editor.onChange.mock.calls[0]! as [PresentationScene, string];
+      const updatedShape = updated.nodes.find((node) => node.id === shape.id);
+      expect(updatedShape).toEqual({
+        ...shape,
+        label,
+        ...(expected === undefined ? {} : { decorative: expected }),
+      });
+      if (expected === undefined) expect(updatedShape).not.toHaveProperty("decorative");
+      expect(updated).toEqual({
+        ...before,
+        nodes: before.nodes.map((node) => (node.id === shape.id ? updatedShape : node)),
+      });
+      expect(historyField).toBe(`native:${shape.id}:label`);
+      expect(editor.scene).toEqual(before);
+    },
+  );
+});
+
 describe("native multi-object selection", () => {
+  it.each([
+    {
+      appearance: { fill: "accent", stroke: "text", strokeWidth: 1 },
+      expected: { strokeWidth: 1 },
+      chosenColor: "sky",
+    },
+    {
+      appearance: { fill: "none", stroke: "accent", strokeWidth: 0.5 },
+      expected: { fill: "none", strokeWidth: 0.5 },
+      chosenColor: "orange",
+    },
+    {
+      appearance: { fill: "accentText", stroke: "none", strokeWidth: 0 },
+      expected: { stroke: "none", strokeWidth: 0 },
+      chosenColor: "orange",
+    },
+  ] as const)(
+    "makes explicit object color visible while retaining its outline treatment: $appearance",
+    ({ appearance, expected, chosenColor }) => {
+      const editor = editorHarness();
+      editor.scene.schemaVersion = 9;
+      const shape = {
+        id: "collection-mark",
+        type: "shape" as const,
+        shape: "ellipse" as const,
+        color: "sky" as const,
+        label: "",
+        decorative: true,
+        frame: { x: 70, y: 10, width: 20, height: 30 },
+        appearance: { ...appearance },
+      };
+      editor.scene.nodes.push(shape);
+      editor.scene.readingOrder.push(shape.id);
+      editor.render("idle");
+      const canvas = editor.find((node) => node.type === NativeSceneCanvas);
+      (canvas.props.onSelect as (id: string) => void)(shape.id);
+      editor.render("idle");
+      const color = editor.find((node) => node.type === "select" && node.props.value === "palette");
+      expect(
+        editor.find((node) => node.type === "option" && node.props.value === "palette").props
+          .disabled,
+      ).toBe(true);
+      (color.props.onChange as (event: unknown) => void)({ target: { value: chosenColor } });
+      expect(editor.onChange).toHaveBeenCalledOnce();
+      const updated = editor.onChange.mock.calls[0]![0] as PresentationScene;
+      expect(updated.nodes.find((node) => node.id === shape.id)).toEqual({
+        ...shape,
+        color: chosenColor,
+        appearance: expected,
+      });
+      expect(shape.color).toBe("sky");
+      expect(shape.appearance).toEqual(appearance);
+    },
+  );
+
   it("opts only the selected text into structured formatting in one scene edit", () => {
     const editor = editorHarness();
     editor.render("idle");
@@ -622,6 +793,54 @@ describe("native external video insertion selection", () => {
 });
 
 describe("native design and rich text coexistence", () => {
+  it("persists plain and formatted object typography using scene version 9 and normal history fields", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const original = editor.scene.nodes[0]!;
+    const typography = editor.find((element) => element.type === NativeSceneTypographyControls);
+    (typography.props.onChange as (node: unknown, field: string) => void)(
+      { ...original, typography: { font: "mono", size: 64 } },
+      "typography:size",
+    );
+    const styled = editor.onChange.mock.calls[0]![0];
+    expect(styled.schemaVersion).toBe(9);
+    expect(styled.nodes[0]).toEqual({ ...original, typography: { font: "mono", size: 64 } });
+    expect(editor.onChange.mock.calls[0]![1]).toBe(`native:${original.id}:typography:size`);
+    editor.scene.nodes = styled.nodes;
+    editor.scene.schemaVersion = styled.schemaVersion;
+    editor.render("idle");
+    (
+      editor.find((element) => element.type === "button" && controlText(element) === "Format text")
+        .props.onClick as () => void
+    )();
+    const formatted = editor.onChange.mock.calls[1]![0];
+    editor.scene.nodes = formatted.nodes;
+    editor.render("idle");
+    const rich = editor.find((element) => element.type === NativeRichTextEditor);
+    (rich.props.onChange as (node: unknown, field: string) => void)(
+      { ...formatted.nodes[0], typography: { font: "serif", size: 72 } },
+      "typography:font",
+    );
+    expect(editor.onChange.mock.calls[2]![0]).toMatchObject({
+      schemaVersion: 9,
+      nodes: [
+        { ...formatted.nodes[0], typography: { font: "serif", size: 72 } },
+        editor.scene.nodes[1],
+      ],
+    });
+    expect(editor.onChange.mock.calls[2]![1]).toBe(`native:${original.id}:typography:font`);
+  });
+
+  it("keeps selected content open by default and tool disclosures outside the authored document", () => {
+    const editor = editorHarness();
+    editor.render("idle");
+    const section = editor.find(
+      (element) => element.type === NativeInspectorSection && element.props.name === "content",
+    );
+    expect(section.props.defaultOpen).toBe(true);
+    expect(section.key).toBe(editor.scene.nodes[0]!.id);
+    expect(editor.onChange).not.toHaveBeenCalled();
+  });
   it.each([3, 4] as const)(
     "keeps scene %s and its composition when formatting, editing and removing formatting",
     (version) => {

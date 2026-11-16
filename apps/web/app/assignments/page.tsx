@@ -9,6 +9,9 @@ import { WorkspaceProvider, useWorkspace } from "../../components/workspace/work
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import type { CursorPage, FollowupSummary } from "../../components/workspace/workspace-types";
 import styles from "../../components/workspace/workspace-content.module.css";
+import compact from "./assignments.module.css";
+import { WorkspaceStatus, workspaceStateTone } from "../../components/workspace/workspace-signals";
+import signals from "../../components/workspace/workspace-signals.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 
 function AssignmentsWorkspace() {
@@ -102,11 +105,16 @@ function AssignmentsWorkspace() {
 
       <section className={styles.list} aria-label={t("pages.assignments.listLabel")}>
         {assignments.map((assignment) => (
-          <article className={styles.listCard} key={assignment.id}>
-            <div className={styles.rowTopline}>
+          <article
+            className={`${styles.listCard} ${compact.card} ${signals.surface}`}
+            data-kind="practice"
+            data-state-tone={workspaceStateTone(assignment.status)}
+            key={assignment.id}
+          >
+            <div className={`${styles.rowTopline} ${compact.heading}`}>
               <div>
                 <h2 lang="">{assignment.title}</h2>
-                <PackPracticeAttribution source={assignment.recoveryPackSource} />
+                <PackPracticeAttribution source={assignment.recoveryPackSource} locale={locale} />
                 <p className={styles.summaryLine}>
                   {t("pages.assignments.created", {
                     date: formatDateTime(locale, assignment.createdAt),
@@ -126,11 +134,11 @@ function AssignmentsWorkspace() {
                   })}
                 </p>
               </div>
-              <span className={styles.status} data-tone={assignment.status}>
+              <WorkspaceStatus status={assignment.status}>
                 {t(`pages.common.status.${assignment.status}`)}
-              </span>
+              </WorkspaceStatus>
             </div>
-            <div className={styles.metricGrid}>
+            <div className={`${styles.metricGrid} ${compact.metrics}`}>
               <div className={styles.metric}>
                 <strong>{assignment.attemptCount}</strong>
                 <span>{t("pages.common.attempts")}</span>
@@ -144,8 +152,12 @@ function AssignmentsWorkspace() {
                 <span>{t("pages.assignments.retainedUntil")}</span>
               </div>
             </div>
-            <div className={styles.listCardActions}>
-              <Link className="button small-button" href={`/practice/${assignment.id}`}>
+            <div className={`${styles.listCardActions} ${compact.actions}`}>
+              <Link
+                className={`button small-button ${signals.action}`}
+                data-action="view"
+                href={`/practice/${assignment.id}`}
+              >
                 {t("pages.assignments.manage")}
               </Link>
             </div>

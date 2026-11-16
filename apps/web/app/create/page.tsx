@@ -18,6 +18,7 @@ import { recordCreationEvent } from "../../components/workspace/product-events";
 import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import { creationGoalMessages } from "../../lib/i18n/creation-goal-messages";
+import { creationContent } from "../../lib/i18n/creation-content";
 import launcherStyles from "./create-launcher.module.css";
 
 const starts = ["blank", "starters", "source", "import"] as const;
@@ -212,12 +213,14 @@ function CreateContent() {
       const response = await apiFetch<{ quiz: { id: string } }>("/v1/quizzes", {
         method: "POST",
         body: JSON.stringify({
-          title: title.trim() || "Untitled Round",
+          title: title.trim() || creationContent(locale)("untitledRound"),
           description: "",
         }),
       });
       recordCreationEvent("creation_completed", "blank", "round");
-      router.push(`/quiz/${response.quiz.id}?insert=${firstResponse}`);
+      router.push(
+        `/quiz/${response.quiz.id}?insert=${firstResponse}&creationLocale=${encodeURIComponent(locale)}`,
+      );
     } catch (caught) {
       setError(humanError(caught));
       creatingRef.current = false;

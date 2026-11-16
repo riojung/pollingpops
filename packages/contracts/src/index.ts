@@ -5,6 +5,8 @@ import {
 } from "./presentation-spatial";
 export * from "./presentation-spatial";
 import { z } from "zod";
+import { DEFAULT_SESSION_POLICY, SessionPolicySchema } from "./auth-session";
+export * from "./auth-session";
 export * from "./feature-policy";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -32,7 +34,14 @@ export * from "./presentation-scene-prototype";
 export * from "./presentation-scene";
 export * from "./presentation-rich-text";
 export * from "./presentation-scene-adapter";
-import { PresentationSceneDesignSchema, type PresentationSceneNode } from "./presentation-scene";
+import {
+  PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION,
+  PRESENTATION_STYLED_SCENE_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION,
+  PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION,
+  PresentationSceneDesignSchema,
+  type PresentationSceneNode,
+} from "./presentation-scene";
 import {
   ContentSlideLayoutSchema,
   ContentSlideDraftSchema,
@@ -112,6 +121,7 @@ export const errorCodes = [
   "ANSWER_INVALID",
   "ENTITLEMENT_LIMIT",
   "UNAUTHORIZED",
+  "SESSION_EXPIRED",
   "EMAIL_DELIVERY_FAILED",
   "ARTIFACT_NOT_ARCHIVED",
   "ARTIFACT_IN_USE",
@@ -2643,6 +2653,7 @@ export const WorkspaceAccountContextSchema = z.object({
   accountType: z.enum(["personal", "organization"]),
   licenseUnit: z.enum(["workspace", "user"]),
   planSource: z.enum(["community", "subscription", "free"]),
+  sessionPolicy: SessionPolicySchema.default(DEFAULT_SESSION_POLICY),
   organization: z
     .object({
       id: z.string().uuid(),
@@ -2660,8 +2671,14 @@ export const WorkspaceAccountContextSchema = z.object({
 export type WorkspaceAccountContext = z.infer<typeof WorkspaceAccountContextSchema>;
 
 export const UpdateWorkspaceSettingsSchema = z
-  .object({ name: z.string().trim().min(1).max(120) })
-  .strict();
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    sessionPolicy: SessionPolicySchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.sessionPolicy !== undefined, {
+    message: "At least one workspace setting is required",
+  });
 
 export const CustomerOrganizationSetupSchema = z
   .object({
@@ -3225,6 +3242,16 @@ export const StarterIdSchema = z.enum([
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
+export const StarterGuideSchema = z.object({
+  audience: z.string().trim().min(1).max(300),
+  minutes: z.number().int().positive().max(180),
+  preparation: z.string().trim().min(1).max(1000),
+  facilitation: z.string().trim().min(1).max(1000),
+  interpretation: z.string().trim().min(1).max(1000),
+  followUp: z.string().trim().min(1).max(1000),
+});
+export type StarterGuide = z.infer<typeof StarterGuideSchema>;
+
 export const StarterSummarySchema = z.object({
   id: StarterIdSchema,
   title: z.string().min(1).max(160),
@@ -3237,6 +3264,7 @@ export const StarterSummarySchema = z.object({
   responseTypes: z.array(QuestionTypeSchema).min(1),
   version: z.literal(1),
   roundType: z.enum(["quiz", "poll", "custom"]).default("custom"),
+  guide: StarterGuideSchema.optional(),
 });
 export type StarterSummary = z.infer<typeof StarterSummarySchema>;
 
@@ -4778,7 +4806,7 @@ function applyPresentationTopology(
 
 function applyPresentationRecoveryPackRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
     recoveryPackInsertions?: RecoveryPackInsertion[];
   },
   ctx: z.RefinementCtx,
@@ -4817,10 +4845,10 @@ export const PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
 
 function applyPresentationSceneRules(
   presentation: {
-    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+    schemaVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
     blocks: Array<{
       kind: string;
-      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 };
+      scene?: { schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 };
       hidden?: true;
     }>;
   },
@@ -4851,6 +4879,26 @@ function applyPresentationSceneRules(
         message: "Native scenes require Presentation schema version 4 or later",
       });
     }
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === PRESENTATION_STYLED_SCENE_SCHEMA_VERSION &&
+      presentation.schemaVersion < PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Styled scenes require Presentation schema version 18",
+      });
+    if (
+      block.kind === "content" &&
+      block.scene?.schemaVersion === PRESENTATION_MOTION_BACKGROUND_SCENE_SCHEMA_VERSION &&
+      presentation.schemaVersion < PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["blocks", index, "scene"],
+        message: "Motion background scenes require Presentation schema version 17",
+      });
     if (
       block.kind === "content" &&
       block.scene?.schemaVersion === 7 &&
@@ -5164,6 +5212,8 @@ export const PresentationDraftSchema = z
         z.literal(14),
         z.literal(15),
         z.literal(16),
+        z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
+        z.literal(PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION),
       ])
       .default(2),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
@@ -5239,6 +5289,8 @@ export const PresentationContentSchema = z
       z.literal(14),
       z.literal(15),
       z.literal(16),
+      z.literal(PRESENTATION_MOTION_BACKGROUND_DOCUMENT_SCHEMA_VERSION),
+      z.literal(PRESENTATION_STYLED_DOCUMENT_SCHEMA_VERSION),
     ]),
     sourceDisclosure: PresentationSourceDisclosureSchema.optional(),
     blocks: z.array(PresentationBlockSchema).min(1).max(200),

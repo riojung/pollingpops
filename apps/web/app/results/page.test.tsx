@@ -9,6 +9,9 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ApiModule from "../../lib/api";
+import type { SupportedLocale } from "@openround/contracts";
+import { createdPackPractice } from "../../test-utils/recovery-pack-practice";
+import { packPracticeDetailCopy } from "../../lib/i18n/pack-practice-detail-copy";
 
 interface ComponentHooks {
   cursor: number;
@@ -20,6 +23,7 @@ interface EffectSlot {
 }
 const fixtures = vi.hoisted(() => ({
   workspaceId: "workspace-a",
+  locale: "en-CA" as SupportedLocale,
   presentationsEnabled: true,
   surveysEnabled: true,
   query: "",
@@ -100,7 +104,7 @@ vi.mock("../../components/locale-provider", async () => {
   const messages = { ...englishMessages, ...workspacePageEnglishMessages };
   return {
     useLocale: () => ({
-      locale: "en-CA",
+      locale: fixtures.locale,
       t: (key: Parameters<typeof translate>[1], values?: Record<string, string | number>) =>
         translate(messages, key, values),
     }),
@@ -224,6 +228,7 @@ function response(path: string) {
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(new Date("2026-10-14T12:00:00Z").getTime());
   fixtures.workspaceId = "workspace-a";
+  fixtures.locale = "en-CA";
   fixtures.presentationsEnabled = true;
   fixtures.surveysEnabled = true;
   fixtures.query = "";
@@ -247,6 +252,87 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
+  it.each([
+    { status: "ready", tone: "positive", label: "Ready", action: "result" },
+    { status: "pending", tone: "warning", label: "Processing", action: "view" },
+    { status: "failed", tone: "danger", label: "Needs attention", action: "view" },
+  ])(
+    "uses the actual $status report state while preserving zero and missing evidence",
+    async ({ status, tone, label, action }) => {
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path.startsWith("/v1/reports?")
+          ? {
+              items: [
+                {
+                  ...report(),
+                  status,
+                  initialAccuracyPercent: 0,
+                  recovery: { recovered: 0, eligible: 10, percent: 0 },
+                },
+              ],
+              nextCursor: null,
+            }
+          : response(path),
+      );
+      await resultsHarness().settle();
+      const card = elements(fixtures.tree).find((node) => node.type === "article")!;
+      const markup = renderToStaticMarkup(card);
+      expect(card.props["data-kind"]).toBe("round");
+      expect(card.props["data-state-tone"]).toBe(tone);
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toContain(`</svg>${label}</span>`);
+      expect(markup).toMatch(/aria-hidden="true"[^>]*data-icon="[^"]+"[^>]*focusable="false"/);
+      expect(markup).toContain(`data-action="${action}" href="/report/report-first"`);
+      expect(markup).not.toContain('data-action="resume"');
+      if (status === "ready") {
+        expect(markup).toContain('aria-valuenow="0"');
+        expect(markup).toContain("0%");
+      } else {
+        expect(markup).not.toContain('role="meter"');
+        expect(markup).not.toContain("0%");
+        expect(markup).toContain("No evidence recorded");
+      }
+    },
+  );
+
+  it.each([
+    { view: "practice", kind: "practice", status: "open", tone: "active", label: "Open" },
+    {
+      view: "presentations",
+      kind: "presentation",
+      status: "finished",
+      tone: "neutral",
+      label: "Finished",
+    },
+    { view: "surveys", kind: "survey", status: "closed", tone: "neutral", label: "Closed" },
+  ])(
+    "preserves $view lifecycle signals in grid and list Results",
+    async ({ view, kind, status, tone, label }) => {
+      fixtures.query = `view=${view}`;
+      const harness = resultsHarness();
+      for (const layout of ["grid", "list"]) {
+        if (layout === "list") clickButton("List view");
+        const markup = await harness.settle();
+        expect(markup).toContain(`data-view="${layout}"`);
+        const card = elements(fixtures.tree).find((node) => node.type === "article")!;
+        const cardMarkup = renderToStaticMarkup(card);
+        expect(card.props["data-kind"]).toBe(kind);
+        expect(card.props["data-state-tone"]).toBe(tone);
+        expect(cardMarkup).toContain(
+          `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+        );
+        expect(cardMarkup).toContain(`</svg>${label}</span>`);
+        expect(cardMarkup).not.toContain('data-action="resume"');
+        if (view === "practice") {
+          expect(cardMarkup).toContain('data-action="view" href="/practice/practice-first"');
+          expect(cardMarkup).not.toContain('data-action="edit"');
+        }
+      }
+    },
+  );
+
   it.each([
     { view: "results", path: "/v1/reports", title: "First Round result" },
     { view: "practice", path: "/v1/followups", title: "First practice" },
@@ -317,6 +403,66 @@ describe("Results workspace", () => {
       expect(markup).toContain(`<h2 lang="">${later}</h2>`);
       const calls = historyCalls(path);
       expect(calls.at(-1)![0]).toBe(calls.at(-2)![0]);
+      harness.dispose();
+    },
+  );
+
+  it.each(["delayed_probe", "full_sequence"] as const)(
+    "updates frozen %s Pack attribution on locale changes without reloading practice history",
+    async (role) => {
+      fixtures.query = "view=practice";
+      const source = { ...createdPackPractice().followup.recoveryPackSource!, role };
+      const frozen = structuredClone(source);
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        const result = response(path);
+        if (path.startsWith("/v1/followups?")) {
+          const page = result as {
+            items: ReturnType<typeof practice>[];
+            nextCursor: string | null;
+          };
+          return {
+            ...page,
+            items: page.items.map((item) => ({ ...item, recoveryPackSource: source })),
+          };
+        }
+        return result;
+      });
+      const harness = resultsHarness();
+      await harness.settle();
+      changeSearch("frozen evidence");
+      clickButton("List view");
+      await harness.settle();
+      const reads = historyCalls("/v1/followups").length;
+      for (const locale of ["ko-KR", "de-DE", "en-CA"] as const) {
+        fixtures.locale = locale;
+        const markup = await harness.settle();
+        expect(markup).toMatch(new RegExp(`<p[^>]*lang="${locale}"`));
+        expect(markup).toContain(
+          packPracticeDetailCopy(locale)(
+            role === "full_sequence"
+              ? "Recovery Pack full sequence"
+              : "Recovery Pack delayed probe",
+          ),
+        );
+        expect(markup).toContain('<span lang="">Halves &lt; whole</span>');
+        expect(markup).toContain('value="frozen evidence"');
+        expect(markup).toContain('data-view="list"');
+        expect(markup).toContain('href="/practice/practice-first"');
+        expect(markup).not.toContain("#token=");
+        expect(markup).not.toContain("Diagnostic only");
+        expect(historyCalls("/v1/followups")).toHaveLength(reads);
+        expect(
+          fixtures.apiFetch.mock.calls.some(([path]) =>
+            String(path).startsWith("/v1/recovery-packs"),
+          ),
+        ).toBe(false);
+        expect(source).toEqual(frozen);
+      }
+      clickButton("Load More Practice");
+      const loaded = await harness.settle();
+      expect(loaded).toContain("First practice");
+      expect(loaded).toContain("Later practice");
+      expect(historyCalls("/v1/followups")).toHaveLength(reads + 1);
       harness.dispose();
     },
   );
@@ -880,7 +1026,7 @@ describe("Results workspace", () => {
     });
     const harness = resultsHarness();
     expect(await harness.settle()).toContain('data-view="grid"');
-    clickButton("List");
+    clickButton("List view");
     expect(harness.render()).toContain('data-view="list"');
     expect(window.localStorage.setItem).toHaveBeenLastCalledWith(
       "openround:results-view:v1:workspace-a",
@@ -889,7 +1035,7 @@ describe("Results workspace", () => {
     fixtures.workspaceId = "workspace-b";
     expect(harness.render()).toContain('data-view="grid"');
     await harness.settle();
-    clickButton("List");
+    clickButton("List view");
     expect(window.localStorage.setItem).toHaveBeenLastCalledWith(
       "openround:results-view:v1:workspace-b",
       "list",
@@ -904,7 +1050,7 @@ describe("Results workspace", () => {
       throw new Error("Storage blocked");
     });
     expect(await harness.settle()).toContain('data-view="grid"');
-    clickButton("List");
+    clickButton("List view");
     expect(harness.render()).toContain('data-view="list"');
     expect(headings()).toEqual(["First Round result"]);
   });

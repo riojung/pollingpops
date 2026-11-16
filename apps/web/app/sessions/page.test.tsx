@@ -265,12 +265,63 @@ describe("Sessions workspace", () => {
   it("defaults to Rounds with unknown counts instead of a false zero", () => {
     const markup = renderToStaticMarkup(withEnglishLocale(<SessionsPage />));
     expect(markup).toContain('aria-label="Session type"');
-    expect(markup).toMatch(/aria-selected="true"[^>]*role="tab"[^>]*>Rounds/);
+    expect(markup).toMatch(
+      /aria-selected="true"[^>]*role="tab"[^>]*><svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Rounds/,
+    );
     expect(markup).toContain('aria-label="Loading session count"');
     expect(markup).toContain('placeholder="Search Round sessions"');
     expect(markup).toContain('href="/library?type=rounds"');
     expect(markup).not.toContain("Artifact type");
     expect(markup).not.toContain("Browse Surveys");
+  });
+
+  it.each([
+    { status: "active", tone: "active", label: "Active", resume: true },
+    { status: "finished", tone: "neutral", label: "Finished", resume: false },
+    { status: "expired", tone: "danger", label: "Access Expired", resume: false },
+  ])(
+    "preserves the $status Round lifecycle in its visible badge and actions",
+    async ({ status, tone, label, resume }) => {
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path.startsWith("/v1/sessions?")
+          ? { items: [{ ...round(), status }], nextCursor: null }
+          : response(path),
+      );
+      const harness = sessionsHarness();
+      const markup = await harness.settle();
+      expect(markup).toContain(`data-kind="round" data-state-tone="${tone}"`);
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toMatch(/aria-hidden="true"[^>]*data-icon="[^"]+"[^>]*focusable="false"/);
+      expect(markup).toContain(`</svg>${label}</span>`);
+      expect(markup.includes('data-action="resume"')).toBe(resume);
+      expect(markup).toContain('data-action="result" href="/report/report-one"');
+      clickButton("List view");
+      const listMarkup = harness.render();
+      expect(listMarkup).toContain('data-view="list"');
+      expect(listMarkup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(listMarkup.includes('data-action="resume"')).toBe(resume);
+    },
+  );
+
+  it("keeps Survey Open, Closed, and Expired labels beside their lifecycle signals", async () => {
+    fixtures.query = "type=surveys";
+    const markup = await sessionsHarness().settle();
+    for (const [status, tone, label] of [
+      ["active", "active", "Open"],
+      ["finished", "neutral", "Closed"],
+      ["expired", "danger", "Access Expired"],
+    ]) {
+      expect(markup).toContain(
+        `data-status="${status}" data-tone="${status}" data-state-tone="${tone}"`,
+      );
+      expect(markup).toContain(`</svg>${label}</span>`);
+    }
+    expect(markup).not.toContain('data-action="resume"');
+    expect(markup).not.toContain('href="/results/surveys/survey-expired"');
   });
 
   it.each(["rounds", "presentations", "surveys"])(
@@ -712,14 +763,18 @@ describe("Sessions workspace", () => {
         return Promise.resolve(response(path));
       });
       const harness = sessionsHarness();
-      await harness.settle();
+      const initialMarkup = await harness.settle();
+      const deleteLabel = type === "presentations" ? "Delete session" : "Delete Survey run";
+      expect(initialMarkup).toContain(`aria-label="${deleteLabel}"`);
+      expect(initialMarkup).toContain(`title="${deleteLabel}"`);
+      expect(initialMarkup).toContain(`class="sr-only">${deleteLabel}</span>`);
       const historyReads = () =>
         fixtures.apiFetch.mock.calls.filter(
           ([path]) =>
             path === "/v1/presentation-sessions" || String(path).startsWith("/v1/survey-rooms?"),
         ).length;
       expect(historyReads()).toBe(1);
-      clickButton(type === "presentations" ? "Delete session" : "Delete Survey run");
+      clickButton(deleteLabel);
       fixtures.query = `type=${type}&q=Deletable&status=finished`;
       await harness.settle();
       expect(historyReads()).toBe(1);
@@ -798,7 +853,9 @@ describe("Sessions workspace", () => {
     expect(markup).not.toContain("Delete Survey run");
     fixtures.role = "owner";
     markup = harness.render();
-    expect(markup.match(/>Delete Survey run<\/button>/g)).toHaveLength(2);
+    expect(markup.match(/aria-label="Delete Survey run"/g)).toHaveLength(2);
+    expect(markup.match(/title="Delete Survey run"/g)).toHaveLength(2);
+    expect(markup.match(/class="sr-only">Delete Survey run<\/span>/g)).toHaveLength(2);
   });
 
   it("keeps a pending resume scoped to the original query", async () => {
@@ -823,7 +880,10 @@ describe("Sessions workspace", () => {
 
   it("deletes owner history through the typed endpoint and clears Round credentials", async () => {
     const harness = sessionsHarness();
-    await harness.settle();
+    const initialMarkup = await harness.settle();
+    expect(initialMarkup).toContain('aria-label="Delete session"');
+    expect(initialMarkup).toContain('title="Delete session"');
+    expect(initialMarkup).toContain('class="sr-only">Delete session</span>');
     clickButton("Delete session");
     const markup = await harness.settle();
     expect(
@@ -871,7 +931,9 @@ describe("Sessions workspace", () => {
     await harness.settle();
     clickButton("Delete session");
     fixtures.query = "type=rounds&status=finished";
-    await harness.settle();
+    const pendingMarkup = await harness.settle();
+    expect(pendingMarkup).toContain('aria-label="Deleting…"');
+    expect(pendingMarkup).toContain('aria-live="polite" class="sr-only">Deleting…</span>');
     clickButton("Deleting…");
     expect(
       fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "DELETE"),
@@ -934,7 +996,7 @@ describe("Sessions workspace", () => {
   it("stores a Sessions view per workspace separately from the Library preference", async () => {
     const harness = sessionsHarness();
     await harness.settle();
-    clickButton("List");
+    clickButton("List view");
     expect(harness.render()).toContain('data-view="list"');
     expect(window.localStorage.setItem).toHaveBeenCalledWith(
       "openround:sessions-view:v1:workspace-a",

@@ -7,8 +7,15 @@ import {
   expectQuestionSuggestionsCapacity,
   expectQuestionSuggestionsSourceFence,
   expectQuestionSuggestionsInsertionFence,
+  expectQuestionSuggestionsMotionConformance,
 } from "./support/presentation-question-suggestions-conformance.js";
 describe("Presentation question suggestions memory", () => {
+  it.each([false, true])(
+    "admits, completes and applies suggestions on scene8 without changing text digests (motion cleared: %s)",
+    async (cleared) => {
+      await expectQuestionSuggestionsMotionConformance(new MemoryRepository(), cleared);
+    },
+  );
   it("preserves source, exact admissions, normal opinion insertion and historical accepted receipts", async () => {
     await expectQuestionSuggestionsConformance(new MemoryRepository());
   });

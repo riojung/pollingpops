@@ -12,6 +12,8 @@ import {
 } from "@napi-rs/canvas";
 import {
   PresentationReviewSchema,
+  presentationDesignPalette,
+  type PresentationDesignPaletteColors,
   CANVAS_FILL_COLORS,
   CANVAS_STROKE_COLORS,
   canvasDiagramShapePath,
@@ -26,6 +28,7 @@ import {
   type PresentationRichTextRun,
 } from "@openround/contracts";
 import { inspectPresentationVisualImage } from "./presentation-visual-converter.js";
+import { paintPresentationMotionPoster } from "./presentation-motion-poster.js";
 import {
   PresentationStaticExportError,
   PRESENTATION_STATIC_RENDER_LIMITS as limits,
@@ -37,13 +40,7 @@ import {
 
 const W = limits.width,
   H = limits.height;
-const palettes = {
-  paper: { background: "#fffdf7", text: "#172b4d", link: "#174d8c", border: "#a6b0ba" },
-  midnight: { background: "#111b2e", text: "#f6f8ff", link: "#99d8ff", border: "#657796" },
-  ocean: { background: "#eaf8fa", text: "#113945", link: "#145678", border: "#78aab2" },
-  sunset: { background: "#fff0e5", text: "#522a20", link: "#873722", border: "#bc8f7b" },
-};
-type Palette = typeof palettes.paper;
+type Palette = PresentationDesignPaletteColors;
 type Scene = NonNullable<Extract<PresentationReviewBlock, { kind: "content" }>["scene"]>;
 type Framed = Exclude<PresentationSceneNode, { type: "connector" }>;
 type RenderImages = PresentationStaticRenderInput["images"] & {
@@ -55,6 +52,8 @@ type Style = {
   color: string;
   leading: number;
   bold?: boolean;
+  weight?: number;
+  align?: "left" | "center" | "right";
   italic?: boolean;
 };
 type Glyph = { text: string; bold?: boolean; italic?: boolean; href?: string };
@@ -95,7 +94,7 @@ function assertText(text: string) {
   checkedText.add(text);
 }
 function font(ctx: SKRSContext2D, style: Style, run?: Glyph) {
-  ctx.font = `${run?.italic || style.italic ? "italic " : ""}${run?.bold || style.bold ? "700" : "400"} ${style.size}px ${style.family}, StaticCJK, StaticEmoji`;
+  ctx.font = `${run?.italic || style.italic ? "italic " : ""}${run?.bold ? Math.max(700, style.weight ?? 700) : (style.weight ?? (style.bold ? 700 : 400))} ${style.size}px ${style.family}, StaticCJK, StaticEmoji`;
 }
 function family(token: string | undefined) {
   return token === "serif" ? "serif" : token === "mono" ? "monospace" : "sans-serif";
@@ -191,7 +190,19 @@ function paragraphs(
     }
     for (const line of lineTokens(ctx, paragraph.runs, width - indent, style)) {
       if (cursor >= y + height) break;
-      let left = x + indent;
+      const measured = line.reduce((sum, run) => {
+        font(ctx, style, run);
+        return sum + ctx.measureText(run.text).width;
+      }, 0);
+      const available = width - indent;
+      let left =
+        x +
+        indent +
+        (style.align === "center"
+          ? (available - measured) / 2
+          : style.align === "right"
+            ? available - measured
+            : 0);
       for (const run of line) {
         font(ctx, style, run);
         ctx.fillStyle = style.color;
@@ -581,18 +592,20 @@ async function drawNode(
   }
   if (node.type === "text") {
     const title = node.role === "title",
-      size = title ? 48 : 26,
-      leading = scene.design
-        ? scene.design.spacing === "compact"
-          ? title
-            ? 1.04
-            : 1.2
+      size = node.typography?.size ?? (title ? 48 : 26),
+      leading =
+        node.typography?.leading ??
+        (scene.design
+          ? scene.design.spacing === "compact"
+            ? title
+              ? 1.04
+              : 1.2
+            : title
+              ? 1.12
+              : 1.45
           : title
-            ? 1.12
-            : 1.45
-        : title
-          ? 1.08
-          : 1.35;
+            ? 1.08
+            : 1.35);
     const items =
       node.richText?.paragraphs ??
       node.text
@@ -605,7 +618,15 @@ async function drawNode(
       pad,
       r.width - pad * 2,
       r.height - pad * 2,
-      { size, family: fam, color: palette.text, leading, bold: title },
+      {
+        size,
+        family: node.typography?.font ? family(node.typography.font) : fam,
+        color: palette[node.typography?.color ?? "text"],
+        leading,
+        bold: title,
+        weight: node.typography?.weight,
+        align: node.typography?.align,
+      },
       node.richText ? size * (scene.design?.spacing === "compact" ? 0.25 : 0.55) : 0,
     );
   } else if (node.type === "image")
@@ -619,14 +640,24 @@ async function drawNode(
   else if (node.type === "shape") {
     ctx.save();
     ctx.scale(r.width / 160, r.height / 90);
-    ctx.fillStyle = CANVAS_FILL_COLORS[node.color];
-    ctx.strokeStyle = CANVAS_STROKE_COLORS[node.color];
-    ctx.lineWidth = 2;
+    const fill = node.appearance?.fill;
+    const stroke = node.appearance?.stroke;
+    ctx.fillStyle =
+      fill === "none" ? "transparent" : fill ? palette[fill] : CANVAS_FILL_COLORS[node.color];
+    ctx.strokeStyle =
+      stroke === "none"
+        ? "transparent"
+        : stroke
+          ? palette[stroke]
+          : CANVAS_STROKE_COLORS[node.color];
+    const strokeWidth = node.appearance?.strokeWidth ?? 2;
+    ctx.lineWidth = strokeWidth;
+    const paintStroke = stroke !== "none" && strokeWidth > 0;
     if (node.shape === "ellipse") {
       ctx.beginPath();
       ctx.ellipse(80, 45, 78, 43, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
+      if (paintStroke) ctx.stroke();
     } else {
       const path =
         node.shape === "diamond" || node.shape === "parallelogram"
@@ -634,13 +665,20 @@ async function drawNode(
           : canvasShapeVariantPath(node.shape, 160, 90);
       const shape = new Path2D(path);
       ctx.fill(shape);
-      ctx.stroke(shape);
+      if (paintStroke) ctx.stroke(shape);
     }
     ctx.restore();
     centeredText(ctx, node.label, r.width * 0.075, 0, r.width * 0.85, r.height, {
       size: 22,
       family: fam,
-      color: node.color === "black" ? "#fff" : "#102a43",
+      color:
+        fill === "accent"
+          ? palette.accentText
+          : fill !== undefined
+            ? palette.text
+            : node.color === "black"
+              ? "#fff"
+              : "#102a43",
       leading: 1.25,
     });
   } else if (node.type === "table") {
@@ -684,29 +722,39 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
   const canvas = createCanvas(W, H),
     ctx = canvas.getContext("2d");
   ctx.textBaseline = "top";
+  const effectiveDesign = block.design,
+    inheritedPalette = effectiveDesign ? presentationDesignPalette(effectiveDesign) : undefined;
   if (block.kind === "content" && block.scene) {
-    const scene = block.scene,
-      palette = scene.design
-        ? palettes[scene.design.theme]
-        : { background: "#fff", text: "#102a43", link: "#145da0", border: "#cbd5e1" };
+    // Inheritance is a rendering view; do not upgrade or rewrite the published scene.
+    const scene =
+        block.scene.design || !effectiveDesign
+          ? block.scene
+          : { ...block.scene, design: effectiveDesign },
+      palette = presentationDesignPalette(scene.design);
     ctx.fillStyle = palette.background;
     ctx.fillRect(0, 0, W, H);
+    if (scene.design?.motionBackground) paintPresentationMotionPoster(ctx, scene.design, W, H);
     for (const node of scene.nodes) if (node.type === "connector") connector(ctx, scene, node);
     for (const node of scene.nodes)
       if (node.type !== "connector") await drawNode(ctx, node, scene, images, palette);
   } else if (block.kind === "content") {
-    const gradient = ctx.createLinearGradient(0, 0, W, H);
-    gradient.addColorStop(0, "#f8fbff");
-    gradient.addColorStop(1, "#fff");
-    ctx.fillStyle = gradient;
+    if (inheritedPalette) ctx.fillStyle = inheritedPalette.background;
+    else {
+      const gradient = ctx.createLinearGradient(0, 0, W, H);
+      gradient.addColorStop(0, "#f8fbff");
+      gradient.addColorStop(1, "#fff");
+      ctx.fillStyle = gradient;
+    }
     ctx.fillRect(0, 0, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     const frames = resolveContentSlideFrames(block);
     for (const element of block.textElements) {
       const r = frame(frames[element.id]!);
       text(ctx, element.text, r.x + 8, r.y + 6, r.width - 16, r.height - 12, {
         size: element.role === "title" ? 46 : 23,
-        family: "sans-serif",
-        color: element.role === "title" ? "#102a43" : "#334e68",
+        family: family(effectiveDesign?.font),
+        color: inheritedPalette?.text ?? (element.role === "title" ? "#102a43" : "#334e68"),
         leading: element.role === "title" ? 1.04 : 1.4,
         bold: element.role === "title",
       });
@@ -714,18 +762,20 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
     if (block.mediaId)
       drawImage(ctx, await imageAt(images, block.mediaId), frame(contentSlideMediaFrame));
   } else {
-    ctx.fillStyle = "#f8fbff";
+    ctx.fillStyle = inheritedPalette?.background ?? "#f8fbff";
     ctx.fillRect(0, 0, W, H);
+    if (effectiveDesign?.motionBackground)
+      paintPresentationMotionPoster(ctx, effectiveDesign, W, H);
     text(ctx, "Activity preview - no submissions or results", 64, 34, 1152, 40, {
       size: 20,
-      family: "sans-serif",
-      color: "#52616f",
+      family: family(effectiveDesign?.font),
+      color: inheritedPalette?.link ?? "#52616f",
       leading: 1.3,
     });
     const end = text(ctx, block.question.prompt, 64, 96, 1152, 220, {
       size: 42,
-      family: "sans-serif",
-      color: "#102a43",
+      family: family(effectiveDesign?.font),
+      color: inheritedPalette?.text ?? "#102a43",
       leading: 1.2,
       bold: true,
     });
@@ -738,7 +788,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         block.question.mediaId ? 700 : 1152,
         340,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.5 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.5,
+        },
       );
     else if (block.question.rating)
       text(
@@ -748,7 +803,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#102a43", leading: 1.4 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#102a43",
+          leading: 1.4,
+        },
       );
     else
       text(
@@ -760,7 +820,12 @@ async function drawPage(block: PresentationReviewBlock, images: RenderImages) {
         end + 24,
         1152,
         120,
-        { size: 26, family: "sans-serif", color: "#52616f", leading: 1.4 },
+        {
+          size: 26,
+          family: family(effectiveDesign?.font),
+          color: inheritedPalette?.text ?? "#52616f",
+          leading: 1.4,
+        },
       );
     if (block.question.mediaId)
       drawImage(ctx, await imageAt(images, block.question.mediaId), {
@@ -868,7 +933,9 @@ function semanticBlock(
         case "image":
           return image(node.mediaId, node.altText);
         case "shape":
-          return `<p>Shape (${escape(node.shape)}): ${escape(node.label)}</p>`;
+          return node.decorative
+            ? ""
+            : `<p>Shape (${escape(node.shape)}): ${escape(node.label)}</p>`;
         case "connector":
           return `<p>${escape(node.label || "Connection")}: ${escape(nodeLabel(nodes.get(node.from.nodeId)))} → ${escape(nodeLabel(nodes.get(node.to.nodeId)))}</p>`;
         case "table":

@@ -17,6 +17,12 @@ import {
 } from "../../components/workspace/workspace-creation-model";
 import { hasHomeWork, homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
 import { useHomeSummary } from "./home-summary";
+import { deriveHomeInsights } from "../../lib/home-insights";
+import { homeOverviewCopy, formatHomeOverviewText } from "../../lib/i18n/home-overview-copy";
+import { HomeOverview, HomeNextUp } from "./home-overview";
+import { HomeIcon } from "./home-icon";
+import { WorkspaceStatus } from "../../components/workspace/workspace-signals";
+import signals from "../../components/workspace/workspace-signals.module.css";
 import styles from "./home.module.css";
 
 type Translator = ReturnType<typeof useLocale>["t"];
@@ -46,6 +52,7 @@ function HomeWorkspace() {
   const { canEdit, creator, workspace, productFeatures, loading: accountLoading } = useWorkspace();
   const copy = workspaceDiscoveryCopy(locale);
   const canvasCopy = canvasMessages(locale);
+  const overviewCopy = homeOverviewCopy(locale);
   const contextKey =
     !accountLoading && creator && productFeatures?.workspaceShell === true
       ? JSON.stringify([
@@ -64,6 +71,7 @@ function HomeWorkspace() {
   const { summary, loading, error, refresh: loadSummary } = useHomeSummary(contextKey);
   const canCreate = workspaceCreationOptions({ canEdit, productFeatures }).length > 0;
   const recentWork = summary ? recentHomeWork(summary) : [];
+  const insights = summary ? deriveHomeInsights(summary, canEdit) : null;
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -132,7 +140,13 @@ function HomeWorkspace() {
           : action.label === "continueEditing"
             ? t("pages.home.authoring.continueEditing")
             : copy[action.label];
-    return { ...action, label };
+    const tone =
+      action.label === "hostRound" || action.label === "hostPresentation"
+        ? "host"
+        : action.label === "continueEditing"
+          ? "edit"
+          : "view";
+    return { ...action, label, tone };
   }
   function compactWork(items: HomeWork[]) {
     return (
@@ -145,9 +159,7 @@ function HomeWorkspace() {
           >
             <div className={styles.activityTopline}>
               <span>{workType(artifact)}</span>
-              <span className={styles.statusPill} data-status={artifact.status}>
-                {workStatus(artifact)}
-              </span>
+              <WorkspaceStatus status={artifact.status}>{workStatus(artifact)}</WorkspaceStatus>
             </div>
             <strong lang="">{artifact.title}</strong>
             {workCount(artifact) || artifact.updatedAt ? (
@@ -171,11 +183,12 @@ function HomeWorkspace() {
     <WorkspaceShell
       actions={
         canCreate ? (
-          <Link className="button" href={createHref} lang={locale}>
+          <Link className={`button ${styles.homeCreateAction}`} href={createHref} lang={locale}>
             {t("common.create")}
           </Link>
         ) : null
       }
+      headerDensity="compact"
       description={t("home.welcome", { name: firstName })}
       eyebrow={t("home.eyebrow")}
       title={t("home.title")}
@@ -195,7 +208,11 @@ function HomeWorkspace() {
                   {localizedProgress(session.progressLabel, t)}
                 </p>
               </div>
-              <Link className="button" href={session.href}>
+              <Link
+                className={`button ${signals.action}`}
+                data-action={session.artifactType === "round" ? "view" : "resume"}
+                href={session.href}
+              >
                 {t(
                   session.artifactType === "round"
                     ? "pages.common.openSessions"
@@ -227,6 +244,20 @@ function HomeWorkspace() {
         </section>
       ) : null}
 
+      {summary && insights ? (
+        <HomeOverview
+          summary={summary}
+          insights={insights}
+          boardsAvailable={
+            productFeatures?.ideaBoards === true ||
+            productFeatures?.canvasBoards === true ||
+            summary.totals.boards === undefined ||
+            summary.totals.boards > 0 ||
+            (summary.recentBoards?.length ?? 0) > 0
+          }
+        />
+      ) : null}
+
       {summary && canCreate && creator ? (
         <HomeGuidance
           summary={summary}
@@ -250,55 +281,70 @@ function HomeWorkspace() {
                 <div>
                   <p className={styles.eyebrow}>{t("pages.home.authoring.eyebrow")}</p>
                   <h2>{t("pages.home.authoring.title")}</h2>
-                  <p>{copy.recentDescription}</p>
+                  <p>{overviewCopy.recentWorkDescription}</p>
                 </div>
                 <Link href="/library">{t("pages.common.viewLibrary")}</Link>
               </div>
               {recentWork.length ? (
-                <div className={styles.artifactGrid} data-layout="compact">
-                  {recentWork.map((artifact) => (
-                    <article
-                      className={styles.artifactCard}
-                      key={`${artifact.artifactType}:${artifact.id}`}
-                    >
-                      <div className={styles.cardTopline}>
-                        <span
-                          className={styles.typePill}
-                          data-type={artifact.artifactType}
-                          lang={locale}
+                <div
+                  className={styles.artifactGrid}
+                  data-layout="compact"
+                  role="list"
+                  aria-label={formatHomeOverviewText(overviewCopy.recentWorkCount, {
+                    count: new Intl.NumberFormat(locale).format(recentWork.length),
+                  })}
+                >
+                  {recentWork.map((artifact) => {
+                    const count = workCount(artifact);
+                    const action = workAction(artifact);
+                    return (
+                      <article
+                        className={styles.artifactCard}
+                        key={`${artifact.artifactType}:${artifact.id}`}
+                        data-work-row
+                        role="listitem"
+                      >
+                        <span className={styles.workIcon} data-type={artifact.artifactType}>
+                          <HomeIcon name={artifact.artifactType} />
+                        </span>
+                        <div className={styles.workContent}>
+                          <div className={styles.workTitleline}>
+                            <h3 lang="">
+                              <Link href={artifact.editHref}>{artifact.title}</Link>
+                            </h3>
+                            <WorkspaceStatus status={artifact.status}>
+                              {workStatus(artifact)}
+                            </WorkspaceStatus>
+                          </div>
+                          <div className={styles.metadata}>
+                            <span
+                              className={styles.workType}
+                              data-type={artifact.artifactType}
+                              lang={locale}
+                            >
+                              {workType(artifact)}
+                            </span>
+                            {count ? <span>{count}</span> : null}
+                            {artifact.updatedAt ? (
+                              <time dateTime={artifact.updatedAt} lang={locale}>
+                                {t("pages.common.updated", {
+                                  date: formatDate(artifact.updatedAt),
+                                })}
+                              </time>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Link
+                          className={`${styles.cardAction} ${signals.action}`}
+                          data-action={action.tone}
+                          href={action.href}
+                          aria-label={`${action.label}: ${artifact.title}`}
                         >
-                          {workType(artifact)}
-                        </span>
-                        <span className={styles.statusPill} data-status={artifact.status}>
-                          {workStatus(artifact)}
-                        </span>
-                      </div>
-                      <h3 lang="">
-                        <Link href={artifact.editHref}>{artifact.title}</Link>
-                      </h3>
-                      <p className={styles.description}>
-                        {artifact.description ? (
-                          <span lang="">{artifact.description}</span>
-                        ) : (
-                          t("pages.common.noDescription")
-                        )}
-                      </p>
-                      {workCount(artifact) || artifact.updatedAt ? (
-                        <p className={styles.metadata}>
-                          {workCount(artifact)}
-                          {workCount(artifact) && artifact.updatedAt ? " · " : null}
-                          {artifact.updatedAt ? (
-                            <time dateTime={artifact.updatedAt} lang={locale}>
-                              {t("pages.common.updated", { date: formatDate(artifact.updatedAt) })}
-                            </time>
-                          ) : null}
-                        </p>
-                      ) : null}
-                      <Link className={styles.cardAction} href={workAction(artifact).href}>
-                        {workAction(artifact).label} →
-                      </Link>
-                    </article>
-                  ))}
+                          {action.label} →
+                        </Link>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className={styles.compactEmpty}>
@@ -381,6 +427,7 @@ function HomeWorkspace() {
           </div>
 
           <aside className={styles.sideColumn} aria-label={t("pages.home.currentActivity")}>
+            {insights ? <HomeNextUp insights={insights} /> : null}
             <section className={styles.sidePanel}>
               <div className={styles.sideHeading}>
                 <div>
@@ -493,9 +540,9 @@ function HomeWorkspace() {
                       key={assignment.id}
                     >
                       <div className={styles.activityTopline}>
-                        <span className={styles.statusPill} data-status={assignment.status}>
+                        <WorkspaceStatus status={assignment.status}>
                           {t(`pages.common.status.${assignment.status}`)}
-                        </span>
+                        </WorkspaceStatus>
                         <time dateTime={assignment.closesAt} lang={locale}>
                           {t("pages.common.closes", { date: formatDate(assignment.closesAt) })}
                         </time>

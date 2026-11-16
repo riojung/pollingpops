@@ -1,9 +1,14 @@
 import { randomInt, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { LocalReturnPathSchema } from "@openround/contracts";
+import {
+  AuthSessionStateSchema,
+  LocalReturnPathSchema,
+  type AuthSessionState,
+} from "@openround/contracts";
 import { createPlatformRepository, PlatformError } from "@openround/db";
 import type {
   CreatorContext,
+  CreatorSessionRecord,
   MagicLinkIdentity,
   Repository,
   Segment,
@@ -145,11 +150,13 @@ export class AuthService {
 
   private async issueIdentitySession(user: UserPrincipal, activeWorkspaceId?: string) {
     const sessionToken = opaqueToken();
+    const now = new Date();
     await this.repository.createCreatorSession({
       id: randomUUID(),
       userId: user.userId,
       tokenHash: hashToken(sessionToken),
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000),
+      expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60_000),
+      createdAt: now,
       ...(activeWorkspaceId ? { activeWorkspaceId } : {}),
     });
     return sessionToken;
@@ -280,12 +287,58 @@ export class AuthService {
     return creator ? this.effectiveCreator(creator) : null;
   }
 
+  private sessionState(session: CreatorSessionRecord, now: Date): AuthSessionState {
+    const expiresAt = new Date(
+      Math.min(session.idleExpiresAt.getTime(), session.expiresAt.getTime()),
+    );
+    return AuthSessionStateSchema.parse({
+      sessionId: session.id,
+      workspaceId: session.activeWorkspaceId,
+      serverNow: now.toISOString(),
+      lastActivityAt: session.lastActivityAt.toISOString(),
+      warningAt: new Date(expiresAt.getTime() - 60_000).toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      absoluteExpiresAt: session.expiresAt.toISOString(),
+      policy: { idleTimeoutMinutes: session.idleTimeoutMinutes, warningDurationSeconds: 60 },
+    });
+  }
+
+  async sessionFromRequest(request: FastifyRequest, intent?: "activity" | "continue") {
+    const token = request.cookies[this.config.COOKIE_NAME];
+    if (!token) return null;
+    const now = new Date();
+    const session = intent
+      ? await this.repository.renewCreatorSession(hashToken(token), now, intent)
+      : await this.repository.getCreatorSession(hashToken(token), now);
+    const responseNow = new Date();
+    return session && session.idleExpiresAt > responseNow && session.expiresAt > responseNow
+      ? this.sessionState(session, responseNow)
+      : null;
+  }
+
+  async rejectUnauthenticated(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("cache-control", "private, no-store");
+    const token = request.cookies[this.config.COOKIE_NAME];
+    const expired = Boolean(
+      token &&
+      !(await this.sessionFromRequest(request)) &&
+      (await this.repository.creatorSessionExists(hashToken(token))),
+    );
+    // An old request can finish after a newer sign-in installs another cookie.
+    // Expired credentials are already invalid; only explicit logout clears cookies.
+    return reply.code(401).send({
+      error: {
+        code: expired ? "SESSION_EXPIRED" : "UNAUTHORIZED",
+        message: expired ? "Your session has expired. Sign in again" : "Sign in required",
+        requestId: request.id,
+      },
+    });
+  }
+
   async requireCreator(request: FastifyRequest, reply: FastifyReply) {
     const creator = await this.creatorFromRequest(request);
     if (!creator) {
-      await reply.code(401).send({
-        error: { code: "UNAUTHORIZED", message: "Sign in required", requestId: request.id },
-      });
+      await this.rejectUnauthenticated(request, reply);
       return null;
     }
     return creator;
@@ -294,9 +347,7 @@ export class AuthService {
   async requireUser(request: FastifyRequest, reply: FastifyReply) {
     const user = await this.userFromRequest(request);
     if (!user) {
-      await reply.code(401).send({
-        error: { code: "UNAUTHORIZED", message: "Sign in required", requestId: request.id },
-      });
+      await this.rejectUnauthenticated(request, reply);
     }
     return user;
   }
@@ -308,9 +359,30 @@ export class AuthService {
       : null;
   }
 
-  async logout(request: FastifyRequest, reply: FastifyReply) {
+  async logout(request: FastifyRequest, reply: FastifyReply, expectedSessionId?: string) {
     const token = request.cookies[this.config.COOKIE_NAME];
+    if (expectedSessionId !== undefined) {
+      reply.header("cache-control", "private, no-store");
+      // Match the immutable credential and record ID atomically. A stale liveness
+      // read must not skip revocation while another tab renews the same session.
+      if (token) await this.repository.revokeCreatorSession(hashToken(token), expectedSessionId);
+      const session = await this.sessionFromRequest(request);
+      if (session && session.sessionId !== expectedSessionId) {
+        await reply.code(409).send({
+          error: {
+            code: "CONFLICT",
+            message: "Your sign-in session changed. Refresh before signing out",
+            requestId: request.id,
+          },
+        });
+        return false;
+      }
+      // A delayed reply must not clear a cookie installed by a newer sign-in.
+      // Revocation makes this guarded session's retained cookie value inert.
+      return true;
+    }
     if (token) await this.repository.revokeCreatorSession(hashToken(token));
     this.clearSessionCookie(reply);
+    return true;
   }
 }

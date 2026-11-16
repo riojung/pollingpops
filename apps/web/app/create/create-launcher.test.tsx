@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
 import type { SupportedLocale, WorkspaceProductFeatures } from "@openround/contracts";
+import { creationContent } from "../../lib/i18n/creation-content";
 import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
 
 const allFeatures = () =>
@@ -163,31 +164,45 @@ describe("Round creation launcher", () => {
     expect(workflow).toContain(">가져오기</button>");
   });
 
-  it("creates one private unscored draft only after the Quick poll action, even on a double click", async () => {
-    fixtures.request.mockResolvedValue({ quiz: { id: "new-poll" } });
-    fixtures.capture = true;
-    const page = CreatePage();
-    const shell = page.props.children as ReactElement<{ children: ReactElement }>;
-    const content = shell.props.children;
-    const tree = (content.type as () => ReactElement)();
-    fixtures.capture = false;
-    function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
-      if (Array.isArray(node)) return node.flatMap(elements);
-      if (!isValidElement<Record<string, unknown>>(node)) return [];
-      return [node, ...elements(node.props.children as ReactNode)];
-    }
-    const button = elements(tree).find((element) => element.type === "button");
-    expect(button).toBeDefined();
-    expect(fixtures.request).not.toHaveBeenCalled();
-    (button!.props.onClick as () => void)();
-    (button!.props.onClick as () => void)();
-    for (let index = 0; index < 8; index++) await Promise.resolve();
-    expect(fixtures.request).toHaveBeenCalledExactlyOnceWith("/v1/quizzes", {
-      method: "POST",
-      body: JSON.stringify({ title: "Untitled Round", description: "" }),
-    });
-    expect(fixtures.push).toHaveBeenCalledExactlyOnceWith("/quiz/new-poll?insert=poll");
-  });
+  it.each(["en-CA", "ko-KR"] as const)(
+    "creates one private unscored draft after the explicit action and captures %s through a locale change",
+    async (locale) => {
+      fixtures.locale = locale;
+      let acknowledge!: (value: unknown) => void;
+      fixtures.request.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      fixtures.capture = true;
+      const page = CreatePage();
+      const shell = page.props.children as ReactElement<{ children: ReactElement }>;
+      const content = shell.props.children;
+      const tree = (content.type as () => ReactElement)();
+      fixtures.capture = false;
+      function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+        if (Array.isArray(node)) return node.flatMap(elements);
+        if (!isValidElement<Record<string, unknown>>(node)) return [];
+        return [node, ...elements(node.props.children as ReactNode)];
+      }
+      const button = elements(tree).find((element) => element.type === "button");
+      expect(button).toBeDefined();
+      expect(fixtures.request).not.toHaveBeenCalled();
+      (button!.props.onClick as () => void)();
+      (button!.props.onClick as () => void)();
+      fixtures.locale = locale === "ko-KR" ? "en-CA" : "ko-KR";
+      acknowledge({ quiz: { id: "new-poll" } });
+      for (let index = 0; index < 8; index++) await Promise.resolve();
+      expect(fixtures.request).toHaveBeenCalledExactlyOnceWith("/v1/quizzes", {
+        method: "POST",
+        body: JSON.stringify({ title: creationContent(locale)("untitledRound"), description: "" }),
+      });
+      expect(fixtures.push).toHaveBeenCalledExactlyOnceWith(
+        `/quiz/new-poll?insert=poll&creationLocale=${locale}`,
+      );
+    },
+  );
 
   it("hides ungranted products while retaining independently granted boards and legacy Rounds", () => {
     fixtures.features = {

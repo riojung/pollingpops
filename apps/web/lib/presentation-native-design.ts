@@ -31,15 +31,37 @@ export const INITIAL_NATIVE_DESIGN: PresentationSceneDesign = {
   spacing: "relaxed",
 };
 
-/** An explicit action opts into version 3; existing scenes are never normalized on read. */
+/** An explicit slide font change takes precedence over the collection's paired node fonts. */
+export function nativeSceneNodesForDesign(
+  scene: PresentationScene,
+  design: PresentationSceneDesign,
+): PresentationScene["nodes"] {
+  if (
+    scene.design?.font === design.font ||
+    !scene.nodes.some((node) => node.type === "text" && node.typography?.font)
+  )
+    return scene.nodes;
+  return scene.nodes.map((node) => {
+    if (node.type !== "text" || !node.typography?.font) return node;
+    const typography = { ...node.typography };
+    delete typography.font;
+    return { ...node, typography };
+  });
+}
+
+/** Explicit design writes opt into their feature version; reads preserve historical scenes. */
 export function applyNativeSceneDesign(
   scene: PresentationScene,
   design: PresentationSceneDesign,
 ): PresentationScene {
   return PresentationSceneDraftSchema.parse({
     ...scene,
-    schemaVersion: scene.schemaVersion >= 3 ? scene.schemaVersion : 3,
+    schemaVersion: Math.max(
+      scene.schemaVersion,
+      design.palette ? 9 : design.motionBackground ? 8 : 3,
+    ),
     design,
+    nodes: nativeSceneNodesForDesign(scene, design),
   });
 }
 

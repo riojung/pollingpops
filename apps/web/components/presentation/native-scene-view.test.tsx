@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -299,6 +300,91 @@ describe("production native scene rendering", () => {
     expect(scene).toEqual(original);
   });
 
+  it("opts the editing canvas into eight direct handles above selected content, with circular corners and square sides", () => {
+    const scene = nativeSceneFixture();
+    const body = scene.nodes.find((node) => node.id === "body")!;
+    if (body.type === "connector") throw new Error("Expected body");
+    body.rotation = 25;
+    const markup = renderToStaticMarkup(
+      <NativeSceneView
+        scene={scene}
+        onSelect={() => {}}
+        selectedNodeIds={["body"]}
+        hideGeometryControls
+        showSelectionHandles
+        onNodePointerDown={() => {}}
+      />,
+    );
+    expect(markup).toContain('data-native-selection-outline="true"');
+    expect(markup.match(/data-native-resize-handle=/g)).toHaveLength(8);
+    expect(markup.match(/data-native-resize-corner=/g)).toHaveLength(4);
+    expect(markup.match(/data-native-move-border=/g)).toHaveLength(4);
+    const strips = markup.match(/<span[^>]*data-native-move-border[^>]*>/g)!;
+    expect(
+      strips.every((strip) => strip.includes('aria-hidden="true"') && !strip.includes("tabindex")),
+    ).toBe(true);
+    expect(markup).toContain("clamp(16px,");
+    expect(markup).toContain("rotate(25deg)");
+    // The overlay follows all authored nodes, outside text/data/interaction descendants.
+    expect(markup.indexOf('data-native-selection-handles="true"')).toBeGreaterThan(
+      markup.indexOf('data-node-id="edge"'),
+    );
+    expect(markup.indexOf('data-native-move-border="n"')).toBeLessThan(
+      markup.indexOf('data-native-resize-handle="nw"'),
+    );
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8");
+    expect(css).toContain(".selectionOverlay,\n  .snapGuides {\n    display: none;");
+    expect(css).toContain("pointer-events: auto;");
+    expect(css).toContain("width: 32px;");
+  });
+
+  it("keeps move border hit areas outside the authored frame so inner native scrollbars remain usable", () => {
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8");
+    const rule = (selector: string) => css.slice(css.indexOf(`${selector} {`)).split("}")[0]!;
+    expect(rule(".selectionOutline")).toContain("outline-offset: 0;");
+    expect(rule(".selectionOutline")).toContain("pointer-events: none;");
+    // Each 8px hit strip ends exactly at the frame edge, with no area over its content.
+    const borders = [
+      ["n", "-8px 0 auto", "height"],
+      ["e", "0 -8px 0 auto", "width"],
+      ["s", "auto 0 -8px", "height"],
+      ["w", "0 auto 0 -8px", "width"],
+    ];
+    for (const [edge, inset, size] of borders) {
+      const border = rule(`.selectionDragBorder[data-native-move-border="${edge}"]`);
+      expect(border).toContain(`inset: ${inset};`);
+      expect(border).toContain(`${size}: 8px;`);
+    }
+  });
+
+  it("uses one shared handle set for multiple objects and persistent groups, and never exposes it in delivery or thumbnails", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 4;
+    scene.groups = [{ id: "group", nodeIds: ["body", "shape"] }];
+    const props = {
+      scene,
+      selectedNodeIds: ["body"],
+      hideGeometryControls: true,
+      showSelectionHandles: true,
+      onNodePointerDown: () => {},
+    };
+    const markup = renderToStaticMarkup(<NativeSceneView {...props} onSelect={() => {}} />);
+    expect(markup.match(/data-native-resize-handle=/g)).toHaveLength(8);
+    expect(markup.match(/data-native-selection-outline=/g)).toHaveLength(1);
+    expect(markup).toContain("left:8%;top:40%;width:57%;height:30%");
+    for (const preview of [
+      <NativeSceneView key="delivery" {...props} />,
+      <NativeSceneView key="thumbnail" {...props} onSelect={() => {}} staticThumbnail />,
+      <NativeSceneView
+        key="readonly"
+        {...props}
+        onSelect={() => {}}
+        showSelectionHandles={false}
+      />,
+    ])
+      expect(renderToStaticMarkup(preview)).not.toContain("data-native-resize-handle");
+  });
+
   it("exposes complete native authoring controls while requiring a description before upload", () => {
     const markup = renderToStaticMarkup(
       <NativeSceneEditor
@@ -413,5 +499,101 @@ describe("shared native design rendering", () => {
     expect(markup).not.toContain("data-native-theme");
     expect(markup).not.toContain("--native-background");
     expect(scene).toEqual(original);
+  });
+});
+
+describe("bounded designed scene paint", () => {
+  it("uses authored palette, type and shape tokens for plain and rich text, retaining editor selection", () => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 9;
+    scene.design = { theme: "paper", palette: "cobalt", font: "sans", spacing: "compact" };
+    scene.nodes = scene.nodes.map((node) =>
+      node.type === "text"
+        ? {
+            ...node,
+            typography: {
+              size: 96,
+              weight: 800,
+              align: "center",
+              font: "serif",
+              color: "accent",
+              leading: 0.95,
+            },
+            ...(node.role === "body"
+              ? { richText: { paragraphs: [{ kind: "paragraph", runs: [{ text: node.text }] }] } }
+              : {}),
+          }
+        : node.type === "shape"
+          ? {
+              ...node,
+              decorative: true,
+              appearance: { fill: "accent", stroke: "none", strokeWidth: 0 },
+            }
+          : node,
+    );
+    const before = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} />);
+    expect(markup).toContain("--native-background:#1847c5");
+    expect(markup).toContain("--native-node-size:7.5cqw");
+    expect(markup).toContain("--native-node-weight:800");
+    expect(markup).toContain("--native-node-align:center");
+    expect(markup).toContain("--native-node-leading:0.95");
+    expect(markup).toContain("--native-node-color:#f5ef83");
+    expect(markup).toContain('fill="#f5ef83" stroke="none" stroke-width="0"');
+    expect(markup).toContain('data-decorative="true"');
+    expect(markup).toMatch(/aria-hidden="true" role="img" aria-label="Decision"/);
+    const editing = renderToStaticMarkup(
+      <NativeSceneView scene={scene} onSelect={() => undefined} />,
+    );
+    expect(editing).not.toContain('data-decorative="true"');
+    expect(editing).toContain('data-node-id="shape"');
+    expect(scene).toEqual(before);
+  });
+});
+
+describe("styled rich text reading contrast", () => {
+  it("resets the color token consumed by nested paragraphs in phone and outline reading layouts", () => {
+    // Check the stylesheet contract here; browser coverage verifies computed colors after formatting.
+    const css = readFileSync(new URL("./native-scene.module.css", import.meta.url), "utf8").replace(
+      /\s+/g,
+      " ",
+    );
+    const readingRoots = [
+      '.stage:where(:not(.staticThumbnail):not([data-native-fixed-layout="true"])) .node[data-native-typography] > :is(h1, p, .richBody)',
+      ".outline .node[data-native-typography] > :is(h1, p, .richBody)",
+    ];
+    for (const selector of readingRoots) {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const declarations = css.match(new RegExp(`${escaped}\\s*\\{([^}]+)\\}`))?.[1];
+      expect(declarations).toMatch(/--native-node-color:\s*var\(--native-text, #102a43\)/);
+      expect(declarations).not.toMatch(/--native-link:/);
+    }
+    // The authored outer-node token and palette link token remain available to fixed layouts.
+    expect(css.match(/--native-node-color:\s*var\(--native-text, #102a43\)/g)).toHaveLength(2);
+    expect(css).toMatch(/\.richBody a, \.richTitle a \{ color: var\(--native-link, #145da0\)/);
+  });
+});
+
+describe("shape labels after legacy color edits", () => {
+  it.each([
+    [{ strokeWidth: 1 }, "#ffffff"],
+    [{ stroke: "none" as const }, "#ffffff"],
+    [{ fill: "none" as const, strokeWidth: 1 }, "#171717"],
+  ])("uses fill authority for label contrast with appearance %j", (appearance, labelColor) => {
+    const scene = nativeSceneFixture();
+    scene.schemaVersion = 9;
+    scene.design = { theme: "paper", palette: "default", font: "sans", spacing: "compact" };
+    scene.nodes = scene.nodes.map((node) =>
+      node.type === "shape" ? { ...node, color: "black" as const, appearance } : node,
+    );
+    const before = structuredClone(scene);
+    const markup = renderToStaticMarkup(<NativeSceneView scene={scene} />);
+    expect(markup).toContain(
+      `<span aria-hidden="true" style="color:${labelColor}">Decision</span>`,
+    );
+    expect(markup).toContain(
+      `fill="${"fill" in appearance && appearance.fill === "none" ? "none" : "#3b4351"}"`,
+    );
+    expect(scene).toEqual(before);
   });
 });

@@ -172,7 +172,9 @@ for (const suffix of ["", " @mobile"]) {
     await expect(originalHeading).toHaveCSS("max-width", legacyHeading.maxWidth);
     await openE01Inspector(page, "Layout");
     await page.getByRole("button", { name: "Enable slide design", exact: true }).click();
-    await page.getByRole("combobox", { name: "Slide theme", exact: true }).selectOption("midnight");
+    await page
+      .getByRole("combobox", { name: "Base color theme", exact: true })
+      .selectOption("midnight");
     await page.getByRole("combobox", { name: "Slide font", exact: true }).selectOption("serif");
     await page
       .getByRole("combobox", { name: "Slide spacing", exact: true })
@@ -202,9 +204,7 @@ for (const suffix of ["", " @mobile"]) {
           : block,
       ),
     };
-    await page
-      .getByRole("button", { name: "Apply design to all native slides", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Apply style to native slides", exact: true }).click();
     await expect
       .poll(async () => (await readE01Record(page, record.id)).draft)
       .toEqual(expectedApplied);
@@ -266,7 +266,7 @@ for (const suffix of ["", " @mobile"]) {
       await closeE01Overlays(page);
     }
     await openE01Inspector(page, "Layout");
-    await expect(page.getByRole("combobox", { name: "Slide theme", exact: true })).toHaveValue(
+    await expect(page.getByRole("combobox", { name: "Base color theme", exact: true })).toHaveValue(
       "midnight",
     );
     await expect(page.getByRole("combobox", { name: "Slide font", exact: true })).toHaveValue(

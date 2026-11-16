@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { idleSessionCopy } from "../../apps/web/lib/i18n/idle-session-messages";
 import { signInCreator } from "../support/creator-auth";
 import { testEmail } from "../e2e/test-email";
 
@@ -222,7 +223,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await expectAccessibleSettings(page);
 });
 
-test("a real invited viewer cannot select or mutate administrative settings", async ({
+test("a real invited viewer reads the timeout policy without administrative mutation access", async ({
   page: owner,
   browser,
 }, testInfo) => {
@@ -247,19 +248,39 @@ test("a real invited viewer cannot select or mutate administrative settings", as
     const account = await (await viewer.request.get(`${api}/v1/auth/me`)).json();
     expect(account.creator.role).toBe("viewer");
     expect(account.creator.workspaceId).toBe(ownerAccount.creator.workspaceId);
-    for (const fragment of ["people", "appearance", "security"]) {
+    for (const fragment of ["people", "appearance"]) {
       await viewer.goto(`/account#${fragment}`);
       await expect(viewer.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
         "aria-selected",
         "true",
       );
-      await expect(viewer.getByRole("tab")).toHaveCount(3);
+      await expect(viewer.getByRole("tab")).toHaveCount(4);
       await expect(viewer.getByRole("tab", { name: "People", exact: true })).toHaveCount(0);
       await expect(viewer.getByRole("tab", { name: "Appearance", exact: true })).toHaveCount(0);
       await expect(
         viewer.getByRole("tab", { name: "Security and integrations", exact: true }),
-      ).toHaveCount(0);
+      ).toBeVisible();
     }
+    await viewer.goto("/account#security");
+    await expect(
+      viewer.getByRole("tab", { name: "Security and integrations", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    const timeout = idleSessionCopy("en-CA");
+    await expect(
+      viewer.getByRole("spinbutton", { name: timeout.minutesLabel, exact: true }),
+    ).toBeDisabled();
+    await expect(
+      viewer.getByRole("spinbutton", { name: timeout.minutesLabel, exact: true }),
+    ).toHaveValue(String(account.workspace.sessionPolicy.idleTimeoutMinutes));
+    await expect(viewer.getByText(timeout.readOnly, { exact: true })).toBeVisible();
+    await expect(viewer.getByRole("button", { name: timeout.save, exact: true })).toHaveCount(0);
+    expect(
+      (
+        await viewer.request.patch(`${api}/v1/workspace/settings`, {
+          data: { sessionPolicy: { idleTimeoutMinutes: 30, warningDurationSeconds: 60 } },
+        })
+      ).status(),
+    ).toBe(403);
     expect(
       (
         await viewer.request.patch(`${api}/v1/workspace/settings`, {
@@ -368,8 +389,37 @@ test("licensed organization users have usable presets and role-aware settings in
     await expect(member.getByRole("tab", { name: "People", exact: true })).toHaveCount(0);
     await expect(
       member.getByRole("tab", { name: "Security and integrations", exact: true }),
-    ).toHaveCount(0);
-    await expect(member.getByRole("tab")).toHaveCount(4);
+    ).toBeVisible();
+    await expect(member.getByRole("tab")).toHaveCount(5);
+    await selectCategory(member, "Security and integrations");
+    const timeout = idleSessionCopy("en-CA");
+    const memberAccount = await (await member.request.get(`${api}/v1/auth/me`)).json();
+    expect(memberAccount.creator.role).toBe("owner");
+    expect(memberAccount.creator.workspaceId).not.toBe(setup.creator.workspaceId);
+    expect(memberAccount.workspace.permissions).toMatchObject({
+      manageWorkspace: true,
+      manageIntegrations: false,
+      manageBilling: false,
+    });
+    const minutes = member.getByRole("spinbutton", { name: timeout.minutesLabel, exact: true });
+    await expect(minutes).toBeEnabled();
+    await minutes.fill("15");
+    const savedPolicy = member.waitForResponse(
+      (response) =>
+        response.request().method() === "PATCH" &&
+        response.url().endsWith("/v1/workspace/settings"),
+    );
+    await member.getByRole("button", { name: timeout.save, exact: true }).click();
+    expect((await savedPolicy).status()).toBe(200);
+    await expect(member.getByRole("status")).toContainText(timeout.saved);
+    expect(
+      (await (await member.request.get(`${api}/v1/auth/me`)).json()).workspace.sessionPolicy
+        .idleTimeoutMinutes,
+    ).toBe(15);
+    expect(
+      (await (await owner.request.get(`${api}/v1/auth/me`)).json()).workspace.sessionPolicy
+        .idleTimeoutMinutes,
+    ).toBe(5);
     await expect(
       member.locator('header a[href="/account"]').filter({ hasText: "Settings Company" }),
     ).toContainText("Settings user workspace");

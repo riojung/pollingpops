@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { type PresentationScene, type SupportedLocale } from "@openround/contracts";
 import {
+  expandNativeSceneSelection,
   moveNativeSceneNodes,
   resizeNativeSceneNode,
+  resizeNativeSceneSelection,
   snapNativeSceneMove,
+  type NativeSceneResizeHandle,
   type NativeSnapGuide,
 } from "../../lib/presentation-native-geometry";
 import { NativeSceneView, type SceneImageRenderer } from "./native-scene-view";
@@ -14,6 +17,7 @@ import { NativeSceneFitFeedback } from "./native-scene-fit-feedback";
 import { NativeSceneSelectionControls } from "./native-scene-selection-controls";
 import { NativeSceneInteractionMap } from "./native-scene-interaction-map";
 import { NativeSceneInteractionCues } from "./native-scene-interaction-cues";
+import { nativeSelectionCopy } from "./native-selection-copy";
 
 type Gesture = {
   base: PresentationScene;
@@ -25,8 +29,44 @@ type Gesture = {
   id: string;
   ids: readonly string[];
   resize: boolean;
+  resizeHandle?: NativeSceneResizeHandle;
   preview: PresentationScene;
 };
+
+function acceptsSelectionArrows(
+  target: EventTarget | null,
+  canvas: HTMLDivElement,
+  selectedIds: readonly string[],
+) {
+  if (target === canvas) return true;
+  if (!(target instanceof Element) || !canvas.contains(target)) return false;
+  // These descendants own their keys, including custom widgets and direct resize handles.
+  if (
+    target.closest(
+      "a, button, input, textarea, select, details, summary, [contenteditable]:not([contenteditable='false']), [data-native-resize-handle], [role='button'], [role='link'], [role='textbox'], [role='combobox'], [role='listbox'], [role='slider'], [role='spinbutton'], [role='menu'], [role='menuitem'], [role='tree'], [role='grid'], [role='tablist']",
+    )
+  )
+    return false;
+  let element: Element | null = target;
+  while (element && element !== canvas) {
+    if (
+      element instanceof HTMLElement &&
+      (element.isContentEditable ||
+        ((element.scrollHeight > element.clientHeight ||
+          element.scrollWidth > element.clientWidth) &&
+          /(auto|scroll)/.test(
+            `${window.getComputedStyle(element).overflowX} ${window.getComputedStyle(element).overflowY}`,
+          )))
+    )
+      return false;
+    element = element.parentElement;
+  }
+  const object = target.closest("[data-node-id]");
+  return (
+    (object && selectedIds.includes(object.getAttribute("data-node-id") ?? "")) ||
+    Boolean(target.closest("[data-native-selection-outline]"))
+  );
+}
 
 /** Pointer previews are local; only a completed gesture enters draft history and autosave. */
 export function NativeSceneCanvas({
@@ -39,6 +79,7 @@ export function NativeSceneCanvas({
   onChange,
   navigationTargets,
   onEditInteraction,
+  onArrangeSelection,
 }: {
   scene: PresentationScene;
   locale?: SupportedLocale;
@@ -49,9 +90,15 @@ export function NativeSceneCanvas({
   onChange: (scene: PresentationScene) => void;
   navigationTargets?: readonly { id: string; title: string }[];
   onEditInteraction?: (id: string) => void;
+  onArrangeSelection?: () => void;
 }) {
+  const copy = nativeSelectionCopy(locale);
   const permission = useRef(canEdit);
   permission.current = canEdit;
+  const source = useRef(scene);
+  source.current = scene;
+  const selection = useRef(selectedNodeIds);
+  selection.current = selectedNodeIds;
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [interactionMapOpen, setInteractionMapOpen] = useState(false);
@@ -95,8 +142,15 @@ export function NativeSceneCanvas({
     [],
   );
 
-  function start(event: PointerEvent<HTMLElement>, id: string, resize: boolean, handle: boolean) {
-    if (!event.isPrimary || event.button !== 0 || gesture.current) return;
+  function start(
+    event: PointerEvent<HTMLElement>,
+    id: string,
+    resize: boolean,
+    handle: boolean,
+    resizeHandle?: NativeSceneResizeHandle,
+  ) {
+    if (!event.isPrimary || event.button !== 0 || gesture.current || scene !== source.current)
+      return;
     if (event.shiftKey) {
       event.preventDefault();
       onSelect(id, true);
@@ -105,6 +159,24 @@ export function NativeSceneCanvas({
     const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
     if (!selectedNodeIds.includes(id)) onSelect(id);
     if (!permission.current) return;
+    if (!handle && typeof Element !== "undefined" && event.target instanceof Element) {
+      // Object chrome can move, while links, form controls and scrollbars
+      // retain their native behavior. Resize handles are siblings above this content.
+      if (event.target.closest("a, button, input, textarea, select, [contenteditable='true']"))
+        return;
+      let target: Element | null = event.target;
+      while (target && target !== event.currentTarget) {
+        if (
+          target instanceof HTMLElement &&
+          (target.scrollHeight > target.clientHeight || target.scrollWidth > target.clientWidth) &&
+          /(auto|scroll)/.test(
+            `${window.getComputedStyle(target).overflowX} ${window.getComputedStyle(target).overflowY}`,
+          )
+        )
+          return;
+        target = target.parentElement;
+      }
+    }
     // The narrow layout is a semantic list, not a scaled coordinate plane. Touch can scroll
     // content normally; only explicit handles opt into a touch gesture on the wide stage.
     if (
@@ -131,6 +203,7 @@ export function NativeSceneCanvas({
       id,
       ids,
       resize,
+      resizeHandle,
       preview: scene,
     };
     root.current.setPointerCapture(event.pointerId);
@@ -141,7 +214,7 @@ export function NativeSceneCanvas({
       !permission.current ||
       !active ||
       event.pointerId !== active.pointerId ||
-      active.base !== scene
+      active.base !== source.current
     )
       return;
     const dx = event.clientX - active.startX;
@@ -161,12 +234,20 @@ export function NativeSceneCanvas({
     active.preview =
       snapped?.scene ??
       (active.resize
-        ? resizeNativeSceneNode(
-            active.base,
-            active.id,
-            (dx / active.width) * 100,
-            (dy / active.height) * 100,
-          )
+        ? active.resizeHandle
+          ? resizeNativeSceneSelection(
+              active.base,
+              active.ids,
+              active.resizeHandle,
+              (dx / active.width) * 100,
+              (dy / active.height) * 100,
+            )
+          : resizeNativeSceneNode(
+              active.base,
+              active.id,
+              (dx / active.width) * 100,
+              (dy / active.height) * 100,
+            )
         : moveNativeSceneNodes(
             active.base,
             active.ids,
@@ -187,22 +268,79 @@ export function NativeSceneCanvas({
     gesture.current = null;
     setPreview(null);
     release(active);
-    if (active.base === scene && active.preview !== scene) onChange(active.preview);
+    if (active.base === source.current && active.preview !== source.current)
+      onChange(active.preview);
   }
-  function geometryKey(id: string, dx: number, dy: number, resize: boolean) {
+  function geometryKey(
+    id: string,
+    dx: number,
+    dy: number,
+    resize: boolean,
+    resizeHandle?: NativeSceneResizeHandle,
+  ) {
     cancel();
-    if (!permission.current) return;
+    if (!permission.current || scene !== source.current) return;
     const ids = selectedNodeIds.includes(id) ? selectedNodeIds : [id];
     if (!selectedNodeIds.includes(id)) onSelect(id);
     const next = resize
-      ? resizeNativeSceneNode(scene, id, dx, dy)
+      ? resizeHandle
+        ? resizeNativeSceneSelection(scene, ids, resizeHandle, dx, dy)
+        : resizeNativeSceneNode(scene, id, dx, dy)
       : moveNativeSceneNodes(scene, ids, dx, dy);
+    if (next !== scene) onChange(next);
+  }
+  function canvasKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" && gesture.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      cancel();
+      return;
+    }
+    if (
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.nativeEvent?.isComposing ||
+      event.nativeEvent?.keyCode === 229 ||
+      !permission.current ||
+      gesture.current ||
+      scene !== source.current ||
+      selectedNodeIds !== selection.current ||
+      event.currentTarget !== root.current
+    )
+      return;
+    const step = event.shiftKey ? 5 : 1;
+    const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
+    const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
+    if (!dx && !dy) return;
+    const ids = expandNativeSceneSelection(scene, selectedNodeIds);
+    if (
+      !scene.nodes.some((node) => node.type !== "connector" && ids.includes(node.id)) ||
+      !acceptsSelectionArrows(event.target, event.currentTarget, ids)
+    )
+      return;
+    // One completed key press uses the same history/autosave path as a finished drag.
+    // At a boundary the key is still handled, but unchanged geometry creates no edit.
+    event.preventDefault();
+    event.stopPropagation();
+    const next = moveNativeSceneNodes(scene, ids, dx, dy);
     if (next !== scene) onChange(next);
   }
   return (
     <div
       ref={root}
-      tabIndex={-1}
+      tabIndex={0}
+      role="group"
+      lang={locale}
+      aria-label={copy("Slide canvas")}
+      aria-description={
+        canEdit
+          ? copy(
+              "Slide canvas. Use arrow keys to move selected objects; hold Shift for larger steps.",
+            )
+          : undefined
+      }
       className={styles.canvas}
       data-native-scene-canvas="true"
       onPointerMove={move}
@@ -213,13 +351,7 @@ export function NativeSceneCanvas({
       onLostPointerCapture={(event) => {
         if (event.pointerId === gesture.current?.pointerId) cancel();
       }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && gesture.current) {
-          event.preventDefault();
-          event.stopPropagation();
-          cancel();
-        }
-      }}
+      onKeyDown={canvasKey}
     >
       <NativeSceneSelectionControls
         disabled={!canEdit}
@@ -229,8 +361,14 @@ export function NativeSceneCanvas({
           cancel();
           onSelect(id);
         }}
-        onPointerDown={start}
-        onGeometryKey={geometryKey}
+        onArrange={
+          onArrangeSelection
+            ? () => {
+                cancel();
+                onArrangeSelection();
+              }
+            : undefined
+        }
       />
       <NativeSceneInteractionMap
         locale={locale}
@@ -262,6 +400,7 @@ export function NativeSceneCanvas({
           renderImage={renderImage}
           selectedNodeIds={selectedNodeIds}
           hideGeometryControls
+          showSelectionHandles={canEdit}
           onSelect={onSelect}
           onNodePointerDown={start}
           onGeometryKey={geometryKey}

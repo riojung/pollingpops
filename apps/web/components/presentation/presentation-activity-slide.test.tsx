@@ -340,12 +340,12 @@ describe("Presentation activity slide", () => {
     }));
     const result = markup({
       question: value,
-      design: { theme: "sunset", font: "serif", spacing: "compact" },
+      design: { theme: "sunset", font: "serif", spacing: "compact", palette: "clay" },
     });
     expect(result).toContain('data-activity-theme="sunset"');
     expect(result).toContain('data-activity-font="serif"');
     expect(result).toContain('data-activity-spacing="compact"');
-    expect(result).toContain("#fff0e5");
+    expect(result).toContain("#f4e9dd");
     expect(result).toContain("Georgia");
     expect(result).toContain(value.prompt);
     for (const choice of value.choices) expect(result).toContain(choice.label);

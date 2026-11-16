@@ -14,7 +14,8 @@ import {
   revokeReadingAssignment,
   saveReadingAssignmentIntent,
 } from "../../lib/presentation-assignments-client";
-import styles from "../presentation-sharing/sharing.module.css";
+import { EditorIcon } from "../presentation/presentation-editor-chrome";
+import styles from "../presentation/presentation-delivery-dialog.module.css";
 import { PresentationReadingInsights } from "./reading-insights";
 
 export function PresentationAssignmentButton({
@@ -186,118 +187,189 @@ export function PresentationAssignmentDialog({
         onClose();
       }}
     >
-      <div className={styles.controls}>
+      <header className={styles.header}>
+        <span className={styles.headerIcon}>
+          <EditorIcon name="content" />
+        </span>
         <h2 id="presentation-assignment-title">Assign a reading assignment</h2>
-        <button type="button" onClick={onClose}>
-          Close
+        <button className={styles.closeButton} type="button" onClick={onClose}>
+          <EditorIcon name="close" />
+          <span className={styles.srOnly}>Close</span>
         </button>
-      </div>
-      <p>
-        Assigns this published version. Draft changes and speaker notes stay private. Anyone with
-        the assignment link can start their own reader until the deadline or revocation.
-      </p>
-      <p>
-        Readers mark each page read and explicitly finish. This is self-reported reading completion;
-        identity is not verified. Questions are read-only. Responses, scores and mastery are not
-        collected.
-      </p>
-      <label>
-        Reading deadline
-        <select
-          disabled={busy || pending}
-          value={days}
-          onChange={(event) => setDays(Number(event.target.value))}
-        >
-          <option value={1}>In 1 day</option>
-          <option value={7}>In 7 days</option>
-          <option value={30}>In 30 days</option>
-        </select>
-      </label>
-      {pending ? (
-        <p role="status">An assignment request is pending. Retry to recover the same link.</p>
-      ) : null}
-      <button type="button" disabled={busy} onClick={() => void create()}>
-        {busy ? "Working…" : pending ? "Retry assignment creation" : "Create assignment"}
-      </button>
-      {error ? <p role="alert">{error}</p> : null}
-      {url ? (
-        <div className={styles.created}>
-          <p>Save this link before closing. To share again later, create a new assignment.</p>
-          <label>
-            Your assignment link
-            <textarea
-              readOnly
-              value={url}
-              rows={3}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              if (!navigator.clipboard?.writeText) {
-                setError("Select and copy the link above.");
-                return;
-              }
-              void navigator.clipboard
-                .writeText(url)
-                .catch(() => setError("Select and copy the link above."));
-            }}
-          >
-            Copy assignment link
-          </button>
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            Open assignment
-          </a>
+      </header>
+      <div className={styles.body}>
+        <div className={styles.publication}>
+          <span className={styles.publicationLabel}>
+            <EditorIcon name="slides" />
+            Published version only
+          </span>
+          <p>Draft changes and speaker notes stay private.</p>
         </div>
-      ) : null}
-      <h3>Reading assignments</h3>
-      {assignments.length ? (
-        <ul className={styles.shareList}>
-          {assignments.map((assignment) => {
-            const expired = Date.parse(assignment.expiresAt) <= Date.now();
-            return (
-              <li key={assignment.id}>
-                <span>
-                  Created {new Date(assignment.createdAt).toLocaleString("en-CA")}
-                  <br />
-                  {assignment.revokedAt
-                    ? "Revoked"
-                    : expired
-                      ? "Expired"
-                      : `Deadline ${new Date(assignment.expiresAt).toLocaleString("en-CA")}`}
-                </span>
-                <button
-                  type="button"
-                  aria-pressed={insightsId === assignment.id}
-                  onClick={() => setInsightsId(assignment.id)}
-                >
-                  Reading insights
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || !!assignment.revokedAt || expired}
-                  onClick={() => void revoke(assignment.id)}
-                >
-                  Revoke assignment
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p>No reading assignments yet.</p>
-      )}
-      {assignments
-        .filter((assignment) => assignment.id === insightsId)
-        .map((assignment) => (
-          <PresentationReadingInsights
-            key={`${actorKey}:${presentationId}:${assignment.id}:${assignment.versionId}`}
-            actorKey={actorKey}
-            presentationId={presentationId}
-            assignment={assignment}
-          />
-        ))}
+        <section className={styles.setup} aria-label="Set up reading">
+          <div className={styles.sectionIntro}>
+            <h3>Set up reading</h3>
+            <p>
+              Anyone with the assignment link can start their own reader until the deadline or
+              revocation.
+            </p>
+          </div>
+          <div className={styles.setupControls}>
+            <label>
+              Reading deadline
+              <select
+                disabled={busy || pending}
+                value={days}
+                onChange={(event) => setDays(Number(event.target.value))}
+              >
+                <option value={1}>In 1 day</option>
+                <option value={7}>In 7 days</option>
+                <option value={30}>In 30 days</option>
+              </select>
+            </label>
+            <button
+              className={styles.primaryButton}
+              type="button"
+              disabled={busy}
+              onClick={() => void create()}
+            >
+              {busy ? "Working…" : pending ? "Retry assignment creation" : "Create assignment"}
+            </button>
+          </div>
+          <p className={styles.hint}>
+            Self-reported completion. Questions are read-only; responses are not collected.
+          </p>
+          <details className={styles.guidance}>
+            <summary>How reading completion works</summary>
+            <div className={styles.guidanceBody}>
+              <p>
+                Readers mark each page read and explicitly finish. This is self-reported reading
+                completion; identity is not verified. Questions are read-only. Responses, scores and
+                mastery are not collected.
+              </p>
+            </div>
+          </details>
+          {pending ? (
+            <p className={styles.notice} role="status">
+              An assignment request is pending. Retry to recover the same link.
+            </p>
+          ) : null}
+        </section>
+        {error ? <p role="alert">{error}</p> : null}
+        {url ? (
+          <section className={styles.created} aria-label="Created assignment link">
+            <div className={styles.sectionIntro}>
+              <h3>Your assignment is ready</h3>
+              <p>Save this link before closing. To share again later, create a new assignment.</p>
+            </div>
+            <label>
+              Your assignment link
+              <textarea
+                readOnly
+                value={url}
+                rows={2}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!navigator.clipboard?.writeText) {
+                    setError("Select and copy the link above.");
+                    return;
+                  }
+                  void navigator.clipboard
+                    .writeText(url)
+                    .catch(() => setError("Select and copy the link above."));
+                }}
+              >
+                Copy assignment link
+              </button>
+              <a className={styles.actionLink} href={url} target="_blank" rel="noopener noreferrer">
+                Open assignment
+              </a>
+            </div>
+          </section>
+        ) : null}
+        <section className={styles.management} aria-label="Reading assignments">
+          <div className={styles.sectionHeading}>
+            <h3>Reading assignments</h3>
+            <span className={styles.count}>{assignments.length}</span>
+          </div>
+          {assignments.length ? (
+            <ul className={styles.shareList}>
+              {assignments.map((assignment, index) => {
+                const expired = Date.parse(assignment.expiresAt) <= Date.now();
+                return (
+                  <li key={assignment.id}>
+                    <div className={styles.listRow}>
+                      <div className={styles.itemDetails}>
+                        <div className={styles.itemHeading}>
+                          <strong>Reading assignment {index + 1}</strong>
+                          <span
+                            className={styles.badge}
+                            data-inactive={!!assignment.revokedAt || expired}
+                          >
+                            {assignment.revokedAt ? "Revoked" : expired ? "Expired" : "Active"}
+                          </span>
+                        </div>
+                        <span className={styles.itemMeta}>
+                          Created{" "}
+                          <time dateTime={assignment.createdAt}>
+                            {new Date(assignment.createdAt).toLocaleString("en-CA")}
+                          </time>
+                        </span>
+                        <span className={styles.itemMeta}>
+                          Deadline{" "}
+                          <time dateTime={assignment.expiresAt}>
+                            {new Date(assignment.expiresAt).toLocaleString("en-CA")}
+                          </time>
+                        </span>
+                      </div>
+                      <div className={styles.actions}>
+                        <button
+                          type="button"
+                          aria-pressed={insightsId === assignment.id}
+                          onClick={() => setInsightsId(assignment.id)}
+                        >
+                          Reading insights
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy || !!assignment.revokedAt || expired}
+                          onClick={() => void revoke(assignment.id)}
+                        >
+                          Revoke assignment
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className={styles.empty}>
+              <span className={styles.emptyIcon}>
+                <EditorIcon name="content" />
+              </span>
+              <p className={styles.emptyTitle}>No reading assignments yet.</p>
+              <p className={styles.emptyDescription}>
+                Create an assignment to share reading at your readers’ own pace.
+              </p>
+            </div>
+          )}
+        </section>
+        {assignments
+          .filter((assignment) => assignment.id === insightsId)
+          .map((assignment) => (
+            <PresentationReadingInsights
+              key={`${actorKey}:${presentationId}:${assignment.id}:${assignment.versionId}`}
+              actorKey={actorKey}
+              presentationId={presentationId}
+              assignment={assignment}
+            />
+          ))}
+      </div>
     </dialog>
   );
 }

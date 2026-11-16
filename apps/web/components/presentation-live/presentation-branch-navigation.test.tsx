@@ -99,6 +99,15 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
+function accessibleText(node: ReactNode): string {
+  if (Array.isArray(node)) return node.map(accessibleText).join("");
+  if (isValidElement<Record<string, unknown>>(node)) {
+    if (node.props["aria-hidden"] === true || node.props["aria-hidden"] === "true") return "";
+    if (typeof node.props["aria-label"] === "string") return node.props["aria-label"];
+    return accessibleText(node.props.children as ReactNode);
+  }
+  return typeof node === "string" || typeof node === "number" ? String(node) : "";
+}
 function click(element: ReactElement<Record<string, unknown>>) {
   (element.props.onClick as () => void)();
 }
@@ -142,7 +151,7 @@ function dialogHarness(
     },
     byText(text: string) {
       const element = elements(tree).find(
-        (element) => element.type === "button" && element.props.children === text,
+        (element) => element.type === "button" && accessibleText(element) === text,
       );
       if (!element) throw new Error(`Missing button ${text}`);
       return element;
@@ -231,7 +240,10 @@ describe("localized staff navigation behavior", () => {
     expect(view.markup).toContain(`aria-label="${copy("Presentation navigation")}"`);
     expect(view.markup).toContain(`${copy("Activity")} · ${copy("Current")} · ${copy("Review")}`);
     expect(view.markup).toContain(`${copy("Slide")} · ${copy("Visited")}`);
-    expect(view.markup).toContain('<span lang="">Activity 2</span>');
+    const authoredTitle = elements(view.entry(nextBlockId)).find(
+      (element) => element.type === "span" && element.props.children === "Activity 2",
+    );
+    expect(authoredTitle?.props.lang).toBe("");
     expect(view.markup).toContain('lang="">Presentation navigation &lt;script&gt;</p>');
     expect(view.markup).toContain('<span lang="">Original path &lt;script&gt; {number}</span>');
     expect(view.props.navigation).toEqual(before);

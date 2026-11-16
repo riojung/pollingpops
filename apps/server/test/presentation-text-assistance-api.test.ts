@@ -190,6 +190,41 @@ async function ready(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("Reviewed native text assistance API", () => {
+  it("preserves scene8/document17 and its motion background when translating selected text", async () => {
+    const f = await fixture();
+    await f.edit((draft) => {
+      draft.schemaVersion = 17;
+      const block = draft.blocks[0]!;
+      if (block.kind !== "content" || !block.scene) throw new Error("Expected native scene");
+      block.scene.schemaVersion = 8;
+      block.scene.design = {
+        theme: "ocean",
+        font: "sans",
+        spacing: "relaxed",
+        motionBackground: "orbs",
+      };
+    });
+    expect(
+      (
+        await f.post({
+          ...f.request,
+          operation: "translate",
+          targetLanguage: "fr",
+          sourceLanguage: null,
+          expectedRevision: 2,
+        })
+      ).statusCode,
+    ).toBe(202);
+    expect(await f.presentationTextAssistanceWorker.runOnce()).toBe("completed");
+    const job = PresentationTextAssistanceJobSchema.parse((await f.get()).json().job);
+    const response = await f.apply(job, { expectedRevision: 2 });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().presentation.draft).toMatchObject({
+      schemaVersion: 17,
+      blocks: [{ scene: { schemaVersion: 8, design: { motionBackground: "orbs" } } }],
+    });
+  });
+
   it("translates only the selected text and requested target, preserves evidence, and recovers accepted language edits after expiry", async () => {
     const translated = "Convenez d’un objectif commun.";
     const generate = vi.fn().mockResolvedValue({ text: translated }),

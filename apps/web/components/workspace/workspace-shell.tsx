@@ -287,6 +287,7 @@ interface WorkspaceShellProps {
   title: string;
   titleLanguage?: string;
   description?: string;
+  headerDensity?: "comfortable" | "compact";
   actions?: ReactNode;
   children: ReactNode;
   /** Compatibility name: requires the baseline shell, independently of UX beta. */
@@ -421,7 +422,21 @@ function CreateMenu({ productFeatures }: { productFeatures: WorkspaceProductFeat
   const options = workspaceCreationOptions({ canEdit, productFeatures });
   if (!options.length) return null;
   return (
-    <details className={styles.createMenu}>
+    <details
+      className={styles.createMenu}
+      onKeyDown={(event) => {
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          !event.currentTarget.open
+        )
+          return;
+        event.preventDefault();
+        event.currentTarget.open = false;
+        event.currentTarget.querySelector("summary")?.focus();
+      }}
+    >
       <summary
         aria-label={t("workspace.create.label")}
         className={styles.createButton}
@@ -507,6 +522,7 @@ export function WorkspaceShell({
   title,
   titleLanguage,
   description,
+  headerDensity = "compact",
   actions,
   children,
   requireBeta = true,
@@ -823,10 +839,12 @@ export function WorkspaceShell({
         <main
           className={styles.main}
           id="main"
+          data-header-density={headerDensity === "compact" ? "compact" : undefined}
           lang={translationLevel === "full" ? locale : "en-CA"}
         >
           <header
             className={styles.pageHeader}
+            data-density={headerDensity === "compact" ? "compact" : undefined}
             lang={translationLevel === "none" ? "en-CA" : locale}
           >
             <div>

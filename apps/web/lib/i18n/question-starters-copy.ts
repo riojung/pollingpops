@@ -13,7 +13,7 @@ const locales = [
   "zh-TW",
 ] as const;
 
-// System chrome only. Generated English templates and authored source never enter this catalog.
+// System chrome only. Generated prompts and authored source never enter this catalog.
 const rows = {
   "Private source context": [
     "Contexte source privé",
@@ -261,17 +261,17 @@ const rows = {
       "选择一个模板，审阅完整问题及来源上下文。插入后将在此幻灯片之后创建可编辑的观点问题。",
       "選擇一個範本，檢閱完整問題與來源脈絡。插入後將在此投影片之後建立可編輯的意見問題。",
     ],
-  "Created locally. No AI service or allowance is used. Prompts use English scaffolding and your slide’s wording. Other objects, images, tables, charts and closed interaction content are not interpreted.":
+  "Created locally. No AI service or allowance is used. Prompts use the language selected when you open this review and your slide’s exact wording. Other objects, images, tables, charts and closed interaction content are not interpreted.":
     [
-      "Création locale, sans service ni quota d’IA. Les questions combinent une structure en anglais et le texte de votre diapositive. Les autres objets, images, tableaux, graphiques et interactions fermées ne sont pas interprétés.",
-      "Lokal erstellt. Es wird kein KI-Dienst oder KI-Kontingent genutzt. Fragen verwenden englische Vorlagen und Ihren Folientext. Andere Objekte, Bilder, Tabellen, Diagramme und geschlossene Interaktionsinhalte werden nicht interpretiert.",
-      "Creado localmente, sin servicios ni cuotas de IA. Las preguntas usan una estructura en inglés y el texto de tu diapositiva. No se interpretan otros objetos, imágenes, tablas, gráficos ni contenido de interacciones cerradas.",
-      "Creato localmente, senza servizi o quote IA. Le domande usano una struttura in inglese e il testo della diapositiva. Altri oggetti, immagini, tabelle, grafici e contenuti di interazioni chiuse non vengono interpretati.",
-      "Criado localmente, sem serviços ou quotas de IA. As perguntas usam uma estrutura em inglês e o texto do diapositivo. Outros objetos, imagens, tabelas, gráficos e conteúdos de interações fechadas não são interpretados.",
-      "ローカルで作成され、AIサービスや利用枠は使用しません。質問は英語の定型文とスライドの表現を使います。他のオブジェクト、画像、表、グラフ、閉じたインタラクションの内容は解釈しません。",
-      "로컬에서 생성하며 AI 서비스나 사용 한도를 사용하지 않습니다. 질문은 영어 기본 문구와 슬라이드의 표현을 사용합니다. 다른 객체, 이미지, 표, 차트 및 닫힌 상호작용 콘텐츠는 해석하지 않습니다.",
-      "在本地创建，不使用 AI 服务或额度。问题使用英语框架和幻灯片原文，不解读其他对象、图片、表格、图表或关闭的互动内容。",
-      "在本機建立，不使用 AI 服務或額度。問題使用英語框架和投影片原文，不解讀其他物件、圖片、表格、圖表或已關閉的互動內容。",
+      "Création locale, sans service ni quota d’IA. Les questions utilisent la langue choisie à l’ouverture et le texte exact de votre diapositive. Les autres objets, images, tableaux, graphiques et interactions fermées ne sont pas interprétés.",
+      "Lokal erstellt, ohne KI-Dienst oder Kontingent. Fragen verwenden die beim Öffnen gewählte Sprache und Ihren genauen Folientext. Andere Objekte, Bilder, Tabellen, Diagramme und geschlossene Interaktionen werden nicht interpretiert.",
+      "Creado localmente, sin servicios ni cuotas de IA. Las preguntas usan el idioma elegido al abrir la revisión y el texto exacto de tu diapositiva. No se interpretan otros objetos, imágenes, tablas, gráficos ni interacciones cerradas.",
+      "Creato localmente, senza servizi o quote IA. Le domande usano la lingua scelta all’apertura e il testo esatto della diapositiva. Altri oggetti, immagini, tabelle, grafici e interazioni chiuse non vengono interpretati.",
+      "Criado localmente, sem serviços ou quotas de IA. As perguntas usam o idioma escolhido ao abrir a revisão e o texto exato do diapositivo. Outros objetos, imagens, tabelas, gráficos e interações fechadas não são interpretados.",
+      "ローカルで作成され、AIサービスや利用枠は使用しません。レビューを開いた時点の言語とスライドの原文を使います。他のオブジェクト、画像、表、グラフ、閉じたインタラクションの内容は解釈しません。",
+      "로컬에서 생성하며 AI 서비스나 사용 한도를 사용하지 않습니다. 검토를 열 때 선택된 언어와 슬라이드 원문을 사용합니다. 다른 객체, 이미지, 표, 차트 및 닫힌 상호작용 콘텐츠는 해석하지 않습니다.",
+      "在本地生成，不使用AI服务或额度。问题使用打开审核时所选的语言与幻灯片原文，不解读其他对象、图片、表格、图表或已关闭的互动内容。",
+      "在本機建立，不使用AI服務或額度。問題使用開啟檢閱時所選的語言與投影片原文，不解讀其他物件、圖片、表格、圖表或已關閉的互動內容。",
     ],
   "Choose a question starter": [
     "Choisir une amorce de question",

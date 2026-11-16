@@ -13,6 +13,193 @@ no deployment, changes no commercial entitlement and does not mark existing evid
 The user's broader product direction guides this plan; older learning-only positioning should
 not silently narrow its scope.
 
+## Expanded design collection and application — November 13, 2026
+
+The `codex/presentation-expanded-designs` iteration adds 22 original visual systems to
+the existing eight, reaching 30 collections and 240 editable native layouts. Each addition
+owns its cover and seven coordinated interior compositions. Ten-language discovery and
+example narratives cover business, education, creative and impact needs. Ten overlapping
+categories add Corporate, Creative, Academic, Nature, Playful and Geometric discovery.
+
+The [additional public-template benchmark](evidence/presentation-expanded-designs-2026-11.md)
+records eight more visually inspected covers and interiors. The original eight families and
+their existing identifiers remain stable. Typed composition modules share bounded native
+primitives; no new contract version, migration, dependency or paid asset service is needed.
+
+Existing-deck application defaults to Full design, mapping meaningful authored objects into
+family content regions and replacing only unreferenced decorative artwork. Colors and fonts
+retains the earlier geometry-preserving behavior. Complex connected/grouped/interactive or
+imported canvases retain geometry with an explicit notice. Previews and commits use one
+validated transformation; meaningful IDs, content, reading order, provenance, notes and motion
+must survive with single-step undo. Base color theme controls must identify a collection palette
+honestly and explain their difference from a full layout application.
+
+Discovery initially renders twelve covers and progressively reveals the remaining collections.
+Full-catalog search and category filters apply before pagination; preview decks are constructed
+only on demand. Acceptance covers all 300 localized example decks, 240 English layouts'
+rendered heading/paragraph fit, separate content regions, panel contrast, keyboard browsing,
+localized creation and reload, layout insertion, and full-design preview/apply/undo/reload on
+existing authored work. Results belong in [implementation status](implementation-status.md);
+local checks do not establish hosted, physical-device or native-language human acceptance.
+
+## Authored visual collections — November 13, 2026
+
+The `codex/presentation-designed-collections` follow-up deepens the eight design families into
+complete visual sets. The original names and layout APIs remain stable; each family now has
+its own typography, recurring components, cover composition and eight coordinated interiors.
+Family-specific purposes and illustrative headlines are supplied in all ten creation languages.
+Gallery discovery, full-size previews, new-deck creation and individual-layout insertion use
+the same factories. Existing presentation styling keeps content and native geometry intact.
+
+The [individual-template benchmark](evidence/presentation-designed-collections-2026-11.md)
+records nine inspected public Canva sets and the clean-room design decisions. Implementations
+use editable native vectors and system fonts, with explicit image placeholders. Additional
+families can extend the typed catalog, localized narrative and composition factory.
+
+Named palettes, bounded per-object typography and decorative shape appearance use scene 9 /
+document 18 with additive migration 108. Deploy the migration before enabling new-version
+writes; existing frozen publications are not rewritten. Legacy visuals remain unchanged when
+the optional fields are absent. Browser, live, shared, reading and static-export surfaces must
+honor the same public fields and retain private-data fences. Acceptance results belong in
+[implementation status](implementation-status.md); local automated checks do not qualify hosted,
+physical-device or native-language acceptance gates.
+
+## Presentation design collection — November 13, 2026
+
+The `codex/presentation-design-library` follow-up separates visual designs from the content
+and scenario collection below. Eight original families supply 64 editable native layout recipes
+with ten-locale example copy. Templates → Designs supports visual browsing, filtering, preview
+and new-draft creation. The editor supports applying style to existing content and inserting
+one selected layout through the existing undo/autosave transaction.
+
+Style application retains native geometry and content; ordinary slides use the existing native
+adapter. Activity appearance follows nearby visible content, and imported raster colors remain
+part of the original artwork. Appearance changes and layout insertion are separate actions.
+Existing motion is retained, published source content stays immutable, and complete-document
+budgets are validated before application or spatial insertion. Creation retries preserve their
+original request identity, owner context and initial draft revision.
+
+Public catalog/help evidence, clean-room provenance, implementation boundaries and export
+consistency are recorded in [the design-library evidence](evidence/presentation-design-library-2026-11.md).
+The source uses existing versioned scene primitives and requires no new migration or paid asset
+service. Validation results are recorded in [implementation status](implementation-status.md).
+This closes a specific design-discovery/application gap without treating an original starter
+collection as numerical parity with competitor catalogs or advancing release-acceptance gates.
+
+## Customer template collection — November 12, 2026
+
+The pre-launch template work prioritizes complete, useful examples and faithful previews.
+It improves the existing collection rather than using catalog count as a quality measure.
+The implementation branch is `codex/customer-template-collection`; it starts from main
+independently of the open workspace-color PR.
+
+### Reference observations and product decisions
+
+Sources were inspected on November 12, 2026. These observations describe the public
+libraries; they do not establish market share, customer outcomes or independently measured
+presentation trends.
+
+| Reference                                                                                  | Observed pattern                                                                                 | Polling Pops decision                                                                        |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [Canva presentation library](https://www.canva.com/presentations/templates/)               | Customer-job names, searchable multi-slide designs and visible slide counts                      | Keep real use-case browsing and show complete sequences before creation                      |
+| [Slidesgo 2026 collection](https://slidesgo.com/presentation-trends-2026)                  | Industry, content, style, color and format filters; distinct design families                     | Introduce original Editorial, Briefing and Workshop families with purpose-built compositions |
+| [Adobe Express presentation library](https://www.adobe.com/express/templates/presentation) | Business/education categories, editable matching design elements and whole-presentation examples | Keep text, diagrams and data editable, with one coherent visual language per deck            |
+
+Sources informed browsing and quality standards. Polling Pops scenarios, copy and native
+compositions are original. Static content and existing rendering primitives keep ordinary
+creation independent of per-use AI generation or paid stock assets.
+
+### Delivered scope
+
+- Preserve the 21 Presentation IDs and ten creation languages. Upgrade all 96 slides in
+  the 12 native decks using covers, statements, comparisons, cards, processes, a timeline,
+  editable data views and closings. Preserve existing authored examples, figures and notes.
+  Keep the nine facilitated templates available alongside these content-only decks.
+- Deepen eight existing starter IDs: `source-evaluation`, `percentage-check`,
+  `feedback-skills`, `project-kickoff`, `event-feedback`, `onboarding-experience`,
+  `service-experience` and `learning-needs`. Keep the knowledge packs discoverable as
+  quizzes; put unscored reflection in their facilitator guides.
+- Supply audience, approximate duration, preparation, facilitation, interpretation and
+  follow-up guidance in all ten languages. Preserve creation-language text after later
+  interface-language changes.
+- Give Surveys participant-safe introductions and explicit optional items through the same
+  factory used by preview and creation. Keep owner interpretation guidance separate.
+  Survey templates use the supported unscored polls and labeled ratings.
+- Use dedicated read-only question/questionnaire dialogs, reveal correct-answer reasoning
+  for creator knowledge previews, and show presenter notes in the Presentation preview.
+  Preserve independent copies, idempotent retries, viewer previews and creation permissions.
+
+The expanded activity examples have an explicit job and next action:
+
+| Example               | Questions | Intended use                                                                                  |
+| --------------------- | --------: | --------------------------------------------------------------------------------------------- |
+| Source evaluation     |         6 | Practice evaluating supplied evidence, explain the answer, then recheck with another scenario |
+| Percentage check      |         6 | Work through concrete percentage calculations with explanations and linked rechecks           |
+| Feedback skills       |         4 | Compare responses in supplied workplace scenarios and discuss the reasoning                   |
+| Project kickoff       |         7 | Surface team expectations and uncertainties before agreeing on next steps                     |
+| Event feedback        |         8 | Gather actionable feedback about an event and its follow-up                                   |
+| Onboarding experience |         8 | Identify friction in a new joiner's experience and prioritize support                         |
+| Service experience    |         8 | Review a service interaction without forcing respondents to report a problem                  |
+| Learning needs        |         8 | Identify learning priorities and practical support needs before planning an activity          |
+
+The last four also supply the complete Survey questionnaires. The curated Survey catalog
+retains Team collaboration and Community planning as shorter legacy starters; those two,
+the remaining Round starters and the nine facilitated Presentation templates are not
+represented as newly expanded editorial content.
+
+### Quality evaluation and remaining editorial work
+
+Evaluate each example for task completeness, clear original content, coherent visual
+hierarchy, meaningful interactions, preview fidelity, readable reflow and editability.
+A useful editorial rubric allocates 20 points each to completeness, content and visual
+craft, 15 to interactions, 10 each to preview fidelity and accessibility/reflow, and 5 to
+provenance/editability. An 85-point editorial target is a proposal for customer validation,
+not a score implied by passing automated tests.
+
+Automated checks must catch invalid drafts, wrong arithmetic/answer keys, broken recheck
+links, scored preferences, missing translations, clipping, failed copy creation and
+preview/creation disagreement. Software checks do not establish native-language editorial
+approval or usefulness for a specific customer. The next editorial work is to observe a
+creator adapting and running each workflow, review translations with native speakers,
+and use that evidence to prioritize additional industry scenarios and visual families.
+Free-response Surveys remain a separate capability; these templates do not advertise it.
+
+## Built-in motion backgrounds — November 12, 2026
+
+The `codex/presentation-motion-backgrounds` slice adds optional Aurora, Soft waves,
+Floating orbs, Gradient mesh, Flowing ribbons and Star drift presets. A static background
+remains the default. The Layout inspector provides visual choices, None, an explicit
+selected-tile preview and the existing apply-design action. This is a fixed original
+library: no custom motion builder, stock video, remote asset service or paid generation
+is required.
+
+Motion uses three bounded decorative CSS layers with slow transform animation, with
+colors harmonized to the slide's existing palette. Content, choices, links and geometry
+controls remain above the background. Native slides, inherited ordinary slides and
+audience activities share the renderer. Filmstrip/layout thumbnails stay still; reduced
+motion preferences, hidden tabs and offscreen backgrounds pause animation. A local
+pause/play control sits outside the slide artwork and persists across slide changes.
+Playback preferences are not document edits, responses or broadcast actions.
+
+Published, shared and assignment content preserves the selected preset. PNG, PDF,
+readable HTML and offline HTML retain their existing static-export semantics and render
+a deterministic still composition. Print uses a still background too. New UI labels
+cover all ten supported locales; authored content is unchanged.
+
+### Stored-content compatibility
+
+The optional closed `design.motionBackground` token explicitly opts into scene schema8
+and Presentation document17. Existing documents and omitted tokens keep their original
+versions and appearance. Removing motion retains the document's already-supported
+version; Undo, duplicate, recovery, bulk design and assistance preserve higher versions.
+Publication remains immutable. Named tokens accept no URLs, scripts or arbitrary CSS.
+
+Append-only migration107 extends the PostgreSQL validators and delivery/response fences
+for these versions. It runs through the existing migration process before the updated
+writer is used; it does not rewrite stored JSON or hashes. Motion-enabled documents
+require the updated parser/renderer. No automatic downgrade to an older application
+version is provided for documents written with the new capability.
+
 ## Product definition
 
 The first credible broad release must let an ordinary creator make a pitch, project update,

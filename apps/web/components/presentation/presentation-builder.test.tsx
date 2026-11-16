@@ -197,8 +197,11 @@ describe("Presentation Builder UI", () => {
     );
     const map = markup.slice(markup.indexOf("<ol"), markup.indexOf("</ol>") + 5);
     expect(map.indexOf("Sequence first")).toBeLessThan(map.indexOf("Sequence second"));
-    expect(map.match(/Evidence group/g)).toHaveLength(2);
-    expect(markup).toContain("Selected block section");
+    expect(map.match(/data-slide-id=/g)).toHaveLength(2);
+    expect(markup).toContain(`data-section-header="${sectionId}"`);
+    expect(markup).toContain("Collapse section Evidence group");
+    expect(markup).toContain("2 slides");
+    expect(markup).toContain("Selected slide section");
     expect(markup).toContain("Rename");
     expect(markup).toContain("Move earlier");
     expect(markup).toContain("Move later");

@@ -1,0 +1,168 @@
+.surface {
+  --workspace-kind-bg: var(--ui-surface-soft);
+  --workspace-kind-ink: var(--ui-text-strong);
+  position: relative;
+}
+
+.status.status[data-state-tone] {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--workspace-status-bg, var(--ui-surface-soft));
+  color: var(--workspace-status-ink, var(--ui-text-subtle));
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 3px 7px;
+}
+
+.status[data-state-tone="positive"] {
+  --workspace-status-bg: var(--ui-accent-soft);
+  --workspace-status-ink: var(--ui-accent-ink);
+}
+
+.status[data-state-tone="active"] {
+  --workspace-status-bg: var(--ui-accent-soft);
+  --workspace-status-ink: var(--ui-accent-ink);
+}
+
+.status[data-state-tone="danger"] {
+  --workspace-status-bg: var(--ui-danger-bg);
+  --workspace-status-ink: var(--ui-danger-text);
+}
+
+.statusIcon,
+.actionIcon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
+
+.kindIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--ui-text-subtle);
+  vertical-align: -3px;
+}
+
+.action.action[data-action] {
+  background: var(--workspace-action-bg, var(--ui-surface));
+  color: var(--workspace-action-ink, var(--ui-text-strong));
+  border-color: var(--workspace-action-border, var(--ui-border));
+}
+
+.action[data-action="host"] {
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
+}
+
+.action[data-action="resume"] {
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
+}
+
+.action[data-action="edit"] {
+  --workspace-action-bg: var(--ui-surface);
+  --workspace-action-ink: var(--ui-text-strong);
+}
+
+.action[data-action="result"] {
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
+}
+
+.action[data-action="delete"] {
+  --workspace-action-bg: var(--ui-surface);
+  --workspace-action-ink: var(--ui-danger-text);
+}
+
+/* Repeating the class keeps legacy button hover rules from replacing the action color. */
+.action.action[data-action]:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: color-mix(
+    in srgb,
+    var(--workspace-action-bg, var(--ui-surface)) 88%,
+    var(--workspace-action-ink, var(--ui-text-strong))
+  );
+  color: var(--workspace-action-ink, var(--ui-text-strong));
+}
+
+.action.action[data-action]:focus-visible,
+.kindTab.kindTab:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.action.action[data-action]:disabled,
+.action.action[data-action][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  border-color: var(--ui-accent-ink);
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) > span {
+  background: var(--ui-surface);
+  color: var(--ui-accent-ink);
+}
+
+.kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) .kindIcon {
+  color: inherit;
+}
+
+@media (forced-colors: active) {
+  .status.status[data-state-tone] {
+    background: Canvas;
+    color: CanvasText;
+    outline: 1px solid CanvasText;
+  }
+
+  .kindIcon {
+    color: inherit;
+  }
+
+  .action.action[data-action],
+  .action.action[data-action]:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  .action.action[data-action] {
+    outline: 1px solid ButtonText;
+  }
+
+  .action.action[data-action]:focus-visible,
+  .kindTab.kindTab:focus-visible {
+    outline: 3px solid CanvasText;
+  }
+
+  .action.action[data-action]:disabled,
+  .action.action[data-action][aria-disabled="true"] {
+    color: GrayText;
+    outline-color: GrayText;
+    opacity: 1;
+  }
+
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]),
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) > span {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+
+  .kindTab.kindTab[data-kind]:is([aria-selected="true"], [aria-current="page"]) {
+    border-block-end: 2px solid CanvasText;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

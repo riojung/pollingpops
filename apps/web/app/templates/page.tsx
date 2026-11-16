@@ -1,30 +1,43 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocale } from "../../components/locale-provider";
 import { StarterGallery } from "../../components/workspace/starter-gallery";
+import { PresentationDesignGallery } from "../../components/workspace/presentation-design-gallery";
+import { presentationDesignCopy } from "../../lib/i18n/presentation-design-copy";
 import { PresentationTemplateGallery } from "../../components/workspace/presentation-template-gallery";
 import { useWorkspace, WorkspaceProvider } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import styles from "../../components/workspace/workspace-content.module.css";
 import galleryStyles from "../../components/workspace/template-gallery.module.css";
 
-const types = ["rounds", "presentations", "surveys"] as const;
+const types = ["designs", "rounds", "presentations", "surveys"] as const;
 type TemplateType = (typeof types)[number];
 
 function TemplatesWorkspace() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const designCopy = presentationDesignCopy(locale);
   const { canEdit, productFeatures } = useWorkspace();
   const [type, setType] = useState<TemplateType>("rounds");
+  useEffect(() => {
+    const selectLinkedSection = () => {
+      if (window.location.hash === "#designs" && productFeatures?.presentations) setType("designs");
+    };
+    selectLinkedSection();
+    window.addEventListener("hashchange", selectLinkedSection);
+    return () => window.removeEventListener("hashchange", selectLinkedSection);
+  }, [productFeatures?.presentations]);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const enabled =
     type === "rounds" ||
-    (type === "presentations" ? productFeatures?.presentations : productFeatures?.surveys);
+    (type === "presentations" || type === "designs"
+      ? productFeatures?.presentations
+      : productFeatures?.surveys);
   const blankHref =
     type === "rounds"
       ? "/create?start=blank"
-      : type === "presentations"
+      : type === "presentations" || type === "designs"
         ? "/create/presentation"
         : "/surveys/new";
 
@@ -79,7 +92,7 @@ function TemplatesWorkspace() {
                 tabRefs.current[nextIndex]?.focus();
               }}
             >
-              {t(`templateLibrary.${value}`)}
+              {value === "designs" ? designCopy.designs : t(`templateLibrary.${value}`)}
             </button>
           ))}
         </div>
@@ -95,20 +108,28 @@ function TemplatesWorkspace() {
               <>
                 <div className={styles.sectionHeader}>
                   <div>
-                    <h2 className={galleryStyles.sectionTitle}>{t(`templateLibrary.${value}`)}</h2>
-                    <p>{t(`templateLibrary.${value}Description`)}</p>
+                    <h2 className={galleryStyles.sectionTitle}>
+                      {value === "designs" ? designCopy.designs : t(`templateLibrary.${value}`)}
+                    </h2>
+                    <p>
+                      {value === "designs"
+                        ? designCopy.description
+                        : t(`templateLibrary.${value}Description`)}
+                    </p>
                   </div>
                 </div>
                 {!enabled && value !== "rounds" ? (
                   <p className="notice">
                     {t(
-                      value === "presentations"
+                      value === "presentations" || value === "designs"
                         ? "templateLibrary.presentationUnavailable"
                         : "templateLibrary.surveyUnavailable",
                     )}
                   </p>
                 ) : null}
-                {value === "presentations" ? (
+                {value === "designs" ? (
+                  <PresentationDesignGallery />
+                ) : value === "presentations" ? (
                   <PresentationTemplateGallery />
                 ) : (
                   <StarterGallery survey={value === "surveys"} />

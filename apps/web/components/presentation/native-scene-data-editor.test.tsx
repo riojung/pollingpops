@@ -646,4 +646,22 @@ describe("staged native data editing", () => {
       }
     },
   );
+  it("creates new staged row and series labels in the action locale without translating prior edits", () => {
+    const editor = harness(createNativeChartNode());
+    editor.setLocale("ko-KR");
+    editor.click(nativeDataCopy("ko-KR")("Add category"));
+    editor.click(nativeDataCopy("ko-KR")("Add series"));
+    expect(editor.onChange).not.toHaveBeenCalled();
+    editor.setLocale("fr-FR");
+    editor.click(nativeDataCopy("fr-FR")("Apply chart changes"));
+    const chart = editor.scene.nodes.at(-1);
+    expect(chart).toMatchObject({
+      categories: ["Alpha", "Beta", "Gamma", "범주 4"],
+      series: [
+        { name: "Illustrative value", values: [10, 20, 15, 0] },
+        { name: "계열 2", values: [0, 0, 0, 0] },
+      ],
+    });
+    expect(editor.onChange).toHaveBeenCalledOnce();
+  });
 });

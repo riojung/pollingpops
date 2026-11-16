@@ -42,15 +42,15 @@ async function setAppearance(page: Page, mode: "light" | "dark") {
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
 }
 
-async function createRound(host: Page) {
-  await signInBeta(host);
+async function createRound(page: Page) {
+  await signInBeta(page);
   const correctChoiceId = randomUUID();
-  const created = await host.request.post(`${apiUrl}/v1/quizzes`, {
+  const created = await page.request.post(`${apiUrl}/v1/quizzes`, {
     data: { title: "Round live workspace lifecycle" },
   });
   expect(created.status()).toBe(201);
   const quizId = (await created.json()).quiz.id as string;
-  const updated = await host.request.patch(`${apiUrl}/v1/quizzes/${quizId}`, {
+  const updated = await page.request.patch(`${apiUrl}/v1/quizzes/${quizId}`, {
     data: {
       title: "Round live workspace lifecycle",
       description: "Real host and participant states in a themed, narrow live workspace.",
@@ -86,9 +86,9 @@ async function createRound(host: Page) {
   });
   expect(updated.ok()).toBe(true);
   expect(
-    (await host.request.post(`${apiUrl}/v1/quizzes/${quizId}/publish`, { data: {} })).ok(),
+    (await page.request.post(`${apiUrl}/v1/quizzes/${quizId}/publish`, { data: {} })).ok(),
   ).toBe(true);
-  const hosted = await host.request.post(`${apiUrl}/v1/sessions`, {
+  const hosted = await page.request.post(`${apiUrl}/v1/sessions`, {
     data: {
       quizId,
       clientCapabilities: currentRoundClientCapabilities(),
@@ -105,11 +105,11 @@ async function createRound(host: Page) {
   const session = (await hosted.json()) as LiveFixture;
   expect(session.snapshot.experienceTheme.preset.id).toBe("spark");
   expect(session.snapshot.settings.confidenceEnabled).toBe(false);
-  await host.evaluate(({ sessionId, hostToken }) => {
+  await page.evaluate(({ sessionId, hostToken }) => {
     sessionStorage.setItem(`openround:host:${sessionId}`, hostToken);
   }, session);
-  await host.goto(`/host/${session.sessionId}`);
-  await expect(host.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
+  await page.goto(`/host/${session.sessionId}`);
+  await expect(page.getByTestId("host-session")).toHaveAttribute("data-phase", "lobby");
   return { session, correctChoiceId };
 }
 

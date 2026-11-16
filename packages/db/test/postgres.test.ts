@@ -22,6 +22,7 @@ import {
 } from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectReportHistoryEvidenceConformance } from "./support/report-history-evidence-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
 import { expectIdeaBoardRichConformance } from "./support/idea-board-rich-conformance.js";
@@ -1441,6 +1442,10 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 104, name: "presentation_question_suggestions" },
       { version: 105, name: "presentation_reading_assignments" },
       { version: 106, name: "presentation_practice_assignments" },
+      { version: 107, name: "presentation_motion_backgrounds" },
+      { version: 108, name: "presentation_styled_scenes" },
+      { version: 109, name: "presentation_frame_arithmetic" },
+      { version: 110, name: "workspace_idle_timeout" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -1958,6 +1963,13 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("results-history-owner"),
       await creator("results-history-outsider"),
+    );
+  });
+
+  it("distinguishes missing assessed evidence from measured zero in retained PostgreSQL report history", async () => {
+    await expectReportHistoryEvidenceConformance(
+      repository,
+      await creator("report-history-evidence-owner"),
     );
   });
 
@@ -5929,7 +5941,9 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     expect(await valid({ ...document, schemaVersion: 14 }, 14)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 15 }, 15)).toBe(true);
     expect(await valid({ ...document, schemaVersion: 16 }, 16)).toBe(true);
-    expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(false);
+    expect(await valid({ ...document, schemaVersion: 17 }, 17)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 18 }, 18)).toBe(true);
+    expect(await valid({ ...document, schemaVersion: 19 }, 19)).toBe(false);
     expect(await valid({ ...document, schemaVersion: 10 }, 9)).toBe(false);
     expect(await valid(document, 10)).toBe(false);
     const uppercase = {

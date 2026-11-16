@@ -634,6 +634,25 @@ describe("Survey creator and participant APIs", () => {
       const acceptedSignIn = await requestPinAndSignIn(app, `survey-${role}@example.com`);
       expect(accepted.statusCode, accepted.body).toBe(200);
       const memberHeaders = { cookie: String(acceptedSignIn.headers["set-cookie"]).split(";")[0]! };
+      const preview = await app.inject({
+        method: "GET",
+        url: "/v1/surveys/templates/event-feedback?locale=ko-KR",
+        headers: memberHeaders,
+      });
+      expect(preview.statusCode, preview.body).toBe(200);
+      expect(preview.json().draft.items).toHaveLength(8);
+      if (role === "viewer") {
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/v1/surveys",
+              headers: memberHeaders,
+              payload: { idempotencyKey: randomUUID(), templateId: "event-feedback" },
+            })
+          ).statusCode,
+        ).toBe(403);
+      }
       const denied = await app.inject({
         method: "DELETE",
         url: `/v1/survey-rooms/${room.id}`,
@@ -850,6 +869,10 @@ describe("Survey creator and participant APIs", () => {
     });
     expect(joined.statusCode, joined.body).toBe(200);
     config.FEATURE_SURVEYS = false;
+    expect(
+      (await app.inject({ method: "GET", url: "/v1/surveys/templates/event-feedback", headers }))
+        .statusCode,
+    ).toBe(200);
     expect(
       (
         await app.inject({

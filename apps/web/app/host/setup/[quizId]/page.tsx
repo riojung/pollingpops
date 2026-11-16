@@ -28,6 +28,7 @@ import {
 } from "../../../../lib/room-password";
 import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
+import { saveCreatorHostCredential } from "../../../../lib/host-credential-recovery";
 import { clientUuid } from "../../../../lib/uuid";
 import { confidenceControlCopy } from "../../../../lib/i18n/confidence-control-copy";
 import {
@@ -332,7 +333,7 @@ export default function HostSetupPage() {
         headers: { "x-idempotency-key": creationIntent.current.key },
         body,
       });
-      sessionStorage.setItem(`openround:host:${session.sessionId}`, session.hostToken);
+      saveCreatorHostCredential(sessionStorage, session.sessionId, session.hostToken);
       sessionStorage.setItem(`openround:code:${session.sessionId}`, session.code);
       router.push(`/host/${session.sessionId}`);
     } catch (caught) {

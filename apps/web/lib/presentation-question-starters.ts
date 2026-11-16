@@ -1,5 +1,7 @@
 import {
   ContentSlideDraftSchema,
+  SupportedLocaleSchema,
+  type SupportedLocale,
   InteractiveQuestionBlockDraftSchema,
   PRESENTATION_NATIVE_DOCUMENT_MAX_BYTES,
   PresentationDraftSchema,
@@ -10,6 +12,8 @@ import {
   type PresentationDraft,
   type PresentationTextLanguage,
 } from "@openround/contracts";
+import { questionStarterContent } from "./i18n/question-starter-content";
+import { questionStartersCopy } from "./i18n/question-starters-copy";
 import { promotePresentationOpinionFormats } from "./presentation-builder";
 import { reconcilePresentationSpatialBlocks } from "./presentation-spatial-authoring";
 
@@ -32,6 +36,7 @@ export interface PresentationQuestionStarterSource {
 }
 export interface PresentationQuestionStarter {
   id: PresentationQuestionStarterKind;
+  creationLocale?: SupportedLocale;
   label: string;
   description: string;
   type: "open_text" | "rating" | "poll";
@@ -110,40 +115,47 @@ function priorityChoices(source: PresentationQuestionStarterSource): string[] | 
   return new Set(normalized).size === choices.length ? choices : null;
 }
 
-/** Local English templates quote authored text; they do not infer facts, comprehension or correctness. */
+/** Local templates quote authored text; they do not infer facts, comprehension or correctness. */
 export function createPresentationQuestionStarters(
   block: PresentationBlockDraft,
+  locale: SupportedLocale = "en-CA",
 ): PresentationQuestionStarter[] {
   const result = sourceFor(block);
   if (!result.supported) return [];
   const source = result.source;
+  const content = questionStarterContent(locale, source.title.text);
+  const copy = questionStartersCopy(locale);
+  const creation = locale === "en-CA" ? {} : { creationLocale: locale };
   const starters: PresentationQuestionStarter[] = [
     {
+      ...creation,
       id: "discussion",
-      label: "Discussion",
-      description: "Invite questions and comments about the authored slide title.",
+      label: copy("Discussion"),
+      description: copy("Invite questions and comments about the authored slide title."),
       type: "open_text",
-      prompt: `What questions or comments do you have about “${source.title.text}”?`,
+      prompt: content.discussion,
       source,
     },
     {
+      ...creation,
       id: "clarity",
-      label: "Clarity rating",
-      description: "Ask for a subjective clarity rating, not a scored understanding check.",
+      label: copy("Clarity rating"),
+      description: copy("Ask for a subjective clarity rating, not a scored understanding check."),
       type: "rating",
-      prompt: `How clear is “${source.title.text}” to you?`,
-      rating: { min: 1, max: 5, minLabel: "Not clear yet", maxLabel: "Very clear" },
+      prompt: content.clarity,
+      rating: { min: 1, max: 5, minLabel: content.minLabel, maxLabel: content.maxLabel },
       source,
     },
   ];
   const choices = priorityChoices(source);
   if (choices)
     starters.push({
+      ...creation,
       id: "priority",
-      label: "Priority poll",
-      description: "Use every authored body point as an option for what to discuss next.",
+      label: copy("Priority poll"),
+      description: copy("Use every authored body point as an option for what to discuss next."),
       type: "poll",
-      prompt: `Which point from “${source.title.text}” should we discuss next?`,
+      prompt: content.priority,
       choices,
       source,
     });
@@ -173,6 +185,7 @@ function sourceCitations(source: PresentationQuestionStarterSource) {
 function starterIdentity(starter: PresentationQuestionStarter): string {
   return JSON.stringify([
     starter.id,
+    starter.creationLocale ?? "en-CA",
     starter.label,
     starter.description,
     starter.type,
@@ -196,7 +209,9 @@ export function insertPresentationQuestionStarter(
   );
   const source = draft.blocks[sourceIndex];
   if (!source) return { ok: false, reason: stale };
-  const current = createPresentationQuestionStarters(source).find(
+  const locale = SupportedLocaleSchema.safeParse(starter.creationLocale ?? "en-CA");
+  if (!locale.success) return { ok: false, reason: stale };
+  const current = createPresentationQuestionStarters(source, locale.data).find(
     (candidate) => candidate.id === starter.id,
   );
   if (!current || starterIdentity(current) !== starterIdentity(starter))
@@ -268,9 +283,9 @@ export function insertPresentationQuestionStarter(
       sourceName: `Slide: ${starter.source.title.text}`,
       sourceDigest: starter.source.sourceDigest,
       provider: "local",
-      model: "question-starters-v1",
+      model: locale.data === "en-CA" ? "question-starters-v1" : "question-starters-v2",
       conversionNotes: [
-        `Source slide ${starter.source.blockId}. Local English template; only authored title/body text is used. Other objects are not interpreted. No AI or independent verification.`,
+        `Source slide ${starter.source.blockId}. ${locale.data === "en-CA" ? "Local English template" : `Local template; creation locale: ${locale.data}`}; only authored title/body text is used. Other objects are not interpreted. No AI or independent verification.`,
         ...[starter.source.title, ...starter.source.body].map(
           (node, index) =>
             `${index === 0 ? "Title" : `Body ${index}`} node ${node.nodeId}; language: ${node.lang ?? "unspecified"}.`,

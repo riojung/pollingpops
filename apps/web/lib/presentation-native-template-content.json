@@ -10,7 +10,8 @@
       {
         "title": "A repair request should become an owned next step",
         "body": "Illustrative startup: HarborTask helps shared workshops turn scattered equipment requests into a visible queue, an assigned owner and a documented resolution. The initial audience is small workshop operators, not every maintenance team.",
-        "notes": "Open with a recognizable request arriving by email, paper and a corridor conversation. Replace HarborTask and the workshop segment with your venture. Describe a proposed service; do not present this example as a launched product."
+        "notes": "Open with a recognizable request arriving by email, paper and a corridor conversation. Replace HarborTask and the workshop segment with your venture. Describe a proposed service; do not present this example as a launched product.",
+        "layout": "cover"
       },
       {
         "title": "The problem sits between the messages",
@@ -20,7 +21,8 @@
           "Intake: requests arrive through several channels, with uneven detail.",
           "Ownership: the next responsible person is unclear after a request is forwarded.",
           "Closure: reporters cannot tell whether the issue was resolved or merely acknowledged."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "A small demand model makes the assumptions visible",
@@ -37,7 +39,8 @@
               "values": [18, 27, 35]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "One queue, three deliberate transitions",
@@ -47,7 +50,8 @@
           "Capture: location, issue, urgency and an optional approved image.",
           "Assign: one accountable owner and a visible next update.",
           "Resolve: record the action taken and tell the reporter what changed."
-        ]
+        ],
+        "layout": "process"
       },
       {
         "title": "Why this workflow instead of another inbox?",
@@ -69,7 +73,8 @@
               "A new habit and another tool to maintain"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A commercial hypothesis that can be disproved",
@@ -83,19 +88,23 @@
             ["Proposed monthly site fee", "$90", "A real purchasing conversation"],
             ["Initial setup effort", "2 staff hours", "A measured onboarding attempt"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A pilot should test behavior, not collect compliments",
         "body": "The proposed pilot follows one queue from intake to closure. Before it starts, agree how to measure owner assignment, stale requests and staff effort. Keep an exit option if maintaining the queue costs more attention than it saves.",
-        "notes": "Replace the suggested measures with a pilot agreement. Specify who records each measure and when the team will review it. Do not describe planned thresholds as achieved results."
+        "notes": "Replace the suggested measures with a pilot agreement. Specify who records each measure and when the team will review it. Do not describe planned thresholds as achieved results.",
+        "layout": "statement"
       },
       {
         "title": "The ask: a bounded learning partnership",
         "body": "Seek one workshop sponsor, one operational contact and permission to observe the existing handoff. The next decision is whether to run the six-week pilot; expansion depends on evidence from that pilot, not this illustrative demand model.",
-        "notes": "End with the exact commitment you need and a proposed review date. Replace role labels with consenting contacts and remove any request for access that your pilot does not require."
+        "notes": "End with the exact commitment you need and a proposed review date. Replace role labels with consenting contacts and remove any request for access that your pilot does not require.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "editorial"
   },
   {
     "id": "native-client-proposal",
@@ -108,7 +117,8 @@
       {
         "title": "Help visitors plan a confident first visit",
         "body": "Illustrative proposal: redesign Northline Museum’s visit-planning pages so a first-time visitor can find opening hours, accessibility information, travel options and ticket choices in one coherent journey.",
-        "notes": "Replace the museum and audience with the actual brief. Confirm the decision this proposal asks the client to make before discussing deliverables or fees."
+        "notes": "Replace the museum and audience with the actual brief. Confirm the decision this proposal asks the client to make before discussing deliverables or fees.",
+        "layout": "cover"
       },
       {
         "title": "Start with the journey the site must support",
@@ -118,7 +128,8 @@
           "Can we visit? Hours, closures, access arrangements and support contacts.",
           "Can we get there? Directions, transport choices and the entrance to use.",
           "What do we book? Clear ticket options, conditions and the next action."
-        ]
+        ],
+        "layout": "process"
       },
       {
         "title": "A narrow scope makes delivery reviewable",
@@ -127,7 +138,8 @@
         "columns": [
           "Included: journey map, page structure, content guidance, responsive prototype and implementation support.",
           "Outside this example: payment platform replacement, collection cataloguing, photography and a full brand redesign."
-        ]
+        ],
+        "layout": "comparison"
       },
       {
         "title": "Deliverables tied to decisions",
@@ -150,7 +162,8 @@
             ],
             ["Launch checklist", "Are agreed tasks and content ready?", "Named launch owner"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A five-week route with visible dependencies",
@@ -166,7 +179,8 @@
             ["4", "Build support and handoff", "Implementation access and web lead time"],
             ["5", "Checks and launch preparation", "Approved content and launch decision"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Choose the support level deliberately",
@@ -183,19 +197,23 @@
               "values": [8000, 12000]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Resolve the risks before promising a launch",
         "body": "The main uncertainties are content readiness, ticket-provider constraints and access to the current site. Confirm an owner and fallback for each. A clear manual route to visitor support is preferable to a broken booking or access-information link.",
-        "notes": "Use the client’s actual systems and access requirements. Replace generic risk statements with a specific dependency, impact and owner; agree escalation and change approval before work starts."
+        "notes": "Use the client’s actual systems and access requirements. Replace generic risk statements with a specific dependency, impact and owner; agree escalation and change approval before work starts.",
+        "layout": "statement"
       },
       {
         "title": "The next decision and first working session",
         "body": "Choose the engagement option, confirm the client project owner and agree the scope exclusions. The first working session should produce the visitor tasks, source-content inventory and review calendar needed to begin.",
-        "notes": "Close with the actual approval route and contact. Keep a written record of selected scope and assumptions; do not treat discussion during this presentation as a signed agreement."
+        "notes": "Close with the actual approval route and contact. Keep a written record of selected scope and assumptions; do not treat discussion during this presentation as a signed agreement.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "editorial"
   },
   {
     "id": "native-project-update",
@@ -208,7 +226,8 @@
       {
         "title": "The migration is progressing; the access decision is open",
         "body": "Illustrative status: Canopy’s internal service portal has completed content mapping and begun pilot migration. The next milestone depends on agreeing who approves access rules. This update separates completed work from the decision still needed.",
-        "notes": "Replace the project name, reporting date and status with current project evidence. State the requested decision early so the audience can interpret the detail that follows."
+        "notes": "Replace the project name, reporting date and status with current project evidence. State the requested decision early so the audience can interpret the detail that follows.",
+        "layout": "cover"
       },
       {
         "title": "What changed since the previous review",
@@ -218,7 +237,8 @@
           "Completed: agreed page inventory and migration rules for the pilot.",
           "Learned: source permissions differ between two operating teams.",
           "Needs a decision: one accountable approver for the target access model."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Milestone progress against an explicit plan",
@@ -239,7 +259,8 @@
               "values": [5, 20, 8, 0]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "The remaining-work view is a forecast, not a promise",
@@ -256,12 +277,14 @@
               "values": [24, 18, 16, 10]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "One issue requires leadership attention",
         "body": "The pilot cannot close until conflicting access rules have an agreed owner. The proposed response is to pause only the affected pages, continue low-risk migration work and set a short deadline for the approval decision.",
-        "notes": "Replace the access example with the current blocking issue. Explain the consequence of waiting and the smallest decision that would release useful work; do not hide unresolved security questions behind a green status."
+        "notes": "Replace the access example with the current blocking issue. Explain the consequence of waiting and the smallest decision that would release useful work; do not hide unresolved security questions behind a green status.",
+        "layout": "statement"
       },
       {
         "title": "The next fortnight has named outcomes",
@@ -276,19 +299,23 @@
             ["Rehearse rollback", "Operations lead", "Recorded restore rehearsal"],
             ["Decide rollout readiness", "Project sponsor", "Explicit go or defer decision"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "What would change the forecast?",
         "body": "The worked forecast assumes no new source systems, a stable pilot scope and a reviewer available within two working days. If any assumption changes, the team will revise the milestone and explain the trade-off rather than compress checks silently.",
-        "notes": "Use assumptions the audience can verify. Replace the sample turnaround with the actual review agreement and identify the event that triggers a replanning conversation."
+        "notes": "Use assumptions the audience can verify. Replace the sample turnaround with the actual review agreement and identify the event that triggers a replanning conversation.",
+        "layout": "statement"
       },
       {
         "title": "Confirm the decision, then return to delivery",
         "body": "Requested decision: appoint the access approver and confirm the pilot boundary. The next update should report the decision outcome, accepted pilot work and evidence from the rollback rehearsal, using the same definitions as this review.",
-        "notes": "Finish by recording the decision owner, due date and communication channel. Replace the next-update expectations with what the team can substantiate by that date."
+        "notes": "Finish by recording the decision owner, due date and communication channel. Replace the next-update expectations with what the team can substantiate by that date.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "briefing"
   },
   {
     "id": "native-quarterly-strategy",
@@ -301,12 +328,14 @@
       {
         "title": "A quarter focused on dependable repeat purchase",
         "body": "Illustrative strategy: Aster will spend the next quarter making its existing repairable desk-accessory range easier to understand, buy and support. A new product category is deferred until the core buying and support journey is more dependable.",
-        "notes": "Replace the retailer and strategic choice with your organization. State what will be postponed as clearly as what will be pursued; this example is not evidence of a real business outcome."
+        "notes": "Replace the retailer and strategic choice with your organization. State what will be postponed as clearly as what will be pursued; this example is not evidence of a real business outcome.",
+        "layout": "cover"
       },
       {
         "title": "The choice starts with constraints",
         "body": "The fictional team has limited product, content and support capacity. Running a range expansion alongside checkout and support changes would create more work than the team can evaluate well. Focus is a capacity decision, not a claim that expansion has no value.",
-        "notes": "Replace these constraints with the real decision context. Distinguish a measured bottleneck from an assumption that still needs observation."
+        "notes": "Replace these constraints with the real decision context. Distinguish a measured bottleneck from an assumption that still needs observation.",
+        "layout": "statement"
       },
       {
         "title": "Three priorities form one customer journey",
@@ -316,7 +345,8 @@
           "Understand: explain material, repairability and product fit in plain language.",
           "Choose: make compatibility, total price and delivery conditions clear.",
           "Keep using: make spare parts, care guidance and support routes easy to find."
-        ]
+        ],
+        "layout": "process"
       },
       {
         "title": "Allocate capacity before promising initiatives",
@@ -333,7 +363,8 @@
               "values": [50, 30, 20]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Each priority needs a testable outcome",
@@ -355,7 +386,8 @@
             ],
             ["Post-purchase support", "Repeated care questions by topic", "A dated support sample"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Sequence the work so learning can change it",
@@ -365,19 +397,23 @@
           "First: establish definitions and work through one representative product.",
           "Next: test the revised journey and extend only the useful changes.",
           "Finally: review outcomes, support effort and the next quarter’s trade-offs."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Stop rules protect the focus",
         "body": "Pause expansion if support load rises beyond available coverage, the spare-parts story is incomplete or the buying changes create new confusion. Continue only when an owner can show what was learned and what will change next.",
-        "notes": "Replace the qualitative rules with agreed triggers where reliable measures exist. Assign a decision owner for stopping or redirecting work; a rule without ownership will not protect capacity."
+        "notes": "Replace the qualitative rules with agreed triggers where reliable measures exist. Assign a decision owner for stopping or redirecting work; a rule without ownership will not protect capacity.",
+        "layout": "statement"
       },
       {
         "title": "Approve the focus and its review rhythm",
         "body": "The decision is to commit to the three connected priorities, protect operational capacity and defer range expansion. Review the evidence every month and record any change to priorities with its reason and capacity cost.",
-        "notes": "Close by confirming the accountable sponsor and first review date. Replace the fictional priorities and allocation before using this as an organizational strategy."
+        "notes": "Close by confirming the accountable sponsor and first review date. Replace the fictional priorities and allocation before using this as an organizational strategy.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "briefing"
   },
   {
     "id": "native-portfolio-case-study",
@@ -390,7 +426,8 @@
       {
         "title": "Cedar Station: make the next step understandable",
         "body": "Illustrative portfolio case: redesign the information a first-time visitor needs when entering a small transit interchange. The brief focuses on finding the correct platform and understanding what to do when the route changes.",
-        "notes": "Replace the fictional station, project and role with your actual work. State whether the work was commissioned, personal or speculative; this example does not represent a real client engagement."
+        "notes": "Replace the fictional station, project and role with your actual work. State whether the work was commissioned, personal or speculative; this example does not represent a real client engagement.",
+        "layout": "cover"
       },
       {
         "title": "Define the role and the boundary",
@@ -399,12 +436,14 @@
         "columns": [
           "Owned in the example: visitor-task definition, sign hierarchy and prototype decisions.",
           "Dependencies: operator terminology, accessible routes, installation rules and accurate service information."
-        ]
+        ],
+        "layout": "comparison"
       },
       {
         "title": "Start with tasks, not a new visual style",
         "body": "The proposed discovery plan follows three tasks: locate a platform, change between services and find assistance after a disruption. Existing signs, route choices and points of uncertainty would be documented before visual design begins.",
-        "notes": "Replace this planned method with the methods you actually used. Show permissioned artifacts where available; do not describe this fictional plan as completed user research."
+        "notes": "Replace this planned method with the methods you actually used. Show permissioned artifacts where available; do not describe this fictional plan as completed user research.",
+        "layout": "statement"
       },
       {
         "title": "A worked journey reveals information gaps",
@@ -426,7 +465,8 @@
             ],
             ["Disruption", "Where can I get current help?", "Show a reliable assistance route"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A hierarchy that repeats at every decision point",
@@ -436,7 +476,8 @@
           "Primary: destination or direction in plain language.",
           "Secondary: platform, transfer choice or accessible route.",
           "Supporting: local identifiers and the next source of assistance."
-        ]
+        ],
+        "layout": "process"
       },
       {
         "title": "Show the decision, not an invented improvement claim",
@@ -462,19 +503,23 @@
               "Whether visitors can reach useful help"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "An evaluation plan matched to the task",
         "body": "Test the prototype using realistic navigation tasks and a safe representation of the environment. Observe wrong turns, requests for help and interpretation of accessible-route cues. Record context and uncertainty alongside any timing measure.",
-        "notes": "Replace the plan with your completed evaluation if one exists. Arrange appropriate participation and permissions before testing; do not report planned observations as actual findings."
+        "notes": "Replace the plan with your completed evaluation if one exists. Arrange appropriate participation and permissions before testing; do not report planned observations as actual findings.",
+        "layout": "statement"
       },
       {
         "title": "What this case demonstrates",
         "body": "The worked case demonstrates problem framing, a consistent information hierarchy and a plan to evaluate it. A next iteration would prioritize the most confusing decision point, then revise the system using observed task evidence.",
-        "notes": "Finish with your actual contribution, one limitation and one lesson you can substantiate. Add a real portfolio or prototype link only if you have permission to share it."
+        "notes": "Finish with your actual contribution, one limitation and one lesson you can substantiate. Add a real portfolio or prototype link only if you have permission to share it.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "editorial"
   },
   {
     "id": "native-event-talk",
@@ -487,7 +532,8 @@
       {
         "title": "The decision is small; the consequences still travel",
         "body": "A community library needs a better way to lend equipment. The fictional team can buy a new checkout tool, simplify its current process or try a small manual pilot. The useful question is not which option sounds modern, but what the team needs to learn.",
-        "notes": "Open with the library scenario and make its fictional status explicit. Replace it with a story you can substantiate if appropriate. This talk can be delivered as a complete explanation without polling the audience."
+        "notes": "Open with the library scenario and make its fictional status explicit. Replace it with a story you can substantiate if appropriate. This talk can be delivered as a complete explanation without polling the audience.",
+        "layout": "cover"
       },
       {
         "title": "A hurried choice can hide three different questions",
@@ -497,12 +543,14 @@
           "Outcome: what should become easier or more dependable?",
           "Constraint: what must the solution respect?",
           "Uncertainty: what do we need to learn before committing?"
-        ]
+        ],
+        "layout": "process"
       },
       {
         "title": "Name a decision that someone can own",
         "body": "A useful decision statement identifies the choice, the person accountable and the time boundary. In the example: choose how to run a four-week equipment-lending pilot, with the service coordinator owning the review.",
-        "notes": "Contrast this bounded decision with a vague instruction to modernize lending. Replace the owner role and time boundary with details appropriate to your own worked example."
+        "notes": "Contrast this bounded decision with a vague instruction to modernize lending. Replace the owner role and time boundary with details appropriate to your own worked example.",
+        "layout": "statement"
       },
       {
         "title": "Compare options against the same questions",
@@ -528,12 +576,14 @@
               "Which information and controls are actually needed"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Make uncertainty a task, not a footnote",
         "body": "The worked decision depends on two unknowns: how often availability is unclear and how much attention a new process would require. The team can investigate these with a short record of real lending tasks before making a larger commitment.",
-        "notes": "Replace these unknowns with the most consequential assumptions in your own story. Explain what observation would change the choice rather than adding more research without a decision purpose."
+        "notes": "Replace these unknowns with the most consequential assumptions in your own story. Explain what observation would change the choice rather than adding more research without a decision purpose.",
+        "layout": "statement"
       },
       {
         "title": "A one-page record is enough to start",
@@ -543,19 +593,23 @@
           "Decision and reason: try a bounded manual pilot to understand the workflow.",
           "Owner and review: service coordinator reviews the pilot after four weeks.",
           "Reconsideration signal: the process cannot be maintained or misses a critical service need."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Does every small decision need this much attention?",
         "body": "The amount of documentation should match the consequences and the cost of reversal. A routine, easily reversible choice may need only a brief note. A choice that changes access, money or shared responsibilities deserves a clearer record.",
-        "notes": "Acknowledge the cost of unnecessary process. Replace broad slogans with one example of a light record and one example that deserves more care; do not claim this approach has universal measured benefits."
+        "notes": "Acknowledge the cost of unnecessary process. Replace broad slogans with one example of a light record and one example that deserves more care; do not claim this approach has universal measured benefits.",
+        "layout": "statement"
       },
       {
         "title": "Leave the next decision easier to understand",
         "body": "The practical takeaway is to name the outcome, expose the important uncertainty and record why the choice makes sense now. In the library example, the next step is a bounded pilot and an explicit review, not a claim that the final system has been found.",
-        "notes": "Close by inviting listeners to use the three questions privately on their next relevant decision. No response or platform activity is required. Replace the example with the one used consistently throughout your talk."
+        "notes": "Close by inviting listeners to use the three questions privately on their next relevant decision. No response or platform activity is required. Replace the example with the one used consistently throughout your talk.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "editorial"
   },
   {
     "id": "native-product-demo",
@@ -568,7 +622,8 @@
       {
         "title": "One task, one visible outcome",
         "body": "Illustrative product: Mapline is a proposed workspace for handing a recurring operational request from one team to another. This demo follows a fictional room-setup request until the requester can see what was completed and what remains open.",
-        "notes": "Replace Mapline and the task with your actual product and a sanitized demo record. Make clear which features are shipped, experimental or represented only by this example."
+        "notes": "Replace Mapline and the task with your actual product and a sanitized demo record. Make clear which features are shipped, experimental or represented only by this example.",
+        "layout": "cover"
       },
       {
         "title": "Prepare a record the audience can follow",
@@ -583,12 +638,14 @@
             ["Needed outcome", "Room layout and access checks confirmed"],
             ["Completion evidence", "Checklist and a short resolution note"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Step one: capture enough context to act",
         "body": "The requester records the intended outcome, timing and relevant constraints. The handoff should explain what success means, not merely attach a vague request title. In the example, room access and layout are explicit checklist items.",
-        "notes": "Demonstrate the actual fields in your product, or explain the proposed record if this remains a concept. Replace the constraints with details that are safe to show and relevant to the chosen audience."
+        "notes": "Demonstrate the actual fields in your product, or explain the proposed record if this remains a concept. Replace the constraints with details that are safe to show and relevant to the chosen audience.",
+        "layout": "statement"
       },
       {
         "title": "Step two: make the next owner visible",
@@ -597,29 +654,35 @@
         "columns": [
           "Before handoff: a request exists, but responsibility is not yet accepted.",
           "After handoff: an accountable role and a next update are visible."
-        ]
+        ],
+        "layout": "comparison"
       },
       {
         "title": "Step three: show the exception path",
         "body": "The fictional room contact discovers that one requested layout is unavailable. Instead of closing the request, the contact records the constraint, offers an alternative and returns the decision to the coordinator.",
-        "notes": "Use a harmless, predictable exception that demonstrates the real workflow. Explain where the product stops and a human decision begins. Do not hide the limitation behind an idealized success path."
+        "notes": "Use a harmless, predictable exception that demonstrates the real workflow. Explain where the product stops and a human decision begins. Do not hide the limitation behind an idealized success path.",
+        "layout": "statement"
       },
       {
         "title": "Completion should answer the original request",
         "body": "The coordinator accepts the alternative layout and the contact records what was prepared. The completion note references the intended outcome and identifies any remaining task, so a closed status does not imply that every possible concern has disappeared.",
-        "notes": "Show the completed record and its history if your product supports them. Replace the sample resolution with one consistent with the exception shown on the previous slide."
+        "notes": "Show the completed record and its history if your product supports them. Replace the sample resolution with one consistent with the exception shown on the previous slide.",
+        "layout": "statement"
       },
       {
         "title": "What this demo does and does not establish",
         "body": "The scenario explains a proposed capture, ownership and closure flow. It does not establish integration coverage, security certification, delivery performance or customer results. Those claims need their own current evidence.",
-        "notes": "Replace this slide with accurate limitations and evidence links for your product. Be explicit about manual steps, supported roles and features unavailable in the demonstrated edition."
+        "notes": "Replace this slide with accurate limitations and evidence links for your product. Be explicit about manual steps, supported roles and features unavailable in the demonstrated edition.",
+        "layout": "statement"
       },
       {
         "title": "Evaluate it with a task you actually need to hand off",
         "body": "The useful next step is a bounded trial using a low-risk, representative request. Agree who will observe the handoff, what a successful outcome looks like and how the team will report friction before expanding use.",
-        "notes": "End with a real trial route or contact, not an invented customer story. Replace the trial scope with what your team can support and avoid requesting sensitive production data for a demonstration."
+        "notes": "End with a real trial route or contact, not an invented customer story. Replace the trial scope with what your team can support and avoid requesting sensitive production data for a demonstration.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "workshop"
   },
   {
     "id": "native-customer-onboarding",
@@ -632,7 +695,8 @@
       {
         "title": "Your first week is about one useful contribution",
         "body": "Illustrative team: Wren Studio helps local organizations improve everyday service information. In the first week, the goal is to understand how work moves, complete a supported task and know where to ask for help.",
-        "notes": "Replace the fictional team, purpose and first-week outcome. Explain what a newcomer is not expected to know yet, and confirm that the example reflects the actual role."
+        "notes": "Replace the fictional team, purpose and first-week outcome. Explain what a newcomer is not expected to know yet, and confirm that the example reflects the actual role.",
+        "layout": "cover"
       },
       {
         "title": "How work moves through the team",
@@ -642,7 +706,8 @@
           "Understand the brief: outcome, audience and constraints.",
           "Make a useful first version: small enough for timely feedback.",
           "Review and hand off: record the decision and the remaining work."
-        ]
+        ],
+        "layout": "timeline"
       },
       {
         "title": "A first-week plan with room for support",
@@ -657,17 +722,20 @@
             ["Days 3–4", "Complete a supported first task", "Task reviewer"],
             ["Day 5", "Review what helped and choose the next task", "Team lead and newcomer"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Access is a prerequisite, not a test",
         "body": "The newcomer needs the agreed communication channel, project workspace and example materials before starting the task. Missing access should be reported through the named support route rather than worked around by sharing another person’s account.",
-        "notes": "Replace the generic tools and support route with the actual approved setup. Confirm access before assigning delivery expectations; do not include passwords, access tokens or private customer material in this deck."
+        "notes": "Replace the generic tools and support route with the actual approved setup. Confirm access before assigning delivery expectations; do not include passwords, access tokens or private customer material in this deck.",
+        "layout": "statement"
       },
       {
         "title": "A worked first task: clarify a service notice",
         "body": "The example task is to rewrite a fictional room-booking notice so readers can find who may book, what information is needed and how to ask a question. The output is a short draft plus a note explaining any unresolved uncertainty.",
-        "notes": "Use a real low-risk task and an approved example of acceptable work. Keep the first attempt small enough for useful feedback; replace the fictional notice before assigning the task."
+        "notes": "Use a real low-risk task and an approved example of acceptable work. Keep the first attempt small enough for useful feedback; replace the fictional notice before assigning the task.",
+        "layout": "statement"
       },
       {
         "title": "What a useful review looks for",
@@ -677,19 +745,23 @@
           "Clarity: the intended reader can find the next action.",
           "Accuracy: claims and instructions match approved source information.",
           "Handoff: the reviewer can see open questions and the next owner."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Where to go when the next step is unclear",
         "body": "Ask the task reviewer about the work, the onboarding partner about team routines and the designated support contact about access. If the person you need is unavailable, use the agreed escalation route instead of waiting without an update.",
-        "notes": "Replace every role with a current contact or maintained directory link. Confirm permission before adding personal contact information; do not leave fictional contacts in a delivered onboarding deck."
+        "notes": "Replace every role with a current contact or maintained directory link. Confirm permission before adding personal contact information; do not leave fictional contacts in a delivered onboarding deck.",
+        "layout": "statement"
       },
       {
         "title": "Close the week with a clear next step",
         "body": "The end-of-week conversation reviews the completed task, unresolved questions and the support needed next. A useful outcome is one agreed next task and one improvement to the onboarding plan, rather than a claim that onboarding is finished.",
-        "notes": "Set an actual check-in time and invite private feedback. Replace the sample next step with a task suitable for the person’s responsibilities and available support."
+        "notes": "Set an actual check-in time and invite private feedback. Replace the sample next step with a task suitable for the person’s responsibilities and available support.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "workshop"
   },
   {
     "id": "native-practical-workshop",
@@ -702,12 +774,14 @@
       {
         "title": "Leave with one experiment the service can actually run",
         "body": "Illustrative workshop: a community centre wants to reduce confusion during room booking. The output is one bounded change, a responsible owner and a way to learn whether the change makes the next step clearer.",
-        "notes": "Replace the service and output with the workshop brief. This deck includes a complete worked example; optional discussion or practice can be added in the notes without making an activity necessary to follow the story."
+        "notes": "Replace the service and output with the workshop brief. This deck includes a complete worked example; optional discussion or practice can be added in the notes without making an activity necessary to follow the story.",
+        "layout": "cover"
       },
       {
         "title": "A shared scenario keeps the discussion concrete",
         "body": "In the fictional example, a volunteer requests a room, receives an acknowledgement and waits for confirmation without knowing whether more information is needed. Staff see an incomplete request but have no consistent follow-up message.",
-        "notes": "Read the scenario neutrally and avoid assigning blame. Replace it with a permissioned example or keep it explicitly illustrative; do not imply that the scenario was observed at a real centre."
+        "notes": "Read the scenario neutrally and avoid assigning blame. Replace it with a permissioned example or keep it explicitly illustrative; do not imply that the scenario was observed at a real centre.",
+        "layout": "statement"
       },
       {
         "title": "Map the handoff before proposing a new tool",
@@ -730,12 +804,14 @@
               "Update the schedule and notify the requester"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "The friction is a missing distinction",
         "body": "The worked map suggests that receipt and confirmation look too similar to the requester. A new platform is one possible response, but a clearer message and visible next step are smaller changes the team can test first.",
-        "notes": "Distinguish the map’s hypothesis from a verified cause. Replace it with the uncertainty your evidence supports, and avoid treating the first suggested solution as the only option."
+        "notes": "Distinguish the map’s hypothesis from a verified cause. Replace it with the uncertainty your evidence supports, and avoid treating the first suggested solution as the only option.",
+        "layout": "statement"
       },
       {
         "title": "Turn the hypothesis into a small experiment",
@@ -745,24 +821,29 @@
           "Change: distinguish receipt from confirmation in one message.",
           "Learn: whether requesters can explain the current status and next step.",
           "Boundary: one booking channel during a short, agreed review period."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Choose evidence that matches the question",
         "body": "The team can walk through the revised message with representative task scenarios and review clarification requests during the pilot. Completion counts alone would not reveal whether people understood the booking status.",
-        "notes": "Replace the proposed observations with a practical, permissioned evaluation plan. Establish how notes will be recorded and keep personal information out of the workshop artifacts."
+        "notes": "Replace the proposed observations with a practical, permissioned evaluation plan. Establish how notes will be recorded and keep personal information out of the workshop artifacts.",
+        "layout": "statement"
       },
       {
         "title": "Plan for the constraints that could undo the change",
         "body": "The message needs an owner, accurate service conditions and a maintained support route. If staff cannot deliver the stated next step, the team must revise the promise or stop the pilot rather than publish reassuring but inaccurate copy.",
-        "notes": "Assign real owner roles and a review date. Optional group practice can use the worked example, but the presenter should still explain the completed plan for anyone who does not participate."
+        "notes": "Assign real owner roles and a review date. Optional group practice can use the worked example, but the presenter should still explain the completed plan for anyone who does not participate.",
+        "layout": "statement"
       },
       {
         "title": "A finished workshop leaves an owned decision",
         "body": "The worked decision is to test one clearer acknowledgement, keep the original available for comparison and review the evidence before expanding. Record the owner, start date, review date and the signal that would stop or change the experiment.",
-        "notes": "Replace the sample decision with the actual workshop outcome. Read back the commitment and identify who will maintain the record after the session; do not equate agreement in the room with implemented change."
+        "notes": "Replace the sample decision with the actual workshop outcome. Read back the commitment and identify who will maintain the record after the session; do not equate agreement in the room with implemented change.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "workshop"
   },
   {
     "id": "native-lesson-explainer",
@@ -775,7 +856,8 @@
       {
         "title": "What can a before-and-after comparison tell us?",
         "body": "Suppose a fictional library introduces a reminder and the share of books returned on time rises. The change is worth investigating, but the before-and-after numbers alone do not establish what caused it.",
-        "notes": "Introduce the difference between describing a change and explaining it. State that the library and every value in the lesson are invented for teaching; no real intervention result is being reported."
+        "notes": "Introduce the difference between describing a change and explaining it. State that the library and every value in the lesson are invented for teaching; no real intervention result is being reported.",
+        "layout": "cover"
       },
       {
         "title": "First describe the change accurately",
@@ -792,7 +874,8 @@
               "values": [60, 75]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Ask what else could have changed",
@@ -802,7 +885,8 @@
           "People: were the same kinds of borrowers included?",
           "Context: did timing, borrowing patterns or other services change?",
           "Measurement: were on-time returns defined and recorded in the same way?"
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "A comparison group adds useful context",
@@ -815,12 +899,14 @@
             ["Branch with reminder", "60%", "75%"],
             ["Comparison branch", "60%", "66%"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Plan the study around the claim you want to make",
         "body": "A stronger study decides how to assign or compare reminder conditions, define the outcome and handle missing records before examining the result. Where feasible, random assignment can help reduce systematic differences between conditions.",
-        "notes": "Keep the explanation at the level appropriate to the audience. Clarify that implementation, sample size and analysis still matter; naming random assignment does not make every study definitive."
+        "notes": "Keep the explanation at the level appropriate to the audience. Clarify that implementation, sample size and analysis still matter; naming random assignment does not make every study definitive.",
+        "layout": "statement"
       },
       {
         "title": "Report the boundary as part of the result",
@@ -830,7 +916,8 @@
           "Who: the people and settings actually included.",
           "What: the exact reminder and outcome measured.",
           "When: the observed period and the duration still unknown."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Choose wording that matches the evidence",
@@ -853,14 +940,17 @@
               "A broad generalization requiring additional evidence"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A reusable habit: describe, compare, qualify",
         "body": "Describe exactly what changed, ask what comparison supports the explanation and state the boundary of the conclusion. These steps help readers distinguish an interesting observation from a causal claim and an overextended generalization.",
-        "notes": "Close by revisiting the opening example in these three steps. Optional private reflection can use another everyday claim, but the lesson remains complete without an audience response."
+        "notes": "Close by revisiting the opening example in these three steps. Optional private reflection can use another everyday claim, but the lesson remains complete without an audience response.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "workshop"
   },
   {
     "id": "native-research-findings",
@@ -873,7 +963,8 @@
       {
         "title": "The decision: what must an offline note preserve?",
         "body": "Illustrative research readout: a team is exploring a field-note tool used where connectivity is unreliable. This deck rehearses how to present evidence and uncertainty using synthetic task records; it does not report completed research.",
-        "notes": "Replace the fictional context and synthetic records with traceable, permissioned evidence before presenting real findings. State the product decision the actual research is meant to inform."
+        "notes": "Replace the fictional context and synthetic records with traceable, permissioned evidence before presenting real findings. State the product decision the actual research is meant to inform.",
+        "layout": "cover"
       },
       {
         "title": "Separate the research plan from the evidence in hand",
@@ -896,7 +987,8 @@
             ],
             ["Usage or customer data", "Not provided", "No prevalence or outcome claim can be made"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A worked coding view makes interpretation inspectable",
@@ -922,7 +1014,8 @@
               "Is one accepted action recorded once?"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Counts should explain their denominator",
@@ -939,7 +1032,8 @@
               "values": [8, 4]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Three design hypotheses to investigate",
@@ -949,12 +1043,14 @@
           "Retained state: the author can tell what is safely stored locally.",
           "Synchronization state: the interface distinguishes local and shared versions.",
           "Recovery state: pending work has an understandable next step."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "What this readout cannot answer",
         "body": "The rehearsal cannot determine how often interruptions occur, which people need offline capture or whether the proposed status language is understandable. Those questions need appropriate research in the intended settings.",
-        "notes": "Use the limitations to prioritize the next study, not merely as a disclaimer at the end. Replace the questions with the unresolved decisions in your actual project."
+        "notes": "Use the limitations to prioritize the next study, not merely as a disclaimer at the end. Replace the questions with the unresolved decisions in your actual project.",
+        "layout": "statement"
       },
       {
         "title": "Turn hypotheses into a focused evaluation",
@@ -980,14 +1076,17 @@
               "Recovery workflow design"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A useful readout makes the next evidence request clear",
         "body": "The worked recommendation is to investigate state comprehension before expanding features. The next review should show actual source-backed observations, which hypotheses changed and the product decision those observations support.",
-        "notes": "Replace this rehearsal conclusion after real research. End with the decision owner, planned evidence and review date; remove synthetic charts from any presentation claiming validated findings."
+        "notes": "Replace this rehearsal conclusion after real research. End with the decision owner, planned evidence and review date; remove synthetic charts from any presentation claiming validated findings.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "briefing"
   },
   {
     "id": "native-business-decision-brief",
@@ -1000,7 +1099,8 @@
       {
         "title": "Choose a dependable print-room route",
         "body": "Illustrative decision: a community arts centre must choose whether to repair its current printer, replace it or use a nearby shared service. The aim is dependable access for routine materials within the centre’s operating capacity.",
-        "notes": "Replace the centre, equipment and decision boundary. Make clear that the example is a planning exercise, not procurement advice or a recommendation about a real product."
+        "notes": "Replace the centre, equipment and decision boundary. Make clear that the example is a planning exercise, not procurement advice or a recommendation about a real product.",
+        "layout": "cover"
       },
       {
         "title": "Agree the criteria before comparing prices",
@@ -1010,12 +1110,14 @@
           "Service fit: availability, access and the tasks the centre must support.",
           "Operating fit: staff effort, supplies and support responsibilities.",
           "Decision fit: affordability, uncertainty and the cost of reversal."
-        ]
+        ],
+        "layout": "cards"
       },
       {
         "title": "Three options, with explicit boundaries",
         "body": "Repair keeps the existing workflow but depends on a reliable service assessment. Replacement changes equipment and may require setup. A shared service reduces equipment responsibility but introduces travel, scheduling and external-service dependencies.",
-        "notes": "Replace the generic options with verified, comparable offers. State which tasks each option includes and excludes; do not assume an external service is continuously available."
+        "notes": "Replace the generic options with verified, comparable offers. State which tasks each option includes and excludes; do not assume an external service is continuously available.",
+        "layout": "statement"
       },
       {
         "title": "Compare like-for-like planning assumptions",
@@ -1034,7 +1136,8 @@
             ["Replace printer", "$1,200", "$650", "$1,850"],
             ["Use shared service", "$100", "$1,400", "$1,500"]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Operating attention is a separate comparison",
@@ -1051,7 +1154,8 @@
               "values": [4, 2, 3]
             }
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "Ask which uncertainty could reverse the choice",
@@ -1077,18 +1181,22 @@
               "Written service conditions and a task trial"
             ]
           ]
-        }
+        },
+        "layout": "data"
       },
       {
         "title": "A conditional recommendation is more honest than a forced winner",
         "body": "For the worked scenario, investigate repair first only if a credible assessment supports the required use and support effort. Keep replacement and the shared service as explicit alternatives if that condition fails. This is a decision rule, not a claim that repair is best.",
-        "notes": "Replace the rule with the actual owner’s justified recommendation. State the evidence that would change it, and do not present this fictional example as a purchase recommendation."
+        "notes": "Replace the rule with the actual owner’s justified recommendation. State the evidence that would change it, and do not present this fictional example as a purchase recommendation.",
+        "layout": "statement"
       },
       {
         "title": "Approve the next evidence step and its owner",
         "body": "The immediate decision is to authorize a bounded assessment and collect comparable operating information. Record who will obtain it, the spending authority required and the date for returning with a final recommendation.",
-        "notes": "Replace owner roles, approval limits and dates with the actual process. Close by confirming the next decision, not by implying that an equipment purchase has already been approved."
+        "notes": "Replace owner roles, approval limits and dates with the actual process. Close by confirming the next decision, not by implying that an equipment purchase has already been approved.",
+        "layout": "closing"
       }
-    ]
+    ],
+    "visualStyle": "briefing"
   }
 ]

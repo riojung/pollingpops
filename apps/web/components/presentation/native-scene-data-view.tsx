@@ -167,16 +167,19 @@ export function NativeSceneDataView({
   node,
   fixedLayout = false,
   locale = "en-CA",
+  contentLocale,
 }: {
   node: NativeDataNode;
   fixedLayout?: boolean;
   locale?: SupportedLocale;
+  /** Known creation language; ordinary stored data keeps its existing unspecified boundary. */
+  contentLocale?: SupportedLocale;
 }) {
   const copy = nativeAudienceCopy(locale);
   if (node.type === "table")
     return (
       <div
-        lang={node.caption.trim() ? "" : locale}
+        lang={node.caption.trim() ? (contentLocale ?? "") : locale}
         className={styles.dataView}
         data-native-data="table"
         data-native-fixed-layout={fixedLayout ? "true" : undefined}
@@ -186,11 +189,11 @@ export function NativeSceneDataView({
         onKeyDown={scrollKey}
       >
         <table className={styles.dataTable}>
-          <caption lang="">{node.caption}</caption>
+          <caption lang={contentLocale ?? ""}>{node.caption}</caption>
           <thead>
             <tr>
               {node.headers.map((header, index) => (
-                <th lang="" key={index} scope="col">
+                <th lang={contentLocale ?? ""} key={index} scope="col">
                   {header}
                 </th>
               ))}
@@ -200,7 +203,7 @@ export function NativeSceneDataView({
             {node.rows.map((row, index) => (
               <tr key={index}>
                 {row.map((value, column) => (
-                  <td lang="" key={column} data-label={node.headers[column]}>
+                  <td lang={contentLocale ?? ""} key={column} data-label={node.headers[column]}>
                     {value}
                   </td>
                 ))}
@@ -216,7 +219,7 @@ export function NativeSceneDataView({
   const chartLayout = (node.frame.width / 100) * 1280 >= 600 ? "split" : "stack";
   return (
     <figure
-      lang={node.title.trim() ? "" : locale}
+      lang={node.title.trim() ? (contentLocale ?? "") : locale}
       className={`${styles.dataView} ${styles.chart}`}
       data-native-data="chart"
       data-native-fixed-layout={fixedLayout ? "true" : undefined}
@@ -226,7 +229,7 @@ export function NativeSceneDataView({
       tabIndex={0}
       onKeyDown={scrollKey}
     >
-      <figcaption lang="">
+      <figcaption lang={contentLocale ?? ""}>
         <strong>{node.title}</strong>
         <div>{node.summary}</div>
       </figcaption>
@@ -243,7 +246,7 @@ export function NativeSceneDataView({
                   style={{ background: NATIVE_CHART_COLORS[index % NATIVE_CHART_COLORS.length] }}
                   aria-hidden="true"
                 />
-                {index + 1}. <span lang="">{name}</span> ·{" "}
+                {index + 1}. <span lang={contentLocale ?? ""}>{name}</span> ·{" "}
                 {copy(colorNames[index % colorNames.length]!)}
               </li>
             ))}
@@ -254,7 +257,7 @@ export function NativeSceneDataView({
         </div>
         <table className={styles.dataTable}>
           <caption lang={locale}>
-            <span lang="">{node.title}</span> · {copy("chart data")}
+            <span lang={contentLocale ?? ""}>{node.title}</span> · {copy("chart data")}
           </caption>
           <thead>
             <tr>
@@ -262,7 +265,7 @@ export function NativeSceneDataView({
                 {copy("Category")}
               </th>
               {node.series.map((series, index) => (
-                <th lang="" key={index} scope="col">
+                <th lang={contentLocale ?? ""} key={index} scope="col">
                   {series.name}
                 </th>
               ))}
@@ -271,11 +274,11 @@ export function NativeSceneDataView({
           <tbody>
             {node.categories.map((category, index) => (
               <tr key={index}>
-                <th lang="" scope="row">
+                <th lang={contentLocale ?? ""} scope="row">
                   {index + 1}. {category}
                 </th>
                 {node.series.map((series, seriesIndex) => (
-                  <td lang="" key={seriesIndex} data-label={series.name}>
+                  <td lang={contentLocale ?? ""} key={seriesIndex} data-label={series.name}>
                     {String(series.values[index])}
                   </td>
                 ))}

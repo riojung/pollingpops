@@ -1,10 +1,10 @@
 .hero {
   position: relative;
   display: grid;
-  min-height: 270px;
-  align-items: end;
+  min-width: 0;
+  align-items: center;
   overflow: hidden;
-  border-radius: 1.45rem;
+  border-radius: 0.875rem;
   background:
     radial-gradient(circle at 86% 14%, var(--ui-hero-glow-warm), transparent 12rem),
     radial-gradient(circle at 70% 120%, var(--ui-hero-glow-teal), transparent 18rem),
@@ -16,7 +16,7 @@
     );
   box-shadow: var(--ui-shadow-lg);
   color: var(--ui-on-hero);
-  padding: clamp(1.45rem, 4vw, 2.6rem);
+  padding: clamp(1rem, 2vw, 1.25rem);
 }
 
 .hero::after {
@@ -34,52 +34,66 @@
 .heroContent {
   position: relative;
   z-index: 1;
-  max-width: 690px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.375rem 1.25rem;
+  min-width: 0;
 }
 
 .heroEyebrow {
-  margin: 0 0 0.7rem;
+  grid-column: 1;
+  margin: 0;
   color: var(--ui-on-hero-muted);
-  font-size: 0.72rem;
+  font-size: 0.625rem;
   font-weight: 850;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .hero h2 {
+  grid-column: 1;
   max-width: 620px;
   margin: 0;
   color: var(--ui-on-hero);
-  font-size: clamp(2rem, 4.8vw, 3.7rem);
-  letter-spacing: -0.055em;
-  line-height: 0.98;
+  font-size: clamp(1.375rem, 2.6vw, 2rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .hero p:not(.heroEyebrow) {
+  grid-column: 1;
   max-width: 620px;
   color: var(--ui-on-hero-muted);
-  font-size: 1rem;
-  line-height: 1.6;
-  margin: 1rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .heroActions {
   display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  flex-direction: column;
   flex-wrap: wrap;
-  gap: 0.7rem;
-  margin-top: 1.4rem;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .heroPrimary,
 .heroSecondary {
   display: inline-flex;
-  min-height: 44px;
+  min-height: var(--workspace-control-height, 2.25rem);
+  max-width: 100%;
   align-items: center;
   justify-content: center;
-  border-radius: 0.72rem;
-  font-size: 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   font-weight: 800;
-  padding: 0.7rem 1rem;
+  padding: 0.45rem 0.75rem;
+  overflow-wrap: anywhere;
   text-decoration: none;
 }
 
@@ -95,29 +109,54 @@
 }
 
 .section {
-  margin-top: 2rem;
+  margin-top: 1.25rem;
 }
 
 .sectionHeading {
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.sectionHeading > div {
+  min-width: 0;
+}
+
+.sectionHeading > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--workspace-control-height, 2.25rem);
+  font-size: 0.8125rem;
 }
 
 .sectionHeading h2 {
   margin: 0;
   color: var(--ui-text-strong);
-  font-size: clamp(1.45rem, 2.7vw, 2rem);
-  letter-spacing: -0.035em;
+  font-size: 1.125rem;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .sectionHeading p {
   max-width: 650px;
   color: var(--ui-text-muted);
-  line-height: 1.55;
-  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.sectionHeading .sectionEyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--ui-accent-ink);
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
 }
 
 .quickGrid,
@@ -125,8 +164,11 @@
 .methodGrid,
 .benefitGrid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--workspace-card-gap, 0.625rem);
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--workspace-grid-min, 16.5rem)), 1fr)
+  );
 }
 
 .quickCard,
@@ -137,16 +179,20 @@
   min-width: 0;
   flex-direction: column;
   border: 1px solid var(--ui-border);
-  border-radius: 1.1rem;
+  border-radius: 0.75rem;
   background: var(--ui-surface-translucent);
   box-shadow: var(--ui-shadow-sm);
   color: var(--ui-text-strong);
-  padding: 1.2rem;
+  padding: var(--workspace-card-padding, 0.875rem);
+  overflow-wrap: anywhere;
   text-decoration: none;
 }
 
 .quickCard {
-  min-height: 158px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 0.375rem 0.625rem;
 }
 
 .quickCard:hover,
@@ -166,10 +212,10 @@
 
 .cardIcon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border-radius: 0.8rem;
+  border-radius: 0.6rem;
   background: var(--ui-accent-soft);
   color: var(--ui-accent-ink);
   font-size: 0.92rem;
@@ -190,7 +236,9 @@
 .featureCard h3,
 .methodCard h2,
 .benefitCard h3 {
-  margin: 0.9rem 0 0.35rem;
+  margin: 0.625rem 0 0.25rem;
+  font-size: 1rem;
+  line-height: 1.3;
   color: var(--ui-text-strong);
   letter-spacing: -0.025em;
 }
@@ -200,7 +248,8 @@
 .methodCard p,
 .benefitCard p {
   color: var(--ui-text-muted);
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.45;
   margin: 0;
 }
 
@@ -209,13 +258,25 @@
   font-size: 0.84rem;
   font-weight: 820;
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: 0.625rem;
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }
 
-.featureCard {
-  min-height: 190px;
+.quickCard > .cardIcon {
+  grid-row: 1 / span 3;
+}
+
+.quickCard h3,
+.quickCard p,
+.quickCard .cardLink {
+  grid-column: 2;
+  margin: 0;
+}
+
+.quickCard .cardLink {
+  padding-top: 0;
+  font-size: 0.75rem;
 }
 
 .featureCard small,
@@ -228,7 +289,6 @@
 }
 
 .methodCard {
-  min-height: 230px;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -245,13 +305,13 @@
 
 .emptyCanvas {
   display: grid;
-  min-height: 390px;
+  min-height: 260px;
   place-items: center;
   border: 1px dashed var(--ui-border-strong);
-  border-radius: 1.25rem;
+  border-radius: 0.875rem;
   background:
     radial-gradient(circle at 50% 42%, var(--ui-accent-soft), transparent 12rem), var(--ui-surface);
-  padding: 2rem;
+  padding: 1.25rem;
   text-align: center;
 }
 
@@ -261,22 +321,22 @@
 
 .emptyMark {
   display: grid;
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   place-items: center;
-  border-radius: 1.3rem;
+  border-radius: 0.875rem;
   background: var(--ui-accent-soft);
   color: var(--ui-accent-ink);
   font-size: 1.4rem;
   font-weight: 900;
-  margin: 0 auto 1.2rem;
+  margin: 0 auto 0.75rem;
   transform: rotate(-4deg);
 }
 
 .emptyCanvas h2 {
   margin: 0;
   color: var(--ui-text-strong);
-  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  font-size: 1.25rem;
   letter-spacing: -0.035em;
 }
 
@@ -288,41 +348,43 @@
 
 .notice {
   border: 1px solid var(--ui-border-strong);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
   background: linear-gradient(135deg, var(--ui-violet-bg), var(--ui-surface));
   color: var(--ui-violet-text);
-  line-height: 1.55;
-  padding: 1rem 1.1rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  padding: 0.875rem;
 }
 
 .notice strong {
   color: var(--ui-violet-text);
 }
 
-@media (max-width: 920px) {
-  .quickGrid,
-  .cardGrid,
-  .methodGrid,
-  .benefitGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 780px) {
+  .heroContent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .heroActions {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    margin-top: 0.375rem;
   }
 }
 
 @media (max-width: 620px) {
-  .hero {
-    min-height: 340px;
-  }
-
-  .quickGrid,
-  .cardGrid,
-  .methodGrid,
-  .benefitGrid {
-    grid-template-columns: 1fr;
-  }
-
   .sectionHeading {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (pointer: coarse) {
+  .heroPrimary,
+  .heroSecondary,
+  .sectionHeading > a {
+    min-height: 44px;
   }
 }
 

@@ -1,0 +1,59 @@
+name: Local AWS staging
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infra/aws*/**"
+      - "compose.aws-*.yaml"
+      - "scripts/ops/aws-*.mjs"
+      - "scripts/ops/lib.mjs"
+      - "scripts/ops/product-build.mjs"
+      - "scripts/ops/deploy.mjs"
+      - "apps/server/Dockerfile"
+      - "apps/web/Dockerfile"
+      - "playwright.aws-staging.config.ts"
+      - "tests/aws-staging-e2e/**"
+      - ".github/workflows/aws-staging.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-staging-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate AWS infrastructure schema
+        run: |
+          python3 -m venv .deploy/cfn-lint
+          .deploy/cfn-lint/bin/pip install cfn-lint==1.46.0
+          .deploy/cfn-lint/bin/cfn-lint infra/aws/production.template.json
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm aws:staging build
+      - run: pnpm aws:staging start
+      - run: pnpm aws:staging verify
+      - name: Upload synthetic rehearsal evidence
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: local-aws-staging-${{ github.sha }}
+          path: artifacts/aws-staging/qualification.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Stop disposable staging
+        if: always()
+        run: pnpm aws:staging stop

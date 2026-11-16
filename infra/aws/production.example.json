@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "environment": "production",
+  "accountId": "123456789012",
+  "region": "ca-central-1",
+  "stackName": "pollingpops-production",
+  "profile": "production",
+  "parameters": {
+    "VpcId": "vpc-0123456789abcdef0",
+    "SubnetId": "subnet-0123456789abcdef0",
+    "KeyPairName": "pollingpops-production",
+    "SshIngressCidr": "203.0.113.10/32",
+    "AppDomain": "app.example.com",
+    "MediaBucketName": "pollingpops-production-123456789012",
+    "InstanceType": "t3.xlarge",
+    "DataVolumeGiB": "100"
+  }
+}

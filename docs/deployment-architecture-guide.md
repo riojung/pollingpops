@@ -5,18 +5,22 @@ external services. Its business features form one coordinated application, while
 containers run the website, API, database and supporting tools.
 
 This guide brings together the account checklist, provider boundaries and five diagrams for a
-real deployment rehearsal. AWS EC2 is the selected staging provider in the repository. Cloudflare,
+real deployment rehearsal. AWS EC2 is the selected hosted provider. The AWS production overlay
+uses private S3 for live media; the generic single-VM profile retains MinIO. Cloudflare,
 Resend, Better Stack and S3 in a separate backup account are the proposed supporting products.
 These diagrams describe the intended connections; they do not establish that any account,
 integration or environment has been provisioned.
 
-Start with staging. Staging and production each need their own VM, credentials, database and live
-media. They can use the same hosting provider account while remaining separate deployments.
+Start with the disposable local AWS staging rehearsal, then complete hosted staging acceptance.
+Hosted staging and production each need their own VM, credentials, database and live media. They
+can use the same hosting provider account while remaining separate deployments. The repository's
+new EC2/EBS/S3 foundation does not establish that either hosted environment has been provisioned.
 
 ## Contents
 
 - [Products and architectural roles](#products-and-architectural-roles)
 - [Account checklist in priority order](#account-checklist-in-priority-order)
+- [Local rehearsal and AWS production path](#local-rehearsal-and-aws-production-path)
 - [1. Overall product and account boundaries](#1-overall-product-and-account-boundaries)
 - [2. Inside the AWS virtual machine](#2-inside-the-aws-virtual-machine)
 - [3. From code to a running deployment](#3-from-code-to-a-running-deployment)
@@ -31,15 +35,17 @@ media. They can use the same hosting provider account while remaining separate d
 | ------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------- |
 | GitHub and GitHub Container Registry | Development and delivery            | Source code, independent review, automated checks and signed release images |
 | AWS EC2 and EBS                      | Hosting infrastructure              | A Linux virtual machine and persistent disk for the running application     |
+| AWS S3 in the hosting account        | Private live media                  | Quarantine and clean objects accessed through constrained signed URLs       |
 | Cloudflare Registrar and DNS         | Domain and DNS                      | Domain ownership and lookup of the application's server address             |
 | Resend                               | External email service              | Verification links and sign-in PIN delivery                                 |
 | Better Stack                         | Observability and incident response | Logs, metrics, traces, external uptime checks and incident notifications    |
 | Separate AWS account and S3          | Disaster recovery                   | Encrypted recovery copies outside the active server's account               |
 | Stripe                               | External payment service            | Hosted checkout, subscriptions, billing portal and payment events           |
 
-PostgreSQL, Valkey, MinIO, ClamAV and Caddy run in the Docker stack. They do not require separate
-hosted-service accounts. The application is organized into presentation, application and data
-layers, all deployed on the same VM for this topology.
+PostgreSQL, Valkey, ClamAV and Caddy run in the Docker stack. The AWS production overlay disables
+MinIO and uses S3 through the VM's instance role; the generic single-VM profile retains MinIO.
+The application is organized into presentation, application and data layers on one VM, with
+private media in S3 for the AWS path shown below.
 
 ## Account checklist in priority order
 
@@ -69,6 +75,20 @@ layers, all deployed on the same VM for this topology.
 Items 1–6 supply the accounts for the staging deployment and recovery exercises. Account creation
 must be followed by configuration, integration and verification. Public production promotion also
 requires the existing [release-readiness gates](release-readiness.json).
+
+## Local rehearsal and AWS production path
+
+`pnpm aws:staging build`, `start`, and `verify` run the real app, PostgreSQL, Valkey, ClamAV, and
+Mailpit with official AWS Emulator S3 in an isolated local Compose project. Open exactly
+`http://localhost:19180`; the local S3 gateway and email inbox use ports 19181 and 19182. Its
+synthetic database/cache/media are disposable, and existing development volumes are separate.
+
+The [AWS staging and production runbook](runbooks/aws-staging-production.md) describes the full
+sequence: rehearse the exact protected production manifest with same-origin browser API routing,
+retain the image/manifest-bound qualification receipt, prepare the real EC2/EBS/S3 foundation,
+then promote through the existing signed-release and readiness gates. A local development
+candidate cannot satisfy production promotion. Emulator tests cannot qualify IAM, AWS networking,
+hardware, load, public-provider behavior, or clean-host recovery; hosted acceptance is still required.
 
 ## 1. Overall product and account boundaries
 
@@ -149,18 +169,18 @@ flowchart TB
                 API["Fastify + Socket.IO<br/>Authentication, rules and live sessions"]
                 DB[("PostgreSQL<br/>Durable application data")]
                 Cache[("Valkey<br/>Live coordination and temporary state")]
-                Media[("MinIO<br/>Private uploaded media")]
                 Scan["ClamAV<br/>Uploaded-file malware scanning"]
             end
 
             Disk["EBS disk<br/>Persistent Docker volumes"]
         end
+        Media[("AWS S3<br/>Private live media outside the VM")]
     end
 
     Browser <-->|"HTTPS"| Caddy
     Caddy -->|"Page requests"| Web
     Caddy <-->|"API requests and live events"| API
-    Caddy <-->|"Authorized media transfers"| Media
+    Browser <-->|"Authorized short-lived S3 HTTPS transfers"| Media
 
     API <-->|"Read and write"| DB
     API <-->|"Coordinate sessions"| Cache
@@ -169,7 +189,6 @@ flowchart TB
 
     DB --- Disk
     Cache --- Disk
-    Media --- Disk
 ```
 
 The three logical application layers are:
@@ -177,16 +196,18 @@ The three logical application layers are:
 - **Presentation:** Next.js serves pages and the browser user interface.
 - **Application:** Fastify owns authorization, business rules and API operations; Socket.IO
   carries live session updates.
-- **Data:** PostgreSQL stores durable application records and MinIO stores private media.
+- **Data:** PostgreSQL stores durable application records and AWS S3 stores private media.
   Valkey supports live coordination and is rebuildable.
 
 PostgreSQL is the durable source of truth. The API authorizes media access and issues constrained,
-short-lived upload or download URLs. Uploads enter MinIO quarantine; the server validates and
+short-lived upload or download URLs. Uploads enter S3 quarantine; the server validates and
 scans the content before promoting clean files.
 
-Caddy routes the app hostname to Next.js and the API, and the separate media hostname to MinIO.
-The public media route does not make the bucket anonymous. Database, cache, scanning, metrics and
-administration endpoints remain private.
+Caddy routes the app hostname to Next.js and the API. Browsers transfer media directly through
+signed AWS S3 HTTPS URLs, and the API accesses the private bucket through its EC2 instance role.
+Signed transfers do not make the bucket anonymous. Database, cache, scanning, metrics and
+administration endpoints remain private. The generic single-VM profile instead routes a separate
+media hostname through Caddy to MinIO.
 
 All these containers share one VM and disk failure domain. Losing that VM interrupts the service;
 container restart policies do not provide failover. The minimum host size is a starting point
@@ -209,7 +230,9 @@ flowchart TB
         Manifest["Signed release manifest<br/>Identifies exact images"]
     end
 
-    Operator["Operator runs deployment script<br/>with approved configuration"]
+    Rehearsal["Local Docker rehearsal<br/>Exact app images + emulator S3"]
+    Evidence["Manifest/image-bound local receipt<br/>Hosted acceptance remains required"]
+    Operator["Operator runs promotion script<br/>with accepted release + approved configuration"]
 
     subgraph AWS["AWS — runtime boundary"]
         Deploy["EC2 pulls verified images<br/>and runs database migrations"]
@@ -221,7 +244,7 @@ flowchart TB
     Main --> Actions
     Actions --> Registry
     Actions --> Manifest
-    Manifest --> Operator
+    Manifest --> Rehearsal --> Evidence --> Operator
     Operator -->|"SSH with verified host identity"| Deploy
     Registry -->|"Download exact image digests"| Deploy
     Deploy --> Compose --> Checks
@@ -232,7 +255,9 @@ deployment process installs a reviewed release. GitHub Actions signs release ima
 approved identity. GitHub Container Registry stores those images, so no separate container-registry
 provider account is needed.
 
-The documented workflow uses the operator's deployment script over SSH. The diagram does not imply
+The AWS wrapper first verifies the local receipt and the real foundation, then delegates to the
+existing deployment script over pinned SSH. A local receipt never substitutes for protected
+release signatures or independent readiness acceptance. The diagram does not imply
 that GitHub Actions automatically logs into the production server. Runtime database credentials
 remain restricted; the one-shot migration receives separate elevated credentials.
 
@@ -284,7 +309,7 @@ Monitoring reports what is happening. Backups provide recoverable copies of dura
 
 ```mermaid
 flowchart TB
-    subgraph Hosting["AWS hosting account — active VM"]
+    subgraph Hosting["AWS hosting account"]
         API["Polling Pops API"]
 
         Collector["OpenTelemetry Collector<br/>Metrics and traces"]
@@ -293,7 +318,7 @@ flowchart TB
         Alertmanager["Alertmanager<br/>Route alert notifications"]
 
         DB[("PostgreSQL")]
-        Media[("MinIO media")]
+        Media[("AWS S3 live media<br/>Outside the active VM")]
     end
 
     subgraph Maintenance["Restricted maintenance environment"]
@@ -340,9 +365,12 @@ Better Stack supports the required [OpenTelemetry ingestion](https://betterstack
 and [Alertmanager webhooks](https://betterstack.com/docs/uptime/prometheus/). Configuring these
 connections, log shipping, readiness observers and named responders remains deployment work.
 
-MinIO serves **live media**. S3 holds **backup copies** of the PostgreSQL export and media,
-including the metadata and tags required for recovery. Backups must be encrypted, verified and
-retained outside the active VM; recovery keys must remain available outside it as well.
+The hosting account's private S3 bucket serves **live media** for the AWS overlay. The separately
+administered backup account holds **recovery copies** of the PostgreSQL export and media,
+including the metadata and tags required for recovery. The generic profile uses MinIO as its
+live-media source. Backups must be encrypted, verified and retained outside the active deployment;
+recovery keys must remain available outside it as well. A versioned live-media bucket in the
+hosting account does not provide this separation.
 The backup process runs from a restricted maintenance environment using dedicated source-read
 identities and a separate destination-write identity. Backup credentials stay outside the source
 VM and the backup payload; source access uses approved restricted connections.
@@ -354,20 +382,22 @@ single-VM topology does not provide automatic failover or a high-availability gu
 
 ## Environment and access boundaries
 
-| Boundary                               | Rule                                                                                     |
-| -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Staging and production                 | Separate VMs, credentials, databases, media and Compose projects                         |
-| Internet and application               | Public web and media requests enter through Caddy; operator SSH is restricted            |
-| Application and database               | The long-running application uses a restricted role; migrations use separate credentials |
-| Public media route and private storage | Short-lived authorized transfers; quarantine and scanning before publication             |
-| Hosting and backup accounts            | Separate administration and credentials, with encrypted off-host copies                  |
-| Application and external providers     | Dedicated credentials for email, telemetry, alerts and payments                          |
-| Operator and independent reviewer      | A second human reviews the protected release path                                        |
+| Boundary                               | Rule                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Staging and production                 | Separate VMs, credentials, databases, media and Compose projects                                  |
+| Internet and application               | App requests enter through Caddy; authorized media goes directly to private S3; SSH is restricted |
+| Application and database               | The long-running application uses a restricted role; migrations use separate credentials          |
+| Public media route and private storage | Short-lived authorized transfers; quarantine and scanning before publication                      |
+| Hosting and backup accounts            | Separate administration and credentials, with encrypted off-host copies                           |
+| Application and external providers     | Dedicated credentials for email, telemetry, alerts and payments                                   |
+| Operator and independent reviewer      | A second human reviews the protected release path                                                 |
 
 ## Operational references
 
 - [Architecture and protocol](architecture.md)
 - [Single-VM hosting profile](../infra/single-vm/README.md)
+- [Local AWS staging and production promotion](runbooks/aws-staging-production.md)
+- [Pinned emulator distribution and compatibility notes](../infra/aws-emulator/README.md)
 - [Beta release preparation](runbooks/beta-release-preparation.md)
 - [Build, service and deployment runbook](runbooks/deployment.md)
 - [Staging readiness and observer configuration](runbooks/staging-readiness.md)

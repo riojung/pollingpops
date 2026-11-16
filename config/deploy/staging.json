@@ -4,6 +4,7 @@
   "deploymentMode": "single-vm",
   "publicWebUrl": "https://staging.pollingpops.example",
   "publicApiUrl": "https://staging.pollingpops.example",
+  "apiRouting": "same-origin",
   "publicMediaUrl": "https://media-staging.pollingpops.example",
   "imageRepository": "ghcr.io/riojung/openround/openround",
   "imagePlatform": "linux/amd64",

@@ -1,8 +1,8 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { composeBuildArgv, run } from "../../scripts/ops/lib.mjs";
+import { composeBuildArgv, run, validateBuildManifest } from "../../scripts/ops/lib.mjs";
 import { main as productBuildMain } from "../../scripts/ops/product-build.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -35,7 +35,16 @@ async function fakeImageTools() {
               '  *) echo "Unexpected host compilation" >&2; exit 97 ;;',
               "esac",
             ]
-          : ["exit 0"]),
+          : [
+              'while [ "$#" -gt 0 ]; do',
+              '  if [ "$1" = --metadata-file ]; then',
+              "    shift",
+              `    printf '%s\\n' '{"containerimage.digest":"sha256:${"a".repeat(64)}"}' > "$1"`,
+              "  fi",
+              "  shift",
+              "done",
+              "exit 0",
+            ]),
         "",
       ].join("\n"),
     );
@@ -52,6 +61,79 @@ async function fakeImageTools() {
 }
 
 describe("component image builds", () => {
+  it.each([undefined, "same-origin"])(
+    "prepares production images with reviewed API routing %s and unchanged release bindings",
+    async (apiRouting) => {
+      const directory = await temporaryDirectory("polling-pops-hosted-images-");
+      const tools = await fakeImageTools();
+      await mkdir(join(directory, "scripts/ops"), { recursive: true });
+      await mkdir(join(directory, "config/deploy"), { recursive: true });
+      for (const filename of ["product-build.mjs", "lib.mjs"]) {
+        await copyFile(
+          join(root, "scripts/ops", filename),
+          join(directory, "scripts/ops", filename),
+        );
+      }
+      const config = JSON.parse(
+        await readFile(join(root, "config/deploy/production.json"), "utf8"),
+      );
+      config.publicWebUrl = "https://app.openround.ca";
+      config.publicApiUrl = "https://app.openround.ca";
+      config.publicMediaUrl = "https://media.openround.ca";
+      config.singleVm.host = "production-vm.openround.ca";
+      if (apiRouting === undefined) delete config.apiRouting;
+      else config.apiRouting = apiRouting;
+      await writeFile(join(directory, "config/deploy/production.json"), JSON.stringify(config));
+      await writeFile(join(directory, ".gitignore"), "artifacts/\n");
+      for (const args of [
+        ["init", "--quiet"],
+        ["config", "user.name", "Polling Pops Test"],
+        ["config", "user.email", "test@example.invalid"],
+        ["add", "--all"],
+        ["commit", "--quiet", "--no-gpg-sign", "--message", "reviewed image fixture"],
+      ]) {
+        await run("git", args, { cwd: directory, capture: true });
+      }
+      const buildId = (
+        await run("git", ["rev-parse", "HEAD"], { cwd: directory, capture: true })
+      ).stdout.trim();
+      await run(
+        process.execPath,
+        [
+          "scripts/ops/product-build.mjs",
+          "production",
+          "--api-url",
+          config.publicApiUrl,
+          "--registry",
+          config.imageRepository,
+          "--push",
+          "--prepare",
+        ],
+        { cwd: directory, capture: true, env: tools.env },
+      );
+      const manifest = JSON.parse(
+        await readFile(join(directory, "artifacts/deploy/production/build-manifest.json"), "utf8"),
+      );
+      expect(validateBuildManifest(manifest, { ...config, buildId, requireSigning: false })).toBe(
+        manifest,
+      );
+      expect(manifest.apiRouting).toBe(apiRouting);
+      expect(manifest.nextPublicApiUrl).toBe(
+        apiRouting === "same-origin" ? "" : config.publicApiUrl,
+      );
+      expect(manifest.environment).toBe("production");
+      expect(manifest.images.web.signed).toBe(false);
+      expect(manifest.images.web.ref).toMatch(/@sha256:[a-f0-9]{64}$/);
+      const calls = (await readFile(tools.calls, "utf8")).trim().split("\n");
+      const webBuild = calls.find((call) => call.includes("--file apps/web/Dockerfile"));
+      expect(webBuild).toContain(
+        `--build-arg NEXT_PUBLIC_API_URL=${manifest.nextPublicApiUrl} --platform`,
+      );
+      expect(webBuild).toContain(`org.opencontainers.image.revision=${buildId}`);
+      expect(webBuild).toContain("--provenance=mode=max --sbom=true --push");
+    },
+  );
+
   it.each([undefined, "server", "web", "control"])(
     "builds %s through Docker without a redundant host compiler",
     async (component) => {

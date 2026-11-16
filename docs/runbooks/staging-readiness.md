@@ -1,5 +1,14 @@
 # Single-VM staging readiness workflow
 
+The separate [local AWS staging rehearsal](aws-staging-production.md) runs the app with real local
+PostgreSQL/Valkey and AWS Emulator S3 on loopback. `pnpm aws:staging verify` produces
+`artifacts/aws-staging/qualification.json` for one exact candidate; it does not complete this
+hosted workflow or its evidence record. Local development images are not promotable releases.
+For production promotion, rehearse the exact same-origin production manifest, retain the matching
+release-kind receipt, and keep all signature and independent acceptance checks. Emulator success
+cannot qualify IAM, AWS networking/hardware, target load, public TLS, provider email, or clean-host
+recovery.
+
 The API-triggered `Staging readiness` GitHub workflow separates three kinds of evidence. A GitHub-hosted
 Ubuntu runner probes public TLS and HTTP-to-HTTPS redirects, dependency health, feature flags,
 security headers, an upload/scan/private-download/delete media round trip, outbound SMTP delivery,

@@ -38,7 +38,7 @@
     "guides:render": "tsx scripts/demo/render-polling-pops-guides.ts",
     "licenses:report": "node scripts/generate-third-party-notices.mjs",
     "lint": "turbo run lint --concurrency=2 && pnpm lint:build",
-    "lint:build": "eslint scripts/build/*.mjs scripts/prepare-playwright-next.mjs scripts/check-docker-workspace-deps.mjs scripts/test-browser.mjs scripts/test-presentation-scene.mjs scripts/localization-review.ts",
+    "lint:build": "eslint scripts/build/*.mjs scripts/prepare-playwright-next.mjs scripts/check-docker-workspace-deps.mjs scripts/test-browser.mjs scripts/test-presentation-scene.mjs scripts/localization-review.ts scripts/ops/aws-*.mjs",
     "load:compose:aggregate": "tsx tests/load/compose-aggregate-load.ts",
     "load:compose": "tsx tests/load/compose-game-load.ts",
     "load:presentation": "tsx tests/load/presentation-load.ts",
@@ -86,7 +86,11 @@
     "build:admin": "turbo run build:admin --filter=@openround/control --concurrency=2",
     "build:packages": "turbo run build --filter=./packages/* --concurrency=2",
     "test:integration": "node -e \"for (const key of ['TEST_DATABASE_ADMIN_URL', 'TEST_DATABASE_URL', 'TEST_REDIS_URL']) { if (!process.env[key]) { console.error(key + ' is required for test:integration'); process.exit(1); } }\" && pnpm --filter @openround/db test && pnpm --filter @openround/server test",
-    "localization:review": "tsx --tsconfig scripts/localization-review.tsconfig.json scripts/localization-review.ts"
+    "localization:review": "tsx --tsconfig scripts/localization-review.tsconfig.json scripts/localization-review.ts",
+    "aws:staging": "node scripts/ops/aws-staging.mjs",
+    "aws:production": "node scripts/ops/aws-production.mjs",
+    "aws:promote": "node scripts/ops/aws-promote.mjs",
+    "test:e2e:aws-staging": "playwright test --config=playwright.aws-staging.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

@@ -1,0 +1,134 @@
+# Disposable synthetic-data rehearsal. Never shares development/hosted volumes.
+name: pollingpops-aws-staging
+services:
+  aws-emulator:
+    image: pollingpops-aws-emulator:1.0.385
+    build:
+      context: ./infra/aws-emulator
+    restart: "no"
+    mem_limit: 2g
+    memswap_limit: 2g
+    ports:
+      - "127.0.0.1:19297:19297"
+    networks: [staging]
+
+  aws-gateway:
+    image: caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    volumes:
+      - ./infra/aws-emulator/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.deploy/aws-staging/tls:/etc/aws-emulator:ro
+    ports:
+      - "127.0.0.1:19181:80"
+    networks: [staging]
+
+  postgres:
+    image: postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    extends:
+      file: compose.yaml
+      service: postgres
+    restart: "no"
+    volumes: !override
+      - ./infra/postgres/001-runtime-role.sql:/docker-entrypoint-initdb.d/001-runtime-role.sql:ro
+    tmpfs: [/var/lib/postgresql/data:size=1g]
+    networks: [staging]
+
+  valkey:
+    image: valkey/valkey@sha256:d827e7f7552cdee40cc7482dbae9da020f42bc47669af6f71182a4ef76a22773
+    extends:
+      file: compose.yaml
+      service: valkey
+    restart: "no"
+    volumes: !reset []
+    tmpfs: [/data:size=256m]
+    networks: [staging]
+
+  clamav:
+    image: clamav/clamav@sha256:cc16781fe005e49de6a8fc1231b63b265f74b18fc2a6347c670c35716914c3b6
+    extends:
+      file: compose.media.yaml
+      service: clamav
+    restart: "no"
+    networks: [staging]
+
+  mailpit:
+    extends:
+      file: compose.yaml
+      service: mailpit
+    restart: "no"
+    ports: !override ["127.0.0.1:19182:8025"]
+    networks: [staging]
+
+  server:
+    extends:
+      file: compose.yaml
+      service: server
+    image: ${STAGING_SERVER_IMAGE:-pollingpops-staging-server:local}
+    restart: "no"
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      aws-gateway:
+        condition: service_started
+    environment:
+      WEB_ORIGIN: http://localhost:19180
+      PUBLIC_API_URL: http://localhost:19180
+      S3_ENDPOINT: http://aws-gateway
+      S3_PUBLIC_ENDPOINT: http://localhost:19181
+      S3_BUCKET: pollingpops-staging-media
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ${STAGING_ACCESS_KEY:-not-started}
+      S3_SECRET_ACCESS_KEY: ${STAGING_SECRET_KEY:-not-started}
+      MEDIA_SCAN_MODE: clamav
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      CLAMAV_TIMEOUT_MS: 30000
+      SMTP_URL: smtp://mailpit:1025
+      DEVELOPMENT_EMAIL_INBOX_URL: http://localhost:19182
+      BILLING_MODE: disabled
+      AUTHORING_AI_MODE: disabled
+      OIDC_MODE: disabled
+      LTI_MODE: disabled
+      ADMIN_TOKEN: ${STAGING_ADMIN_TOKEN:-not-started}
+      AUTH_DEBUG_MAGIC_LINKS: "false"
+      FEATURE_WORKSPACE_SHELL: "true"
+      FEATURE_BUILDER_V2: "true"
+      FEATURE_PRESENTATIONS: "true"
+      FEATURE_PRESENTATION_REALTIME: "true"
+      FEATURE_PRESENTATION_COMPANION: "true"
+      FEATURE_SURVEYS: "true"
+      FEATURE_DISCOVER: "true"
+      FEATURE_GROUPS: "true"
+      FEATURE_PRACTICE_ASSIGNMENTS: "true"
+      UX_BETA_WORKSPACE_ALLOWLIST: ""
+      EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST: ""
+      CORE_PARITY_WORKSPACE_ALLOWLIST: ""
+    networks: [staging]
+
+  web:
+    extends:
+      file: compose.yaml
+      service: web
+    image: ${STAGING_WEB_IMAGE:-pollingpops-staging-web:local}
+    restart: "no"
+    environment:
+      NEXT_PUBLIC_API_URL: ""
+      OPENROUND_PUBLIC_URL: http://localhost:19180
+    networks: [staging]
+
+  caddy:
+    image: caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    extends:
+      file: compose.yaml
+      service: caddy
+    restart: "no"
+    ports: !override ["127.0.0.1:19180:80"]
+    networks: [staging]
+
+networks:
+  staging:
+volumes:
+  clamav-data:

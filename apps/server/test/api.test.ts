@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import Stripe from "stripe";
-import type { Report, SessionSnapshot } from "@openround/contracts";
+import { colorContrastRatio, type Report, type SessionSnapshot } from "@openround/contracts";
 import { MEDIA_DELETION_TOMBSTONE_HOLD_MS, MemoryRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
@@ -1391,6 +1391,7 @@ describe("creator to report journey", () => {
             organizationName: "Updated organization",
             primaryColor: "#102A43",
             accentColor: "#055D5F",
+            colorMode: "dark",
           },
         })
       ).statusCode,
@@ -1408,6 +1409,57 @@ describe("creator to report journey", () => {
       primaryColor: "#0B2239",
       accentColor: "#087375",
     });
+    const retainedRoom = await built.sessions.snapshot({
+      sessionId: branded.sessionId,
+      hostToken: branded.hostToken,
+      role: "host",
+    });
+    expect(retainedRoom.experienceTheme).toEqual(branded.snapshot.experienceTheme);
+    const updatedTheme = {
+      organizationName: "Updated organization",
+      primaryColor: "#102A43",
+      accentColor: "#055D5F",
+      colorMode: "dark",
+    };
+    const themeAccount = await app.inject({
+      method: "GET",
+      url: "/v1/account/theme",
+      headers: { cookie },
+    });
+    expect(themeAccount.json()).toMatchObject({ theme: updatedTheme });
+    const nextLaunch = await app.inject({
+      method: "POST",
+      url: "/v1/sessions",
+      headers: { cookie },
+      payload: {
+        quizId,
+        settings: {
+          audienceLimit: 20,
+          scoringMode: "accuracy",
+          resultVisibility: "private",
+          allowLateJoin: true,
+          nicknamePolicy: "friendly_only",
+        },
+      },
+    });
+    expect(nextLaunch.statusCode).toBe(201);
+    const nextRoom = nextLaunch.json<{ snapshot: SessionSnapshot }>().snapshot;
+    expect(nextRoom.brandTheme).toEqual(updatedTheme);
+    expect(nextRoom.experienceTheme.tokens.canvas).not.toEqual(
+      branded.snapshot.experienceTheme.tokens.canvas,
+    );
+    for (const background of [
+      nextRoom.experienceTheme.tokens.canvas,
+      nextRoom.experienceTheme.tokens.surface,
+      nextRoom.experienceTheme.tokens.surfaceStrong,
+    ]) {
+      expect(
+        colorContrastRatio(nextRoom.experienceTheme.tokens.text, background),
+      ).toBeGreaterThanOrEqual(7);
+      expect(
+        colorContrastRatio(nextRoom.experienceTheme.tokens.primary, background),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
     await built.audienceOutboxWorker.runUntilIdle();
     const metrics = await app.inject({ method: "GET", url: "/metrics" });
     expect(metrics.statusCode).toBe(200);

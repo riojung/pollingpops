@@ -49,6 +49,7 @@ import {
   preparePresentationPublication,
   IdeaBoardCreateSchema,
   type AuthoringDraft,
+  type BrandTheme,
   type PresentationDraft,
   type QuizDraft,
   type Report,
@@ -1446,6 +1447,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 108, name: "presentation_styled_scenes" },
       { version: 109, name: "presentation_frame_arithmetic" },
       { version: 110, name: "workspace_idle_timeout" },
+      { version: 111, name: "library_sharing" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -10103,6 +10105,33 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       now,
     });
     expect(secondFollowupPage.items.map(({ id }) => id)).toEqual([followupIds[1]]);
+  });
+
+  it("round-trips optional workspace theme modes and preserves legacy absence", async () => {
+    const owner = await creator("workspace-theme");
+    const other = await creator("workspace-theme-other");
+    const legacy: BrandTheme = {
+      organizationName: "Northern Learning",
+      primaryColor: "#0B2239",
+      accentColor: "#087375",
+    };
+    for (const theme of [
+      legacy,
+      { ...legacy, colorMode: "light" as const },
+      { ...legacy, colorMode: "dark" as const },
+    ]) {
+      expect(await repository.updateBrandTheme(owner.workspaceId, theme)).toEqual(theme);
+      expect(await repository.getBrandTheme(owner.workspaceId)).toEqual(theme);
+      expect(await repository.getBrandTheme(other.workspaceId)).toBeNull();
+      const exported = await repository.exportAccount(owner.userId);
+      expect(exported.workspaces).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: owner.workspaceId, brand_theme: theme }),
+        ]),
+      );
+    }
+    await repository.updateBrandTheme(owner.workspaceId, null);
+    expect(await repository.getBrandTheme(owner.workspaceId)).toBeNull();
   });
 
   it("shows only the active workspace and rejects cross-tenant writes", async () => {

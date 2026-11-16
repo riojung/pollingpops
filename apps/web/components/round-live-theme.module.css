@@ -44,7 +44,7 @@
   --ui-accent-ink: var(--round-accent-ink);
   --ui-accent-soft: var(--round-accent-soft);
   --ui-on-accent: var(--round-on-accent);
-  --ui-focus: var(--round-accent);
+  --ui-focus: var(--round-focus);
   --ui-danger-bg: var(--round-danger-soft);
   --ui-danger-text: var(--round-danger);
   --ui-danger-border: var(--round-danger-border);
@@ -95,6 +95,7 @@
   --round-accent-hover: #cdbcff;
   --round-accent-soft: #302846;
   --round-accent-ink: #d3c2ff;
+  --round-focus: var(--round-accent);
   --round-on-accent: #211631;
   --round-header: #191e2c;
   --round-success: #91ddbc;
@@ -104,6 +105,37 @@
   --round-danger-soft: #442833;
   --round-danger-border: #a8596b;
   color-scheme: dark;
+}
+
+/* Explicit workspace modes are frozen with the room. Browser appearance never
+   replaces those colors; older rooms keep the established neutral treatment. */
+:global(html) .shell.shell[data-workspace-color-mode] {
+  --round-canvas: var(--experience-canvas);
+  --round-surface: var(--experience-surface);
+  --round-surface-raised: var(--experience-surface);
+  --round-soft: var(--experience-surface-strong);
+  --round-hover: var(--experience-surface-strong);
+  --round-text: var(--experience-text);
+  --round-muted: var(--experience-muted);
+  --round-border: color-mix(in srgb, var(--experience-text) 24%, var(--experience-surface));
+  --round-border-strong: color-mix(in srgb, var(--experience-text) 65%, var(--experience-surface));
+  --round-accent: var(--experience-accent);
+  --round-accent-hover: var(--experience-primary-fill);
+  --round-accent-soft: var(--experience-surface-strong);
+  --round-accent-ink: var(--experience-primary);
+  --round-focus: var(--experience-primary);
+  --round-on-accent: #ffffff;
+  --round-header: var(--experience-primary-fill);
+  color-scheme: light;
+}
+
+:global(html) .shell.shell[data-workspace-color-mode="dark"] {
+  color-scheme: dark;
+}
+
+.shell.shell[data-workspace-color-mode] :global(.answer-button)[data-selected="true"] {
+  border-color: var(--round-focus);
+  box-shadow: 0 0 0 1px var(--round-focus);
 }
 
 .shell.shell :is(h1, h2, h3, :global(.field-label)) {
@@ -196,6 +228,23 @@
 
 .shell :global(.live-topbar) :global(.button-quiet):hover:not(:disabled) {
   background: rgb(255 255 255 / 17%);
+}
+
+/* Saved custom fills may be right at the white-text contrast threshold.
+   Darken header controls instead of washing their backgrounds toward white. */
+:global(html)
+  .shell.shell[data-workspace-color-mode]
+  :global(.live-topbar)
+  :is(:global(.button-quiet), :global(.experience-preferences) > summary) {
+  background: rgb(0 0 0 / 16%);
+  color: #ffffff;
+}
+
+:global(html)
+  .shell.shell[data-workspace-color-mode]
+  :global(.live-topbar)
+  :is(:global(.button-quiet), :global(.experience-preferences) > summary):hover {
+  background: rgb(0 0 0 / 24%);
 }
 
 .shell.shell
@@ -474,6 +523,7 @@
 }
 
 :global(html[data-openround-contrast="high"]) .shell.shell {
+  color-scheme: light;
   --round-canvas: #ffffff;
   --round-surface: #ffffff;
   --round-surface-raised: #ffffff;
@@ -487,6 +537,7 @@
   --round-accent-hover: #222222;
   --round-accent-soft: #f0f0f0;
   --round-accent-ink: #000000;
+  --round-focus: #000000;
   --round-on-accent: #ffffff;
   --round-success: #000000;
   --round-success-soft: #ffffff;
@@ -499,6 +550,7 @@
 
 @media (prefers-contrast: more) {
   :global(html) .shell.shell.shell {
+    color-scheme: light;
     --round-canvas: #ffffff;
     --round-surface: #ffffff;
     --round-surface-raised: #ffffff;
@@ -512,6 +564,7 @@
     --round-accent-hover: #222222;
     --round-accent-soft: #f0f0f0;
     --round-accent-ink: #000000;
+    --round-focus: #000000;
     --round-on-accent: #ffffff;
     --round-success: #000000;
     --round-success-soft: #ffffff;

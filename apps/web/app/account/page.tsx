@@ -38,7 +38,6 @@ import {
   visibleSettingsSections,
   selectedSettingsSection,
   organizationSettingsHref,
-  workspaceThemePresets,
   type SettingsSection,
   type PersonalBillingProfile,
   type PersonalBillingState,
@@ -46,7 +45,7 @@ import {
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../lib/api";
 import { formatDate, formatList, formatNumber } from "../../lib/i18n/format";
-import { liveThemeStyle } from "../../lib/theme";
+import { PersonalInterfaceSettings, WorkspaceBrandSettings } from "./appearance-settings";
 import styles from "./account.module.css";
 
 interface Creator {
@@ -1185,138 +1184,19 @@ export default function AccountPage() {
             </section>
           ) : null}
           {selectedSection === "appearance" ? (
-            <section className="panel">
-              <p className="eyebrow">{t("account.theme.eyebrow")}</p>
-              <h2 style={{ fontSize: "1.8rem" }}>{t("account.theme.title")}</h2>
-              <p className="muted">{t("account.theme.description")}</p>
-              {entitlements && !entitlements.brandTheme ? (
-                <p className="notice">{t("account.theme.requiresPro")}</p>
-              ) : null}
-              <div
-                className="live-shell theme-preview"
-                data-branded="true"
-                style={liveThemeStyle(theme)}
-              >
-                <CreatorBrand
-                  inverted
-                  name={theme.organizationName || t("account.theme.defaultOrganizationName")}
-                  productFeatures={productFeatures}
-                />
-                <p className="theme-preview-copy">{t("account.theme.preview")}</p>
-              </div>
-              <form onSubmit={saveTheme}>
-                <label className="field" htmlFor="theme-name">
-                  <span>{t("customer.theme.brandName")}</span>
-                  <input
-                    className="input"
-                    disabled={
-                      !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
-                    }
-                    id="theme-name"
-                    maxLength={80}
-                    onChange={(event) =>
-                      setTheme({ ...theme, organizationName: event.target.value })
-                    }
-                    required
-                    value={theme.organizationName}
-                  />
-                </label>
-                <fieldset className={styles.themePresets}>
-                  <legend>{t("customer.theme.presets")}</legend>
-                  <div className={styles.presetChoices}>
-                    {workspaceThemePresets.map((preset) => (
-                      <button
-                        className="button-quiet"
-                        key={preset.id}
-                        type="button"
-                        aria-pressed={
-                          theme.primaryColor === preset.primaryColor &&
-                          theme.accentColor === preset.accentColor
-                        }
-                        disabled={
-                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
-                        }
-                        onClick={() =>
-                          setTheme((value) => ({
-                            ...value,
-                            primaryColor: preset.primaryColor,
-                            accentColor: preset.accentColor,
-                          }))
-                        }
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={styles.themeSwatch}
-                          style={{ background: preset.primaryColor }}
-                        />
-                        {t(`customer.theme.${preset.id}`)}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-                <details className={styles.advanced}>
-                  <summary>{t("customer.theme.advanced")}</summary>
-                  <div className="settings-grid">
-                    <label className="field" htmlFor="theme-primary">
-                      <span>
-                        {t("account.theme.backgroundColour")} · {theme.primaryColor}
-                      </span>
-                      <input
-                        className="color-input"
-                        disabled={
-                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
-                        }
-                        id="theme-primary"
-                        onChange={(event) =>
-                          setTheme({ ...theme, primaryColor: event.target.value })
-                        }
-                        type="color"
-                        value={theme.primaryColor}
-                      />
-                    </label>
-                    <label className="field" htmlFor="theme-accent">
-                      <span>
-                        {t("account.theme.actionColour")} · {theme.accentColor}
-                      </span>
-                      <input
-                        className="color-input"
-                        disabled={
-                          !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
-                        }
-                        id="theme-accent"
-                        onChange={(event) =>
-                          setTheme({ ...theme, accentColor: event.target.value })
-                        }
-                        type="color"
-                        value={theme.accentColor}
-                      />
-                    </label>
-                  </div>
-                </details>
-                <p className="muted">{t("account.theme.contrastHelp")}</p>
-                <div className="button-row">
-                  <button
-                    className="button"
-                    disabled={
-                      !entitlements?.brandTheme || !permissions.manageWorkspace || busy !== ""
-                    }
-                    type="submit"
-                  >
-                    {busy === "theme" ? t("account.common.saving") : t("account.theme.save")}
-                  </button>
-                  {savedTheme ? (
-                    <button
-                      className="button-quiet"
-                      disabled={busy !== ""}
-                      onClick={() => void resetTheme()}
-                      type="button"
-                    >
-                      {t("account.theme.useOpenRound")}
-                    </button>
-                  ) : null}
-                </div>
-              </form>
-            </section>
+            <div>
+              <PersonalInterfaceSettings />
+              <WorkspaceBrandSettings
+                theme={theme}
+                savedTheme={savedTheme}
+                onChange={setTheme}
+                onSave={saveTheme}
+                onReset={() => void resetTheme()}
+                canManage={permissions.manageWorkspace}
+                entitled={entitlements?.brandTheme === true}
+                busy={busy !== ""}
+              />
+            </div>
           ) : null}
           {selectedSection === "data" ? (
             <PersonalInstitutionIdentities

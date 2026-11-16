@@ -1701,6 +1701,7 @@ textarea::placeholder {
   --experience-text: var(--ink);
   --experience-muted: var(--ink-soft);
   --experience-primary: var(--navy);
+  --experience-primary-fill: var(--experience-primary);
   --experience-accent: var(--teal);
   background-color: var(--experience-canvas);
   color: var(--experience-text);
@@ -1721,14 +1722,14 @@ textarea::placeholder {
   --ui-text-subtle: var(--experience-muted);
   --ui-text-muted: var(--experience-muted);
   --ui-accent: var(--experience-accent);
-  --ui-accent-hover: var(--experience-primary);
+  --ui-accent-hover: var(--experience-primary-fill);
   --ui-accent-ink: var(--experience-primary);
   --ui-accent-soft: var(--experience-surface-strong);
   --ui-on-accent: #ffffff;
   --ui-focus: var(--experience-primary);
   --ink: var(--experience-text);
   --ink-soft: var(--experience-muted);
-  --navy: var(--experience-primary);
+  --navy: var(--experience-primary-fill);
   --teal: var(--experience-accent);
   --teal-dark: var(--experience-primary);
   --sky: var(--experience-surface-strong);
@@ -2042,7 +2043,7 @@ textarea::placeholder {
   display: flex;
   justify-content: space-between;
   min-height: 72px;
-  background: var(--experience-primary);
+  background: var(--experience-primary-fill);
   color: white;
 }
 
@@ -2052,7 +2053,7 @@ textarea::placeholder {
   position: absolute;
   inset: 0;
   z-index: -1;
-  box-shadow: 0 0 0 100vmax var(--experience-primary);
+  box-shadow: 0 0 0 100vmax var(--experience-primary-fill);
   clip-path: inset(0 -100vmax);
   pointer-events: none;
 }
@@ -2119,6 +2120,7 @@ html[data-openround-contrast="high"] .live-shell {
   --experience-text: #000000 !important;
   --experience-muted: #1f1f1f !important;
   --experience-primary: #000000 !important;
+  --experience-primary-fill: #000000 !important;
   --experience-accent: #000000 !important;
   background-image: none !important;
 }
@@ -2322,7 +2324,7 @@ html[data-openround-motion="reduced"] *::after {
 
 .answer-selection-check {
   align-items: center;
-  background: var(--experience-primary);
+  background: var(--experience-primary-fill);
   border-radius: 50%;
   color: #ffffff;
   display: inline-flex;
@@ -2342,7 +2344,7 @@ html[data-openround-motion="reduced"] *::after {
 }
 
 .live-shell .response-confidence-options .button-quiet[data-selected="true"] {
-  background: var(--experience-primary);
+  background: var(--experience-primary-fill);
   box-shadow: 0 0 0 2px var(--experience-primary);
   color: #ffffff;
 }
@@ -3384,6 +3386,7 @@ html[data-openround-motion="reduced"] *::after {
     --experience-text: #000000 !important;
     --experience-muted: #1f1f1f !important;
     --experience-primary: #000000 !important;
+    --experience-primary-fill: #000000 !important;
     --experience-accent: #000000 !important;
     background-image: none !important;
   }

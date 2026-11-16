@@ -319,7 +319,7 @@ This file is not legal advice.
 | statuses                              | 2.0.2               | [Project page](https://github.com/jshttp/statuses#readme)                                           |
 | string-width                          | 4.2.3               | [Project page](https://github.com/sindresorhus/string-width#readme)                                 |
 | strip-ansi                            | 6.0.1               | [Project page](https://github.com/chalk/strip-ansi#readme)                                          |
-| stripe                                | 22.6.2              | [Project page](https://github.com/stripe/stripe-node)                                               |
+| stripe                                | 23.1.0              | [Project page](https://github.com/stripe/stripe-node)                                               |
 | strnum                                | 2.5.1               | [Project page](https://github.com/NaturalIntelligence/strnum#readme)                                |
 | styled-jsx                            | 5.1.6               | [Project page](https://github.com/vercel/styled-jsx#readme)                                         |
 | tdigest                               | 0.1.3               | [Project page](https://github.com/welch/tdigest)                                                    |

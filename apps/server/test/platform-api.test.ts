@@ -1,8 +1,10 @@
 import { verifyEmailAndSignIn, requestPinAndSignIn } from "./support/email-auth.js";
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { createPlatformRepository, MemoryRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
@@ -44,6 +46,182 @@ async function signIn(target: FastifyInstance, email: string) {
 }
 
 describe("customer organization administration", () => {
+  it("preserves Checkout and paid subscription changes through the real Stripe HTTP client", async () => {
+    const requests: Array<{
+      method: string | undefined;
+      path: string;
+      version: string | string[] | undefined;
+      idempotencyKey: string | string[] | undefined;
+      parameters: URLSearchParams;
+    }> = [];
+    let providerQuantity = 1;
+    let organizationId = "";
+    const periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const url = new URL(request.url!, "http://localhost");
+      const parameters = new URLSearchParams(Buffer.concat(chunks).toString());
+      requests.push({
+        method: request.method,
+        path: url.pathname,
+        version: request.headers["stripe-version"],
+        idempotencyKey: request.headers["idempotency-key"],
+        parameters,
+      });
+      response.setHeader("content-type", "application/json");
+      if (url.pathname === "/v1/prices/price_httpfixture") {
+        response.end(
+          JSON.stringify({
+            id: "price_httpfixture",
+            active: true,
+            currency: "cad",
+            unit_amount: 1000,
+            type: "recurring",
+            recurring: { interval: "month", interval_count: 1, usage_type: "licensed" },
+          }),
+        );
+      } else if (url.pathname === "/v1/checkout/sessions") {
+        response.end(
+          JSON.stringify({ id: "cs_http_fixture", url: "https://checkout.stripe.test/fixture" }),
+        );
+      } else if (url.pathname === "/v1/subscriptions/sub_http_fixture") {
+        if (request.method === "POST")
+          providerQuantity = Number(parameters.get("items[0][quantity]"));
+        response.end(
+          JSON.stringify({
+            id: "sub_http_fixture",
+            customer: "cus_http_fixture",
+            status: "active",
+            metadata: { organizationId },
+            items: {
+              data: [
+                {
+                  id: "si_http_fixture",
+                  price: { id: "price_httpfixture" },
+                  quantity: providerQuantity,
+                  current_period_end: periodEnd,
+                },
+              ],
+            },
+            latest_invoice: {
+              id: "in_http_fixture",
+              status: "paid",
+              amount_paid: 1000,
+              currency: "cad",
+              status_transitions: { paid_at: periodEnd - 30 * 24 * 60 * 60 },
+            },
+          }),
+        );
+      } else if (url.pathname === "/v1/invoice_payments") {
+        response.end(JSON.stringify({ object: "list", data: [], has_more: false }));
+      } else {
+        response.statusCode = 404;
+        response.end(JSON.stringify({ error: { message: "Unexpected Stripe request" } }));
+      }
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Missing local Stripe port");
+      const stripe = new Stripe("sk_test_local_http_fixture", {
+        host: "127.0.0.1",
+        port: address.port,
+        protocol: "http",
+        maxNetworkRetries: 0,
+      });
+      const repository = new MemoryRepository();
+      const built = await buildApp(
+        config({
+          BILLING_MODE: "stripe",
+          STRIPE_SECRET_KEY: "sk_test_local_http_fixture",
+          STRIPE_WEBHOOK_SECRET: "whsec_local_http_fixture",
+          BUSINESS_CATALOG_JSON: JSON.stringify([
+            {
+              id: "http-fixture",
+              version: 1,
+              title: "Workspace license",
+              kind: "workspace_subscription",
+              published: true,
+              stripePriceId: "price_httpfixture",
+              currency: "cad",
+              unitAmount: 1000,
+              interval: "month",
+            },
+          ]),
+        }),
+        { repository, cache: new MemorySessionCache(), stripe },
+      );
+      app = built.app;
+      const owner = await signIn(app, "stripe-http@example.com");
+      const platform = createPlatformRepository(repository);
+      organizationId = (await platform.getOrganizationForWorkspace(owner.creator.workspaceId))!.id;
+      const checkout = await app.inject({
+        method: "POST",
+        url: `/v1/organizations/${organizationId}/billing/checkout`,
+        headers: { cookie: owner.cookie, ...key() },
+        payload: { offerId: "http-fixture", offerVersion: 1, quantity: 1 },
+      });
+      expect(checkout.statusCode, checkout.body).toBe(200);
+      expect(checkout.json()).toEqual({ url: "https://checkout.stripe.test/fixture" });
+      const checkoutRequest = requests.find((request) => request.path === "/v1/checkout/sessions")!;
+      const purchaseId = checkoutRequest.parameters.get("metadata[purchaseId]");
+      expect(purchaseId).toBeTruthy();
+      expect(Object.fromEntries(checkoutRequest.parameters)).toMatchObject({
+        mode: "subscription",
+        "line_items[0][price]": "price_httpfixture",
+        "line_items[0][quantity]": "1",
+        "metadata[organizationId]": organizationId,
+        "subscription_data[metadata][purchaseId]": purchaseId,
+      });
+      expect(checkoutRequest.parameters.has("payment_method_types[0]")).toBe(false);
+      expect(checkoutRequest.idempotencyKey).toBe(`pollingpops-purchase-${purchaseId}`);
+      await platform.applySubscriptionSnapshot({
+        organizationId,
+        customerId: "cus_http_fixture",
+        subscriptionId: "sub_http_fixture",
+        status: "active",
+        licenseQuantity: 1,
+        offerId: "http-fixture",
+        paidThrough: new Date(),
+        graceUntil: null,
+      });
+      const quantityKey = randomUUID();
+      const quantity = await app.inject({
+        method: "POST",
+        url: `/v1/organizations/${organizationId}/billing/quantity`,
+        headers: { cookie: owner.cookie, "x-idempotency-key": quantityKey },
+        payload: { quantity: 3 },
+      });
+      expect(quantity.statusCode, quantity.body).toBe(200);
+      expect(quantity.json()).toMatchObject({
+        subscription: {
+          subscriptionId: "sub_http_fixture",
+          licenseQuantity: 3,
+          paidThrough: new Date(periodEnd * 1000).toISOString(),
+        },
+      });
+      const update = requests.find(
+        (request) =>
+          request.method === "POST" && request.path === "/v1/subscriptions/sub_http_fixture",
+      )!;
+      expect(Object.fromEntries(update.parameters)).toEqual({
+        "items[0][id]": "si_http_fixture",
+        "items[0][quantity]": "3",
+        payment_behavior: "pending_if_incomplete",
+        proration_behavior: "always_invoice",
+      });
+      expect(update.idempotencyKey).toBe(`pollingpops-quantity-${organizationId}-${quantityKey}`);
+      expect(requests.every((request) => request.version === "2026-10-28.endive")).toBe(true);
+    } finally {
+      await app?.close();
+      app = undefined;
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
   it.each([
     { enabled: false, existingCustomer: false, subscriptionOffer: false },
     { enabled: false, existingCustomer: true, subscriptionOffer: false },

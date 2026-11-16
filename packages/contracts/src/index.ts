@@ -5,6 +5,8 @@ import {
 } from "./presentation-spatial";
 export * from "./presentation-spatial";
 import { z } from "zod";
+import { DEFAULT_SESSION_POLICY, SessionPolicySchema } from "./auth-session";
+export * from "./auth-session";
 export * from "./feature-policy";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
@@ -119,6 +121,7 @@ export const errorCodes = [
   "ANSWER_INVALID",
   "ENTITLEMENT_LIMIT",
   "UNAUTHORIZED",
+  "SESSION_EXPIRED",
   "EMAIL_DELIVERY_FAILED",
   "ARTIFACT_NOT_ARCHIVED",
   "ARTIFACT_IN_USE",
@@ -2650,6 +2653,7 @@ export const WorkspaceAccountContextSchema = z.object({
   accountType: z.enum(["personal", "organization"]),
   licenseUnit: z.enum(["workspace", "user"]),
   planSource: z.enum(["community", "subscription", "free"]),
+  sessionPolicy: SessionPolicySchema.default(DEFAULT_SESSION_POLICY),
   organization: z
     .object({
       id: z.string().uuid(),
@@ -2667,8 +2671,14 @@ export const WorkspaceAccountContextSchema = z.object({
 export type WorkspaceAccountContext = z.infer<typeof WorkspaceAccountContextSchema>;
 
 export const UpdateWorkspaceSettingsSchema = z
-  .object({ name: z.string().trim().min(1).max(120) })
-  .strict();
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    sessionPolicy: SessionPolicySchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.sessionPolicy !== undefined, {
+    message: "At least one workspace setting is required",
+  });
 
 export const CustomerOrganizationSetupSchema = z
   .object({

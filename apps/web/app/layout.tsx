@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { PRODUCT_BRAND } from "@openround/contracts";
 import { ColorModeSync } from "../components/color-mode-sync";
 import { LocaleProvider } from "../components/locale-provider";
+import { IdleSessionProvider } from "../components/idle-session-provider";
 import { COLOR_MODE_BOOTSTRAP_SCRIPT } from "../lib/color-mode";
 import { loadMessagesWithFallback, localeDomainsForPath } from "../lib/i18n/catalog";
 import { LOCALE_COOKIE_NAME, localeDirection, resolveLocale } from "../lib/i18n/config";
@@ -69,7 +70,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           initialMessages={messages}
         >
           <ColorModeSync />
-          {children}
+          <IdleSessionProvider>{children}</IdleSessionProvider>
         </LocaleProvider>
       </body>
     </html>

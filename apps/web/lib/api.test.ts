@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT } from "./idle-session";
 import {
   canvasCreationSetupEpoch,
   readCanvasCreationSetup,
@@ -15,6 +16,72 @@ import {
 } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("creator session boundary notifications", () => {
+  it("leaves guarded logout success scoped to its owning boundary so a late S0 response cannot invalidate S1", async () => {
+    const browser = new EventTarget();
+    const loggedOut = vi.fn();
+    const authChanged = vi.fn();
+    browser.addEventListener(SESSION_LOGOUT_EVENT, loggedOut);
+    browser.addEventListener(AUTH_CHANGE_EVENT, authChanged);
+    vi.stubGlobal("window", browser);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true })),
+    );
+    const epoch = canvasCreationSetupEpoch();
+    await apiFetch("/v1/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ expectedSessionId: "00000000-0000-4000-8000-000000000001" }),
+    });
+    expect(loggedOut).not.toHaveBeenCalled();
+    expect(authChanged).not.toHaveBeenCalled();
+    expect(canvasCreationSetupEpoch()).toBe(epoch);
+  });
+  it("gates on server-confirmed idle expiration without changing independent public credentials", async () => {
+    const browser = new EventTarget();
+    const expired = vi.fn();
+    browser.addEventListener(SESSION_EXPIRED_EVENT, expired);
+    vi.stubGlobal("window", browser);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: { code: "SESSION_EXPIRED", message: "Expired" } }, { status: 401 }),
+      ),
+    );
+    await expect(apiFetch("/v1/auth/session")).rejects.toMatchObject({
+      status: 401,
+      code: "SESSION_EXPIRED",
+    });
+    expect(expired).toHaveBeenCalledOnce();
+    expired.mockClear();
+    await expect(apiFetch("/v1/participant", { credentials: "omit" })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(expired).not.toHaveBeenCalled();
+  });
+  it("announces only confirmed logout, including empty successful responses", async () => {
+    const browser = new EventTarget();
+    const loggedOut = vi.fn();
+    browser.addEventListener(SESSION_LOGOUT_EVENT, loggedOut);
+    vi.stubGlobal("window", browser);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    );
+    await apiFetch("/v1/auth/logout", { method: "POST" });
+    expect(loggedOut).toHaveBeenCalledOnce();
+    loggedOut.mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: { message: "Unavailable" } }, { status: 503 })),
+    );
+    await expect(apiFetch("/v1/auth/logout", { method: "POST" })).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(loggedOut).not.toHaveBeenCalled();
+  });
+});
 
 describe("API request credentials", () => {
   it("retains authenticated defaults while honoring explicit credential isolation", async () => {

@@ -22,6 +22,7 @@ import { useConfirmNavigation } from "../navigation-guard";
 import { useManagementNavigation, type ManagementNavigationState } from "../management-navigation";
 import { fetchCustomerManagementNavigation } from "../../lib/management-navigation";
 import { clearOtherCanvasCreationSetups } from "../../lib/canvas-creation-storage";
+import type { IdleSessionPolicy } from "../../lib/idle-session";
 
 export interface WorkspaceCreator {
   userId: string;
@@ -39,6 +40,7 @@ export type WorkspaceProductFeatures = ContractWorkspaceProductFeatures;
 export interface WorkspaceAccountContext {
   id: string;
   name: string;
+  sessionPolicy?: IdleSessionPolicy;
   accountType: "personal" | "organization";
   licenseUnit: "workspace" | "user";
   planSource?: "community" | "subscription" | "free";

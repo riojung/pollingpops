@@ -119,7 +119,7 @@ describe("GitHub-hosted runner migration contract", () => {
     expect(trivySetup?.with?.version).toBe("v0.74.0");
     expect(
       parsed.jobs["ubuntu26-image-toolchain"].steps?.some(
-        ({ uses }) => uses === "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
+        ({ uses }) => uses === "sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532",
       ),
     ).toBe(true);
     expect(
@@ -192,7 +192,7 @@ describe("GitHub-hosted runner migration contract", () => {
       expect(installers, path).not.toHaveLength(0);
       for (const installer of installers) {
         expect(installer.uses, path).toBe(
-          "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
+          "sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532",
         );
       }
     }

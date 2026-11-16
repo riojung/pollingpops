@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { workspaceThemePresets } from "@openround/experience";
 import type { ResolvedColorMode } from "./color-mode";
+import { serializeInlineScriptJson } from "./inline-script-json";
 
 export const INTERFACE_THEME_STORAGE_KEY = "openround:interface-theme";
 export const INTERFACE_THEME_CHANGE_EVENT = "openround:interface-theme-change";
@@ -258,6 +259,7 @@ export function applyInterfaceThemePreference(id: InterfaceThemeId): void {
   window.dispatchEvent(new Event(INTERFACE_THEME_CHANGE_EVENT));
 }
 
-// Serialize only trusted tokens. Storage contributes an allowlisted ID, never CSS.
+// Escape JSON for its inline script context, even though tokens are trusted.
+// Storage contributes an allowlisted ID, never CSS.
 // Runs in the root head immediately after the existing color-mode bootstrap.
-export const INTERFACE_THEME_BOOTSTRAP_SCRIPT = `(function(){var t=${JSON.stringify(themeOverridesByMode)};var p="classic";try{p=localStorage.getItem("${INTERFACE_THEME_STORAGE_KEY}")}catch(e){}if(!Object.prototype.hasOwnProperty.call(t,p))p="classic";var r=document.documentElement;var m=r.dataset.colorMode==="dark"?"dark":"light";r.dataset.interfaceTheme=p;var s=t[p][m];for(var k in s)r.style.setProperty(k,s[k])})()`;
+export const INTERFACE_THEME_BOOTSTRAP_SCRIPT = `(function(){var t=${serializeInlineScriptJson(themeOverridesByMode)};var p="classic";try{p=localStorage.getItem("${INTERFACE_THEME_STORAGE_KEY}")}catch(e){}if(!Object.prototype.hasOwnProperty.call(t,p))p="classic";var r=document.documentElement;var m=r.dataset.colorMode==="dark"?"dark":"light";r.dataset.interfaceTheme=p;var s=t[p][m];for(var k in s)r.style.setProperty(k,s[k])})()`;

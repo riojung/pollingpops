@@ -1314,6 +1314,36 @@ paragraphs per object within the existing 160-character title and 4,000-characte
 
 ## Organize and manage the Library
 
+### Share published content with your company
+
+The Library separates **My workspace**, **Organization library**, and **Shared with me**.
+My workspace keeps the active workspace's existing roles and content. Organization library shows
+published content deliberately shared company-wide; Shared with me shows publications sent
+directly to you. Keep using the Rounds, Presentations, and Surveys tabs inside each scope.
+
+To distribute a published item from an organization workspace, choose **Share with organization**
+on its Library card. Choose everyone in the organization or selected verified members, then
+**Can view** or **Can use**. Add a message and an optional **Review by** date before choosing
+**Share published version**. Draft changes are not shared. The review date is a follow-up date,
+not an access-expiration deadline. Source-workspace editors and organization administrators can
+manage organization publications, including those sent to selected members.
+
+Recipients can **Open** the published snapshot and **Mark reviewed**. New, In progress, Done,
+and overdue information help you find what needs attention; acknowledgement does not establish
+learning mastery. **Can use** also offers **Use a copy** when your active workspace is in the
+same organization and you have permission and a license to create that content type. Switch to
+such a workspace if copying is unavailable. The independent draft can then be edited, published,
+hosted, assigned, or used to collect new responses through the usual workspace tools.
+
+Copies include authored questions and their correct-answer settings where applicable. Private
+speaker notes, source citations, existing participant responses, and existing results are not
+shared. Receiving an item does not grant access to its source workspace or let you edit the
+original. Use **Manage sharing** to revoke distribution; an already-created copy remains an
+independent draft in its destination workspace.
+
+See the [organization sharing design](organization-shared-library.md) for permission boundaries,
+version pinning, staff turnover, and administrative behavior.
+
 ### Import, export, folders, and tags
 
 Use folders, tags, and search to organize the library. Imports support bulk paste, CSV, versioned

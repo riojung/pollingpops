@@ -21,6 +21,7 @@ import {
   createBoardInvitationRepository,
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
+  createLibrarySharingRepository,
   createPresentationRepository,
   createPresentationShareRepository,
   createPresentationAssignmentRepository,
@@ -103,6 +104,7 @@ import { PresentationSessionService } from "./presentation-session-service.js";
 import { registerGroupRoutes } from "./group-routes.js";
 import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
+import { registerLibrarySharingRoutes } from "./library-sharing-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
 import { registerIdeaBoardRoutes } from "./idea-board-routes.js";
@@ -861,6 +863,22 @@ export async function buildApp(
     auth,
     workspaceEnabled: workspaceShellEnabled,
     presentationsEnabled,
+  });
+
+  await registerLibrarySharingRoutes(app, {
+    repository,
+    shares: createLibrarySharingRepository(repository, { communityMode: config.COMMUNITY_MODE }),
+    auth,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: async (workspaceId, artifactType) => {
+      if (!(await workspaceShellEnabled(workspaceId))) return false;
+      if (artifactType === "presentation") return presentationsEnabled(workspaceId);
+      if (artifactType === "survey")
+        return workspaceFeatureEnabled(repository, config, workspaceId, "surveys");
+      return true;
+    },
   });
 
   app.addHook("onClose", async () => {

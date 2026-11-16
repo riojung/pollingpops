@@ -331,6 +331,45 @@ export class StorageService {
     return content;
   }
 
+  /** Copy verified clean bytes into an independent Library recipient's media namespace. */
+  async cloneLibraryImage(source: MediaAssetRecord, destination: MediaAssetRecord) {
+    if (!this.internalClient) throw new Error("Object storage is not configured");
+    if (
+      source.scanStatus !== "clean" ||
+      source.deletionStartedAt ||
+      destination.scanStatus !== "clean" ||
+      destination.deletionStartedAt ||
+      source.id === destination.id ||
+      destination.objectKey !== cleanObjectKey(destination) ||
+      source.objectKey === destination.objectKey ||
+      source.mimeType !== destination.mimeType ||
+      source.sizeBytes !== destination.sizeBytes ||
+      source.sizeBytes < 1 ||
+      source.sizeBytes > MAX_IMAGE_BYTES
+    )
+      throw new Error("Invalid Library media copy");
+    // Read the exact scanned object and validate its signature and size before writing.
+    const content = await this.readImage(source);
+    await this.internalClient.send(
+      new PutObjectCommand({
+        Bucket: this.config.S3_BUCKET,
+        Key: destination.objectKey,
+        Body: content,
+        ContentType: destination.mimeType,
+        ContentLength: content.byteLength,
+        Metadata: { mediaid: destination.id, scanstatus: "clean" },
+      }),
+      { abortSignal: AbortSignal.timeout(STORAGE_OPERATION_TIMEOUT_MS) },
+    );
+  }
+
+  /** Roll back only a newly allocated Library media object after a failed copy. */
+  async deleteLibraryImageClone(asset: MediaAssetRecord) {
+    if (asset.scanStatus !== "clean" || asset.objectKey !== cleanObjectKey(asset))
+      throw new Error("Invalid Library media cleanup");
+    await this.deleteObject(asset.objectKey);
+  }
+
   async deleteAsset(asset: MediaAssetRecord) {
     if (!this.internalClient) throw new Error("Object storage is not configured");
     const candidates = await this.listFinalizationCandidates(asset);

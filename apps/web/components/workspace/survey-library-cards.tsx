@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { SurveyDraft } from "@openround/contracts/surveys";
 import { useLocale } from "../locale-provider";
 import type { RoundLibraryView } from "../../lib/round-library-view";
@@ -18,6 +19,7 @@ export function SurveyLibraryCards({
   onSelect,
   onFavorite,
   onAction,
+  renderSharingAction,
 }: {
   surveys: Array<{
     id: string;
@@ -38,6 +40,7 @@ export function SurveyLibraryCards({
   onSelect: (id: string) => void;
   onFavorite: (id: string) => void;
   onAction: (action: "duplicate" | "archive", id: string) => void;
+  renderSharingAction?: (id: string) => ReactNode;
 }) {
   const { locale, t } = useLocale();
   return (
@@ -126,6 +129,7 @@ export function SurveyLibraryCards({
                     {t("pages.library.shareSurvey")}
                   </Link>
                 ) : null}
+                {renderSharingAction?.(survey.id)}
                 {canEdit ? (
                   <details className={styles.moreMenu}>
                     <summary>{t("pages.library.more")}</summary>

@@ -1755,3 +1755,41 @@ historical media and delayed delivery. Sources must belong to the target workspa
 allow existing authorized reads but reject new links. No guest, participant, published-content,
 activity/image export or duplication contract is extended with these private authoring references.
 Authorized account exports include reference metadata for owned workspaces.
+
+## Authenticated organization Library sharing
+
+These routes distribute explicit published versions across workspaces in the same organization.
+They use the current signed-in identity, not public audience/review bearer links. Organization
+membership never grants the source workspace's editor, host, media, or reporting credentials.
+
+| Route                                                        | Behavior                                                                                                 |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `GET /v1/library/shares?scope=organization\|shared\|managed` | Principal-filtered metadata with `limit` (1–100), `cursor`, and optional `organizationId`                |
+| `GET /v1/library/share-recipients?search=…`                  | Bounded verified-member directory for an authorized source-workspace sharer                              |
+| `POST /v1/library/shares`                                    | Pin a published Round, Presentation, or Survey and choose organization-wide or named-member distribution |
+| `GET /v1/library/shares/:id`                                 | Safe read-only published content and current action capabilities                                         |
+| `GET /v1/library/shares/:id/media/:mediaId`                  | Authorized clean image bytes referenced by that publication                                              |
+| `PUT /v1/library/shares/:id/progress`                        | Set the current recipient's `in_progress` or `done` state                                                |
+| `POST /v1/library/shares/:id/copy`                           | Create an independent draft in the active, authorized, same-organization workspace                       |
+| `DELETE /v1/library/shares/:id`                              | Revoke distribution; retained independent copies are unaffected                                          |
+
+Creation uses `{requestId, artifactType, artifactId, versionId, audience, recipientIds,
+permission, message, dueAt}`. Types are `round`, `presentation`, and `survey`; audiences are
+`organization` and `people`; permissions are `view` and `use`. Named recipients are limited to
+50 current verified non-billing organization members. Copy uses `{requestId}` and returns a
+verified local editor destination with an idempotent receipt. Reusing a request ID for another
+operation or destination is a conflict. Reading permissions and destination copy permissions are
+separate; summaries include server-derived capabilities and an unavailable-copy reason.
+
+Responses use private, no-store caching. Missing/revoked/inaccessible items return unavailable
+rather than disclosing a foreign publication. Every detail, media, progress, and copy operation
+rechecks current membership and source eligibility. Copy commits serialize with membership and
+revocation changes. Media preparation occurs outside database locks, with four concurrent
+preparations per process and a 50-image/50-MB limit per copy; capacity responses are retryable
+`503` errors. Unknown commit acknowledgements retain prepared image objects to avoid deleting
+images that might already belong to a committed draft.
+
+Migration **111** adds the sharing, progress, and copy-receipt tables with forced row-level
+security. Deploy it through the existing migration workflow before serving these routes. See
+[Organization Library and Shared with me](organization-shared-library.md) for the ownership,
+privacy, and lifecycle contract.

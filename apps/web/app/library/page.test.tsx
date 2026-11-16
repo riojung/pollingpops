@@ -204,6 +204,16 @@ describe("Library workspace", () => {
     expect(markup).toContain('aria-label="Loading Library"');
   });
 
+  it.each(["organization", "shared", "managed"])(
+    "passes header-search queries into the %s collection",
+    (scope) => {
+      fixtures.query = `scope=${scope}&type=surveys&q=preparedness`;
+      const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+      expect(markup).toContain('placeholder="Search shared content"');
+      expect(markup).toContain('value="preparedness"');
+    },
+  );
+
   it("deep-links to Presentations with shared folder and favorite controls", () => {
     fixtures.query = "type=presentations&q=recovery";
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));

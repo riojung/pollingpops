@@ -7995,6 +7995,26 @@ export class PostgresRepository implements Repository {
            ORDER BY created_at, artifact_type, artifact_id`,
           [userId],
         );
+        const libraryShares = await client.query(
+          `SELECT id,organization_id AS "organizationId",workspace_id AS "sourceWorkspaceId",
+                  artifact_type AS "artifactType",artifact_id AS "artifactId",version_id AS "versionId",
+                  title,description,audience,permission,message,due_at AS "dueAt",
+                  created_by AS "createdBy",request_id AS "requestId",shared_at AS "sharedAt",revoked_at AS "revokedAt"
+           FROM library_shares WHERE created_by=$1 OR workspace_id=ANY($2::uuid[])
+           ORDER BY shared_at,id`,
+          [userId, workspaceIds],
+        );
+        const libraryShareProgress = await client.query(
+          `SELECT share_id AS "shareId",status,updated_at AS "updatedAt"
+           FROM library_share_progress WHERE user_id=$1 ORDER BY updated_at,share_id`,
+          [userId],
+        );
+        const libraryShareCopies = await client.query(
+          `SELECT request_id AS "requestId",share_id AS "shareId",workspace_id AS "workspaceId",
+                  artifact_type AS "artifactType",artifact_id AS "artifactId",created_at AS "createdAt"
+           FROM library_share_copies WHERE user_id=$1 ORDER BY created_at,request_id`,
+          [userId],
+        );
         const productFeedback = await client.query(
           "SELECT * FROM beta_feedback WHERE user_id = $1 ORDER BY created_at, id",
           [userId],
@@ -8423,6 +8443,9 @@ export class PostgresRepository implements Repository {
           recoveryPackSources: recoveryPackSources.rows,
           recoveryPackSourceApprovals: recoveryPackSourceApprovals.rows,
           libraryFavorites: libraryFavorites.rows,
+          libraryShares: libraryShares.rows,
+          libraryShareProgress: libraryShareProgress.rows,
+          libraryShareCopies: libraryShareCopies.rows,
           productFeedback: productFeedback.rows,
           mediaAssets: mediaAssets.rows,
           mediaReferences: mediaReferences.rows,

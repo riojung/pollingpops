@@ -904,8 +904,9 @@ across four desktop/mobile profiles pass. See the
 [translation record](evidence/presentation-e12-translation.md). This increment is merged in
 [PR #208](https://github.com/riojung/pollingpops/pull/208) and remains undeployed.
 Rich-text/whole-deck translation, RTL, question suggestions and other E12 scopes remain planned.
-The reviewed layout increment remains separately proposed in
-[PR #207](https://github.com/riojung/pollingpops/pull/207).
+The reviewed layout proposal in [PR #207](https://github.com/riojung/pollingpops/pull/207)
+was integrated through [PR #218](https://github.com/riojung/pollingpops/pull/218).
+PR #207's merge reconciles the original proposal history with that current implementation.
 
 ### Presentation E12 selected-text assistance November 6, 2026
 

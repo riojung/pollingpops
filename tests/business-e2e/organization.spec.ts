@@ -270,13 +270,15 @@ test("organization owner invites billing-only administrator and funds a premium 
   await financeContext.close();
 });
 
-test("organization entry explains sign-in and disabled deployments without creation controls", async ({
+test("anonymous organization entry preserves its return path at the sign-in boundary", async ({
   page,
 }) => {
-  await page.goto("/organization");
-  await expect(
-    page.getByRole("heading", { name: "Sign in to manage your organization" }),
-  ).toBeVisible();
+  const destination = "/organization?organizationId=pending#members";
+  await page.goto(destination);
+  await expect(page).toHaveURL(
+    (url) => url.pathname === "/signin" && url.searchParams.get("returnTo") === destination,
+  );
+  await expect(page.getByRole("heading", { name: "Sign in by email", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
     0,
   );
@@ -292,10 +294,11 @@ test("organization entry explains sign-in and disabled deployments without creat
       },
     });
   });
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Organization management is unavailable" }),
-  ).toBeVisible();
+  await page.goto(destination);
+  await expect(page).toHaveURL(
+    (url) => url.pathname === "/signin" && url.searchParams.get("returnTo") === destination,
+  );
+  await expect(page.getByRole("heading", { name: "Sign in by email", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create organization", exact: true })).toHaveCount(
     0,
   );

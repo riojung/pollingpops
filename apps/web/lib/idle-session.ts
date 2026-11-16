@@ -87,6 +87,7 @@ export function publishSessionSignal(
 /** Public audience passes have their own lifetime and never join creator idle tracking. */
 export function isWorkspaceSessionPath(path: string) {
   if (path === "/") return false;
+  if (/^\/lti\/link\/?$/.test(path)) return false;
   if (
     /^\/(?:signin|join|play|present|embed|board|followup|presentation-assignment|presentation-practice|presentation-review|summary|survey|invite|help|status|pricing|privacy|terms)(?:\/|$)/.test(
       path,
@@ -140,7 +141,13 @@ export function sessionSecondsRemaining(session: IdleSession, now: number) {
 }
 
 export function sessionReturnPath(location: Pick<Location, "pathname" | "search" | "hash">) {
-  const path = `${location.pathname}${location.search}${location.hash}`;
+  // Never promote a host capability fragment into a sign-in query string.
+  const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const capabilityFragment =
+    (/^\/host\/[^/]+\/?$/.test(location.pathname) && fragment.has("cohost")) ||
+    (/^\/lti\/link\/?$/.test(location.pathname) && fragment.has("token"));
+  const hash = capabilityFragment ? "" : location.hash;
+  const path = `${location.pathname}${location.search}${hash}`;
   const hasControl = Array.from(path).some((character) => {
     const point = character.codePointAt(0) ?? 0;
     return point <= 31 || point === 127;

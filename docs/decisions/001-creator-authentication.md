@@ -76,9 +76,23 @@ trigger reconciliation with the server; they do not supply an authoritative new 
 Authentication credentials and draft content are not added to browser storage for this feature.
 At expiry, private pages are removed, creator control credentials in the current browser are
 cleared, and the user returns to sign-in with a validated local return path. Anonymous audience,
-shared stage and companion capabilities retain their separate lifecycles; incoming audience
+shared stage, cohost and companion capabilities retain their separate lifecycles; incoming audience
 responses never establish the account holder's presence. Presenters who need more time can
 choose an appropriate workspace duration before a session.
+
+Round cohost links are classified from their explicit `#cohost` handoff before any creator-session
+check. The credential is removed from the fragment and stored in a separate, session-scoped
+cohost namespace so refreshing the shared host page does not require a creator account. Owner
+setup, resume and recovery clear that session's cohost mode and retain creator inactivity checks.
+Rejected cohost credentials do not silently upgrade into account-backed owner access. Cohost
+credentials remain subject to the existing server-side staff expiry, revocation and permissions.
+
+Older cohost tabs stored their pass in the same key as owner credentials. Those untyped values
+cannot safely establish an anonymous cohost mode; reopen the original shared cohost link once
+after upgrading. The LTI identity-link handoff page likewise remains available before sign-in
+to preserve its one-time launch token, while content selection stays private and the linking
+action still requires a creator account. Credential fragments are excluded from sign-in return
+URLs.
 
 An overdue tab first hides and disables private content while keeping its component state
 mounted, since another tab may have renewed the same login. Verification restores that same
@@ -126,6 +140,8 @@ late renewals, policy/workspace changes and the absolute cap. Its PostgreSQL cas
 `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` for an isolated test cluster; the runtime
 role has no superuser or RLS-bypass privileges. Upgrade coverage applies migration 110 as a
 table owner subject to forced RLS and checks that its transaction-local access does not leak.
+The CI `test:postgres` command includes this conformance file alongside the broader row-level
+isolation suites, and its expected migration inventory includes version 110.
 `apps/server/test/idle-session.test.ts` covers authenticated endpoints, policy permissions,
 cookie behavior, cache control and origin checks.
 

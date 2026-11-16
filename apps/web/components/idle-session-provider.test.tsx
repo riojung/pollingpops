@@ -21,6 +21,7 @@ interface Hooks {
 const mocked = vi.hoisted(() => ({
   hooks: null as Hooks | null,
   apiFetch: vi.fn(),
+  pathname: "/dashboard",
   router: { replace: vi.fn() },
 }));
 vi.mock("react", async (original) => ({
@@ -57,7 +58,7 @@ vi.mock("react", async (original) => ({
   },
 }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
+  usePathname: () => mocked.pathname,
   useRouter: () => mocked.router,
 }));
 vi.mock("./locale-provider", () => ({ useLocale: () => ({ locale: "en-CA" }) }));
@@ -114,7 +115,7 @@ function harness() {
       const privateNode = nodes.find((node) => node.type === "div" && node.props.ref);
       if (privateNode) (privateNode.props.ref as ReactModule.RefObject<unknown>).current = boundary;
       const gate = nodes.find((node) => node.props["data-testid"] === "idle-session-gate");
-      if (gate)
+      if (gate?.props.ref)
         (gate.props.ref as ReactModule.RefObject<unknown>).current = {
           querySelectorAll: () => [view.gateControl],
         };
@@ -174,6 +175,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(session.serverNow));
   mocked.apiFetch.mockReset().mockResolvedValue({ session });
   mocked.router.replace.mockReset();
+  mocked.pathname = "/dashboard";
   const values = new Map<string, string>();
   vi.stubGlobal(
     "window",
@@ -183,6 +185,11 @@ beforeEach(() => {
       setTimeout,
       clearTimeout,
       location: { pathname: "/dashboard", search: "", hash: "" },
+      history: {
+        replaceState: vi.fn(() => {
+          window.location.hash = "";
+        }),
+      },
       localStorage: { setItem: vi.fn() },
       sessionStorage: {
         get length() {
@@ -346,6 +353,54 @@ describe("late expiration responses across fresh sign-in", () => {
       expect(mocked.router.replace).toHaveBeenCalledOnce();
       expect(callsTo("/v1/auth/session")).toHaveLength(2);
       expect(callsTo("/v1/auth/logout")).toHaveLength(0);
+    },
+  );
+});
+
+describe("Round cohost capability boundary", () => {
+  const cohost = "synthetic_cohost_capability_1234567890";
+  it("consumes a cohost fragment before creator authentication and keeps the public mode across hash removal and reload", async () => {
+    mocked.pathname = "/host/room-a";
+    window.location.pathname = mocked.pathname;
+    window.location.hash = `#cohost=${cohost}`;
+    window.sessionStorage.setItem("openround:host:room-a", cohost);
+    const view = harness();
+    await settled();
+    expect(view.render().find((node) => "protectedPage" in node.props)?.props.protectedPage).toBe(
+      false,
+    );
+    expect(window.location.hash).toBe("");
+    expect(mocked.apiFetch).not.toHaveBeenCalled();
+    expect(mocked.router.replace).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("hashchange"));
+    expect(view.render().find((node) => "protectedPage" in node.props)?.props.protectedPage).toBe(
+      false,
+    );
+    view.unmount();
+    const reloaded = harness();
+    await settled();
+    expect(
+      reloaded.render().find((node) => "protectedPage" in node.props)?.props.protectedPage,
+    ).toBe(false);
+    expect(mocked.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "#cohost=invalid"])(
+    "keeps owner/legacy stored passes behind the private boundary for fragment %s",
+    async (hash) => {
+      mocked.pathname = "/host/room-a";
+      window.location.pathname = mocked.pathname;
+      window.location.hash = hash;
+      window.sessionStorage.setItem(
+        "openround:host:room-a",
+        "synthetic_creator_capability_123456789",
+      );
+      const view = harness();
+      await settled();
+      expect(view.render().find((node) => "protectedPage" in node.props)?.props.protectedPage).toBe(
+        true,
+      );
+      expect(window.location.hash).toBe("");
     },
   );
 });

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
+import { saveCreatorHostCredential } from "../../lib/host-credential-recovery";
 import { formatDateTime } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
@@ -414,7 +415,7 @@ function SessionsContent() {
       );
       if (controller.signal.aborted || activeQueryKey.current !== requestedKey || !mounted.current)
         return;
-      window.sessionStorage.setItem(`openround:host:${session.id}`, response.token);
+      saveCreatorHostCredential(window.sessionStorage, session.id, response.token);
       router.push(`/host/${session.id}`);
     } catch (caught) {
       if (!controller.signal.aborted && activeQueryKey.current === requestedKey && mounted.current)

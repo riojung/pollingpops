@@ -27,6 +27,11 @@ import {
 import { idleSessionCopy } from "../lib/i18n/idle-session-messages";
 import { useLocale } from "./locale-provider";
 import styles from "./idle-session.module.css";
+import {
+  HOST_CREDENTIAL_CHANGE_EVENT,
+  readHostCredential,
+  roundHostSessionId,
+} from "../lib/host-credential-recovery";
 
 type Phase =
   "checking" | "active" | "warning" | "expired" | "error" | "signing-out" | "logout-error";
@@ -48,9 +53,69 @@ const initialView: SessionView = {
 /** One creator session boundary for the entire app, including editors without WorkspaceShell. */
 export function IdleSessionProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const hostSessionId = roundHostSessionId(pathname);
+  if (hostSessionId)
+    return (
+      <RoundHostIdleSessionBoundary key={hostSessionId} sessionId={hostSessionId}>
+        {children}
+      </RoundHostIdleSessionBoundary>
+    );
   const protectedPage = isWorkspaceSessionPath(pathname);
   return (
     <IdleSessionBoundary key={protectedPage ? "private" : "public"} protectedPage={protectedPage}>
+      {children}
+    </IdleSessionBoundary>
+  );
+}
+
+function RoundHostIdleSessionBoundary({
+  sessionId,
+  children,
+}: {
+  sessionId: string;
+  children: ReactNode;
+}) {
+  const [mode, setMode] = useState<"checking" | "creator" | "cohost">("checking");
+  const { locale } = useLocale();
+  useEffect(() => {
+    const resolve = () => {
+      let storage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
+      try {
+        storage = window.sessionStorage;
+      } catch {
+        storage = {
+          getItem: () => null,
+          setItem: () => {
+            throw new Error("Storage unavailable");
+          },
+          removeItem: () => {},
+        };
+      }
+      const credential = readHostCredential(storage, sessionId, window.location.hash, () =>
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}`,
+        ),
+      );
+      setMode(credential.kind);
+    };
+    resolve();
+    window.addEventListener("hashchange", resolve);
+    window.addEventListener(HOST_CREDENTIAL_CHANGE_EVENT, resolve);
+    return () => {
+      window.removeEventListener("hashchange", resolve);
+      window.removeEventListener(HOST_CREDENTIAL_CHANGE_EVENT, resolve);
+    };
+  }, [sessionId]);
+  if (mode === "checking")
+    return (
+      <main className="shell page-main" data-testid="idle-session-gate" lang={locale}>
+        <p role="status">{idleSessionCopy(locale).checking}</p>
+      </main>
+    );
+  return (
+    <IdleSessionBoundary key={mode} protectedPage={mode === "creator"}>
       {children}
     </IdleSessionBoundary>
   );

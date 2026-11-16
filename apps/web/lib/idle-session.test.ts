@@ -74,6 +74,9 @@ describe("private session boundary", () => {
     "/presentation-session/id/host",
     "/practice/id",
     "/future-private-page",
+    "/host/session-id",
+    "/host/setup/quiz-id",
+    "/lti/select",
   ])("protects %s by default", (path) => {
     expect(isWorkspaceSessionPath(path)).toBe(true);
   });
@@ -97,10 +100,25 @@ describe("private session boundary", () => {
     "/presentation-session/id/play",
     "/presentation-session/id/stage",
     "/presentation-session/id/companion",
+    "/lti/link",
   ])("preserves independent public route %s", (path) => {
     expect(isWorkspaceSessionPath(path)).toBe(false);
   });
   it("retains only a safe local return destination", () => {
+    expect(
+      sessionReturnPath({
+        pathname: "/host/session",
+        search: "?view=live",
+        hash: "#cohost=synthetic-capability",
+      }),
+    ).toBe("/host/session?view=live");
+    expect(
+      sessionReturnPath({
+        pathname: "/lti/link",
+        search: "",
+        hash: "#token=synthetic-one-time-token",
+      }),
+    ).toBe("/lti/link");
     expect(
       sessionReturnPath({ pathname: "/quiz/id", search: "?tab=edit", hash: "#question" }),
     ).toBe("/quiz/id?tab=edit#question");
@@ -121,6 +139,7 @@ describe("private session boundary", () => {
       ["openround:participant:round", "audience"],
       ["openround:presentation-stage:session", "display"],
       ["openround:presentation-companion:session", "notes"],
+      ["openround:cohost:round", "independent-cohost"],
       ["pollingpops:idea-board:guest", "guest"],
     ]);
     vi.stubGlobal("window", {
@@ -137,6 +156,7 @@ describe("private session boundary", () => {
       "openround:participant:round",
       "openround:presentation-stage:session",
       "openround:presentation-companion:session",
+      "openround:cohost:round",
       "pollingpops:idea-board:guest",
     ]);
   });

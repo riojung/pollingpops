@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { LocalReturnPathSchema } from "../../packages/contracts/src/index.ts";
+import {
+  AuthSessionStateSchema,
+  LocalReturnPathSchema,
+} from "../../packages/contracts/src/index.ts";
 import { signInCreator, type CreatorAuthOptions } from "../support/creator-auth";
 
 // This account receives the beta server's explicitly seeded, allowlisted workspace.
@@ -16,6 +19,21 @@ async function validSession(page: Page, apiOrigin: string, email: string) {
   if (!response.ok()) return false;
   const account = (await response.json()) as { creator: { email: string } };
   return account.creator.email === email.trim().toLowerCase();
+}
+
+async function continueCachedSignIn(page: Page, apiOrigin: string) {
+  // Calling signInBeta is a deliberate test sign-in. A passive /auth/me read can
+  // accept a cached session already in its warning minute, so explicitly continue
+  // it once here rather than sending background keepalives during the journey.
+  const response = await page.request.post(`${apiOrigin}/v1/auth/session/activity`, {
+    data: { intent: "continue" },
+  });
+  if (response.status() === 401) return false;
+  expect(response.status()).toBe(200);
+  const session = AuthSessionStateSchema.parse((await response.json()).session);
+  expect(Date.parse(session.warningAt)).toBeGreaterThan(Date.parse(session.serverNow));
+  expect(Date.parse(session.expiresAt)).toBeGreaterThan(Date.parse(session.serverNow));
+  return true;
 }
 
 export async function signInBeta(
@@ -45,7 +63,10 @@ export async function signInBeta(
   if (cookies?.length) {
     await page.context().addCookies(cookies);
     // A restarted API invalidates old sessions. Reuse only a real, live creator session.
-    if (await validSession(page, apiOrigin, email)) {
+    if (
+      (await validSession(page, apiOrigin, email)) &&
+      (await continueCachedSignIn(page, apiOrigin))
+    ) {
       sessions.set(key, cookies);
       await page.goto(returnTo, { waitUntil: "load" });
       await expect(page).not.toHaveURL(/\/signin/);

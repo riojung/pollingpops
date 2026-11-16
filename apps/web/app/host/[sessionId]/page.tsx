@@ -49,7 +49,7 @@ import { QnaPanel } from "../../../components/qna-panel";
 import { apiFetch, humanError } from "../../../lib/api";
 import {
   createHostCredentialRecovery,
-  hostCredentialStorageKey,
+  readHostCredential,
 } from "../../../lib/host-credential-recovery";
 import {
   audienceContextKey,
@@ -117,18 +117,6 @@ const LEGACY_COMMAND_MESSAGE_KEYS = {
   "Open linked recheck": "live.host.command.openLinkedRecheck",
   "Recheck by revote": "live.host.command.recheckByRevote",
 } as const;
-
-function hostCredential(sessionId: string) {
-  const storageKey = hostCredentialStorageKey(sessionId);
-  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const cohostToken = fragment.get("cohost");
-  if (cohostToken) {
-    sessionStorage.setItem(storageKey, cohostToken);
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    return cohostToken;
-  }
-  return sessionStorage.getItem(storageKey);
-}
 
 export default function HostPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -223,6 +211,9 @@ export default function HostPage() {
     let disposed = false;
     let activeHostToken = "";
     let sync: () => void = () => undefined;
+    const credential = readHostCredential(sessionStorage, sessionId, window.location.hash, () =>
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`),
+    );
     const recovery = createHostCredentialRecovery(sessionStorage, sessionId);
 
     const missingCredentialMessage =
@@ -257,6 +248,10 @@ export default function HostPage() {
       rejectedToken: string,
     ) => {
       if (disposed || rejectedToken !== activeHostToken) return false;
+      if (credential.kind === "cohost") {
+        setError(syncError.message);
+        return false;
+      }
       if (!recovery.claim(syncError.code, rejectedToken)) {
         setError(syncError.message);
         return false;
@@ -378,7 +373,7 @@ export default function HostPage() {
       socket.connect();
     };
 
-    const existingToken = hostCredential(sessionId);
+    const existingToken = credential.token;
     if (existingToken) {
       connect(existingToken);
     } else {
@@ -501,7 +496,7 @@ export default function HostPage() {
       setError("Wait for the connection to recover before using host controls.");
       return;
     }
-    const hostToken = sessionStorage.getItem(`openround:host:${sessionId}`);
+    const hostToken = mediaCredential;
     if (!hostToken) return;
     setError("");
     const commandId = clientUuid();

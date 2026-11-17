@@ -189,6 +189,12 @@ const messages = {
   "starter.emptyTitle": "利用できるテンプレートはまだありません",
   "starter.emptyDescription":
     "このワークスペースで有効になると、ここにテンプレートライブラリが表示されます。",
+  "category.science": "科学",
+  "category.health_wellbeing": "健康とウェルビーイング",
+  "category.arts_culture": "芸術と文化",
+  "category.leadership": "リーダーシップ",
+  "category.sustainability": "サステナビリティ",
+  "category.community": "コミュニティ",
   "category.general": "一般",
   "category.education": "教育",
   "category.business": "ビジネス",

@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("zh-CN"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "房间密码",
   "live.protection.toggle": "本次活动需要密码",
@@ -163,7 +165,6 @@ const messages = {
   "live.experience.category.icebreaker": "断冰器",
   "live.experience.category.safety_compliance": "安全/合规",
   "live.experience.category.technical": "技术",
-  "live.experience.categoryHelp": "分类组织集并推荐一个经验而不改变你的选择.",
   "live.experience.categoryLabel": "回合类别",
   "live.experience.motion": "{motion} 动议",
   "live.experience.motion.calm": "冷静",
@@ -459,7 +460,7 @@ const messages = {
   "live.roundSetup.readyTitle": "准备好创建大厅了吗?",
   "live.roundSetup.recipe": "从食谱开始",
   "live.roundSetup.recipeTitle": "选择便利样式",
-  "live.roundSetup.recoveryDescription": "私人的,精度第一, 平静的视觉默认。",
+  "live.roundSetup.recoveryDescription": "结果私密、准确度优先的活动引导。",
   "live.roundSetup.recoveryTitle": "恢复",
   "live.roundSetup.resultVisibility": "回合的结果",
   "live.roundSetup.reviewHelp": "食谱已准备好使用。 仅在您需要更改时打开此区域 。",

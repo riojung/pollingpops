@@ -47,7 +47,24 @@ export function workspaceThemeTokens(
   brand: BrandTheme,
 ): ExperienceThemeTokens {
   if (!brand.colorMode) {
-    return { ...authored, primary: brand.primaryColor, accent: brand.accentColor };
+    // Existing light palettes retain their original override semantics. New authored
+    // dark palettes need a foreground ink distinct from the validated brand fill.
+    const dark =
+      colorContrastRatio(authored.surface, "#FFFFFF") >
+      colorContrastRatio(authored.surface, "#000000");
+    return dark
+      ? {
+          ...authored,
+          primary: readableInk(
+            mix(brand.primaryColor, "#FFFFFF", 0.8),
+            [authored.canvas, authored.surface, authored.surfaceStrong],
+            "#FFFFFF",
+            4.5,
+          ),
+          primaryFill: brand.primaryColor,
+          accent: brand.accentColor,
+        }
+      : { ...authored, primary: brand.primaryColor, accent: brand.accentColor };
   }
 
   const dark = brand.colorMode === "dark";

@@ -298,7 +298,11 @@ for (const suffix of ["desktop", "phone @mobile"]) {
       ).toContainText("revoked");
       // API setup leaves no one-time secret share URL in the rendered page or artifacts.
       await expect(host.locator('a[href*="#cohost="]')).toHaveCount(0);
-      await participant.getByTestId("audience-tray").locator("summary").first().click();
+      const participantTools = participant.getByRole("complementary", {
+        name: "Audience interaction",
+        exact: true,
+      });
+      await participantTools.getByRole("tab", { name: "Room chat", exact: true }).click();
       const drawer = await openDrawer(host);
       await drawer.locator("#audience-tab-chat").click();
       const hostMessage = drawer.locator(".chat-message").filter({ hasText: chatBody });
@@ -313,7 +317,9 @@ for (const suffix of ["desktop", "phone @mobile"]) {
         "aria-pressed",
         "true",
       );
+      await participantTools.getByRole("tab", { name: "Q&A", exact: true }).click();
       await expect(participant.locator(".qna-replies li")).toContainText(staffReply);
+      await participantTools.getByRole("tab", { name: "Pulse", exact: true }).click();
       await expect(
         participant.getByRole("button", { name: "Got it", exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -373,31 +379,60 @@ for (const suffix of ["desktop", "phone @mobile"]) {
           await palette(drawer.locator("#audience-tab-pulse"), "--round-hover");
           await host.mouse.move(0, 0);
         }
-        const tray = participant.getByTestId("audience-tray");
-        await palettes(
-          tray,
-          ".chat-message, .chat-replying, .qna-question, .pulse-stat",
-          "--round-soft",
-        );
-        await palettes(tray, ".qna-replies li", "--round-surface-raised");
-        await palettes(tray, "input:not([type=checkbox]), textarea", "--round-surface");
-        for (const reaction of await tray.locator(".reaction-button").all())
-          await palette(
-            reaction,
-            (await reaction.getAttribute("aria-pressed")) === "true"
-              ? "--round-accent-soft"
-              : "--round-surface-raised",
-          );
-        for (const pulse of await tray.locator(".pulse-button").all())
-          await palette(
-            pulse,
-            (await pulse.getAttribute("aria-pressed")) === "true"
-              ? "--round-accent-soft"
-              : "--round-soft",
-          );
-        await quality(participant, '[data-testid="audience-tray"]');
-        if (mode === "dark")
-          await capture(tray, testInfo, `nested-participant-dark-${viewport.width}`);
+        await palette(participantTools, "--round-surface");
+        for (const name of ["Q&A", "Pulse", "Room chat"]) {
+          await participantTools.getByRole("tab", { name, exact: true }).click();
+          await participant.mouse.move(0, 0);
+          await expect(participantTools.getByRole("tab", { selected: true })).toHaveCount(1);
+          await expect(participantTools.getByRole("tab", { selected: false })).toHaveCount(2);
+          for (const tab of await participantTools.getByRole("tab").all()) {
+            const selected = (await tab.getAttribute("aria-selected")) === "true";
+            await palette(
+              tab,
+              selected ? "--round-accent-soft" : undefined,
+              selected ? "--round-accent-ink" : "--round-muted",
+              selected ? "--round-accent" : undefined,
+            );
+          }
+          const panel = participantTools.getByRole("tabpanel");
+          await expect(panel).toHaveCount(1);
+          await expect(panel).toBeVisible();
+          if (name === "Q&A") {
+            await palettes(panel, ".qna-question", "--round-soft");
+            await palettes(panel, ".qna-replies li", "--round-surface-raised");
+            await palettes(panel, "textarea", "--round-surface");
+          }
+          if (name === "Pulse") {
+            for (const pulse of await panel.locator(".pulse-button").all())
+              await palette(
+                pulse,
+                (await pulse.getAttribute("aria-pressed")) === "true"
+                  ? "--round-accent-soft"
+                  : "--round-soft",
+              );
+            // A single signaller never authorizes participant aggregate counts.
+            await expect(panel.locator(".pulse-stat")).toHaveCount(0);
+          }
+          if (name === "Room chat") {
+            await palettes(panel, ".chat-message, .chat-replying", "--round-soft");
+            await palettes(panel, "input:not([type=checkbox])", "--round-surface");
+            for (const reaction of await panel.locator(".reaction-button").all())
+              await palette(
+                reaction,
+                (await reaction.getAttribute("aria-pressed")) === "true"
+                  ? "--round-accent-soft"
+                  : "--round-surface-raised",
+              );
+            await expect(panel.locator(".chat-replying")).toBeVisible();
+          }
+          await quality(participant, 'aside[aria-label="Audience interaction"]');
+          if (mode === "dark")
+            await capture(
+              participantTools,
+              testInfo,
+              `nested-participant-${name === "Q&A" ? "qna" : name === "Pulse" ? "pulse" : "chat"}-dark-${viewport.width}`,
+            );
+        }
       }
       await closeDrawer(host);
       for (const surface of [host, participant]) await appearance(surface, "light");

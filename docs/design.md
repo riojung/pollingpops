@@ -89,8 +89,8 @@ same authoritative round but expose only the information and controls appropriat
 
 ## Round Experiences
 
-Round Experiences provide seven accessible, versioned presets: Candy Pop, Focus, Campus, Studio,
-Blueprint, Signal, and Spark. New blank work uses Candy Pop; existing content keeps its selection.
+Round Experiences provide 14 accessible, versioned presets: Candy Pop, Focus, Campus, Studio,
+Blueprint, Signal, Spark, Observatory, Breath, Gallery, Summit, Grove, Commons, and Midnight. New blank work uses Candy Pop; existing content keeps its selection.
 A checkpoint-set category recommends one preset, but explicit creator choice
 wins. The published version stores that choice. Session setup may override it once, and session
 creation freezes the resolved semantic theme for reconnect and process restoration.
@@ -104,6 +104,33 @@ receive validated tokens and never arbitrary CSS, fonts, uploaded backgrounds, o
 Preset changes are intentionally non-behavioural. They cannot change scoring, timers, checkpoint
 order, visibility, or control placement. Audio is opt-in, begins muted on each device, and always
 duplicates a visual event.
+
+### Live appearance, participation and report workspace — November 17, 2026
+
+Published Round appearance is the launch default. Workspace-saved facilitation recipes carry
+session settings rather than a prior Round's preset or sound preference; explicit one-launch
+appearance overrides have a reset to the published look. Every live surface uses the frozen
+experience tokens even without workspace branding. Native control appearance, semantic feedback,
+patterns, typography and corner treatment follow the saved palette; local high contrast and reduced
+motion retain precedence. Existing preset versions and retained sessions are not rewritten.
+
+Twelve topic categories recommend one of the curated looks without changing a creator's selected
+preset. The picker uses keyboard-operable radio cards with real palette swatches and a sample
+question. Additional categories cover science, wellbeing, arts, leadership, sustainability and
+community; dark options remain explicit choices rather than consequences of a viewer's UI mode.
+
+Participant delivery centers the current question with adjacent contextual tools on wide screens
+and a stacked narrow layout. Answer acknowledgement, reveal, privacy and standings projection rules
+remain server owned. Reports start with a compact overview and useful denominators, then drill down
+into questions, participants and evidence. Missing evidence is distinct from zero; old reports do
+not acquire inferred identity or response coverage. Follow-up state survives tab navigation.
+
+Reference patterns were checked in the official
+[Mentimeter theme guide](https://help.mentimeter.com/en/articles/410482-change-the-theme-of-your-menti),
+[Kahoot theme guide](https://support.kahoot.com/hc/en-us/articles/4433531677715-How-to-use-themes), and
+[Mentimeter results guide](https://help.mentimeter.com/en/articles/6448359-the-results-page): visible
+theme choices, consistency on participant devices, and overview-to-detail report navigation.
+No competitor assets or content were copied.
 
 ## Authoring design
 

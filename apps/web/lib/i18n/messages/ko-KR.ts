@@ -190,6 +190,12 @@ const messages = {
   "starter.emptyTitle": "아직 사용할 수 있는 템플릿이 없습니다",
   "starter.emptyDescription":
     "이 워크스페이스에서 활성화되면 여기에 템플릿 라이브러리가 표시됩니다.",
+  "category.science": "과학",
+  "category.health_wellbeing": "건강과 웰빙",
+  "category.arts_culture": "예술과 문화",
+  "category.leadership": "리더십",
+  "category.sustainability": "지속가능성",
+  "category.community": "커뮤니티",
   "category.general": "일반",
   "category.education": "교육",
   "category.business": "비즈니스",

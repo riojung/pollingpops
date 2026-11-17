@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("ko-KR"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "방 비밀번호",
   "live.protection.toggle": "이번 실행에 비밀번호 설정",
@@ -168,10 +170,8 @@ const messages = {
   "live.experience.category.icebreaker": "아이스브레이커",
   "live.experience.category.safety_compliance": "안전 / 준수",
   "live.experience.category.technical": "기술",
-  "live.experience.categoryHelp":
-    "범주는 세트를 구성하고 당신의 선택을 변경하지 않고 경험을 권장합니다.",
   "live.experience.categoryLabel": "Round 카테고리",
-  "live.experience.motion": "{motion} 동의",
+  "live.experience.motion": "{motion} 움직임",
   "live.experience.motion.calm": "차분함",
   "live.experience.motion.lively": "활기참",
   "live.experience.motion.standard": "표준",
@@ -482,7 +482,8 @@ const messages = {
   "live.roundSetup.readyTitle": "로비를 만들 준비가 되셨나요?",
   "live.roundSetup.recipe": "레시피 시작",
   "live.roundSetup.recipeTitle": "진행 방식 선택",
-  "live.roundSetup.recoveryDescription": "개인, 정확도 우선, 조용한 시각적 기본.",
+  "live.roundSetup.recoveryDescription":
+    "결과를 비공개로 유지하며 정확도를 우선하는 진행 방식입니다.",
   "live.roundSetup.recoveryTitle": "회복 중심",
   "live.roundSetup.resultVisibility": "라운드 중 결과",
   "live.roundSetup.reviewHelp":

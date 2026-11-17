@@ -211,6 +211,12 @@ export const englishMessages = {
   "starter.emptyTitle": "No starters are available yet",
   "starter.emptyDescription":
     "The starter library will appear here when it is enabled for this workspace.",
+  "category.science": "Science",
+  "category.health_wellbeing": "Health and wellbeing",
+  "category.arts_culture": "Arts and culture",
+  "category.leadership": "Leadership",
+  "category.sustainability": "Sustainability",
+  "category.community": "Community",
   "category.general": "General",
   "category.education": "Education",
   "category.business": "Business",

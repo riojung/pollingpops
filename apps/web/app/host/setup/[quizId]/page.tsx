@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  ExperiencePresetIdSchema,
   currentRoundClientCapabilities,
   SessionSettingsSchema,
   hasTextOpinionQuestions,
@@ -30,6 +29,10 @@ import { useLocale } from "../../../../components/locale-provider";
 import { apiFetch, humanError } from "../../../../lib/api";
 import { saveCreatorHostCredential } from "../../../../lib/host-credential-recovery";
 import { clientUuid } from "../../../../lib/uuid";
+import {
+  publishedRoundPreset,
+  roundLaunchExperience,
+} from "../../../../lib/round-launch-experience";
 import { confidenceControlCopy } from "../../../../lib/i18n/confidence-control-copy";
 import {
   defaultSetupSettings,
@@ -95,7 +98,7 @@ export default function HostSetupPage() {
   );
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const [settings, setSettings] = useState<SessionSettings | null>(null);
-  const [experiencePreset, setExperiencePreset] = useState<ExperiencePresetId>("focus");
+  const [experienceOverride, setExperienceOverride] = useState<ExperiencePresetId | null>(null);
   const [presenterSoundEnabled, setPresenterSoundEnabled] = useState(false);
   const [uxBeta, setUxBeta] = useState(false);
   const [productFeatures, setProductFeatures] = useState<ProductFeatures | null>(null);
@@ -108,6 +111,8 @@ export default function HostSetupPage() {
     ? (eventProductFeatures ?? productFeatures)
     : productFeatures;
   const roundExperiencesAvailable = launchFeatures?.roundExperiences === true;
+  const publishedPreset = publishedContent ? publishedRoundPreset(publishedContent) : "focus";
+  const experiencePreset = experienceOverride ?? publishedPreset;
   const audienceTools = {
     audiencePulseAvailable: launchFeatures?.audiencePulse === true,
     roomChatAvailable: launchFeatures?.roomChat === true,
@@ -148,6 +153,8 @@ export default function HostSetupPage() {
         }
         setQuiz(quizResponse.quiz);
         setPublishedContent(quizResponse.currentVersion.content);
+        setExperienceOverride(null);
+        setPresenterSoundEnabled(false);
         setEntitlements(account.entitlements);
         setCreator(account.creator);
         setUxBeta(account.productFeatures.uxBeta);
@@ -165,14 +172,9 @@ export default function HostSetupPage() {
         if (!account.productFeatures.uxBeta) {
           preserveFlexPreferenceRef.current = false;
           setSettings(defaults);
-          setExperiencePreset(
-            account.productFeatures.roundExperiences
-              ? (quizResponse.currentVersion.content.experiencePreset?.id ?? "focus")
-              : "focus",
-          );
-          setPresenterSoundEnabled(false);
           return;
         }
+        // Restore facilitation settings only; each launch starts from its published look.
         let restored = false;
         try {
           const saved = JSON.parse(
@@ -180,11 +182,8 @@ export default function HostSetupPage() {
           ) as {
             recipe?: SetupRecipe | "custom";
             settings?: SessionSettings;
-            experiencePreset?: ExperiencePresetId;
-            presenterSoundEnabled?: boolean;
           } | null;
           const parsedSettings = SessionSettingsSchema.safeParse(saved?.settings);
-          const parsedPreset = ExperiencePresetIdSchema.safeParse(saved?.experiencePreset);
           const parsedRecipe = ["recovery", "competition", "discussion", "custom"].includes(
             saved?.recipe ?? "",
           )
@@ -204,16 +203,6 @@ export default function HostSetupPage() {
               ),
             });
             setRecipe(parsedRecipe);
-            setExperiencePreset(
-              account.productFeatures.roundExperiences
-                ? parsedPreset.success
-                  ? parsedPreset.data
-                  : "focus"
-                : "focus",
-            );
-            setPresenterSoundEnabled(
-              account.productFeatures.roundExperiences && Boolean(saved?.presenterSoundEnabled),
-            );
             restored = true;
           }
         } catch {
@@ -224,11 +213,8 @@ export default function HostSetupPage() {
           const resolved = resolveSetupRecipe("recovery", defaults, {
             segment: account.creator.segment,
             maxParticipants: maximumParticipants,
-            roundExperiencesAvailable: account.productFeatures.roundExperiences,
           });
           setSettings(resolved.settings);
-          setExperiencePreset(resolved.experiencePreset);
-          setPresenterSoundEnabled(resolved.presenterSoundEnabled);
         }
       })
       .catch((caught) => {
@@ -252,9 +238,9 @@ export default function HostSetupPage() {
     };
     localStorage.setItem(
       setupRecipeStorageKey(creator.workspaceId),
-      JSON.stringify({ recipe, settings: storedSettings, experiencePreset, presenterSoundEnabled }),
+      JSON.stringify({ recipe, settings: storedSettings }),
     );
-  }, [creator, experiencePreset, presenterSoundEnabled, recipe, settings, uxBeta]);
+  }, [creator, recipe, settings, uxBeta]);
 
   function applyRecipe(nextRecipe: SetupRecipe) {
     if (!settings || !creator || maximumParticipants === undefined) return;
@@ -262,12 +248,9 @@ export default function HostSetupPage() {
     const resolved = resolveSetupRecipe(nextRecipe, settings, {
       segment: creator.segment,
       maxParticipants: maximumParticipants,
-      roundExperiencesAvailable,
     });
     setRecipe(nextRecipe);
     setSettings(resolved.settings);
-    setExperiencePreset(resolved.experiencePreset);
-    setPresenterSoundEnabled(resolved.presenterSoundEnabled);
     void apiFetch<{ accepted: number }>("/v1/product-events", {
       method: "POST",
       body: JSON.stringify({
@@ -313,11 +296,12 @@ export default function HostSetupPage() {
           ...(!launchFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
         },
         clientCapabilities: currentRoundClientCapabilities(),
-        ...(roundExperiencesAvailable &&
-        experiencePreset !== (publishedContent.experiencePreset?.id ?? "focus")
-          ? { experiencePresetOverride: experiencePreset }
-          : {}),
-        presenterSoundEnabled: roundExperiencesAvailable && presenterSoundEnabled,
+        ...roundLaunchExperience({
+          content: publishedContent,
+          override: experienceOverride,
+          available: roundExperiencesAvailable,
+          soundEnabled: presenterSoundEnabled,
+        }),
         useEventCredit,
         ...roomPasswordFields(passwordAvailable, protectRoom, joinPassword),
       });
@@ -594,11 +578,30 @@ export default function HostSetupPage() {
                   <h2 style={{ fontSize: "1.8rem" }}>{t("live.roundSetup.lookMotionSound")}</h2>
                   {roundExperiencesAvailable ? (
                     <>
+                      <p className="muted" role="status">
+                        {t(
+                          experienceOverride === null
+                            ? "live.experience.usingPublished"
+                            : "live.experience.launchOverride",
+                          {
+                            name: t(`live.experience.preset.${publishedPreset}.name`),
+                          },
+                        )}
+                      </p>
+                      {experienceOverride !== null ? (
+                        <button
+                          className="button-quiet small-button"
+                          onClick={() => setExperienceOverride(null)}
+                          type="button"
+                        >
+                          {t("live.experience.resetPublished")}
+                        </button>
+                      ) : null}
                       <ExperiencePicker
                         category={publishedContent?.category ?? "general"}
                         onPresetChange={(preset) => {
                           setRecipe("custom");
-                          setExperiencePreset(preset);
+                          setExperienceOverride(preset === publishedPreset ? null : preset);
                         }}
                         presetId={experiencePreset}
                         showCategory={false}

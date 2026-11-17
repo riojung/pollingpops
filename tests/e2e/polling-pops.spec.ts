@@ -98,7 +98,7 @@ test("Candy Pop remains accessible for a host and guest using dark appearance", 
   await signInCreator(page, testEmail("pops-live", testInfo), { returnTo: "/dashboard" });
   await page.getByLabel("Checkpoint set title").fill("Every voice pops");
   await page.getByRole("button", { name: "Create checkpoint set" }).click();
-  await expect(page.getByLabel("Experience preset")).toHaveValue("pops");
+  await expect(page.getByRole("radio", { name: "Candy Pop", exact: true })).toBeChecked();
   await page.getByRole("button", { name: "True or false", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Checkpoint prompt", exact: true })
@@ -108,7 +108,7 @@ test("Candy Pop remains accessible for a host and guest using dark appearance", 
   await expect(page.getByText("published", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: "Host", exact: true }).click();
-  await expect(page.getByLabel("Experience preset")).toHaveValue("pops");
+  await expect(page.getByRole("radio", { name: "Candy Pop", exact: true })).toBeChecked();
   await page.getByRole("button", { name: "Create live session" }).click();
   await expect(page.locator(".session-code")).toBeVisible();
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });

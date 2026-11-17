@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("de-DE"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Raumpasswort",
   "live.protection.toggle": "Für diesen Durchlauf ein Passwort verlangen",
@@ -171,8 +173,6 @@ const messages = {
   "live.experience.category.icebreaker": "Eisbrecher",
   "live.experience.category.safety_compliance": "Sicherheit/Compliance",
   "live.experience.category.technical": "Technische",
-  "live.experience.categoryHelp":
-    "Category organisiert das Set und empfiehlt eine Erfahrung, ohne Ihre Wahl zu ändern.",
   "live.experience.categoryLabel": "Runde Kategorie",
   "live.experience.motion": "{motion} Bewegung",
   "live.experience.motion.calm": "Ruhe",
@@ -496,7 +496,7 @@ const messages = {
   "live.roundSetup.recipe": "Beginnen Sie mit einem Rezept",
   "live.roundSetup.recipeTitle": "Wählen Sie den Facilitation Style",
   "live.roundSetup.recoveryDescription":
-    "Privat, Genauigkeit zuerst, mit ruhigen visuellen Standardeinstellungen.",
+    "Private Ergebnisse und Moderation mit Fokus auf Genauigkeit.",
   "live.roundSetup.recoveryTitle": "Erholung",
   "live.roundSetup.resultVisibility": "Ergebnisse während der Runde",
   "live.roundSetup.reviewHelp":

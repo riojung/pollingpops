@@ -196,6 +196,12 @@ const messages = {
   "starter.emptyTitle": "Noch keine Vorlagen verfügbar",
   "starter.emptyDescription":
     "Die Vorlagenbibliothek erscheint hier, sobald sie für diesen Arbeitsbereich aktiviert ist.",
+  "category.science": "Wissenschaft",
+  "category.health_wellbeing": "Gesundheit und Wohlbefinden",
+  "category.arts_culture": "Kunst und Kultur",
+  "category.leadership": "Führung",
+  "category.sustainability": "Nachhaltigkeit",
+  "category.community": "Gemeinschaft",
   "category.general": "Allgemein",
   "category.education": "Bildung",
   "category.business": "Unternehmen",

@@ -62,7 +62,7 @@ import {
   HOST_ACK_CHECKING_MESSAGE,
   HOST_ACK_TIMEOUT_MESSAGE,
 } from "../../../lib/realtime-mutation-recovery";
-import { experienceThemeStyle } from "../../../lib/theme";
+import { experienceThemeStyle, experienceColorScheme } from "../../../lib/theme";
 import { clientUuid } from "../../../lib/uuid";
 import { startModalInitialFocus } from "../../../lib/modal-initial-focus";
 import { createHostCommandController, type HostPhaseCommand } from "../../../lib/host-phase";
@@ -819,6 +819,7 @@ export default function HostPage() {
       data-typography={snapshot?.experienceTheme.tokens.typography}
       data-ux-beta={uxBeta}
       data-workspace-color-mode={snapshot?.brandTheme?.colorMode}
+      data-experience-color-scheme={experienceColorScheme(snapshot?.experienceTheme)}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
       <header className={`shell live-topbar ${styles.topbar}`} inert={audienceOpen}>

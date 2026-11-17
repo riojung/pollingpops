@@ -94,14 +94,21 @@ test("legacy authoring remains available while professional features are off", a
     await expect(page.getByText("Results are ready.")).toBeVisible();
     await page.getByRole("link", { name: "Open report" }).click();
 
-    await expect(page.getByRole("heading", { name: "Checkpoint analysis" })).toBeVisible({
+    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+      { timeout: 20_000 },
+    );
+    await expect(page.getByRole("heading", { name: "No responses were recorded" })).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Report details" })).toBeVisible();
+    await page.getByRole("tab", { name: "Questions", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Question analysis" })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("navigation", { name: "Report details" })).toHaveCount(0);
-    await expect(page.getByRole("tab", { name: "Manage data" })).toHaveCount(0);
     await expect(page.getByRole("columnheader", { name: "Distribution", exact: true })).toHaveCount(
       0,
     );
+    await page.getByRole("tab", { name: "Manage data", exact: true }).click();
     const exportNotice = page.getByRole("link", { name: "CSV was not included for this room" });
     await expect(exportNotice).toBeVisible();
     await expect(exportNotice).toHaveAttribute("href", "/pricing");

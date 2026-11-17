@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("es-ES"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Contraseña de la sala",
   "live.protection.toggle": "Exigir una contraseña para esta sesión",
@@ -175,8 +177,6 @@ const messages = {
   "live.experience.category.icebreaker": "Rompehielos",
   "live.experience.category.safety_compliance": "Seguridad / cumplimiento",
   "live.experience.category.technical": "Técnica",
-  "live.experience.categoryHelp":
-    "La categoría organiza el conjunto y recomienda una experiencia sin cambiar su elección.",
   "live.experience.categoryLabel": "Categoría del Round",
   "live.experience.motion": "{motion} moción",
   "live.experience.motion.calm": "calma.",
@@ -493,8 +493,7 @@ const messages = {
   "live.roundSetup.readyTitle": "¿Listo para crear el vestíbulo?",
   "live.roundSetup.recipe": "Empieza con una receta",
   "live.roundSetup.recipeTitle": "Elija el estilo de facilitación",
-  "live.roundSetup.recoveryDescription":
-    "Privado, de precisión primero, con defectos visuales tranquilos.",
+  "live.roundSetup.recoveryDescription": "Resultados privados y dinámica centrada en la precisión.",
   "live.roundSetup.recoveryTitle": "Recuperación",
   "live.roundSetup.resultVisibility": "Resultados durante el Round",
   "live.roundSetup.reviewHelp":

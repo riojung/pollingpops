@@ -1505,20 +1505,35 @@ removes the retained-session reference that otherwise prevents deletion of its s
 Every checkpoint set has one category and a versioned experience preset. The category recommends
 a visual treatment; choosing a category never silently changes a preset you selected yourself.
 
-| Category          | Recommended preset | Intended character                      |
-| ----------------- | ------------------ | --------------------------------------- |
-| General           | Candy Pop          | Berry, cream, and mint; calm, rounded   |
-| Education         | Campus             | Friendly academic pattern               |
-| Business          | Studio             | Professional slate and teal             |
-| Technical         | Blueprint          | Structured grid and cyan accents        |
-| Safety/compliance | Signal             | High contrast and restrained motion     |
-| Icebreaker        | Spark              | Bright cards and optional lively motion |
+| Category           | Recommended preset | Intended character                       |
+| ------------------ | ------------------ | ---------------------------------------- |
+| General            | Candy Pop          | Berry, cream, and mint; calm, rounded    |
+| Education          | Campus             | Friendly academic pattern                |
+| Business           | Studio             | Professional slate and teal              |
+| Technical          | Blueprint          | Structured grid and cyan accents         |
+| Safety/compliance  | Signal             | High contrast and restrained motion      |
+| Icebreaker         | Spark              | Bright cards and optional lively motion  |
+| Science            | Observatory        | Deep navy and a precise grid             |
+| Health / wellbeing | Breath             | Calm teal and generous rounded surfaces  |
+| Arts / culture     | Gallery            | Warm paper with expressive plum accents  |
+| Leadership         | Summit             | Deep indigo with a focused visual rhythm |
+| Sustainability     | Grove              | Leaf green and soft natural surfaces     |
+| Community          | Commons            | Warm orange and welcoming rounded cards  |
 
 The preset changes only presentation: semantic colours, accessible answer colours, bundled/system
 typography, original patterns, card treatment, motion profile, and optional sound cues. It never
 changes scoring, timing, order, visibility rules, or control placement. Publish after choosing a
-preset so the immutable version records it. At session setup, the host can preview and override
-the preset for that one round. Session creation freezes the resolved experience.
+preset so the immutable version records it. The visual preset gallery contains 14 looks, including
+neutral **Focus** and dark **Midnight** alternatives. Preview the selected look's question, answer
+colors, pattern, typography and corners before choosing it.
+
+Host setup starts with the published Round's look. Saved facilitation recipes restore delivery
+settings without replacing that look. Choose another preset for one launch if needed, or choose
+**Use published look** to reset the override. Newer draft changes require publishing before they
+become the default for a live room. Session creation freezes the resolved experience for host,
+participant and audience-stage views, including reconnects. Personal light/dark interface settings
+do not replace that frozen palette. Workspace branding still layers its configured palette onto
+new rooms as documented in Appearance settings.
 
 On a live device, **High contrast**, **Reduce motion**, and **Mute** are local preferences. They
 always override the room presentation without changing another person’s screen. Sound starts
@@ -1545,6 +1560,12 @@ questions remain confidence-free.
 Keep the host tab open. Host, cohost, and presenter credentials are separate and stored only in
 the tab that received them. From the host screen you can issue revocable cohost or presenter
 access instead of sharing the host credential.
+
+The participant workspace uses a wide question area and adjacent **Standings**, **Q&A**, **Pulse**, and
+**Room chat** tools when available. On phones the tools follow the current question; response
+actions remain reachable without scrolling past standings or conversations. Waiting, answer-saved,
+revealed, and completed states keep their original server-confirmed meaning. A timing deadline or
+lost acknowledgement never becomes a success merely because a choice was selected.
 
 ### Lobby and multi-device entry
 
@@ -1664,6 +1685,17 @@ session storage. Refreshing the same tab can recover state; another browser norm
 new guest.
 
 ## Reports and recovery evidence
+
+A finished Round opens on **Overview**: compact session context, response coverage, question results,
+and the next useful review action. Coverage always names its denominator; retained legacy reports
+without unique participation data show question coverage instead. No-response reports show a clear
+empty state without treating missing accuracy or recovery evidence as a measured zero.
+
+Use **Questions**, **Participants**, **Evidence**, **Conversation**, **Decision replay**, and
+**Manage data** to inspect details. Evidence interpretation and the recovery story are collapsible,
+while missing or small-sample evidence remains explicitly labelled. Tab navigation retains form
+state. Exports, summary sharing, follow-up creation, retention and deletion keep their existing
+permissions and confirmation steps.
 
 The **Results** page includes an **At a glance** overview for the selected activity. Its widgets
 summarize the results currently shown with your filters; **Load More** expands that scope.

@@ -370,6 +370,12 @@ const presetForCategory = {
   technical: "blueprint",
   safety_compliance: "signal",
   icebreaker: "spark",
+  science: "observatory",
+  health_wellbeing: "breath",
+  arts_culture: "gallery",
+  leadership: "summit",
+  sustainability: "grove",
+  community: "commons",
 } as const;
 
 function addQuiz(

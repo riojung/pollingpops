@@ -29,7 +29,6 @@ describe("setup recipes", () => {
           resolveSetupRecipe(recipe, defaults, {
             segment,
             maxParticipants: 50,
-            roundExperiencesAvailable: true,
           }).settings.nicknamePolicy,
         ).toBe("custom");
       }
@@ -45,7 +44,6 @@ describe("setup recipes", () => {
           {
             segment: "education",
             maxParticipants: 100,
-            roundExperiencesAvailable: true,
           },
         ).settings.nicknamePolicy,
       ).toBe("friendly_only");
@@ -63,7 +61,6 @@ describe("setup recipes", () => {
             {
               segment: "education",
               maxParticipants: 100,
-              roundExperiencesAvailable: true,
             },
           ).settings.confidenceEnabled,
         ).toBe(confidenceEnabled ?? false);
@@ -76,7 +73,6 @@ describe("setup recipes", () => {
       resolveSetupRecipe("recovery", current, {
         segment: "workplace",
         maxParticipants: 50,
-        roundExperiencesAvailable: true,
       }),
     ).toEqual({
       settings: {
@@ -88,30 +84,26 @@ describe("setup recipes", () => {
         allowLateJoin: true,
         nicknamePolicy: "custom",
       },
-      experiencePreset: "focus",
-      presenterSoundEnabled: false,
     });
   });
 
-  it("uses Spark only when experiences are available and never enables sound implicitly", () => {
+  it("changes facilitation without silently choosing a room look or enabling sound", () => {
     expect(
       resolveSetupRecipe("competition", current, {
         segment: "education",
         maxParticipants: 100,
-        roundExperiencesAvailable: true,
       }),
-    ).toMatchObject({
-      settings: { timeMode: "timed", scoringMode: "speed" },
-      experiencePreset: "spark",
-      presenterSoundEnabled: false,
+    ).toEqual({
+      settings: {
+        audienceLimit: 80,
+        timeMode: "timed",
+        scoringMode: "speed",
+        resultVisibility: "leaderboard",
+        allowLateJoin: true,
+        nicknamePolicy: "custom",
+        confidenceEnabled: false,
+      },
     });
-    expect(
-      resolveSetupRecipe("competition", current, {
-        segment: "education",
-        maxParticipants: 100,
-        roundExperiencesAvailable: false,
-      }),
-    ).toMatchObject({ experiencePreset: "focus", presenterSoundEnabled: false });
   });
 
   it("keeps participant name choice for discussion and versions stored preferences", () => {
@@ -119,7 +111,6 @@ describe("setup recipes", () => {
       resolveSetupRecipe("discussion", current, {
         segment: "workplace",
         maxParticipants: 100,
-        roundExperiencesAvailable: true,
       }).settings.nicknamePolicy,
     ).toBe("custom");
     expect(setupRecipeStorageKey("workspace-id")).toBe("openround:setup:v1:workspace-id");

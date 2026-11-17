@@ -757,7 +757,7 @@ for (const mobile of [false, true]) {
           await page.keyboard.press("Escape");
           await expect(open).toBeFocused();
           if (fixture.source.kind === "round") {
-            // The same real retained report exposes summary sharing in the classic UI too.
+            // The same retained report exposes summary sharing with the UX flag disabled.
             await page.route(`${api}/v1/auth/me`, async (route) => {
               const accountResponse = await route.fetch();
               const account = await accountResponse.json();
@@ -773,6 +773,7 @@ for (const mobile of [false, true]) {
             await expect(
               page.getByRole("button", { name: "Share summary", exact: true }),
             ).toBeVisible();
+            await page.getByRole("tab", { name: "Manage data", exact: true }).click();
             await expect(
               page.getByRole("link", { name: "Download CSV", exact: true }),
             ).toBeVisible();

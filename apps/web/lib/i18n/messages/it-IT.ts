@@ -192,6 +192,12 @@ const messages = {
   "starter.emptyTitle": "Nessun modello ancora disponibile",
   "starter.emptyDescription":
     "La libreria dei modelli apparirà qui quando sarà abilitata per questa area di lavoro.",
+  "category.science": "Scienza",
+  "category.health_wellbeing": "Salute e benessere",
+  "category.arts_culture": "Arte e cultura",
+  "category.leadership": "Leadership",
+  "category.sustainability": "Sostenibilità",
+  "category.community": "Comunità",
   "category.general": "Generale",
   "category.education": "Istruzione",
   "category.business": "Aziendale",

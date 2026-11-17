@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("pt-PT"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Palavra-passe da sala",
   "live.protection.toggle": "Exigir uma palavra-passe para esta sessão",
@@ -172,8 +174,6 @@ const messages = {
   "live.experience.category.icebreaker": "Quebra-gelo",
   "live.experience.category.safety_compliance": "Segurança / conformidade",
   "live.experience.category.technical": "Técnico",
-  "live.experience.categoryHelp":
-    "A categoria organiza o conjunto e recomenda uma experiência sem alterar a sua escolha.",
   "live.experience.categoryLabel": "Categoria do Round",
   "live.experience.motion": "{motion} moção",
   "live.experience.motion.calm": "calma",
@@ -491,7 +491,7 @@ const messages = {
   "live.roundSetup.readyTitle": "Pronto para criar o átrio?",
   "live.roundSetup.recipe": "Iniciar com uma receita",
   "live.roundSetup.recipeTitle": "Escolha o estilo de facilitação",
-  "live.roundSetup.recoveryDescription": "Private, precisão-primeiro, com padrões visuais calmos.",
+  "live.roundSetup.recoveryDescription": "Resultados privados e facilitação centrada na precisão.",
   "live.roundSetup.recoveryTitle": "Recuperação",
   "live.roundSetup.resultVisibility": "Resultados durante o Round",
   "live.roundSetup.reviewHelp":

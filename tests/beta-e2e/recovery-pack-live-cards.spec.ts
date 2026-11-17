@@ -243,6 +243,8 @@ async function liveCardWorkflow(page: Page, browser: Browser, testInfo: TestInfo
       .getByTestId("host-command-bar")
       .getByRole("link", { name: "Open report", exact: true })
       .click();
+    await page.getByRole("tab", { name: "Evidence", exact: true }).click();
+    await page.getByText("Recovery story and interpretation", { exact: true }).click();
     await expect(page.getByRole("list", { name: "Intervention timeline" })).toContainText(
       `Recovery Pack v1 · card ${cardId}`,
     );

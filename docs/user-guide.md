@@ -1724,19 +1724,36 @@ follow-up deletion/retention cascades with its source session.
 
 ## Assign practice from a published Round
 
-When standalone practice is enabled for your workspace, open a published Round and choose
-**Assign practice**. Polling Pops freezes the current published version, so publishing later edits does
+When standalone practice is enabled for your workspace, open **Assignments → Create assignment**
+and choose a published Round, or open the Round and choose **Assign practice**. Polling Pops freezes the current published version, so publishing later edits does
 not change an assignment that learners have already opened.
 
-- Choose an optional title, a timed or no-countdown mode, and a close date within your plan's
-  retention window.
+- Review the published source, then choose a title and question timers or no-countdown time-flex
+  mode. Open immediately or schedule a future opening. Dates use the timezone shown beside the
+  controls; the closing time must fit within the displayed plan retention limit.
 - Use the generic link for anonymous, unpaired practice or add recipient labels to create
   revocable one-attempt links. Labels help you distribute links; learners still do not need
   accounts.
-- Copy or download every new bearer link when it is shown. Polling Pops stores only its hash and does
-  not reveal the same URL again.
-- Open **Practice** to see aggregate started/completed counts, add another labelled personal link,
-  revoke a link, create an accommodation pass, or close the assignment early.
+- Expand **Create personal one-attempt links (optional)** to add one label per line. Duplicate labels
+  create one link, and the count shows the available allowance. Labels are private distribution aids;
+  Polling Pops does not email the links or verify learner identity.
+- Save every new bearer link when it is shown. The receipt separates the generic anonymous link
+  from personal links and offers individual Copy buttons and a CSV download. Polling Pops stores
+  only hashes and does not reveal the same URLs again after leaving.
+- In **Assignments**, search by title, filter by Open, Scheduled, Closed or Expired, and use
+  **Load more assignments** for older records. Results are newest first. Round and Recovery Pack
+  assignments show their frozen source; practice history remains available from **View all practice**.
+- Choose **Manage assignment** for **Overview**, **Private access**, and **Results**. Private access supports
+  search, link-type/status filters, additional labelled links, individual revocation and timing
+  accommodations. Revoked personal links still count toward the plan limit. Time-flex practice
+  has no countdown to extend. Overview contains the confirmation-protected **Close practice** action;
+  closing immediately disables every link and cannot be undone.
+
+Learners see a compact question layout with completed-question progress, a countdown when enabled,
+clear selected/submitted answer states, and feedback followed by **Next question** or **Finish
+practice**. Light, dark, high-contrast and reduced-motion preferences remain supported. Reloading on
+the same device resumes the server-confirmed attempt. Started/completed totals count attempts,
+including anonymous attempts, and do not establish unique learners or mastery.
 
 Standalone practice includes the published Round's main questions. Linked rechecks remain
 conditional Recovery Loop material and are not added as unconditional practice questions. If a

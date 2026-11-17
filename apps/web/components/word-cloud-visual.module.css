@@ -1,0 +1,64 @@
+.cloud.cloud {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: var(--ui-text, var(--ink, currentColor));
+  isolation: isolate;
+}
+
+.stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  font-family: inherit;
+}
+
+.word {
+  fill: currentColor;
+  font-weight: 700;
+  letter-spacing: normal;
+  transition:
+    transform 520ms cubic-bezier(0.2, 0.75, 0.2, 1),
+    font-size 520ms cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.word:nth-child(3n + 1) {
+  color: var(--ui-accent-ink, var(--teal-dark, currentColor));
+}
+
+.arrival {
+  animation: arrive 420ms ease-out both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+:global(html[data-openround-motion="reduced"]) .word {
+  transition: none;
+}
+
+:global(html[data-openround-motion="reduced"]) .arrival {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word {
+    transition: none;
+  }
+
+  .arrival {
+    animation: none;
+  }
+}

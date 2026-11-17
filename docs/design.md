@@ -263,6 +263,11 @@ gaps. See the [competition dashboard](idea-016-competition-dashboard-plan.md).
 
 #### Final-standings celebration (2026-11-17)
 
+Participant final standings occupy the primary results stage. The final Q&A sidebar has no
+standings tab, so a previous tool selection and its scrolling limit cannot hide the leaderboard.
+The personal saved-answer receipt appears once below the primary result. Private and unscored
+projections preserve their established meaning.
+
 Finale effects start when the final dashboard is actually viewed in an active tab, rather than
 when a background snapshot mounts it. An interrupted sequence can play on return; completed
 effects do not restart for presence updates or ordinary scrolling. A visible replay control
@@ -283,6 +288,24 @@ finish and replay pattern with original CSS/SVG artwork, immediate readable resu
 accessibility controls; no competitor assets, audio or scoring mechanics are copied.
 
 ### Prove, carefully
+
+#### Live word-cloud delivery
+
+New capable Round clients can freeze `settings.wordCloudMode` as `live` or `moderated`. A missing
+setting retains the legacy moderated behavior. Live rooms require the additional
+`response.word_cloud.live` capability; pending older rooms and immutable publications are not
+reinterpreted. A separate aggregate-only endpoint exposes the full live phrase distribution from
+the first accepted response, without weakening legacy reveal/report schemas or exposing response
+IDs, participant identities, aliases or timestamps. Host removal uses the existing audited
+moderation operation. Each reader is authorized before and after body access; a bounded cache
+shares only the latest version's aggregate per room/round and evicts superseded phrase data.
+
+Matching short phrases retain their meaning, with Unicode/case/whitespace and surrounding
+sentence-punctuation normalization. The responsive SVG visual uses original deterministic
+collision-aware packing, a readable top-40 visual limit, finite entrance/growth/reflow motion and
+an exact full count table. Realtime version updates coalesce reads without blanking existing
+terms; context, credential and moderation changes fence old projections. A five-second visible-
+tab fallback read covers missed updates. Reduced motion disables decorative animation instantly.
 
 Reports show initial evidence, confidence × correctness, misconception distribution,
 interventions, linked-recheck recovery, revote improvement, unresolved concepts, participation,

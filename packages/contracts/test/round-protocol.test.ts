@@ -30,6 +30,7 @@ describe("Round protocol compatibility", () => {
         "response.ranking",
         "response.open_text",
         "response.word_cloud",
+        "response.word_cloud.live",
       ],
     });
     expect(canUseRoundProtocol(required, currentRoundClientCapabilities())).toBe(true);

@@ -23,6 +23,7 @@ import {
   textResponseCharacterLimit,
 } from "@openround/contracts";
 import { Brand } from "../../../components/brand";
+import { CompetitionDashboard } from "../../../components/competition-dashboard";
 import {
   enqueueAudienceRealtimeUpdate,
   type AudienceRealtimeBatch,
@@ -77,6 +78,7 @@ import styles from "./participant-page.module.css";
 import { RoundParticipantSidebar } from "./round-participant-sidebar";
 import { participantResponseFooterVisible } from "./round-participant-submission";
 import liveTheme from "../../../components/round-live-theme.module.css";
+import { liveWordCloudCopy } from "../../../lib/i18n/live-word-cloud-copy";
 
 type Ack<T> = { data?: T; error?: { code: string; message: string } };
 type ParticipantSubmission = {
@@ -262,6 +264,7 @@ export default function PlayerPage() {
         resetResponse(nextSnapshot.question);
       else reconcilePendingSubmission(nextSnapshot);
       setSnapshot(nextSnapshot);
+      if (envelope.type === "response.moderated") setTextReadEpoch((current) => current + 1);
     });
     const qnaUpdate = withRealtimeReceipt(() => setQnaRevision((current) => current + 1));
     const audienceUpdate = createAudienceRealtimeReceipt((gap, envelope) => {
@@ -877,6 +880,10 @@ export default function PlayerPage() {
                   responseSaved ? null : (
                     <TextResponseControl
                       type={snapshot.question.type}
+                      liveWordCloud={
+                        snapshot.question.type === "word_cloud" &&
+                        snapshot.settings.wordCloudMode === "live"
+                      }
                       value={retryResponse?.kind === "text" ? retryResponse.value : textValue}
                       disabled={responseControlsDisabled}
                       onChange={(value) => {
@@ -1080,7 +1087,11 @@ export default function PlayerPage() {
                 ) : null}
                 {responseSaved && isTextQuestion(snapshot.question.type) ? (
                   <p className="success" role="status" lang={locale}>
-                    {t(textResponseReceipt(snapshot.myResponseModerationStatus))}
+                    {snapshot.question.type === "word_cloud" &&
+                    snapshot.settings.wordCloudMode === "live" &&
+                    snapshot.myResponseModerationStatus !== "removed"
+                      ? liveWordCloudCopy(locale, "saved")
+                      : t(textResponseReceipt(snapshot.myResponseModerationStatus))}
                   </p>
                 ) : responseSaved && !revealed && !showAutomaticSavedReceipt ? (
                   <p
@@ -1096,6 +1107,10 @@ export default function PlayerPage() {
                   <TextLiveResults
                     sessionId={sessionId}
                     roundId={snapshot.roundId}
+                    liveWordCloud={
+                      snapshot.question.type === "word_cloud" &&
+                      snapshot.settings.wordCloudMode === "live"
+                    }
                     version={snapshot.version}
                     phase={snapshot.phase}
                     credential={textReadAuthorized ? mediaCredential : ""}
@@ -1132,10 +1147,41 @@ export default function PlayerPage() {
                 ) : null}
               </section>
             ) : null}
+            {snapshot?.phase === "finished" && snapshot.competitionStandings ? (
+              <div className={styles.resultsStage} data-testid="participant-final-results">
+                <CompetitionDashboard
+                  variant="participant"
+                  headingLevel={1}
+                  standings={snapshot.competitionStandings}
+                  finished
+                  participantId={snapshot.myParticipantId ?? undefined}
+                />
+              </div>
+            ) : null}
+            {snapshot?.phase === "finished" ? (
+              snapshot.question?.type === "word_cloud" &&
+              snapshot.settings.wordCloudMode === "live" &&
+              snapshot.roundId ? (
+                <TextLiveResults
+                  sessionId={sessionId}
+                  roundId={snapshot.roundId}
+                  version={snapshot.version}
+                  phase={snapshot.phase}
+                  credential={textReadAuthorized ? mediaCredential : ""}
+                  freshness={textReadEpoch}
+                  role="participant"
+                  liveWordCloud
+                />
+              ) : null
+            ) : null}
             {snapshot?.phase === "finished" ? (
               <section className={`live-card ${styles.card} ${styles.completion}`}>
                 <p className="eyebrow">{t("live.presenter.roundComplete")}</p>
-                <h1 className={styles.title}>{t("live.roundPlay.complete")}</h1>
+                {snapshot.competitionStandings ? (
+                  <h2 className={styles.title}>{t("live.roundPlay.complete")}</h2>
+                ) : (
+                  <h1 className={styles.title}>{t("live.roundPlay.complete")}</h1>
+                )}
                 {myRow ? (
                   <p>
                     <ParticipantIdentity
@@ -1146,9 +1192,7 @@ export default function PlayerPage() {
                   </p>
                 ) : null}
                 <ParticipantCompletion snapshot={snapshot} score={myRow?.score} />
-                {!snapshot.competitionStandings ? (
-                  <ScoredResponseReceipt responseSummary={snapshot.myScoredResponseSummary} />
-                ) : null}
+                <ScoredResponseReceipt responseSummary={snapshot.myScoredResponseSummary} />
               </section>
             ) : null}
           </div>

@@ -111,6 +111,7 @@ export default function PresenterPage() {
         setAudienceSyncRevision((current) => current + 1);
       }
       setSnapshot(envelope.payload.snapshot);
+      if (envelope.type === "response.moderated") setTextReadEpoch((current) => current + 1);
     });
     const audienceUpdate = createAudienceRealtimeReceipt((gap, envelope) =>
       setAudienceRealtimeBatch((current) =>
@@ -382,6 +383,10 @@ export default function PresenterPage() {
             ) : null}
             {isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
               <TextLiveResults
+                liveWordCloud={
+                  snapshot.question.type === "word_cloud" &&
+                  snapshot.settings.wordCloudMode === "live"
+                }
                 sessionId={sessionId}
                 roundId={snapshot.roundId}
                 version={snapshot.version}
@@ -421,6 +426,21 @@ export default function PresenterPage() {
             finished={snapshot.phase === "finished"}
             compact={snapshot.phase !== "finished" && snapshot.phase !== "leaderboard"}
             headingLevel={resultsStage ? 1 : 2}
+          />
+        ) : null}
+        {snapshot?.phase === "finished" &&
+        snapshot.question?.type === "word_cloud" &&
+        snapshot.settings.wordCloudMode === "live" &&
+        snapshot.roundId ? (
+          <TextLiveResults
+            sessionId={sessionId}
+            roundId={snapshot.roundId}
+            version={snapshot.version}
+            phase={snapshot.phase}
+            credential={textReadAuthorized ? mediaCredential : ""}
+            freshness={textReadEpoch}
+            role="presenter"
+            liveWordCloud
           />
         ) : null}
         {snapshot?.phase === "finished" && !snapshot.competitionStandings ? (

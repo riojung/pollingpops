@@ -16,7 +16,11 @@ import {
 } from "../src/index.js";
 
 const host = { kind: "host" as const, userId: randomUUID() };
-function fixture(type: "open_text" | "word_cloud" = "open_text", audienceLimit = 250) {
+function fixture(
+  type: "open_text" | "word_cloud" = "open_text",
+  audienceLimit = 250,
+  wordCloudMode?: "live" | "moderated",
+) {
   const question = {
     id: randomUUID(),
     type,
@@ -36,13 +40,14 @@ function fixture(type: "open_text" | "word_cloud" = "open_text", audienceLimit =
     sessionId: randomUUID(),
     code: "1234567",
     quiz,
-    roundProtocol: deriveRoundProtocol(quiz),
+    roundProtocol: deriveRoundProtocol(quiz, { wordCloudMode }),
     settings: {
       audienceLimit,
       scoringMode: "speed",
       resultVisibility: "private",
       nicknamePolicy: "custom",
       allowLateJoin: true,
+      ...(wordCloudMode ? { wordCloudMode } : {}),
     },
   });
   state = command(state, "start", 1000);
@@ -94,6 +99,40 @@ function moderate(state: GameState, answerId: string, status: "approved" | "remo
   return { ...moderateTextResponse(state, input), input };
 }
 describe("moderated text opinion engine", () => {
+  it("auto-includes only live cloud responses and freezes live protocol on recovery", () => {
+    const initial = fixture("word_cloud", 250, "live").state;
+    const accepted = respond(initial, "Better feedback!");
+    expect(accepted.state.version).toBeGreaterThan(initial.version);
+    expect(accepted.state.responseModeration![accepted.answer.answerId]!.status).toBe("approved");
+    expect(
+      snapshotForRole(accepted.state, {
+        role: "participant",
+        participantId: accepted.answer.participantId,
+      }),
+    ).toMatchObject({
+      settings: { wordCloudMode: "live" },
+      myResponseAccepted: true,
+      myResponseModerationStatus: "approved",
+    });
+    expect(upgradeGameState(JSON.parse(JSON.stringify(accepted.state)))).toEqual(accepted.state);
+    expect(() =>
+      upgradeGameState({
+        ...accepted.state,
+        roundProtocol: deriveRoundProtocol(accepted.state.quiz),
+      }),
+    ).toThrow("frozen Round protocol");
+    const removed = moderate(accepted.state, accepted.answer.answerId, "removed");
+    expect(removed.events.map((event) => event.type)).toEqual(["response.moderated"]);
+    expect(removed.state.responseModeration![accepted.answer.answerId]!.status).toBe("removed");
+    for (const mode of [undefined, "moderated", "live"] as const) {
+      const answer = respond(fixture("open_text", 250, mode).state);
+      expect(answer.state.responseModeration![answer.answer.answerId]!.status).toBe("pending");
+    }
+    for (const mode of [undefined, "moderated"] as const) {
+      const answer = respond(fixture("word_cloud", 250, mode).state);
+      expect(answer.state.responseModeration![answer.answer.answerId]!.status).toBe("pending");
+    }
+  });
   it("requires complete bounded state9 metadata and never invents approval during recovery", () => {
     const { state } = fixture();
     expect(state.stateSchemaVersion).toBe(9);

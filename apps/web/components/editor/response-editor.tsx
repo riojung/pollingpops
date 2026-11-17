@@ -18,6 +18,7 @@ import { isTextQuestion } from "../../lib/text-response";
 import styles from "./response-editor.module.css";
 import { authoringWorkflowCopy } from "./authoring-workflow-copy";
 import { roundToolsCopy } from "../../lib/i18n/round-tools-copy";
+import { liveWordCloudCopy } from "../../lib/i18n/live-word-cloud-copy";
 
 function invalidDecimal(value: string, nonnegative = false) {
   try {
@@ -337,6 +338,7 @@ export function ResponseEditor({
   uxBeta,
   multiSelectPollsEnabled = false,
   rankingPollsEnabled = false,
+  wordCloudLiveSupported = false,
   onStructuralChange,
   onUpdateChoiceQuestion,
   onUpdateQuestion,
@@ -345,6 +347,7 @@ export function ResponseEditor({
   uxBeta: boolean;
   multiSelectPollsEnabled?: boolean;
   rankingPollsEnabled?: boolean;
+  wordCloudLiveSupported?: boolean;
   onStructuralChange: QuestionStructuralChange;
   onUpdateChoiceQuestion: ChoiceQuestionUpdater;
   onUpdateQuestion: QuestionUpdater;
@@ -356,9 +359,11 @@ export function ResponseEditor({
     if (!uxBeta)
       return (
         <p className="muted">
-          {t("delivery.builder.textResponseHelp", {
-            limit: textResponseCharacterLimit(question.type),
-          })}
+          {question.type === "word_cloud" && wordCloudLiveSupported
+            ? liveWordCloudCopy(locale, "editorHelp")
+            : t("delivery.builder.textResponseHelp", {
+                limit: textResponseCharacterLimit(question.type),
+              })}
         </p>
       );
     return (
@@ -372,11 +377,15 @@ export function ResponseEditor({
               {copy("Participant response")}
             </h3>
             <p className={styles.guidance} lang={locale}>
-              {copy(
-                question.type === "word_cloud"
-                  ? "Ask for a word or short phrase. Repeated approved responses appear larger in the cloud."
-                  : "Participants write their own response. Ask a focused question that invites reflection.",
-              )}
+              {question.type === "word_cloud"
+                ? wordCloudLiveSupported
+                  ? liveWordCloudCopy(locale, "editorHelp")
+                  : copy(
+                      "Ask for a word or short phrase. Repeated approved responses appear larger in the cloud.",
+                    )
+                : copy(
+                    "Participants write their own response. Ask a focused question that invites reflection.",
+                  )}
             </p>
             <span className={styles.responseLimit} lang={locale}>
               {copy("Up to {limit} characters per response", {
@@ -388,7 +397,9 @@ export function ResponseEditor({
           </div>
         </div>
         <p className={styles.moderationNote} lang={locale}>
-          {copy("Responses need moderator approval before appearing to the audience.")}
+          {question.type === "word_cloud" && wordCloudLiveSupported
+            ? liveWordCloudCopy(locale, "editorPolicy")
+            : copy("Responses need moderator approval before appearing to the audience.")}
         </p>
       </div>
     );

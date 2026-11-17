@@ -1,5 +1,6 @@
 import { useLocale } from "./locale-provider";
 import type { TextQuestionType } from "../lib/text-response";
+import { WordCloudVisual } from "./word-cloud-visual";
 
 export function TextResultsView({
   type,
@@ -15,8 +16,6 @@ export function TextResultsView({
   compact?: boolean;
 }) {
   const { locale, t } = useLocale();
-  const largest = Math.max(1, ...terms.map((term) => term.count));
-  const cloudFont = compact ? { minimum: 16, range: 8 } : { minimum: 18, range: 22 };
   return (
     <div lang={locale}>
       <p>{t("live.text.approvedRespondents", { count: respondents })}</p>
@@ -30,19 +29,7 @@ export function TextResultsView({
         </ul>
       ) : (
         <>
-          <div className="word-cloud" aria-hidden="true">
-            {terms.map((term) => (
-              <span
-                key={term.value}
-                lang=""
-                style={{
-                  fontSize: `${cloudFont.minimum + cloudFont.range * Math.sqrt(term.count / largest)}px`,
-                }}
-              >
-                {term.label}
-              </span>
-            ))}
-          </div>
+          <WordCloudVisual terms={terms} compact={compact} />
           <div
             role="region"
             aria-label={t("live.text.wordCounts")}

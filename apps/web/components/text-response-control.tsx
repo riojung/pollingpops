@@ -2,17 +2,20 @@ import { useId } from "react";
 import { textResponseCharacterLimit } from "@openround/contracts";
 import { useLocale } from "./locale-provider";
 import type { TextQuestionType } from "../lib/text-response";
+import { liveWordCloudCopy } from "../lib/i18n/live-word-cloud-copy";
 
 export function TextResponseControl({
   type,
   value = "",
   disabled = false,
   onChange,
+  liveWordCloud = false,
 }: {
   type: TextQuestionType;
   value?: string;
   disabled?: boolean;
   onChange?: (value: string) => void;
+  liveWordCloud?: boolean;
 }) {
   const { locale, t } = useLocale();
   const id = useId();
@@ -47,7 +50,9 @@ export function TextResponseControl({
         />
       )}
       <small id={`${id}-limit`}>{t("live.text.characterLimit", { count, limit })}</small>
-      <small id={`${id}-privacy`}>{t("live.text.reviewPrivacy")}</small>
+      <small id={`${id}-privacy`}>
+        {liveWordCloud ? liveWordCloudCopy(locale, "privacy") : t("live.text.reviewPrivacy")}
+      </small>
     </div>
   );
 }

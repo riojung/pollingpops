@@ -14,6 +14,8 @@ import {
   TextResponseModerationEntrySchema,
   TextResponseModerationReceiptSchema,
   RoundTextResponseResultsSchema,
+  RoundLiveWordCloudResultsSchema,
+  liveWordCloudGroupKey,
   normalizeTextResponse,
   wordCloudGroupKey,
   deriveRoundProtocol,
@@ -40,6 +42,45 @@ function question(type: "open_text" | "word_cloud" = "open_text") {
   };
 }
 describe("moderated text opinion contracts", () => {
+  it("adds phrase-preserving live aggregates without weakening moderated results", () => {
+    expect(liveWordCloudGroupKey("  ‘BETTER\u00a0 feedback!’  ")).toBe("better feedback");
+    expect(liveWordCloudGroupKey("C++")).toBe("c++");
+    expect(liveWordCloudGroupKey("C#!")).toBe("c#");
+    expect(liveWordCloudGroupKey("don't split short-phrases")).toBe("don't split short-phrases");
+    expect(wordCloudGroupKey("Feedback!")).toBe("feedback!");
+    const result = {
+      sessionId: randomUUID(),
+      roundId: randomUUID(),
+      version: 1,
+      mode: "live",
+      respondents: 1,
+      totalTerms: 1,
+      truncated: false,
+      terms: [{ value: "better feedback", label: "better feedback", count: 1 }],
+    };
+    expect(RoundLiveWordCloudResultsSchema.parse(result)).toEqual(result);
+    for (const patch of [
+      { answerId: randomUUID() },
+      { respondents: 2 },
+      { totalTerms: 2 },
+      { truncated: true },
+    ])
+      expect(RoundLiveWordCloudResultsSchema.safeParse({ ...result, ...patch }).success).toBe(
+        false,
+      );
+    const protocol = deriveRoundProtocol(
+      { questions: [{ type: "word_cloud" }] },
+      { wordCloudMode: "live" },
+    );
+    expect(protocol.requiredCapabilities).toEqual([
+      "response.word_cloud",
+      "response.word_cloud.live",
+    ]);
+    expect(
+      canUseRoundProtocol(protocol, { protocolVersion: 3, capabilities: ["response.word_cloud"] }),
+    ).toBe(false);
+    expect(canUseRoundProtocol(protocol, currentRoundClientCapabilities())).toBe(true);
+  });
   it.each(["open_text", "word_cloud"] as const)(
     "limits %s to unscored live main checkpoints",
     (type) => {

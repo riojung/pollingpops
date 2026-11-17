@@ -38,7 +38,7 @@ const settings = {
   allowLateJoin: true,
   nicknamePolicy: "custom" as const,
 };
-async function fixture() {
+async function fixture(wordCloudMode: "live" | "moderated" = "moderated") {
   const workspaceId = randomUUID();
   const config = ConfigSchema.parse({
     NODE_ENV: "test",
@@ -110,9 +110,14 @@ async function fixture() {
     contentHash: randomUUID(),
     publishedAt: now,
   });
-  const room = await built.sessions.createSession(owner, quiz.id, settings, {
-    clientCapabilities: caps(),
-  });
+  const room = await built.sessions.createSession(
+    owner,
+    quiz.id,
+    { ...settings, wordCloudMode },
+    {
+      clientCapabilities: caps(),
+    },
+  );
   const guests = await Promise.all(
     Array.from({ length: 6 }, (_, index) =>
       built.sessions.join({
@@ -162,7 +167,7 @@ async function fixture() {
     credential = room.hostToken,
   ) =>
     built.app.inject({
-      url: `/v1/sessions/${room.sessionId}/${route}?${new URLSearchParams({ ...Object.fromEntries(Object.entries(options).map(([key, value]) => [key, String(value)])), ...(route === "response-results" && !options.role ? { role: "host" } : {}), clientCapabilities: JSON.stringify(caps()) })}`,
+      url: `/v1/sessions/${room.sessionId}/${route}?${new URLSearchParams({ ...Object.fromEntries(Object.entries(options).map(([key, value]) => [key, String(value)])), ...(["response-results", "word-cloud"].includes(route) && !options.role ? { role: "host" } : {}), clientCapabilities: JSON.stringify(caps()) })}`,
       headers: { authorization: `Bearer ${credential}` },
     });
   return {
@@ -185,6 +190,295 @@ async function fixture() {
 }
 
 describe("moderated open text and word clouds", () => {
+  it("defaults only newly capable cloud rooms to live and preserves explicit moderation", async () => {
+    const f = await fixture();
+    const current = await f.sessions.createSession(f.owner, f.quiz.id, settings, {
+      clientCapabilities: caps(),
+    });
+    expect(current.snapshot.settings.wordCloudMode).toBe("live");
+    expect(current.snapshot.roundProtocol?.requiredCapabilities).toContain(
+      "response.word_cloud.live",
+    );
+    expect(f.room.snapshot.settings.wordCloudMode).toBe("moderated");
+    const older = {
+      ...caps(),
+      capabilities: caps().capabilities.filter((value) => value !== "response.word_cloud.live"),
+    };
+    const retained = await f.sessions.createSession(f.owner, f.quiz.id, settings, {
+      clientCapabilities: older,
+    });
+    expect(retained.snapshot.settings.wordCloudMode).toBeUndefined();
+    expect(retained.snapshot.roundProtocol?.requiredCapabilities).not.toContain(
+      "response.word_cloud.live",
+    );
+    await expect(
+      f.sessions.createSession(
+        f.owner,
+        f.quiz.id,
+        { ...settings, wordCloudMode: "live" },
+        { clientCapabilities: older },
+      ),
+    ).rejects.toMatchObject({ code: "CLIENT_UPDATE_REQUIRED" });
+    expect((await f.query("word-cloud", { roundId: randomUUID() })).statusCode).toBe(404);
+  });
+
+  it("publishes the first live phrase, clusters all respondents, and removes aggregates without changing report gates", async () => {
+    const f = await fixture("live");
+    const immutableVersionId = (await f.repository.getQuiz(f.owner.workspaceId, f.quiz.id))!
+      .currentVersionId!;
+    const published = await f.repository.getQuizVersion(f.owner.workspaceId, immutableVersionId);
+    const openText = await f.submit(0, "Still moderated");
+    expect((await f.query("response-moderation", {})).json().items).toEqual([
+      expect.objectContaining({ answerId: openText.answerId, status: "pending" }),
+    ]);
+    expect((await f.query("word-cloud", { roundId: f.opened.roundId! })).statusCode).toBe(404);
+    await f.command({ action: "lock" });
+    await f.command({ action: "reveal" });
+    const cloud = await f.command({ action: "next" });
+    const query = () => f.query("word-cloud", { roundId: cloud.roundId! });
+    expect((await query()).json()).toMatchObject({
+      respondents: 0,
+      terms: [],
+      totalTerms: 0,
+      truncated: false,
+    });
+    const versions: number[] = [];
+    const unsubscribe = f.sessions.subscribe((mutation) => {
+      if (mutation.events.some((event) => event.type === "session.snapshot"))
+        versions.push(mutation.state.version);
+    });
+    const bodyReads = vi.spyOn(f.repository, "getSessionAnswersByIds");
+    const first = await f.submit(0, "‘Better   Feedback!’", cloud.roundId!);
+    const [hostFirst, participantFirst] = await Promise.all([
+      query(),
+      f.query(
+        "word-cloud",
+        { roundId: cloud.roundId!, role: "participant" },
+        f.guests[0]!.participantToken,
+      ),
+    ]);
+    const firstResult = hostFirst.json();
+    expect(participantFirst.json()).toEqual(firstResult);
+    expect(bodyReads).toHaveBeenCalledTimes(1);
+    const cachedVersions = () =>
+      [
+        ...(
+          Reflect.get(f.sessions, "liveWordCloudAggregates") as Map<string, { version: number }>
+        ).values(),
+      ].map((entry) => entry.version);
+    expect(cachedVersions()).toEqual([firstResult.version]);
+    expect(firstResult).toMatchObject({
+      mode: "live",
+      respondents: 1,
+      totalTerms: 1,
+      truncated: false,
+      terms: [{ value: "better feedback", label: "better feedback", count: 1 }],
+    });
+    await vi.waitFor(() => expect(versions).toContain(firstResult.version));
+    unsubscribe();
+    const participant = await f.sessions.sync({
+      sessionId: f.room.sessionId,
+      role: "participant",
+      participantToken: f.guests[0]!.participantToken,
+      clientCapabilities: caps(),
+      lastSeq: cloud.seq,
+    });
+    expect(participant.snapshot).toMatchObject({
+      myResponseAccepted: true,
+      myResponseModerationStatus: "approved",
+    });
+    expect(participant.replay.some((event) => event.type === "session.snapshot")).toBe(true);
+    expect(JSON.stringify(participant)).not.toContain("Better");
+    const presenter = await f.sessions.createSessionStaffCredential(f.owner, f.room.sessionId, {
+      role: "presenter",
+      label: "Screen",
+      expiresInMinutes: 60,
+    });
+    for (const [role, token] of [
+      ["host", f.room.hostToken],
+      ["presenter", presenter.token],
+      ["participant", f.guests[0]!.participantToken],
+    ]) {
+      const result = await f.query("word-cloud", { roundId: cloud.roundId!, role: role! }, token);
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toEqual(firstResult);
+      expect(result.headers["cache-control"]).toBe("private, no-store");
+      for (const secret of [
+        first.answerId!,
+        f.guests[0]!.participantId,
+        "Guest",
+        "submittedAt",
+        "authorAlias",
+        "acceptedAt",
+      ])
+        expect(JSON.stringify(result.json())).not.toContain(secret);
+    }
+    expect(bodyReads).toHaveBeenCalledTimes(1);
+    await f.submit(1, "better feedback", cloud.roundId!);
+    await f.submit(2, "C++", cloud.roundId!);
+    await f.submit(3, "C#!", cloud.roundId!);
+    expect((await query()).json()).toMatchObject({
+      respondents: 4,
+      totalTerms: 3,
+      terms: [
+        { value: "better feedback", count: 2 },
+        { value: "c#", count: 1 },
+        { value: "c++", count: 1 },
+      ],
+    });
+    expect(bodyReads).toHaveBeenCalledTimes(2);
+    expect(cachedVersions()).toEqual([(await f.snapshot()).version]);
+    expect(cachedVersions()).not.toContain(firstResult.version);
+    await f.command({
+      action: "response.moderate",
+      answerId: first.answerId,
+      responseStatus: "removed",
+    });
+    const removed = (await query()).json();
+    expect(removed.respondents).toBe(3);
+    expect(removed.version).toBeGreaterThan(firstResult.version);
+    expect(cachedVersions()).toEqual([removed.version]);
+    expect(
+      removed.terms.find((term: { value: string }) => term.value === "better feedback").count,
+    ).toBe(1);
+    expect((await f.query("response-results", { roundId: cloud.roundId! })).json()).toMatchObject({
+      visible: false,
+      terms: [],
+    });
+    await f.command({ action: "lock" });
+    expect((await query()).json().respondents).toBe(3);
+    await f.command({ action: "reveal" });
+    expect((await query()).json().respondents).toBe(3);
+    expect((await f.query("response-results", { roundId: cloud.roundId! })).json()).toMatchObject({
+      visible: false,
+      terms: [],
+    });
+    await f.command({ action: "end" });
+    expect(await new ReportWorker(f.repository, 60_000).runOnce()).toBe("completed");
+    const report = (await f.repository.getReportBySession(f.owner.workspaceId, f.room.sessionId))!;
+    expect(report.questions[1]!.responseDistribution).toBeUndefined();
+    expect(await f.repository.getQuizVersion(f.owner.workspaceId, immutableVersionId)).toEqual(
+      published,
+    );
+    expect((await query()).json().respondents).toBe(3);
+    const restored = new SessionService(
+      f.repository,
+      new MemorySessionCache(),
+      {
+        ...f.config,
+        FEATURE_ROUND_CLIENT_PROTOCOL: false,
+        CORE_PARITY_WORKSPACE_ALLOWLIST: [],
+      },
+      new MetricsService(),
+    );
+    services.push(restored);
+    expect(
+      await restored.liveWordCloudResults({
+        sessionId: f.room.sessionId,
+        roundId: cloud.roundId!,
+        role: "host",
+        token: f.room.hostToken,
+        clientCapabilities: caps(),
+      }),
+    ).toMatchObject({ mode: "live", respondents: 3, totalTerms: 3 });
+    const restoredAggregates = Reflect.get(restored, "liveWordCloudAggregates") as Map<
+      string,
+      unknown
+    >;
+    expect(restoredAggregates.size).toBe(1);
+    expect(cachedVersions()).toHaveLength(1);
+    expect(await f.sessions.deleteSession(f.owner.workspaceId, f.room.sessionId)).toBe(true);
+    expect(cachedVersions()).toEqual([]);
+    expect((await query()).statusCode).toBe(404);
+    await restored.invalidateWorkspaceDeletion([
+      { sessionId: f.room.sessionId, code: f.room.code },
+    ]);
+    expect(restoredAggregates.size).toBe(0);
+  });
+
+  it("fences live aggregate credentials and retries reads across response removal", async () => {
+    const f = await fixture("live");
+    await f.command({ action: "lock" });
+    await f.command({ action: "reveal" });
+    const cloud = await f.command({ action: "next" });
+    const answer = await f.submit(0, "Cloud phrase", cloud.roundId!);
+    const presenter = await f.sessions.createSessionStaffCredential(f.owner, f.room.sessionId, {
+      role: "presenter",
+      label: "Screen",
+      expiresInMinutes: 60,
+    });
+    const cohost = await f.sessions.createSessionStaffCredential(f.owner, f.room.sessionId, {
+      role: "cohost",
+      label: "Moderator",
+      expiresInMinutes: 60,
+    });
+    const other = await f.sessions.createSession(f.owner, f.quiz.id, settings, {
+      clientCapabilities: caps(),
+    });
+    const visitor = await f.sessions.join({
+      code: other.code,
+      nickname: "Visitor",
+      clientCapabilities: caps(),
+    });
+    for (const [role, credential] of [
+      ["host", presenter.token],
+      ["host", f.guests[0]!.participantToken],
+      ["participant", visitor.participantToken],
+      ["host", other.hostToken],
+    ])
+      expect(
+        (await f.query("word-cloud", { roundId: cloud.roundId!, role: role! }, credential))
+          .statusCode,
+      ).toBe(401);
+    const oldCaps = {
+      ...caps(),
+      capabilities: caps().capabilities.filter((value) => value !== "response.word_cloud.live"),
+    };
+    const obsolete = await f.app.inject({
+      url: `/v1/sessions/${f.room.sessionId}/word-cloud?${new URLSearchParams({ roundId: cloud.roundId!, role: "host", clientCapabilities: JSON.stringify(oldCaps) })}`,
+      headers: { authorization: `Bearer ${f.room.hostToken}` },
+    });
+    expect(obsolete.statusCode).toBe(409);
+    expect(obsolete.json()).toMatchObject({ error: { code: "CLIENT_UPDATE_REQUIRED" } });
+    const read = f.repository.getSessionAnswersByIds.bind(f.repository);
+    const loading = vi.spyOn(f.repository, "getSessionAnswersByIds");
+    loading.mockImplementationOnce(async (workspaceId, sessionId, ids) => {
+      const answers = await read(workspaceId, sessionId, ids);
+      await f.command({
+        action: "response.moderate",
+        answerId: answer.answerId,
+        responseStatus: "removed",
+      });
+      return answers;
+    });
+    const result = await f.query("word-cloud", { roundId: cloud.roundId! });
+    expect(result.statusCode).toBe(200);
+    expect(result.json()).toMatchObject({ respondents: 0, terms: [] });
+    await f.submit(1, "Another phrase", cloud.roundId!);
+    loading.mockImplementationOnce(async (workspaceId, sessionId, ids) => {
+      const answers = await read(workspaceId, sessionId, ids);
+      await f.repository.revokeSessionStaff(
+        f.owner.workspaceId,
+        f.room.sessionId,
+        cohost.credential.id,
+      );
+      return answers;
+    });
+    expect(
+      (await f.query("word-cloud", { roundId: cloud.roundId!, role: "host" }, cohost.token))
+        .statusCode,
+    ).toBe(401);
+    await f.command({ action: "kick", participantId: f.guests[0]!.participantId });
+    expect(
+      (
+        await f.query(
+          "word-cloud",
+          { roundId: cloud.roundId!, role: "participant" },
+          f.guests[0]!.participantToken,
+        )
+      ).statusCode,
+    ).toBe(401);
+  });
   it("gates text writers and bounds new text sessions", async () => {
     const f = await fixture();
     expect(

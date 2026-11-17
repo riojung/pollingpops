@@ -310,6 +310,7 @@ export default function HostPage() {
             setAudienceSyncRevision((current) => current + 1);
           }
           setSnapshot(envelope.payload.snapshot);
+          if (envelope.type === "response.moderated") setTextReadEpoch((current) => current + 1);
           if (envelope.payload.reportId) setReportId(envelope.payload.reportId);
         },
       );
@@ -1174,6 +1175,10 @@ export default function HostPage() {
                       capability === "response.open_text" || capability === "response.word_cloud",
                   ) ? (
                     <TextModerationPanel
+                      liveWordCloud={
+                        snapshot.question?.type === "word_cloud" &&
+                        snapshot.settings.wordCloudMode === "live"
+                      }
                       sessionId={sessionId}
                       roundId={
                         snapshot.question && isTextQuestion(snapshot.question.type)
@@ -1215,6 +1220,21 @@ export default function HostPage() {
                     ))}
                   </ol>
                 ) : null}
+                {snapshot.phase === "finished" &&
+                snapshot.question?.type === "word_cloud" &&
+                snapshot.settings.wordCloudMode === "live" &&
+                snapshot.roundId ? (
+                  <TextLiveResults
+                    liveWordCloud
+                    sessionId={sessionId}
+                    roundId={snapshot.roundId}
+                    version={snapshot.version}
+                    phase={snapshot.phase}
+                    credential={textReadAuthorized ? mediaCredential : ""}
+                    freshness={textReadEpoch}
+                    role="host"
+                  />
+                ) : null}
               </div>
               <RecoveryCompass
                 showCounts={!uxBeta}
@@ -1236,8 +1256,19 @@ export default function HostPage() {
                   />
                 ) : null}
                 {snapshot.phase === "lobby" ? <JoinAccess code={snapshot.code} editable /> : null}
-                {snapshot.question && isTextQuestion(snapshot.question.type) && snapshot.roundId ? (
+                {snapshot.question &&
+                isTextQuestion(snapshot.question.type) &&
+                snapshot.roundId &&
+                !(
+                  snapshot.phase === "finished" &&
+                  snapshot.question.type === "word_cloud" &&
+                  snapshot.settings.wordCloudMode === "live"
+                ) ? (
                   <TextLiveResults
+                    liveWordCloud={
+                      snapshot.question.type === "word_cloud" &&
+                      snapshot.settings.wordCloudMode === "live"
+                    }
                     sessionId={sessionId}
                     roundId={snapshot.roundId}
                     version={snapshot.version}

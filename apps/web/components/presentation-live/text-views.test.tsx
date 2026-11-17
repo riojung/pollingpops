@@ -72,12 +72,9 @@ describe("Presentation text views", () => {
     expect(markup).not.toContain("<script>");
     expect(markup).not.toContain("responseId");
   });
-  it.each([
-    { compact: false, largestFont: 40 },
-    { compact: true, largestFont: 24 },
-  ])(
-    "keeps complete stage counts with compact=$compact decorative sizing",
-    ({ compact, largestFont }) => {
+  it("keeps complete stage counts and frequency weights within smaller compact bounds", () => {
+    function renderCloud(compact: boolean) {
+      fixtures.cursor = 0;
       fixtures.read = {
         ...publicRead,
         key: JSON.stringify([
@@ -100,7 +97,7 @@ describe("Presentation text views", () => {
           ],
         },
       };
-      const markup = renderToStaticMarkup(
+      return renderToStaticMarkup(
         <PresentationTextResults
           {...props}
           type="word_cloud"
@@ -108,14 +105,46 @@ describe("Presentation text views", () => {
           compact={compact}
         />,
       );
-      expect(markup).toContain(`font-size:${largestFont}px`);
+    }
+    const normal = renderCloud(false);
+    const compact = renderCloud(true);
+    for (const markup of [normal, compact]) {
       expect(markup).toContain('aria-hidden="true"');
+      expect(markup).toContain('data-testid="word-cloud-visual"');
       expect(markup).toContain("<caption>Word-cloud counts</caption>");
       expect(markup).toContain('scope="row" lang="">café f18b536a</th><td>3</td>');
       expect(markup).toContain('scope="row" lang="">practice f18b536a</th><td>2</td>');
       expect(markup).not.toContain("responseId");
-    },
-  );
+      const visualTerms = new Map(
+        Array.from(markup.matchAll(/<[^>]+data-term="([^"]+)"[^>]*>/gu), ([tag, value]) => [
+          value,
+          {
+            count: Number(tag.match(/data-count="([^"]+)"/u)?.[1]),
+            fontSize: Number.parseFloat(tag.match(/font-size:([^;"\s]+)/u)?.[1] ?? ""),
+          },
+        ]),
+      );
+      expect([...visualTerms.keys()].sort()).toEqual(["café f18b536a", "practice f18b536a"]);
+      expect(visualTerms.get("café f18b536a")?.count).toBe(3);
+      expect(visualTerms.get("practice f18b536a")?.count).toBe(2);
+      expect(visualTerms.get("practice f18b536a")!.fontSize).toBeGreaterThan(0);
+      expect(visualTerms.get("café f18b536a")!.fontSize).toBeGreaterThan(
+        visualTerms.get("practice f18b536a")!.fontSize,
+      );
+    }
+    const bounds = (markup: string) => {
+      const viewBox = markup.match(/<svg\b[^>]*viewBox="([^"]+)"/u)?.[1];
+      expect(viewBox).toBeDefined();
+      const [, , width, height] = viewBox!.split(/\s+/u).map(Number);
+      expect(width).toBeGreaterThan(0);
+      expect(height).toBeGreaterThan(0);
+      return { width: width!, height: height! };
+    };
+    const regularBounds = bounds(normal);
+    const compactBounds = bounds(compact);
+    expect(compactBounds.width).toBe(regularBounds.width);
+    expect(compactBounds.height).toBeLessThan(regularBounds.height);
+  });
   it.each([
     { seq: 8 },
     { revision: 4 },

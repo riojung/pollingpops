@@ -83,6 +83,7 @@ import { ProductEventDispatcher, type ProductEventInput } from "./product-events
 import { decisionEventsForTransition } from "./session-decision-replay.js";
 import {
   approvedTextAnswerIds,
+  liveWordCloudResults,
   moderationPage,
   moderationPageSelection,
   textResults,
@@ -208,6 +209,10 @@ export class SessionService {
   private readonly answerCommitWaiters: Array<() => void> = [];
   private readonly joinBatches = new Map<string, JoinBatch>();
   private readonly participantCredentials = new Map<string, ParticipantRecord>();
+  private readonly liveWordCloudAggregates = new Map<
+    string,
+    { sessionId: string; version: number; result: Promise<ReturnType<typeof liveWordCloudResults>> }
+  >();
   private readonly listeners = new Set<MutationListener>();
   private readonly auxiliaryListeners = new Set<AuxiliaryListener>();
   private readonly audienceListeners = new Set<AudienceListener>();
@@ -954,7 +959,16 @@ export class SessionService {
     ) {
       throw new SessionError("NOT_FOUND", EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE);
     }
-    const roundProtocol = deriveRoundProtocol(version.content);
+    // Only a client that understands live visibility may opt a new room into it.
+    // Existing stored rooms retain their omitted policy and remain moderated.
+    const wordCloudMode =
+      settings.wordCloudMode ??
+      (version.content.questions.some((question) => question.type === "word_cloud") &&
+      experience.clientCapabilities?.capabilities.includes("response.word_cloud.live")
+        ? "live"
+        : undefined);
+    const roomSettings = { ...settings, ...(wordCloudMode ? { wordCloudMode } : {}) };
+    const roundProtocol = deriveRoundProtocol(version.content, roomSettings);
     requireRoundClient({ roundProtocol }, experience.clientCapabilities);
     const textCount = version.content.questions.filter(
       (question) => question.type === "open_text" || question.type === "word_cloud",
@@ -1029,7 +1043,7 @@ export class SessionService {
             sessionId,
             code,
             quiz: version.content,
-            settings: { ...settings, confidenceEnabled: settings.confidenceEnabled ?? false },
+            settings: { ...roomSettings, confidenceEnabled: settings.confidenceEnabled ?? false },
             brandTheme,
             experienceTheme,
             ...(features.enabled("roundClientProtocol") ? { roundProtocol } : {}),
@@ -2042,6 +2056,66 @@ export class SessionService {
     return this.readTextResponses(input, false);
   }
 
+  async liveWordCloudResults(input: {
+    sessionId: string;
+    roundId: string;
+    role: "participant" | "host" | "presenter";
+    token: string;
+    clientCapabilities?: RoundClientCapabilities;
+  }) {
+    return this.readTextResponses({ ...input, limit: 50 }, "live");
+  }
+
+  private async responseBodies(session: StoredSession, ids: string[]) {
+    const batches: string[][] = [];
+    for (let index = 0; index < ids.length; index += 100)
+      batches.push(ids.slice(index, index + 100));
+    return (
+      await Promise.all(
+        batches.map((batch) =>
+          this.repository.getSessionAnswersByIds(session.workspaceId, session.id, batch),
+        ),
+      )
+    ).flat();
+  }
+
+  private cachedLiveWordCloud(session: StoredSession, state: GameState, roundId: string) {
+    const key = JSON.stringify([session.workspaceId, session.id, roundId]);
+    const cached = this.liveWordCloudAggregates.get(key);
+    if (cached?.version === state.version) return cached.result;
+    // Validate the frozen policy before reading bodies. Keep only aggregate promises so
+    // concurrent viewers share the calculation without retaining private answer records.
+    liveWordCloudResults(state, roundId, []);
+    const pending = this.responseBodies(session, approvedTextAnswerIds(state, roundId)).then(
+      (answers) => liveWordCloudResults(state, roundId, answers),
+    );
+    // Replace obsolete phrase aggregates immediately. An older in-flight read may
+    // finish, but must never replace a newer entry and still passes the read fence.
+    if (!cached || cached.version < state.version)
+      this.liveWordCloudAggregates.set(key, {
+        sessionId: session.id,
+        version: state.version,
+        result: pending,
+      });
+    while (this.liveWordCloudAggregates.size > 128)
+      this.liveWordCloudAggregates.delete(this.liveWordCloudAggregates.keys().next().value!);
+    void pending.catch(() => {
+      if (this.liveWordCloudAggregates.get(key)?.result === pending)
+        this.liveWordCloudAggregates.delete(key);
+    });
+    return pending;
+  }
+
+  private async readTextResponses(
+    input: TextResponsePageQuery & {
+      sessionId: string;
+      roundId: string;
+      role: "participant" | "host" | "presenter";
+      token: string;
+      clientCapabilities?: RoundClientCapabilities;
+    },
+    moderation: "live",
+  ): Promise<ReturnType<typeof liveWordCloudResults>>;
   private async readTextResponses(
     input: TextModerationPageQuery & {
       sessionId: string;
@@ -2074,16 +2148,17 @@ export class SessionService {
           token: string;
           clientCapabilities?: RoundClientCapabilities;
         }),
-    moderation: boolean,
+    moderation: boolean | "live",
   ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const session = await this.loadSession(input.sessionId);
       if (!session) throw new SessionError("NOT_FOUND", "Session not found");
+      const state = session.state;
       if ("hostToken" in input) {
         await this.authorizeStaff(session, input.hostToken, ["cohost"]);
       } else if (input.role === "participant") {
         const participant = await this.participantForToken(input.token);
-        const runtime = participant && session.state.participants[participant.id];
+        const runtime = participant && state.participants[participant.id];
         if (
           !participant ||
           participant.sessionId !== session.id ||
@@ -2099,41 +2174,50 @@ export class SessionService {
           input.role === "presenter" ? ["cohost", "presenter"] : ["cohost"],
         );
       }
-      requireRoundClient(session.state, input.clientCapabilities);
-      const ids =
-        "hostToken" in input
-          ? moderationPageSelection(session.state, input).entries.map((entry) => entry.answerId)
-          : approvedTextAnswerIds(session.state, input.roundId);
-      const batches: string[][] = [];
-      for (let index = 0; index < ids.length; index += 100)
-        batches.push(ids.slice(index, index + 100));
-      const answers = (
-        await Promise.all(
-          batches.map((batch) =>
-            this.repository.getSessionAnswersByIds(session.workspaceId, session.id, batch),
-          ),
-        )
-      ).flat();
+      requireRoundClient(state, input.clientCapabilities);
+      const liveResult =
+        moderation === "live" && !("hostToken" in input)
+          ? await this.cachedLiveWordCloud(session, state, input.roundId)
+          : null;
+      const answers = liveResult
+        ? []
+        : await this.responseBodies(
+            session,
+            "hostToken" in input
+              ? moderationPageSelection(state, input).entries.map((entry) => entry.answerId)
+              : approvedTextAnswerIds(state, input.roundId),
+          );
       const durable = await this.repository.getSessionById(session.id);
       if (!durable || durable.workspaceId !== session.workspaceId)
         throw new SessionError("NOT_FOUND", "Session not found");
-      if (durable.state.version !== session.state.version) continue;
+      if (durable.state.version !== state.version) continue;
       if (await this.repository.workspaceDeletionStarted(session.workspaceId))
         throw new SessionError("NOT_FOUND", "Session not found");
       // Credential revocation does not advance the game revision. Recheck staff access
       // after loading bodies so an in-flight private queue cannot outlive its credential.
       if ("hostToken" in input) {
         await this.authorizeStaff(session, input.hostToken, ["cohost"]);
-      } else if (input.role !== "participant") {
+      } else if (input.role === "participant") {
+        const participant = await this.repository.getParticipantByToken(hashToken(input.token));
+        if (
+          !participant ||
+          participant.sessionId !== session.id ||
+          participant.status === "kicked" ||
+          !durable.state.participants[participant.id] ||
+          durable.state.participants[participant.id]!.kicked
+        )
+          throw new SessionError("UNAUTHORIZED", "Participant access is invalid or revoked");
+      } else {
         await this.authorizeStaff(
           session,
           input.token,
           input.role === "presenter" ? ["cohost", "presenter"] : ["cohost"],
         );
       }
+      if (liveResult) return liveResult;
       return moderation && "hostToken" in input
-        ? moderationPage(session.state, input, answers)
-        : textResults(session.state, input.roundId!, input, answers);
+        ? moderationPage(state, input, answers)
+        : textResults(state, input.roundId!, input, answers);
     }
     throw new SessionError("CONFLICT", "Responses changed. Refresh the current view");
   }
@@ -2222,6 +2306,10 @@ export class SessionService {
 
   async invalidate(sessionIds: string[]) {
     const uniqueSessionIds = [...new Set(sessionIds)];
+    const invalidatedIds = new Set(uniqueSessionIds);
+    for (const [key, aggregate] of this.liveWordCloudAggregates) {
+      if (invalidatedIds.has(aggregate.sessionId)) this.liveWordCloudAggregates.delete(key);
+    }
     for (const sessionId of uniqueSessionIds) {
       const timer = this.timers.get(sessionId);
       if (timer) clearTimeout(timer);
@@ -2354,6 +2442,7 @@ export class SessionService {
     this.timers.clear();
     this.active.clear();
     this.participantCredentials.clear();
+    this.liveWordCloudAggregates.clear();
     this.metrics.setActiveSessions(0);
   }
 }

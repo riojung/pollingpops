@@ -16,8 +16,9 @@ export function participantSidebarTabs(snapshot: SessionSnapshot): ParticipantSi
   const standingsAvailable =
     Boolean(snapshot.competitionStandings) &&
     snapshot.phase !== "lobby" &&
-    (snapshot.phase === "finished" ||
-      (snapshot.phase !== "intervention" && snapshot.roundKind === "main"));
+    snapshot.phase !== "finished" &&
+    snapshot.phase !== "intervention" &&
+    snapshot.roundKind === "main";
   return [
     ...(standingsAvailable ? (["standings"] as const) : []),
     "qna",
@@ -117,10 +118,9 @@ export function RoundParticipantSidebar({
           <CompetitionDashboard
             variant="participant"
             standings={snapshot.competitionStandings}
-            finished={snapshot.phase === "finished"}
             participantId={snapshot.myParticipantId ?? undefined}
             responseSummary={snapshot.myScoredResponseSummary}
-            compact={snapshot.phase !== "finished"}
+            compact
           />
         </div>
       ) : null}

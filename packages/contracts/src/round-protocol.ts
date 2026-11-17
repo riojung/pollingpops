@@ -6,10 +6,11 @@ export const RoundCapabilitySchema = z.enum([
   "response.ranking",
   "response.open_text",
   "response.word_cloud",
+  "response.word_cloud.live",
 ]);
 const capabilities = z
   .array(RoundCapabilitySchema)
-  .max(4)
+  .max(5)
   .refine((values) => new Set(values).size === values.length, "Declare each capability once");
 export const RoundClientCapabilitiesSchema = z
   .object({
@@ -70,8 +71,11 @@ export function requiresExtendedRoundResponses(content: RoundResponseContent): b
 export function hasRankingQuestions(content: RoundResponseContent): boolean {
   return content.questions.some((question) => question.type === "ranking");
 }
-/** Derive requirements from the immutable content rather than the creating client's profile. */
-export function deriveRoundProtocol(content: RoundResponseContent): RoundProtocol {
+/** Derive requirements from immutable content and frozen room policy. */
+export function deriveRoundProtocol(
+  content: RoundResponseContent,
+  settings?: { wordCloudMode?: "live" | "moderated" },
+): RoundProtocol {
   const requiredCapabilities: RoundProtocol["requiredCapabilities"] = [];
   if (
     content.questions.some(
@@ -84,6 +88,11 @@ export function deriveRoundProtocol(content: RoundResponseContent): RoundProtoco
     requiredCapabilities.push("response.open_text");
   if (content.questions.some((question) => question.type === "word_cloud"))
     requiredCapabilities.push("response.word_cloud");
+  if (
+    settings?.wordCloudMode === "live" &&
+    content.questions.some((question) => question.type === "word_cloud")
+  )
+    requiredCapabilities.push("response.word_cloud.live");
   return requiredCapabilities.length
     ? { schemaVersion: 1, minimumClientVersion: 3, requiredCapabilities }
     : legacyRoundProtocol();
@@ -96,6 +105,7 @@ export function currentRoundClientCapabilities(): RoundClientCapabilities {
       "response.ranking",
       "response.open_text",
       "response.word_cloud",
+      "response.word_cloud.live",
     ],
   };
 }

@@ -94,6 +94,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("window", surface);
   vi.stubGlobal("document", { querySelector: () => null });
+  vi.stubGlobal("localStorage", { getItem: () => null });
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
 });
@@ -365,6 +366,310 @@ describe("private follow-up participant rendering and recovery", () => {
       response: { kind: "choice", choiceIds: ["choice"] },
     });
     expect(html(page.render())).toContain("후속 학습 마치기");
+    cleanup();
+  });
+  it("restores saved accessibility preferences when a private link opens directly", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => JSON.stringify({ highContrast: true, reducedMotion: true }),
+    });
+    fetchMock.mockResolvedValue(json({ attemptToken: "private-attempt", snapshot: snapshot() }));
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    expect(html(page.render())).toContain('data-contrast="high"');
+    expect(html(page.render())).toContain('data-motion="reduced"');
+    cleanup();
+  });
+
+  it("only advances completed-question progress after the server acknowledges an answer", async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ attemptToken: "private-attempt", snapshot: snapshot({ questionCount: 3 }) }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    let tree = page.render();
+    expect(find(tree, (element) => element.props.role === "progressbar")?.props).toMatchObject({
+      "aria-valuenow": 0,
+      "aria-valuemax": 3,
+      "aria-valuetext": "0 of 3 questions completed",
+    });
+    await click(button(tree, "Authored choice 原文"));
+    tree = page.render();
+    expect(button(tree, "Authored choice 原文").props["aria-pressed"]).toBe(true);
+    expect(html(button(tree, "Authored choice 原文"))).toContain("Selected");
+    expect(
+      find(tree, (element) => element.props.role === "progressbar")?.props["aria-valuenow"],
+    ).toBe(0);
+    fetchMock.mockResolvedValueOnce(
+      json({
+        snapshot: snapshot({
+          version: 2,
+          questionCount: 3,
+          phase: "answer_reveal",
+          correct: true,
+          response: { kind: "choice", choiceIds: ["choice"] },
+          correctResponse: { kind: "choice", choiceIds: ["choice"] },
+        }),
+      }),
+    );
+    await click(button(tree, "Submit response"));
+    tree = page.render();
+    expect(
+      find(tree, (element) => element.props.role === "progressbar")?.props["aria-valuenow"],
+    ).toBe(1);
+    const savedChoice = button(tree, "Authored choice 原文");
+    expect(savedChoice.props).toMatchObject({
+      disabled: true,
+      "data-correct": true,
+      "aria-pressed": true,
+    });
+    expect(html(savedChoice)).toContain("Your answer · Correct");
+    expect(html(tree)).toContain("Your response has been saved.");
+    expect(button(tree, "Next question")).toBeDefined();
+    cleanup();
+  });
+
+  it("labels incorrect and correct choices explicitly when reviewing an acknowledged response", async () => {
+    const question = {
+      ...snapshot().question!,
+      choices: [
+        { id: "choice", label: "Selected wrong answer" },
+        { id: "correct", label: "Expected answer" },
+      ],
+    };
+    fetchMock.mockResolvedValue(
+      json({
+        attemptToken: "private-attempt",
+        snapshot: snapshot({
+          phase: "answer_reveal",
+          correct: false,
+          question,
+          response: { kind: "choice", choiceIds: ["choice"] },
+          correctResponse: { kind: "choice", choiceIds: ["correct"] },
+          explanation: "Authored explanation 原文",
+        }),
+      }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    const tree = page.render();
+    expect(button(tree, "Selected wrong answer").props).toMatchObject({
+      disabled: true,
+      "data-incorrect": true,
+    });
+    expect(html(button(tree, "Selected wrong answer"))).toContain("Your answer · Incorrect");
+    expect(button(tree, "Expected answer").props["data-correct"]).toBe(true);
+    expect(html(button(tree, "Expected answer"))).toContain("Correct answer");
+    expect(html(tree)).toContain("Authored explanation 原文");
+    cleanup();
+  });
+
+  it("keeps saved opinion responses neutral rather than marking them incorrect", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        attemptToken: "private-attempt",
+        snapshot: snapshot({
+          phase: "answer_reveal",
+          correct: null,
+          question: { ...snapshot().question!, type: "poll", purpose: "opinion" },
+          response: { kind: "poll", choiceIds: ["choice"] },
+          correctResponse: null,
+        }),
+      }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    const tree = page.render();
+    const choice = button(tree, "Authored choice 原文");
+    expect(choice.props["data-incorrect"]).toBeUndefined();
+    expect(choice.props["data-correct"]).toBeUndefined();
+    expect(choice.props["aria-pressed"]).toBe(true);
+    expect(html(tree)).toContain('data-outcome="recorded"');
+    expect(html(tree)).not.toContain("Review this question");
+    cleanup();
+  });
+
+  it("restores a submitted rating from the server on reload", async () => {
+    const question = {
+      ...snapshot().question!,
+      type: "rating" as const,
+      purpose: "opinion" as const,
+      rating: { min: 1, max: 3, minLabel: "Low 原文", maxLabel: "High 原文" },
+    };
+    fetchMock.mockResolvedValue(
+      json({
+        attemptToken: "private-attempt",
+        snapshot: snapshot({
+          phase: "answer_reveal",
+          question,
+          response: { kind: "rating", value: 2 },
+        }),
+      }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    const tree = page.render();
+    expect(button(tree, ">2<").props).toMatchObject({
+      disabled: true,
+      "aria-pressed": true,
+      "data-selected": true,
+    });
+    expect(button(tree, ">1<").props["aria-pressed"]).toBe(false);
+    cleanup();
+  });
+
+  it("distinguishes a timed-out unanswered question from a saved response", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        attemptToken: "private-attempt",
+        snapshot: snapshot({
+          phase: "answer_reveal",
+          timeMode: "timed",
+          response: null,
+          correct: false,
+        }),
+      }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    const markup = html(page.render());
+    expect(markup).toContain("No response was submitted.");
+    expect(markup).not.toContain("Your response has been saved.");
+    expect(markup).toContain("1 of 1 questions completed");
+    cleanup();
+  });
+
+  it.each(["single_select", "multi_select", "poll"] as const)(
+    "discards a local %s selection when the server reveals that the deadline elapsed without a response",
+    async (type) => {
+      const question = {
+        ...snapshot().question!,
+        type,
+        purpose: type === "poll" ? ("opinion" as const) : ("diagnostic" as const),
+      };
+      fetchMock.mockResolvedValueOnce(
+        json({
+          attemptToken: "private-attempt",
+          snapshot: snapshot({ question, timeMode: "timed" }),
+        }),
+      );
+      const page = view();
+      page.render();
+      const cleanup = await page.effects();
+      await click(button(page.render(), "Authored choice 原文"));
+      let tree = page.render();
+      expect(button(tree, "Authored choice 原文").props["aria-pressed"]).toBe(true);
+      fetchMock.mockResolvedValueOnce(
+        json({
+          snapshot: snapshot({
+            version: 2,
+            phase: "answer_reveal",
+            question,
+            timeMode: "timed",
+            response: null,
+            correct: false,
+            correctResponse: type === "poll" ? null : { kind: "choice", choiceIds: ["choice"] },
+          }),
+        }),
+      );
+      await click(button(tree, "Submit response"));
+      tree = page.render();
+      const choice = button(tree, "Authored choice 原文");
+      expect(choice.props["aria-pressed"]).toBe(false);
+      expect(choice.props["data-selected"]).toBeUndefined();
+      expect(choice.props["data-incorrect"]).toBeUndefined();
+      expect(html(tree)).toContain("No response was submitted.");
+      expect(html(tree)).not.toContain("Your answer");
+      expect(html(tree)).not.toContain("Your response has been saved.");
+      expect(JSON.parse(fetchMock.mock.calls[1]![1].body).response.choiceIds).toEqual(["choice"]);
+      cleanup();
+    },
+  );
+
+  it.each(["numeric", "rating"] as const)(
+    "discards a local %s draft when the server reveals that no response was saved",
+    async (type) => {
+      const question = {
+        ...snapshot().question!,
+        type,
+        purpose: type === "rating" ? ("opinion" as const) : ("diagnostic" as const),
+        ...(type === "rating"
+          ? { rating: { min: 1, max: 3, minLabel: "Low", maxLabel: "High" } }
+          : {}),
+      };
+      fetchMock.mockResolvedValueOnce(
+        json({
+          attemptToken: "private-attempt",
+          snapshot: snapshot({ question, timeMode: "timed" }),
+        }),
+      );
+      const page = view();
+      page.render();
+      const cleanup = await page.effects();
+      if (type === "rating") await click(button(page.render(), ">2<"));
+      else {
+        const input = find(page.render(), (element) => element.type === "input")!;
+        (input.props.onChange as (event: { target: { value: string } }) => void)({
+          target: { value: "12" },
+        });
+      }
+      let tree = page.render();
+      if (type === "rating") expect(button(tree, ">2<").props["aria-pressed"]).toBe(true);
+      else expect(find(tree, (element) => element.type === "input")?.props.value).toBe("12");
+      fetchMock.mockResolvedValueOnce(
+        json({
+          snapshot: snapshot({
+            version: 2,
+            phase: "answer_reveal",
+            question,
+            timeMode: "timed",
+            response: null,
+            correct: false,
+          }),
+        }),
+      );
+      await click(button(tree, "Submit response"));
+      tree = page.render();
+      if (type === "rating") {
+        expect(button(tree, ">2<").props["aria-pressed"]).toBe(false);
+        expect(button(tree, ">2<").props["data-selected"]).toBeUndefined();
+      } else expect(find(tree, (element) => element.type === "input")?.props.value).toBe("");
+      expect(html(tree)).toContain("No response was submitted.");
+      expect(html(tree)).not.toContain("Your response has been saved.");
+      expect(JSON.parse(fetchMock.mock.calls[1]![1].body).response).toMatchObject({
+        kind: type,
+        value: type === "rating" ? 2 : "12",
+      });
+      cleanup();
+    },
+  );
+
+  it("shows the server's numeric answer and authored unit during review", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        attemptToken: "private-attempt",
+        snapshot: snapshot({
+          phase: "answer_reveal",
+          correct: false,
+          question: { ...snapshot().question!, type: "numeric", unit: "kg 原文" },
+          response: { kind: "numeric", value: "12", unit: "kg 原文" },
+          correctResponse: { kind: "numeric", value: "10", unit: "kg 原文" },
+        }),
+      }),
+    );
+    const page = view();
+    page.render();
+    const cleanup = await page.effects();
+    const markup = html(page.render());
+    expect(markup).toContain("Correct answer");
+    expect(markup).toContain("10");
+    expect(markup).toContain("kg 原文");
+    expect(markup).not.toContain("private-attempt");
     cleanup();
   });
 });

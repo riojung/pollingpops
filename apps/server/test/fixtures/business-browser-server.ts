@@ -89,6 +89,7 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
       workspaceShell: { enabled: true, plans: ["free", "pro", "team"] },
       builderV2: { enabled: true, plans: ["free", "pro", "team"] },
       groups: { enabled: true, plans: ["free", "pro", "team"] },
+      practiceAssignments: { enabled: true, plans: ["free", "pro", "team"] },
       presentations: { enabled: true, plans: ["free", "pro", "team"] },
       audienceScopes: { enabled: true, plans: ["free", "pro", "team"] },
       feedbackRooms: { enabled: true, plans: ["free", "pro", "team"] },

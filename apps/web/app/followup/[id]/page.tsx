@@ -26,6 +26,8 @@ import {
   mayApplyFollowupSnapshot,
   type FollowupCommandRecoveryState,
 } from "../../../lib/followup-command-recovery";
+import { learnerCopy } from "./learner-copy";
+import styles from "./page.module.css";
 
 async function followupFetch<T>(path: string, token: string, init: RequestInit = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -52,8 +54,11 @@ async function followupFetch<T>(path: string, token: string, init: RequestInit =
 function FollowupContent() {
   const { locale, t } = useLocale();
   const copy = followupCopy(locale);
+  const learner = learnerCopy(locale);
   const { id } = useParams<{ id: string }>();
   const [snapshot, setSnapshot] = useState<FollowupSnapshot | null>(null);
+  const [highContrast, setHighContrast] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const [attemptToken, setAttemptToken] = useState("");
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
   const [numericValue, setNumericValue] = useState("");
@@ -64,6 +69,7 @@ function FollowupContent() {
   const [accessRevision, setAccessRevision] = useState(0);
   const accessRevisionRef = useRef(0);
   const confidenceControlRef = useRef<HTMLButtonElement>(null);
+  const responseControlsRef = useRef<HTMLDivElement>(null);
   const [commandState, setCommandState] = useState<FollowupCommandRecoveryState>({
     busy: false,
     pendingAction: null,
@@ -77,6 +83,29 @@ function FollowupContent() {
     key: string;
     manager: ReturnType<typeof createFollowupCommandRecovery>;
   } | null>(null);
+
+  useEffect(() => {
+    // Private links can open directly, without mounting the live-room preferences menu.
+    const readAccessibility = () => {
+      try {
+        const saved = JSON.parse(
+          localStorage.getItem("openround:experience-preferences") ?? "null",
+        );
+        setHighContrast(saved?.highContrast === true);
+        setReducedMotion(saved?.reducedMotion === true);
+      } catch {
+        setHighContrast(false);
+        setReducedMotion(false);
+      }
+    };
+    readAccessibility();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === "openround:experience-preferences")
+        readAccessibility();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -344,6 +373,11 @@ function FollowupContent() {
     const answer = response();
     if (!snapshot?.question || !answer || !attemptToken) {
       setError("Complete the response before submitting.");
+      window.requestAnimationFrame(() =>
+        responseControlsRef.current
+          ?.querySelector<HTMLElement>("button:not(:disabled), input:not(:disabled)")
+          ?.focus(),
+      );
       return;
     }
     if (snapshot.question.confidence === "required" && confidence === null) {
@@ -369,29 +403,53 @@ function FollowupContent() {
     }));
   }
 
+  const revealed = snapshot?.phase === "answer_reveal";
+  // A deadline can expire while the learner is editing. Reveal only the server's
+  // saved response; an unsaved local draft must never look like an accepted answer.
   const displayedChoiceIds =
     snapshot?.response?.kind === "choice" || snapshot?.response?.kind === "poll"
       ? snapshot.response.choiceIds
-      : selectedChoiceIds;
-  const revealed = snapshot?.phase === "answer_reveal";
+      : revealed
+        ? []
+        : selectedChoiceIds;
   const assignment = snapshot?.purpose === "assignment";
   const locked = busy || commandState.pendingAction !== null || snapshotSyncRequired;
+  const completedCount =
+    snapshot?.status === "completed"
+      ? snapshot.questionCount
+      : (snapshot?.questionIndex ?? 0) + (revealed ? 1 : 0);
+  const progressLabel = snapshot
+    ? learner("{completed} of {total} questions completed", {
+        completed: formatNumber(locale, completedCount),
+        total: formatNumber(locale, snapshot.questionCount),
+      })
+    : "";
+  const displayedRating =
+    snapshot?.response?.kind === "rating" ? snapshot.response.value : revealed ? null : ratingValue;
+  const displayedNumeric =
+    snapshot?.response?.kind === "numeric" ? snapshot.response.value : revealed ? "" : numericValue;
+  const responseInstruction =
+    snapshot?.question?.type === "multi_select"
+      ? learner("Choose all answers that apply.")
+      : snapshot?.question &&
+          ["single_select", "true_false", "poll", "rating"].includes(snapshot.question.type)
+        ? learner("Choose one answer.")
+        : learner("Enter your answer, then submit.");
 
   return (
-    <div className="live-shell" lang={locale}>
-      <header className="shell live-topbar">
-        <Brand inverted />
+    <div
+      className={`live-shell ${styles.learner}`}
+      data-contrast={highContrast ? "high" : undefined}
+      data-motion={reducedMotion ? "reduced" : undefined}
+      lang={locale}
+    >
+      <header className={`shell live-topbar ${styles.topbar}`}>
+        <Brand />
         {snapshot ? (
-          <span className="status-pill">
-            {snapshot.phase === "intervention" || snapshot.timeMode === "flex"
-              ? copy("No countdown")
-              : copy("{multiplier}× time", {
-                  multiplier: formatNumber(locale, snapshot.timeMultiplier),
-                })}
-          </span>
+          <span className={styles.kind}>{learner(assignment ? "Assignment" : "Follow-up")}</span>
         ) : null}
       </header>
-      <main className="shell live-stage" id="main">
+      <main className={`shell live-stage ${styles.stage}`} id="main">
         <p aria-atomic="true" aria-live="polite" className="sr-only">
           {followupStatusAnnouncement(snapshot, locale)}
         </p>
@@ -473,12 +531,20 @@ function FollowupContent() {
           </section>
         ) : null}
         {snapshot?.status === "completed" ? (
-          <section className="live-card">
+          <section className={`live-card ${styles.completion}`}>
+            <span className={styles.completeMark} aria-hidden="true">
+              ✓
+            </span>
             <p className="eyebrow">
               {assignment ? copy("Practice complete") : copy("Follow-up complete")}
             </p>
             <h1 tabIndex={-1}>{copy("Thanks for checking your understanding.")}</h1>
             <p className="lead">{copy("Your responses were saved without creating an account.")}</p>
+            <p className={styles.savedSummary}>{progressLabel}</p>
+            <p className="muted">{learner("You can close this page.")}</p>
+            <Link className="button-quiet" href="/">
+              {copy("Return home")}
+            </Link>
           </section>
         ) : null}
         {snapshot?.phase === "intervention" &&
@@ -492,34 +558,66 @@ function FollowupContent() {
           />
         ) : null}
         {snapshot?.question && snapshot.status === "in_progress" ? (
-          <section className="live-card">
-            <div className="page-heading" style={{ alignItems: "center", marginBottom: 20 }}>
-              <span className="status-pill">
+          <section
+            className={`live-card ${styles.questionCard}`}
+            aria-labelledby="followup-question-heading"
+            aria-busy={busy}
+          >
+            <div className={styles.context}>
+              <p className={styles.assignmentTitle} lang="">
+                {snapshot.title}
+              </p>
+              <div className={styles.timing}>
+                <span className={styles.timeLabel}>
+                  {snapshot.timeMode === "flex"
+                    ? copy("No countdown")
+                    : copy("{multiplier}× time", {
+                        multiplier: formatNumber(locale, snapshot.timeMultiplier),
+                      })}
+                </span>
+                {snapshot.phase === "question_open" && snapshot.deadline ? (
+                  <Countdown
+                    deadline={snapshot.deadline}
+                    labels={{
+                      seconds: (seconds) =>
+                        copy("{seconds}s", { seconds: formatNumber(locale, seconds) }),
+                      remaining: (seconds) =>
+                        copy("{seconds} seconds remaining", {
+                          seconds: formatNumber(locale, seconds),
+                        }),
+                      paused: copy("Paused"),
+                      timeUp: copy("Time is up"),
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+            <div className={styles.progressHeader}>
+              <span className={styles.questionPosition}>
                 {copy("Question {current} of {total}", {
                   current: formatNumber(locale, (snapshot.questionIndex ?? 0) + 1),
                   total: formatNumber(locale, snapshot.questionCount),
                 })}
               </span>
-              {snapshot.phase === "question_open" && snapshot.deadline ? (
-                <Countdown
-                  deadline={snapshot.deadline}
-                  labels={{
-                    seconds: (seconds) =>
-                      copy("{seconds}s", { seconds: formatNumber(locale, seconds) }),
-                    remaining: (seconds) =>
-                      copy("{seconds} seconds remaining", {
-                        seconds: formatNumber(locale, seconds),
-                      }),
-                    paused: copy("Paused"),
-                    timeUp: copy("Time is up"),
-                  }}
-                />
-              ) : null}
+              <span className={styles.progressCaption}>{progressLabel}</span>
             </div>
-            <p className="eyebrow" lang="">
-              {snapshot.title}
-            </p>
-            <h1 lang="" tabIndex={-1} style={{ fontSize: "clamp(2rem, 7vw, 4rem)" }}>
+            <div
+              className={styles.progress}
+              role="progressbar"
+              aria-label={learner("Your progress")}
+              aria-valuemin={0}
+              aria-valuemax={snapshot.questionCount}
+              aria-valuenow={completedCount}
+              aria-valuetext={progressLabel}
+            >
+              <span style={{ width: `${(completedCount / snapshot.questionCount) * 100}%` }} />
+            </div>
+            <h1
+              id="followup-question-heading"
+              className={styles.questionTitle}
+              lang=""
+              tabIndex={-1}
+            >
               {snapshot.question.prompt}
             </h1>
             <div lang="">
@@ -531,86 +629,119 @@ function FollowupContent() {
                 sessionId={id}
               />
             </div>
-            {snapshot.question.type === "ranking" ||
-            snapshot.question.type === "open_text" ||
-            snapshot.question.type === "word_cloud" ? (
-              <p className="notice" lang={locale}>
-                {copy("These opinion formats currently support live Rounds only.")}
+            {snapshot.phase === "question_open" ? (
+              <p className={styles.instruction} id="followup-response-instruction">
+                {responseInstruction}
               </p>
-            ) : ["single_select", "true_false", "multi_select", "poll"].includes(
-                snapshot.question.type,
-              ) ? (
-              <div className="answer-grid" aria-label={copy("Response choices")}>
-                {snapshot.question.choices.map((choice, index) => {
-                  const selected = displayedChoiceIds.includes(choice.id);
-                  const correct =
-                    revealed &&
-                    snapshot.correctResponse?.kind === "choice" &&
-                    snapshot.correctResponse.choiceIds.includes(choice.id);
-                  return (
-                    <button
-                      aria-pressed={selected}
-                      className="answer-button"
-                      data-correct={correct || undefined}
-                      data-incorrect={(revealed && selected && !correct) || undefined}
-                      data-selected={selected || undefined}
-                      disabled={snapshot.phase !== "question_open" || locked}
-                      key={choice.id}
-                      onClick={() => chooseChoice(choice.id)}
-                      type="button"
-                    >
-                      <span aria-hidden="true" style={{ marginRight: 10 }}>
-                        {String.fromCharCode(65 + index)}.
-                      </span>
-                      <span lang="">{choice.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : snapshot.question.type === "numeric" ? (
-              <label className="field">
-                <span>
-                  {t("live.presentationPlay.numericResponse")}{" "}
-                  <span lang="">{snapshot.question.unit ?? ""}</span>
-                </span>
-                <input
-                  className="input"
-                  disabled={snapshot.phase !== "question_open" || locked}
-                  inputMode="decimal"
-                  onChange={(event) => setNumericValue(event.target.value)}
-                  value={
-                    snapshot.response?.kind === "numeric" ? snapshot.response.value : numericValue
-                  }
-                />
-              </label>
-            ) : snapshot.question.rating ? (
-              <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-                <legend className="field-label">{t("live.presentationPlay.chooseRating")}</legend>
-                <div className="answer-grid">
-                  {Array.from(
-                    { length: snapshot.question.rating.max - snapshot.question.rating.min + 1 },
-                    (_, index) => snapshot.question!.rating!.min + index,
-                  ).map((value) => (
-                    <button
-                      aria-pressed={ratingValue === value}
-                      className="answer-button"
-                      data-selected={ratingValue === value || undefined}
-                      disabled={snapshot.phase !== "question_open" || locked}
-                      key={value}
-                      onClick={() => setRatingValue(value)}
-                      type="button"
-                    >
-                      {formatNumber(locale, value)}
-                    </button>
-                  ))}
-                </div>
-                <p className="muted" lang="">
-                  {snapshot.question.rating.minLabel} · {snapshot.question.rating.maxLabel}
-                </p>
-              </fieldset>
             ) : null}
+            <div
+              ref={responseControlsRef}
+              role="group"
+              aria-label={copy("Response choices")}
+              aria-describedby={
+                snapshot.phase === "question_open" ? "followup-response-instruction" : undefined
+              }
+            >
+              {snapshot.question.type === "ranking" ||
+              snapshot.question.type === "open_text" ||
+              snapshot.question.type === "word_cloud" ? (
+                <p className="notice" lang={locale}>
+                  {copy("These opinion formats currently support live Rounds only.")}
+                </p>
+              ) : ["single_select", "true_false", "multi_select", "poll"].includes(
+                  snapshot.question.type,
+                ) ? (
+                <div className="answer-grid" aria-label={copy("Response choices")}>
+                  {snapshot.question.choices.map((choice, index) => {
+                    const selected = displayedChoiceIds.includes(choice.id);
+                    const correct =
+                      revealed &&
+                      snapshot.question?.purpose !== "opinion" &&
+                      snapshot.correctResponse?.kind === "choice" &&
+                      snapshot.correctResponse.choiceIds.includes(choice.id);
+                    const incorrect =
+                      revealed &&
+                      selected &&
+                      snapshot.question?.purpose !== "opinion" &&
+                      snapshot.correctResponse?.kind === "choice" &&
+                      !correct;
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        className="answer-button"
+                        data-correct={correct || undefined}
+                        data-incorrect={incorrect || undefined}
+                        data-selected={selected || undefined}
+                        disabled={snapshot.phase !== "question_open" || locked}
+                        key={choice.id}
+                        onClick={() => chooseChoice(choice.id)}
+                        type="button"
+                      >
+                        <span className={styles.choiceKey} aria-hidden="true">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className={styles.choiceBody}>
+                          <span lang="">{choice.label}</span>
+                          {selected || correct ? (
+                            <span className={styles.choiceState}>
+                              {revealed
+                                ? selected
+                                  ? `${learner("Your answer")}${correct ? ` · ${copy("Correct")}` : incorrect ? ` · ${learner("Incorrect")}` : ""}`
+                                  : learner("Correct answer")
+                                : learner("Selected")}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className={styles.choiceMark} aria-hidden="true">
+                          {incorrect ? "×" : selected || correct ? "✓" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : snapshot.question.type === "numeric" ? (
+                <label className="field">
+                  <span>
+                    {t("live.presentationPlay.numericResponse")}{" "}
+                    <span lang="">{snapshot.question.unit ?? ""}</span>
+                  </span>
+                  <input
+                    className="input"
+                    disabled={snapshot.phase !== "question_open" || locked}
+                    inputMode="decimal"
+                    onChange={(event) => setNumericValue(event.target.value)}
+                    value={displayedNumeric}
+                  />
+                </label>
+              ) : snapshot.question.rating ? (
+                <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+                  <legend className="field-label">{t("live.presentationPlay.chooseRating")}</legend>
+                  <div className="answer-grid">
+                    {Array.from(
+                      { length: snapshot.question.rating.max - snapshot.question.rating.min + 1 },
+                      (_, index) => snapshot.question!.rating!.min + index,
+                    ).map((value) => (
+                      <button
+                        aria-pressed={displayedRating === value}
+                        className="answer-button"
+                        data-selected={displayedRating === value || undefined}
+                        disabled={snapshot.phase !== "question_open" || locked}
+                        key={value}
+                        onClick={() => setRatingValue(value)}
+                        type="button"
+                      >
+                        {formatNumber(locale, value)}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="muted" lang="">
+                    {snapshot.question.rating.minLabel} · {snapshot.question.rating.maxLabel}
+                  </p>
+                </fieldset>
+              ) : null}
+            </div>
             {snapshot.question.confidence !== "off" && snapshot.phase === "question_open" ? (
-              <fieldset className="field" style={{ border: 0, padding: 0 }}>
+              <fieldset className={`field ${styles.confidence}`}>
                 <legend className="field-label">
                   {copy("How sure are you?")}
                   {snapshot.question.confidence === "required"
@@ -640,42 +771,90 @@ function FollowupContent() {
               </fieldset>
             ) : null}
             {snapshot.phase === "question_open" ? (
-              <button
-                className="button"
-                disabled={locked}
-                onClick={() => void submit()}
-                type="button"
-              >
-                {busy ? t("live.common.saving") : t("live.presentationPlay.submit")}
-              </button>
-            ) : null}
-            {revealed ? (
-              <div className={snapshot.correct === true ? "success" : "notice"}>
-                <strong>
-                  {snapshot.question.purpose === "opinion"
-                    ? t("live.presentationPlay.responseRecorded")
-                    : snapshot.correct
-                      ? copy("Correct")
-                      : copy("Review this question")}
-                </strong>
-                {snapshot.explanation ? <div lang="">{snapshot.explanation}</div> : null}
-                {snapshot.feedback ? <div lang="">{snapshot.feedback}</div> : null}
+              <div className={styles.actions}>
                 <button
                   className="button"
                   disabled={locked}
-                  onClick={() => void advance()}
-                  style={{ marginTop: 16 }}
+                  onClick={() => void submit()}
                   type="button"
                 >
-                  {snapshot.questionIndex === snapshot.questionCount - 1
-                    ? assignment
-                      ? copy("Finish practice")
-                      : copy("Finish follow-up")
-                    : snapshot.practiceMode === "full_sequence"
-                      ? copy("Review recovery guidance")
-                      : t("live.host.command.nextQuestion")}
+                  {busy ? t("live.common.saving") : t("live.presentationPlay.submit")}
                 </button>
               </div>
+            ) : null}
+            {revealed ? (
+              <>
+                <div
+                  className={styles.feedback}
+                  data-outcome={
+                    snapshot.question.purpose === "opinion"
+                      ? "recorded"
+                      : snapshot.correct === true
+                        ? "correct"
+                        : "review"
+                  }
+                >
+                  <span className={styles.feedbackMark} aria-hidden="true">
+                    {snapshot.question.purpose === "opinion" || snapshot.correct === true
+                      ? "✓"
+                      : "↳"}
+                  </span>
+                  <div>
+                    <h2>
+                      {snapshot.question.purpose === "opinion" && snapshot.response
+                        ? t("live.presentationPlay.responseRecorded")
+                        : snapshot.correct
+                          ? copy("Correct")
+                          : copy("Review this question")}
+                    </h2>
+                    <p>
+                      {learner(
+                        snapshot.response
+                          ? "Your response has been saved."
+                          : "No response was submitted.",
+                      )}
+                    </p>
+                    {snapshot.correctResponse?.kind === "numeric" ? (
+                      <p>
+                        <strong>{learner("Correct answer")}: </strong>
+                        <span lang="">
+                          {snapshot.correctResponse.value}{" "}
+                          {snapshot.correctResponse.unit ??
+                            (snapshot.question.type === "numeric" ? snapshot.question.unit : "") ??
+                            ""}
+                        </span>
+                      </p>
+                    ) : null}
+                    {snapshot.explanation ? (
+                      <p className={styles.authoredFeedback} lang="">
+                        {snapshot.explanation}
+                      </p>
+                    ) : null}
+                    {snapshot.feedback ? (
+                      <p className={styles.authoredFeedback} lang="">
+                        {snapshot.feedback}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className={styles.actions}>
+                  <p className="muted">{learner("Review the feedback, then continue.")}</p>
+                  <button
+                    className="button"
+                    disabled={locked}
+                    onClick={() => void advance()}
+                    type="button"
+                  >
+                    {snapshot.questionIndex === snapshot.questionCount - 1
+                      ? assignment
+                        ? copy("Finish practice")
+                        : copy("Finish follow-up")
+                      : snapshot.practiceMode === "full_sequence"
+                        ? copy("Review recovery guidance")
+                        : t("live.host.command.nextQuestion")}
+                  </button>
+                </div>
+              </>
             ) : null}
           </section>
         ) : null}

@@ -278,6 +278,30 @@ reason, and is not visible to other participants. Resume and completion are serv
 data inherits source-session retention and deletion; standalone assignment data uses the plan's
 retention window and is purged directly at its immutable expiry.
 
+### Assignments workspace and learner flow — November 17, 2026
+
+Assignments uses a configure → share → monitor flow: a published-Round picker, numbered setup
+sections with a review rail, a one-time link receipt, and a compact management workspace. The
+directory applies title search and lifecycle filters on the server, paginates older results and
+labels the visible count rather than implying a workspace-wide total. Existing assignments remain
+manageable when creation is paused. Overview, Private access and Results separate availability,
+revocable distribution, and aggregate evidence. Link filters describe permission and expiry only;
+they do not infer submission status for an identifiable learner.
+
+The learner route has its own responsive top-aligned layout and paired semantic foreground/background
+colors for selected, disabled and revealed answers. Progress advances only after server acknowledgement.
+Authored feedback, opinion responses and correctness remain distinct. Immutable publications, server
+deadlines, accommodations, exact-retry recovery and one-attempt bearer handling retain their contracts.
+Follow-up snapshots have no frozen room-theme field, so this route uses interface theme tokens and
+accessibility preferences without adding or changing a theme contract.
+
+Research checked the official [Teams assignment navigation](https://support.microsoft.com/en-us/education/assignments/view-and-navigate-your-assignments-educator),
+[Google Classroom assignment setup](https://support.google.com/edu/classroom/answer/6020265?co=GENIE.Platform%3DDesktop&hl=en),
+and [Kahoot assignment flow](https://support.kahoot.com/hc/en-us/articles/360039411334-How-to-assign-a-kahoot-in-web-platform).
+The adopted patterns are lifecycle navigation, explicit availability settings and a clear share/monitor
+handoff. Polling Pops keeps accountless participation, aggregate-only progress and one-time URL disclosure;
+it does not add a roster, identity verification, email delivery, grading, deadline editing or reopening.
+
 ## Presentation and portability
 
 ### Creator workspace and UX foundation

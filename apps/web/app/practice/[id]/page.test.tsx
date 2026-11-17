@@ -32,6 +32,7 @@ const fixtures = vi.hoisted(() => ({
   assignments: true,
   packs: true,
   pro: true,
+  personalLimit: 250,
   hooks: null as Hooks | null,
   frames: [] as Array<() => void>,
 }));
@@ -96,7 +97,7 @@ vi.mock("../../../components/workspace/workspace-provider", () => ({
     canEdit: fixtures.canEdit,
     loading: fixtures.accountLoading,
     productFeatures: { practiceAssignments: fixtures.assignments, recoveryPacks: fixtures.packs },
-    entitlements: { followups: fixtures.pro },
+    entitlements: { followups: fixtures.pro, maxPracticePersonalLinks: fixtures.personalLimit },
   }),
 }));
 vi.mock("../../../components/workspace/workspace-shell", () => ({
@@ -224,6 +225,7 @@ beforeEach(() => {
   fixtures.assignments = true;
   fixtures.packs = true;
   fixtures.pro = true;
+  fixtures.personalLimit = 250;
   fixtures.hooks = null;
   fixtures.frames = [];
   fixtures.fetch.mockReset().mockImplementation(() => Promise.resolve(detail()));
@@ -459,7 +461,7 @@ describe("practice management localization and state", () => {
 });
 
 describe("practice access authority and action semantics", () => {
-  it.each(["role", "workspace", "actor", "route", "loading", "feature", "entitlement"])(
+  it.each(["role", "workspace", "actor", "route", "loading", "feature", "entitlement", "limit"])(
     "ignores stale creates after a %s change",
     async (changeType) => {
       const state = await loaded();
@@ -478,6 +480,7 @@ describe("practice access authority and action semantics", () => {
       if (changeType === "loading") fixtures.accountLoading = true;
       if (changeType === "feature") fixtures.packs = false;
       if (changeType === "entitlement") fixtures.pro = false;
+      if (changeType === "limit") fixtures.personalLimit = 1;
       state.render();
       state.flushEffects();
       const calls = fixtures.fetch.mock.calls.length;
@@ -729,6 +732,142 @@ describe("practice access authority and action semantics", () => {
       await operation;
       expect(fixtures.frames).toHaveLength(0);
     }
+  });
+});
+
+describe("focused practice management", () => {
+  it.each(["assignment", "recovery"] as const)(
+    "returns %s practice to its matching directory in every locale",
+    async (purpose) => {
+      const state = await loaded(detail({ purpose }));
+      for (const locale of supportedLocales) {
+        fixtures.locale = locale;
+        const tree = state.render() as ReactElement<{ actions: ReactNode }>;
+        const link = nodes(tree.props.actions).find((node) => node.props.href)!;
+        expect(link.props.href).toBe(
+          purpose === "assignment" ? "/assignments" : "/results?view=practice",
+        );
+        expect(text(link)).toBe(
+          practiceManagementCopy(locale)(
+            purpose === "assignment" ? "Back to Assignments" : "Back to Practice",
+          ),
+        );
+      }
+    },
+  );
+
+  it("switches labelled panels with keyboard navigation and retains entered values", async () => {
+    const state = await loaded();
+    let tree = state.render();
+    const panel = (value: string) =>
+      nodes(tree).find((node) => node.props.id === `practice-panel-${value}`)!;
+    expect(panel("overview").props.hidden).toBe(false);
+    expect(panel("access").props.hidden).toBe(true);
+    click(tree, "Private access1");
+    tree = state.render();
+    expect(panel("access").props.hidden).toBe(false);
+    change(tree, "personal-pass-label", "Keep this label");
+    const keyboardFocus = vi.fn();
+    const lookup = vi.fn(() => ({ focus: keyboardFocus }));
+    vi.stubGlobal("document", { getElementById: lookup });
+    const tab = nodes(tree).find((node) => node.props.id === "practice-tab-access")!;
+    const preventDefault = vi.fn();
+    (tab.props as ComponentProps<"button">).onKeyDown?.({
+      key: "ArrowRight",
+      preventDefault,
+    } as never);
+    tree = state.render();
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(lookup).toHaveBeenCalledWith("practice-tab-results");
+    expect(keyboardFocus).toHaveBeenCalledOnce();
+    expect(panel("results").props.hidden).toBe(false);
+    expect(panel("results").props["aria-labelledby"]).toBe("practice-tab-results");
+    expect(field(tree, "personal-pass-label").value).toBe("Keep this label");
+    expect(fixtures.fetch).toHaveBeenCalledTimes(1);
+    expect(fixtures.shareAssignment).not.toHaveBeenCalled();
+  });
+
+  it("combines nickname search, status and link type without inferring completion", async () => {
+    const response = detail();
+    response.access = [
+      access({ id: "active", label: "Untranslated label", nickname: "Maya" }),
+      access({ id: "revoked", label: "Revoked learner", revokedAt: "2026-01-01T00:00:00Z" }),
+      access({ id: "expired", label: "Expired learner", expiresAt: "2020-01-01T00:00:00Z" }),
+      access({ id: "timing", kind: "accommodation", label: "Maya extended", timeMultiplier: 2 }),
+    ];
+    const state = await loaded(response);
+    change(state.render(), "practice-access-search", "mAYA");
+    let tree = state.render();
+    expect(text(tree)).toContain("Showing 2 of 4 links");
+    expect(text(tree)).not.toContain("Revoked learner");
+    change(tree, "practice-access-type", "accommodation");
+    tree = state.render();
+    expect(text(tree)).toContain("Showing 1 of 4 links");
+    expect(text(tree)).toContain("Maya extended");
+    expect(text(tree)).toContain("2× accommodation");
+    const row = nodes(tree).find(
+      (node) => node.type === "tr" && text(node).includes("Maya extended"),
+    )!;
+    expect(text(row)).not.toContain("Completed");
+    change(tree, "practice-access-status", "revoked");
+    tree = state.render();
+    expect(text(tree)).toContain("No links match these filters.");
+    click(tree, "Clear filters");
+    tree = state.render();
+    expect(text(tree)).toContain("Showing 4 of 4 links");
+    change(tree, "practice-access-status", "available");
+    expect(text(state.render())).toContain("Showing 2 of 4 links");
+    change(state.render(), "practice-access-status", "expired");
+    tree = state.render();
+    expect(text(tree)).toContain("Showing 1 of 4 links");
+    expect(text(tree)).toContain("Expired learner");
+    expect(fixtures.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts revoked personal links toward the plan limit and prevents an extra request", async () => {
+    fixtures.personalLimit = 1;
+    const response = detail();
+    response.access = [access({ revokedAt: "2026-01-01T00:00:00Z" })];
+    const state = await loaded(response);
+    let tree = state.render();
+    expect(field(tree, "personal-pass-label").disabled).toBe(true);
+    expect(button(tree, "Create personal link").disabled).toBe(true);
+    expect(text(tree)).toContain(
+      "Personal links used: 1 of 1. Revoked links still count toward the limit.",
+    );
+    expect(text(tree)).toContain("Personal link limit reached.");
+    change(tree, "personal-pass-label", "Attempt extra");
+    tree = state.render();
+    await submit(tree, "personal-pass-label");
+    expect(fixtures.fetch).toHaveBeenCalledTimes(1);
+    expect(button(tree, "Create accommodation pass").disabled).toBe(false);
+  });
+
+  it("uses the total workspace quota for single links beyond the 250-label setup batch limit", async () => {
+    fixtures.personalLimit = 1000;
+    const response = detail();
+    response.access = Array.from({ length: 250 }, (_, index) => access({ id: `link-${index}` }));
+    const state = await loaded(response);
+    const tree = state.render();
+    expect(field(tree, "personal-pass-label").disabled).toBe(false);
+    expect(text(tree)).toContain("Personal links used: 250 of 1,000.");
+    expect(text(tree)).not.toContain("Personal link limit reached.");
+  });
+
+  it("explains aggregate activity and the immutable schedule without presenting personal progress", async () => {
+    const state = await loaded(detail({ closed: true }));
+    const tree = state.render();
+    expect(text(tree)).toContain("The published content and schedule are fixed for this practice.");
+    expect(text(tree)).toContain("This practice is closed. Existing progress remains available.");
+    const results = nodes(tree).find((node) => node.props.id === "practice-panel-results")!;
+    expect(text(results)).toContain("Attempts are activity, not a count of unique learners.");
+    expect(text(results)).toContain("Individual completion is not available for these links.");
+    expect(text(results)).toContain("2,345");
+    expect(text(results)).toContain("1,234");
+    expect(nodes(results).some((node) => node.type === "table")).toBe(false);
+    expect(
+      nodes(tree).some((node) => node.type === "button" && text(node).includes("Reopen")),
+    ).toBe(false);
   });
 });
 

@@ -2,25 +2,29 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { QuizDraft } from "@openround/contracts";
-import styles from "../../../../components/practice/practice.module.css";
+import styles from "./assignment-setup.module.css";
+import { PracticeLinkReceipt } from "../../../../components/practice/practice-link-receipt";
+import {
+  assignmentScheduleError,
+  duplicatePersonalLabelCount,
+} from "../../../../lib/assignment-setup";
+import { assignmentSetupCopy } from "../../../../lib/i18n/assignment-setup-copy";
 import { useLocale } from "../../../../components/locale-provider";
-import { recordPracticeAssignmentShared } from "../../../../components/workspace/product-events";
 import {
   WorkspaceProvider,
   useWorkspace,
 } from "../../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../../components/workspace/workspace-shell";
 import { apiFetch, humanError } from "../../../../lib/api";
-import { formatNumber } from "../../../../lib/i18n/format";
+import { formatDateTime, formatNumber } from "../../../../lib/i18n/format";
 import {
   defaultPracticeWindow,
   localDateTimeValue,
   parsePersonalLabels,
   personalLabelsError,
   practicePersonalLinkLimit,
-  practiceLinksCsv,
   type CreatedPractice,
   type PracticeTimeMode,
 } from "../../../../lib/practice-assignment";
@@ -40,11 +44,17 @@ interface PublishedVersion {
   publishedAt: string;
 }
 
-function AssignPracticeContent() {
+function AssignPracticeController({ id }: { id: string }) {
   const { locale, t } = useLocale();
   const tRef = useRef(t);
-  const { id } = useParams<{ id: string }>();
-  const { entitlements, productFeatures, canEdit, startUpgrade } = useWorkspace();
+  const {
+    creator,
+    loading: accountLoading,
+    entitlements,
+    productFeatures,
+    canEdit,
+    startUpgrade,
+  } = useWorkspace();
   const [quiz, setQuiz] = useState<QuizRecord | null>(null);
   const [currentVersion, setCurrentVersion] = useState<PublishedVersion | null>(null);
   const [title, setTitle] = useState("");
@@ -55,27 +65,71 @@ function AssignPracticeContent() {
   const [maxClosesAt, setMaxClosesAt] = useState("");
   const [personalLabelsText, setPersonalLabelsText] = useState("");
   const [created, setCreated] = useState<CreatedPractice | null>(null);
-  const [copyStatus, setCopyStatus] = useState("");
+  const [timezone, setTimezone] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [rawError, setRawError] = useState("");
   const windowInitialized = useRef(false);
+  const mounted = useRef(false);
+  const busyRef = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
-  const receiptHeadingRef = useRef<HTMLHeadingElement>(null);
+  const copy = assignmentSetupCopy(locale);
+  const actorAvailable = Boolean(creator);
+  const accountReady = Boolean(creator && !accountLoading);
+  // Loading an unchanged account temporarily hides the controller without losing a form or
+  // one-time receipt. Changes to authority invalidate pending mutation callbacks immediately.
+  const authorityKey = JSON.stringify([
+    id,
+    creator?.userId,
+    creator?.workspaceId,
+    creator?.role,
+    canEdit,
+    productFeatures?.practiceAssignments,
+    entitlements?.followups,
+    entitlements?.maxPracticePersonalLinks,
+    entitlements?.reportRetentionDays,
+  ]);
+  const authorityRef = useRef({ key: authorityKey });
+  if (authorityRef.current.key !== authorityKey) authorityRef.current = { key: authorityKey };
+  const authority = authorityRef.current;
+  const accountReadyRef = useRef(accountReady);
+  accountReadyRef.current = accountReady;
+  const current = () => mounted.current && authorityRef.current === authority;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    busyRef.current = false;
+    setBusy(false);
+    setError("");
+    setRawError("");
+  }, [authority]);
 
   useEffect(() => {
     tRef.current = t;
   }, [t]);
 
   useEffect(() => {
+    if (!actorAvailable) return;
     let cancelled = false;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError("");
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     void apiFetch<{ quiz: QuizRecord; currentVersion: PublishedVersion | null }>(
       `/v1/quizzes/${id}`,
+      { signal: controller.signal },
     )
       .then((response) => {
-        if (cancelled) return;
+        if (cancelled || !mounted.current) return;
         setQuiz(response.quiz);
         setCurrentVersion(response.currentVersion);
         const publishedTitle = response.currentVersion?.content.title ?? response.quiz.title;
@@ -84,15 +138,16 @@ function AssignPracticeContent() {
         );
       })
       .catch((caught) => {
-        if (!cancelled) setLoadError(humanError(caught));
+        if (!cancelled && mounted.current) setLoadError(humanError(caught));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && mounted.current) setLoading(false);
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [id]);
+  }, [id, loadAttempt, actorAvailable, creator?.userId, creator?.workspaceId, creator?.role]);
 
   useEffect(() => {
     if (!entitlements || windowInitialized.current) return;
@@ -104,10 +159,8 @@ function AssignPracticeContent() {
     windowInitialized.current = true;
   }, [entitlements]);
 
-  const personalLabels = useMemo(
-    () => parsePersonalLabels(personalLabelsText),
-    [personalLabelsText],
-  );
+  const personalLabels = parsePersonalLabels(personalLabelsText);
+  const duplicateLabels = duplicatePersonalLabelCount(personalLabelsText, personalLabels.length);
   const personalLabelLimit = practicePersonalLinkLimit(entitlements);
   const rawLabelError = personalLabelsError(personalLabels, personalLabelLimit);
   const labelError = rawLabelError
@@ -126,22 +179,51 @@ function AssignPracticeContent() {
   const featureAvailable = productFeatures?.practiceAssignments === true;
   const entitlementAvailable = entitlements?.followups === true;
   const published = quiz?.status === "published" && Boolean(currentVersion);
+  const pageLoading = loading || !accountReady;
+
+  const scheduleError = assignmentScheduleError({ opensLater, opensAt, closesAt, maxClosesAt });
+  const scheduleErrorText =
+    scheduleError === "retention"
+      ? copy("Close by {date} on your plan.", {
+          date: maxClosesAt ? formatDateTime(locale, maxClosesAt) : "",
+        })
+      : scheduleError === "order"
+        ? t("reportRound.assign.closeAfterOpen")
+        : scheduleError === "past"
+          ? copy("Choose a future close time.")
+          : scheduleError === "invalid"
+            ? copy("Choose valid opening and closing times.")
+            : "";
+  const displayDate = (value: string) =>
+    value && Number.isFinite(new Date(value).getTime()) ? formatDateTime(locale, value) : "—";
 
   async function createPractice(event: FormEvent) {
     event.preventDefault();
-    if (!published || !canEdit || !featureAvailable || !entitlementAvailable || labelError) return;
+    if (
+      !current() ||
+      !accountReadyRef.current ||
+      busyRef.current ||
+      !published ||
+      !canEdit ||
+      !featureAvailable ||
+      !entitlementAvailable ||
+      labelError
+    )
+      return;
     const opening = opensLater ? new Date(opensAt) : new Date();
     const closing = new Date(closesAt);
-    if (Number.isNaN(opening.getTime()) || Number.isNaN(closing.getTime()) || closing <= opening) {
-      setError(t("reportRound.assign.closeAfterOpen"));
+    if (assignmentScheduleError({ opensLater, opensAt, closesAt, maxClosesAt })) {
+      setError(scheduleErrorText);
       setRawError("");
-      window.requestAnimationFrame(() => errorRef.current?.focus());
+      window.requestAnimationFrame(() => {
+        if (current()) errorRef.current?.focus();
+      });
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setRawError("");
-    setCopyStatus("");
     try {
       const response = await apiFetch<CreatedPractice>(`/v1/quizzes/${id}/practice-assignments`, {
         method: "POST",
@@ -154,44 +236,19 @@ function AssignPracticeContent() {
           personalLabels,
         }),
       });
-      setCreated(response);
-      window.requestAnimationFrame(() => receiptHeadingRef.current?.focus());
+      if (current()) setCreated(response);
     } catch (caught) {
+      if (!current()) return;
       setRawError(humanError(caught));
-      window.requestAnimationFrame(() => errorRef.current?.focus());
+      window.requestAnimationFrame(() => {
+        if (current()) errorRef.current?.focus();
+      });
     } finally {
-      setBusy(false);
+      if (current()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
-  }
-
-  async function copyLink(url: string, label: string) {
-    setError("");
-    setRawError("");
-    setCopyStatus("");
-    try {
-      await navigator.clipboard.writeText(url);
-      recordPracticeAssignmentShared();
-      setCopyStatus(t("reportRound.assign.copied", { label }));
-    } catch {
-      setError(t("reportRound.assign.copyBlocked"));
-    }
-  }
-
-  function downloadLinks() {
-    if (!created) return;
-    setError("");
-    setRawError("");
-    const blob = new Blob([practiceLinksCsv(created)], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `polling-pops-practice-${created.followup.id}-links.csv`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    recordPracticeAssignmentShared();
-    setCopyStatus(t("reportRound.assign.linksDownloaded"));
   }
 
   return (
@@ -207,7 +264,7 @@ function AssignPracticeContent() {
       title={t("reportRound.assign.title")}
       translationLevel="full"
     >
-      {loadError || rawError || error ? (
+      {accountReady && (loadError || rawError || error) ? (
         <p
           className="error"
           lang={loadError || rawError ? "en-CA" : undefined}
@@ -218,12 +275,22 @@ function AssignPracticeContent() {
           {loadError || rawError || error}
         </p>
       ) : null}
-      {loading ? (
-        <p className={styles.muted} role="status">
-          {t("reportRound.assign.loading")}
-        </p>
+      {accountReady && loadError ? (
+        <button
+          className="button-quiet"
+          onClick={() => setLoadAttempt((value) => value + 1)}
+          type="button"
+        >
+          {t("delivery.common.retry")}
+        </button>
       ) : null}
-      {!loading && !loadError && !featureAvailable ? (
+      {pageLoading ? (
+        <div className={styles.loading} role="status">
+          <span className={styles.loadingBar} aria-hidden="true" />
+          <p>{t("reportRound.assign.loading")}</p>
+        </div>
+      ) : null}
+      {!pageLoading && !loadError && !featureAvailable ? (
         <section className={styles.emptyState}>
           <h2>{t("reportRound.assign.notEnabledTitle")}</h2>
           <p>{t("reportRound.assign.notEnabledDescription")}</p>
@@ -232,7 +299,7 @@ function AssignPracticeContent() {
           </Link>
         </section>
       ) : null}
-      {!loading && !loadError && featureAvailable && !canEdit ? (
+      {!pageLoading && !loadError && featureAvailable && !canEdit ? (
         <section className={styles.emptyState}>
           <h2>{t("reportRound.assign.editorRequiredTitle")}</h2>
           <p>{t("reportRound.assign.editorRequiredDescription")}</p>
@@ -241,7 +308,7 @@ function AssignPracticeContent() {
           </Link>
         </section>
       ) : null}
-      {!loading && !loadError && featureAvailable && canEdit && quiz && !published ? (
+      {!pageLoading && !loadError && featureAvailable && canEdit && quiz && !published ? (
         <section className={styles.emptyState}>
           <h2>{t("reportRound.assign.publishFirstTitle")}</h2>
           <p>{t("reportRound.assign.publishFirstDescription")}</p>
@@ -250,7 +317,7 @@ function AssignPracticeContent() {
           </Link>
         </section>
       ) : null}
-      {!loading &&
+      {!pageLoading &&
       !loadError &&
       featureAvailable &&
       canEdit &&
@@ -263,11 +330,15 @@ function AssignPracticeContent() {
             <button
               className="button"
               onClick={() => {
+                if (!current() || !accountReadyRef.current) return;
                 setError("");
                 setRawError("");
                 void startUpgrade().catch((caught) => {
+                  if (!current()) return;
                   setRawError(humanError(caught));
-                  window.requestAnimationFrame(() => errorRef.current?.focus());
+                  window.requestAnimationFrame(() => {
+                    if (current()) errorRef.current?.focus();
+                  });
                 });
               }}
               type="button"
@@ -280,7 +351,7 @@ function AssignPracticeContent() {
           </div>
         </section>
       ) : null}
-      {!loading &&
+      {!pageLoading &&
       !loadError &&
       featureAvailable &&
       canEdit &&
@@ -295,7 +366,7 @@ function AssignPracticeContent() {
           </Link>
         </section>
       ) : null}
-      {!loading &&
+      {!pageLoading &&
       !loadError &&
       featureAvailable &&
       canEdit &&
@@ -304,281 +375,325 @@ function AssignPracticeContent() {
       mainQuestionCount > 0 &&
       quiz ? (
         created ? (
-          <section className={styles.receipt} aria-labelledby="practice-receipt-heading">
-            <div className={styles.receiptHeader}>
-              <div>
-                <p className="eyebrow">{t("reportRound.assign.ready")}</p>
-                <h2 id="practice-receipt-heading" ref={receiptHeadingRef} tabIndex={-1}>
-                  {t("reportRound.assign.saveLinks")}
-                </h2>
-              </div>
-              <span className="status-pill">
-                {new Date(created.followup.opensAt) > new Date()
-                  ? t("reportRound.status.scheduled")
-                  : t("reportRound.status.open")}
-              </span>
-            </div>
-            <p>{t("reportRound.assign.hashNotice")}</p>
-            <div className={styles.linkBox}>
-              <div className={styles.linkRow}>
-                <label className="field" htmlFor="generic-practice-link">
-                  <span>{t("reportRound.assign.genericLink")}</span>
-                  <input
-                    className="input"
-                    id="generic-practice-link"
-                    readOnly
-                    value={created.genericUrl}
-                  />
-                </label>
-                <button
-                  className="button-quiet small-button"
-                  onClick={() =>
-                    void copyLink(created.genericUrl, t("reportRound.assign.genericPracticeLink"))
-                  }
-                  type="button"
-                >
-                  {t("reportRound.assign.copy")}
-                </button>
-              </div>
-              {created.personalAccess.length ? (
-                <>
-                  <h3>{t("reportRound.assign.personalLinks")}</h3>
-                  <ul className={styles.personalLinks}>
-                    {created.personalAccess.map((access, index) => (
-                      <li className={styles.linkRow} key={access.id}>
-                        <label className="field" htmlFor={`personal-practice-link-${access.id}`}>
-                          <span>{access.nickname ?? access.label}</span>
-                          <input
-                            className="input"
-                            id={`personal-practice-link-${access.id}`}
-                            readOnly
-                            value={access.url ?? ""}
-                          />
-                        </label>
-                        <button
-                          className="button-quiet small-button"
-                          disabled={!access.url}
-                          onClick={() =>
-                            access.url &&
-                            void copyLink(
-                              access.url,
-                              access.nickname ??
-                                (access.label ||
-                                  t("reportRound.assign.personalLinkNumber", {
-                                    number: index + 1,
-                                  })),
-                            )
-                          }
-                          type="button"
-                        >
-                          {t("reportRound.assign.copy")}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </div>
-            <p aria-live="polite" className={copyStatus ? "success" : "sr-only"} role="status">
-              {copyStatus}
-            </p>
-            <div className={styles.receiptActions}>
-              <button className="button" onClick={downloadLinks} type="button">
-                {t("reportRound.assign.downloadCsv")}
-              </button>
-              <Link className="button-quiet" href={`/practice/${created.followup.id}`}>
-                {t("reportRound.assign.managePractice")}
-              </Link>
-              <Link className="button-quiet" href="/dashboard">
-                {t("reportRound.assign.done")}
-              </Link>
-            </div>
-          </section>
+          <PracticeLinkReceipt created={created} locale={locale} doneHref="/assignments" />
         ) : (
-          <div className={styles.stack}>
+          <div className={styles.setup}>
             <section className={styles.sourceCard} aria-labelledby="practice-source-heading">
               <div className={styles.sourceHeader}>
-                <div>
+                <div className={styles.sourceIdentity}>
                   <p className="eyebrow">{t("reportRound.assign.publishedSource")}</p>
-                  <h2 id="practice-source-heading">
+                  <h2 id="practice-source-heading" lang="">
                     {currentVersion?.content.title ?? quiz.title}
                   </h2>
                 </div>
-                <span className="status-pill">
-                  {t("reportRound.assign.publishedVersion", {
-                    version: currentVersion?.version ?? "",
-                  })}
-                </span>
-              </div>
-              <div className={styles.sourceFacts}>
-                <div className={styles.sourceFact}>
-                  <strong>{formatNumber(locale, mainQuestionCount)}</strong>
-                  <span>
+                <div className={styles.sourceBadges}>
+                  <span className={styles.badge}>
+                    {t("reportRound.assign.publishedVersion", {
+                      version: currentVersion?.version ?? "",
+                    })}
+                  </span>
+                  <span className={styles.badge}>
+                    {formatNumber(locale, mainQuestionCount)}{" "}
                     {t("reportRound.assign.mainQuestions", {
                       count: formatNumber(locale, mainQuestionCount),
                     })}
                   </span>
-                </div>
-                <div className={styles.sourceFact}>
-                  <strong>
-                    {timeMode === "flex"
-                      ? t("reportRound.assign.flexible")
-                      : t("reportRound.assign.timed")}
-                  </strong>
-                  <span>{t("reportRound.assign.participantPacing")}</span>
-                </div>
-                <div className={styles.sourceFact}>
-                  <strong>{t("reportRound.assign.oneAttempt")}</strong>
-                  <span>{t("reportRound.assign.perPersonalLink")}</span>
+                  <Link className={styles.sourceLink} href={`/quiz/${id}/preview`}>
+                    {t("reportRound.assign.viewRound")} <span aria-hidden="true">↗</span>
+                  </Link>
                 </div>
               </div>
-              <p>{t("reportRound.assign.immutableDescription")}</p>
+              <p className={styles.muted}>{t("reportRound.assign.immutableDescription")}</p>
               {hasUnpublishedChanges ? (
-                <p className="notice">{t("reportRound.assign.unpublishedNotice")}</p>
+                <p className={styles.driftNotice}>{t("reportRound.assign.unpublishedNotice")}</p>
               ) : null}
             </section>
 
-            <form className={styles.formCard} onSubmit={createPractice}>
-              <h2>{t("reportRound.assign.settings")}</h2>
-              <div className={styles.fields}>
-                <label className={`field ${styles.fullField}`} htmlFor="practice-title">
-                  <span>{t("reportRound.assign.titleField")}</span>
-                  <input
-                    className="input"
-                    id="practice-title"
-                    maxLength={160}
-                    onChange={(event) => setTitle(event.target.value)}
-                    value={title}
-                  />
-                </label>
-                <fieldset className={styles.fullField} style={{ border: 0, margin: 0, padding: 0 }}>
-                  <legend className="field-label">{t("reportRound.assign.timing")}</legend>
-                  <div className={styles.optionGrid}>
-                    <label className={styles.option}>
-                      <input
-                        checked={timeMode === "flex"}
-                        name="time-mode"
-                        onChange={() => setTimeMode("flex")}
-                        type="radio"
-                      />
-                      <span>
-                        <strong>{t("reportRound.assign.timeFlex")}</strong>
-                        {t("reportRound.assign.timeFlexDescription")}
-                      </span>
-                    </label>
-                    <label className={styles.option}>
-                      <input
-                        checked={timeMode === "timed"}
-                        name="time-mode"
-                        onChange={() => setTimeMode("timed")}
-                        type="radio"
-                      />
-                      <span>
-                        <strong>{t("reportRound.assign.useTimers")}</strong>
-                        {t("reportRound.assign.useTimersDescription")}
-                      </span>
-                    </label>
+            <form className={styles.layout} onSubmit={createPractice} aria-busy={busy}>
+              <div className={styles.sections}>
+                <section className={styles.card} aria-labelledby="practice-settings-heading">
+                  <div className={styles.sectionHeading}>
+                    <span aria-hidden="true" className={styles.step}>
+                      1
+                    </span>
+                    <h2 id="practice-settings-heading">{t("reportRound.assign.settings")}</h2>
                   </div>
-                </fieldset>
-                <fieldset className={styles.fullField} style={{ border: 0, margin: 0, padding: 0 }}>
-                  <legend className="field-label">{t("reportRound.assign.openPractice")}</legend>
-                  <div className={styles.optionGrid}>
-                    <label className={styles.option}>
-                      <input
-                        checked={!opensLater}
-                        name="open-time"
-                        onChange={() => setOpensLater(false)}
-                        type="radio"
-                      />
-                      <span>
-                        <strong>{t("reportRound.assign.now")}</strong>
-                        {t("reportRound.assign.nowDescription")}
-                      </span>
-                    </label>
-                    <label className={styles.option}>
-                      <input
-                        checked={opensLater}
-                        name="open-time"
-                        onChange={() => setOpensLater(true)}
-                        type="radio"
-                      />
-                      <span>
-                        <strong>{t("reportRound.assign.scheduleLater")}</strong>
-                        {t("reportRound.assign.scheduleLaterDescription")}
-                      </span>
-                    </label>
-                  </div>
-                </fieldset>
-                {opensLater ? (
-                  <label className="field" htmlFor="practice-opens-at">
-                    <span>{t("reportRound.assign.openDate")}</span>
+                  <label className="field" htmlFor="practice-title">
+                    <span>{t("reportRound.assign.titleField")}</span>
                     <input
                       className="input"
-                      id="practice-opens-at"
-                      max={maxClosesAt || undefined}
-                      min={localDateTimeValue(new Date())}
-                      onChange={(event) => setOpensAt(event.target.value)}
-                      required
-                      type="datetime-local"
-                      value={opensAt}
+                      disabled={busy}
+                      id="practice-title"
+                      lang=""
+                      maxLength={160}
+                      onChange={(event) => setTitle(event.target.value)}
+                      value={title}
                     />
                   </label>
-                ) : null}
-                <label className="field" htmlFor="practice-closes-at">
-                  <span>{t("reportRound.assign.closeDate")}</span>
-                  <input
-                    className="input"
-                    id="practice-closes-at"
-                    max={maxClosesAt || undefined}
-                    min={opensLater ? opensAt : localDateTimeValue(new Date())}
-                    onChange={(event) => setClosesAt(event.target.value)}
-                    required
-                    type="datetime-local"
-                    value={closesAt}
-                  />
-                </label>
-              </div>
-              <details className={styles.disclosure}>
-                <summary>{t("reportRound.assign.createPersonalLinks")}</summary>
-                <label className="field" htmlFor="practice-personal-labels">
-                  <span>{t("reportRound.assign.oneLabelPerLine")}</span>
-                  <textarea
-                    aria-describedby="practice-personal-labels-help"
-                    aria-invalid={Boolean(labelError)}
-                    className="textarea"
-                    id="practice-personal-labels"
-                    onChange={(event) => setPersonalLabelsText(event.target.value)}
-                    placeholder={t("reportRound.assign.labelsPlaceholder")}
-                    rows={5}
-                    value={personalLabelsText}
-                  />
-                </label>
-                <p className={styles.muted} id="practice-personal-labels-help">
-                  {t("reportRound.assign.labelsHelp", {
-                    maximum: formatNumber(locale, personalLabelLimit),
-                    count: formatNumber(locale, personalLabels.length),
-                  })}
-                </p>
-                {labelError ? (
-                  <p className="error" role="alert">
+                  <fieldset className={styles.fieldset} disabled={busy}>
+                    <legend>{t("reportRound.assign.timing")}</legend>
+                    <div className={styles.optionGrid}>
+                      <label
+                        className={`${styles.option} ${timeMode === "flex" ? styles.selected : ""}`}
+                      >
+                        <input
+                          checked={timeMode === "flex"}
+                          name="time-mode"
+                          onChange={() => setTimeMode("flex")}
+                          type="radio"
+                          value="flex"
+                        />
+                        <span>
+                          <strong>{t("reportRound.assign.timeFlex")}</strong>
+                          <span>{t("reportRound.assign.timeFlexDescription")}</span>
+                        </span>
+                      </label>
+                      <label
+                        className={`${styles.option} ${timeMode === "timed" ? styles.selected : ""}`}
+                      >
+                        <input
+                          checked={timeMode === "timed"}
+                          name="time-mode"
+                          onChange={() => setTimeMode("timed")}
+                          type="radio"
+                          value="timed"
+                        />
+                        <span>
+                          <strong>{t("reportRound.assign.useTimers")}</strong>
+                          <span>{t("reportRound.assign.useTimersDescription")}</span>
+                        </span>
+                      </label>
+                    </div>
+                  </fieldset>
+                </section>
+                <section className={styles.card} aria-labelledby="practice-availability-heading">
+                  <div className={styles.sectionHeading}>
+                    <span aria-hidden="true" className={styles.step}>
+                      2
+                    </span>
+                    <h2 id="practice-availability-heading">{copy("Availability")}</h2>
+                  </div>
+                  <fieldset className={styles.fieldset} disabled={busy}>
+                    <legend>{t("reportRound.assign.openPractice")}</legend>
+                    <div className={styles.optionGrid}>
+                      <label className={`${styles.option} ${!opensLater ? styles.selected : ""}`}>
+                        <input
+                          checked={!opensLater}
+                          name="open-time"
+                          onChange={() => setOpensLater(false)}
+                          type="radio"
+                          value="now"
+                        />
+                        <span>
+                          <strong>{t("reportRound.assign.now")}</strong>
+                          <span>{t("reportRound.assign.nowDescription")}</span>
+                        </span>
+                      </label>
+                      <label className={`${styles.option} ${opensLater ? styles.selected : ""}`}>
+                        <input
+                          checked={opensLater}
+                          name="open-time"
+                          onChange={() => setOpensLater(true)}
+                          type="radio"
+                          value="later"
+                        />
+                        <span>
+                          <strong>{t("reportRound.assign.scheduleLater")}</strong>
+                          <span>{t("reportRound.assign.scheduleLaterDescription")}</span>
+                        </span>
+                      </label>
+                    </div>
+                  </fieldset>
+                  <div className={styles.dateGrid}>
+                    {opensLater ? (
+                      <label className="field" htmlFor="practice-opens-at">
+                        <span>{t("reportRound.assign.openDate")}</span>
+                        <input
+                          aria-describedby="practice-timezone practice-schedule-error"
+                          className="input"
+                          disabled={busy}
+                          id="practice-opens-at"
+                          max={closesAt || maxClosesAt || undefined}
+                          min={localDateTimeValue(new Date())}
+                          onChange={(event) => setOpensAt(event.target.value)}
+                          required
+                          type="datetime-local"
+                          value={opensAt}
+                        />
+                      </label>
+                    ) : null}
+                    <label className="field" htmlFor="practice-closes-at">
+                      <span>{t("reportRound.assign.closeDate")}</span>
+                      <input
+                        aria-describedby="practice-timezone practice-retention practice-schedule-error"
+                        aria-invalid={Boolean(scheduleError)}
+                        className="input"
+                        disabled={busy}
+                        id="practice-closes-at"
+                        max={maxClosesAt || undefined}
+                        min={opensLater ? opensAt : localDateTimeValue(new Date())}
+                        onChange={(event) => setClosesAt(event.target.value)}
+                        required
+                        type="datetime-local"
+                        value={closesAt}
+                      />
+                    </label>
+                  </div>
+                  <div className={styles.dateHelp}>
+                    <p id="practice-timezone">
+                      {timezone ? copy("Times shown in {timezone}.", { timezone }) : null}
+                    </p>
+                    <p id="practice-retention">
+                      {maxClosesAt
+                        ? copy("Close by {date} on your plan.", { date: displayDate(maxClosesAt) })
+                        : null}
+                    </p>
+                  </div>
+                  <p
+                    className={scheduleErrorText ? styles.fieldError : "sr-only"}
+                    id="practice-schedule-error"
+                    aria-live="polite"
+                  >
+                    {scheduleErrorText}
+                  </p>
+                </section>
+                <section className={styles.card} aria-labelledby="practice-personal-heading">
+                  <div className={styles.sectionHeading}>
+                    <span aria-hidden="true" className={styles.step}>
+                      3
+                    </span>
+                    <h2 id="practice-personal-heading">{copy("Personal links")}</h2>
+                  </div>
+                  <p className={styles.muted}>
+                    {copy("One anonymous link is always included.")}{" "}
+                    {copy("Share links yourself. No emails are sent.")}
+                  </p>
+                  <details className={styles.personalDisclosure}>
+                    <summary>
+                      {t("reportRound.assign.createPersonalLinks")}
+                      <span className={styles.count}>
+                        {formatNumber(locale, personalLabels.length)}
+                      </span>
+                    </summary>
+                    <div className={styles.personalFields}>
+                      <label className="field" htmlFor="practice-personal-labels">
+                        <span>{t("reportRound.assign.oneLabelPerLine")}</span>
+                        <textarea
+                          aria-describedby="practice-personal-labels-help practice-personal-count practice-personal-error"
+                          aria-invalid={Boolean(labelError)}
+                          className="textarea"
+                          disabled={busy || personalLabelLimit === 0}
+                          id="practice-personal-labels"
+                          lang=""
+                          onChange={(event) => setPersonalLabelsText(event.target.value)}
+                          placeholder={t("reportRound.assign.labelsPlaceholder")}
+                          rows={5}
+                          value={personalLabelsText}
+                        />
+                      </label>
+                      <p className={styles.muted} id="practice-personal-labels-help">
+                        {copy(
+                          "Use a name or private label, up to 80 characters. Duplicate lines create one link.",
+                        )}
+                      </p>
+                      <p
+                        className={labelError ? styles.fieldError : styles.labelCount}
+                        id="practice-personal-count"
+                        aria-live="polite"
+                      >
+                        {copy("{count} of {maximum} personal links", {
+                          count: formatNumber(locale, personalLabels.length),
+                          maximum: formatNumber(locale, personalLabelLimit),
+                        })}
+                        {duplicateLabels > 0 ? (
+                          <>
+                            {" "}
+                            ·{" "}
+                            {copy("Duplicate labels combined: {count}.", {
+                              count: formatNumber(locale, duplicateLabels),
+                            })}
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                  </details>
+                  <p
+                    className={labelError ? styles.fieldError : "sr-only"}
+                    id="practice-personal-error"
+                    role={labelError ? "alert" : undefined}
+                  >
                     {labelError}
                   </p>
-                ) : null}
-              </details>
-              <div className={styles.formActions}>
-                <button className="button" disabled={busy || Boolean(labelError)} type="submit">
-                  {busy ? t("reportRound.assign.creating") : t("reportRound.assign.create")}
-                </button>
-                <Link className="button-quiet" href="/dashboard">
-                  {t("delivery.common.cancel")}
-                </Link>
+                </section>
               </div>
+              <aside className={styles.review} aria-labelledby="practice-review-heading">
+                <div className={styles.reviewHeader}>
+                  <p className="eyebrow">{t("reportRound.assign.title")}</p>
+                  <h2 id="practice-review-heading">{copy("Review assignment")}</h2>
+                </div>
+                <p className={styles.reviewTitle} lang="">
+                  {title || currentVersion?.content.title || quiz.title}
+                </p>
+                <dl className={styles.reviewFacts}>
+                  <div>
+                    <dt>{t("reportRound.assign.timing")}</dt>
+                    <dd>
+                      {timeMode === "flex"
+                        ? t("reportRound.assign.flexible")
+                        : t("reportRound.assign.timed")}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{copy("Opens")}</dt>
+                    <dd>{opensLater ? displayDate(opensAt) : t("reportRound.assign.now")}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy("Closes")}</dt>
+                    <dd>{displayDate(closesAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy("Personal links")}</dt>
+                    <dd>
+                      {formatNumber(locale, personalLabels.length)}
+                      <small>
+                        {t("reportRound.assign.oneAttempt")} ·{" "}
+                        {t("reportRound.assign.perPersonalLink")}
+                      </small>
+                    </dd>
+                  </div>
+                </dl>
+                <p className={styles.muted}>{copy("One anonymous link is always included.")}</p>
+                <div className={styles.formActions}>
+                  <button
+                    className="button"
+                    disabled={busy || Boolean(labelError) || Boolean(scheduleError)}
+                    type="submit"
+                  >
+                    {busy ? t("reportRound.assign.creating") : t("reportRound.assign.create")}
+                  </button>
+                  <Link className="button-quiet" href="/assignments">
+                    {t("delivery.common.cancel")}
+                  </Link>
+                </div>
+                <p className={styles.actionHelp}>
+                  {copy("Share links yourself. No emails are sent.")}
+                </p>
+              </aside>
             </form>
           </div>
         )
       ) : null}
     </WorkspaceShell>
   );
+}
+
+function AssignPracticeContent() {
+  const { id } = useParams<{ id: string }>();
+  const { creator } = useWorkspace();
+  // Actor and route changes discard source data, labels and private bearer receipts together.
+  // Locale and an in-progress refresh of the same account preserve the current controller.
+  const actorKey = JSON.stringify([id, creator?.userId, creator?.workspaceId, creator?.role]);
+  return <AssignPracticeController id={id} key={actorKey} />;
 }
 
 export default function AssignPracticePage() {

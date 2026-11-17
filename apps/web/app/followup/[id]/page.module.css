@@ -1,0 +1,554 @@
+/* Follow-ups do not carry a room theme. Use the current interface's semantic
+   colors, including paired foregrounds, rather than the legacy live defaults. */
+.learner.learner {
+  --experience-canvas: var(--ui-canvas);
+  --experience-surface: var(--ui-surface);
+  --experience-surface-strong: var(--ui-surface-soft);
+  --experience-text: var(--ui-text-strong);
+  --experience-muted: var(--ui-text-subtle);
+  --experience-primary: var(--ui-accent-ink);
+  --experience-primary-fill: var(--ui-accent);
+  --experience-accent: var(--ui-accent);
+  background: var(--ui-canvas);
+  color: var(--ui-text);
+  min-height: 100svh;
+}
+
+.learner .topbar {
+  background: transparent;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-text-strong);
+  gap: 16px;
+  max-width: 1040px;
+  min-height: 76px;
+  padding-block: 12px;
+}
+
+.topbar::before {
+  display: none;
+}
+
+.topbar :global(.brand-name) {
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+}
+
+.topbar :global(.brand-pop) {
+  height: 42px;
+  width: 36px;
+}
+
+.kind {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+  font-weight: 650;
+  padding: 6px 12px;
+}
+
+.stage:global(.live-stage) {
+  align-content: start;
+  align-items: start;
+  gap: 20px;
+  justify-items: stretch;
+  max-width: 900px;
+  min-height: 0;
+  padding-block: 28px 64px;
+}
+
+.stage > * {
+  min-width: 0;
+}
+
+.stage :global(.live-card) {
+  border: 1px solid var(--ui-border);
+  border-radius: 20px;
+  box-shadow: var(--ui-shadow-sm);
+  max-width: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: clamp(22px, 4vw, 40px);
+}
+
+.learner :is(h1, h2, h3, :global(.field-label)) {
+  color: var(--ui-text-strong);
+}
+
+.learner :global(.eyebrow) {
+  color: var(--ui-text-subtle);
+}
+
+.learner :global(.button) {
+  background: var(--ui-accent);
+  border: 1px solid var(--ui-accent);
+  border-radius: 10px;
+  color: var(--ui-on-accent);
+  font-size: 0.94rem;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 12px 22px;
+}
+
+.learner :global(.button):hover:not(:disabled) {
+  background: var(--ui-accent-hover);
+  border-color: var(--ui-accent-hover);
+  filter: none;
+  transform: none;
+}
+
+.learner :global(.button):disabled {
+  background: var(--ui-surface-soft);
+  border-color: var(--ui-border);
+  color: var(--ui-text-muted);
+  opacity: 1;
+}
+
+.learner :global(.button-quiet) {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 10px;
+  color: var(--ui-text);
+  font-size: 0.9rem;
+  min-height: 44px;
+}
+
+.learner :global(.button-quiet):disabled {
+  opacity: 1;
+}
+
+.learner :global(.button-quiet):hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+}
+
+.learner :global(.button-quiet)[data-selected="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-focus);
+  box-shadow: 0 0 0 1px var(--ui-focus);
+  color: var(--ui-text-strong);
+}
+
+.learner :is(button, a, input):focus-visible,
+.learner h1:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 4px;
+}
+
+.context {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.assignmentTitle {
+  color: var(--ui-text-subtle);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 0;
+  min-width: 0;
+}
+
+.timing {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.timeLabel {
+  color: var(--ui-text-subtle);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.learner .timing :global(.countdown) {
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text-strong);
+  font-size: 0.94rem;
+  min-height: 36px;
+  min-width: auto;
+  padding-inline: 12px;
+}
+
+.progressHeader {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.questionPosition {
+  color: var(--ui-text-strong);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.progressCaption {
+  color: var(--ui-text-muted);
+  font-size: 0.78rem;
+}
+
+.progress {
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  border-radius: 99px;
+  height: 6px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+
+.progress > span {
+  background: var(--ui-focus);
+  display: block;
+  height: 100%;
+}
+
+.questionCard .questionTitle {
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.instruction {
+  color: var(--ui-text-subtle);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 16px 0 0;
+}
+
+.questionCard :global(.answer-grid) {
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* These state selectors intentionally outrank legacy live-shell answer colors.
+   Revealed choices stay fully opaque and always keep a paired foreground. */
+.learner .questionCard :global(.answer-button) {
+  align-items: center;
+  background: var(--ui-surface);
+  border: 1.5px solid var(--ui-border-strong);
+  border-radius: 12px;
+  box-shadow: none;
+  color: var(--ui-text-strong);
+  display: flex;
+  font-size: 0.96rem;
+  font-weight: 600;
+  gap: 12px;
+  line-height: 1.45;
+  min-height: 80px;
+  opacity: 1;
+  padding: 16px;
+}
+
+.learner .questionCard :global(.answer-button):hover:not(:disabled) {
+  background: var(--ui-surface-hover);
+  border-color: var(--ui-focus);
+}
+
+.learner .questionCard :global(.answer-button)[data-selected="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-focus);
+  box-shadow: 0 0 0 1px var(--ui-focus);
+  color: var(--ui-text-strong);
+}
+
+.learner .questionCard :global(.answer-button)[data-correct="true"] {
+  background: var(--ui-success-bg);
+  border-color: var(--ui-success-text);
+  box-shadow: none;
+  color: var(--ui-success-text);
+}
+
+.learner .questionCard :global(.answer-button)[data-incorrect="true"] {
+  background: var(--ui-danger-bg);
+  border-color: var(--ui-danger-text);
+  box-shadow: none;
+  color: var(--ui-danger-text);
+}
+
+.choiceKey {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  display: inline-flex;
+  flex: 0 0 30px;
+  font-size: 0.78rem;
+  font-weight: 750;
+  height: 30px;
+  justify-content: center;
+}
+
+.choiceBody {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choiceState {
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.choiceMark {
+  font-size: 1.2rem;
+  font-weight: 800;
+  min-width: 16px;
+  text-align: center;
+}
+
+.learner .questionCard :global(.input) {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border-strong);
+  color: var(--ui-text-strong);
+  min-height: 48px;
+  opacity: 1;
+}
+
+.questionCard :global(.field) {
+  margin-top: 24px;
+}
+
+.questionCard .confidence {
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  margin-inline: 0;
+  min-width: 0;
+  padding: 20px 0 0;
+}
+
+.confidence :global(.field-label) {
+  font-size: 0.9rem;
+  padding: 0 8px 0 0;
+}
+
+.feedback {
+  align-items: start;
+  background: var(--ui-surface-soft);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  color: var(--ui-text);
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 20px;
+}
+
+.feedback[data-outcome="correct"] {
+  background: var(--ui-success-bg);
+  border-color: var(--ui-success-text);
+  color: var(--ui-success-text);
+}
+
+.feedback > div {
+  min-width: 0;
+}
+
+.feedback h2 {
+  color: inherit;
+  font-size: 1.04rem;
+  line-height: 1.4;
+  margin: 0 0 6px;
+}
+
+.feedback p {
+  font-size: 0.94rem;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.feedback p + p {
+  margin-top: 12px;
+}
+
+.feedbackMark {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  display: inline-flex;
+  flex: 0 0 25px;
+  font-weight: 750;
+  height: 25px;
+  justify-content: center;
+}
+
+.authoredFeedback {
+  white-space: pre-wrap;
+}
+
+.actions {
+  align-items: center;
+  border-top: 1px solid var(--ui-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: flex-end;
+  margin-top: 28px;
+  padding-top: 22px;
+}
+
+.actions p {
+  flex: 1 1 200px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.completion h1,
+.stage > :global(.live-card):not(.questionCard) > h1 {
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  line-height: 1.25;
+  margin-block: 12px 16px;
+}
+
+.completeMark {
+  align-items: center;
+  background: var(--ui-success-bg);
+  border-radius: 50%;
+  color: var(--ui-success-text);
+  display: flex;
+  font-size: 1.5rem;
+  height: 48px;
+  justify-content: center;
+  margin-bottom: 24px;
+  width: 48px;
+}
+
+.completion :global(.lead) {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.savedSummary {
+  border-top: 1px solid var(--ui-border);
+  font-weight: 650;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+/* Accessibility preferences override the interface palette on this surface. */
+:global(html[data-openround-contrast="high"]) .learner,
+.learner[data-contrast="high"] {
+  --ui-canvas: #ffffff;
+  --ui-surface: #ffffff;
+  --ui-surface-soft: #f0f0f0;
+  --ui-surface-hover: #f0f0f0;
+  --ui-text: #000000;
+  --ui-text-strong: #000000;
+  --ui-text-subtle: #1f1f1f;
+  --ui-text-muted: #1f1f1f;
+  --ui-border: #000000;
+  --ui-border-strong: #000000;
+  --ui-accent: #000000;
+  --ui-accent-hover: #1f1f1f;
+  --ui-accent-soft: #f0f0f0;
+  --ui-accent-ink: #000000;
+  --ui-on-accent: #ffffff;
+  --ui-focus: #000000;
+  --ui-success-bg: #ffffff;
+  --ui-success-text: #000000;
+  --ui-danger-bg: #ffffff;
+  --ui-danger-text: #000000;
+  color-scheme: light;
+}
+
+@media (prefers-contrast: more) {
+  .learner.learner {
+    --ui-canvas: #ffffff;
+    --ui-surface: #ffffff;
+    --ui-surface-soft: #f0f0f0;
+    --ui-surface-hover: #f0f0f0;
+    --ui-text: #000000;
+    --ui-text-strong: #000000;
+    --ui-text-subtle: #1f1f1f;
+    --ui-text-muted: #1f1f1f;
+    --ui-border: #000000;
+    --ui-border-strong: #000000;
+    --ui-accent: #000000;
+    --ui-accent-hover: #1f1f1f;
+    --ui-accent-soft: #f0f0f0;
+    --ui-accent-ink: #000000;
+    --ui-on-accent: #ffffff;
+    --ui-focus: #000000;
+    --ui-success-bg: #ffffff;
+    --ui-success-text: #000000;
+    --ui-danger-bg: #ffffff;
+    --ui-danger-text: #000000;
+    color-scheme: light;
+  }
+}
+
+.learner[data-motion="reduced"] *,
+.learner[data-motion="reduced"] *::before,
+.learner[data-motion="reduced"] *::after {
+  animation: none !important;
+  scroll-behavior: auto !important;
+  transition: none !important;
+}
+
+@media (forced-colors: active) {
+  .learner .questionCard :global(.answer-button)[data-selected="true"] {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .progress > span {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .stage:global(.live-stage) {
+    padding-block: 18px 40px;
+  }
+
+  .learner .topbar {
+    min-height: 68px;
+  }
+
+  .stage :global(.live-card) {
+    border-radius: 16px;
+    padding: 22px 18px;
+  }
+
+  .context {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .timing {
+    justify-content: flex-start;
+  }
+
+  .questionCard :global(.answer-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  .learner .questionCard :global(.answer-button) {
+    min-height: 70px;
+    padding: 14px;
+  }
+
+  .actions :global(.button) {
+    width: 100%;
+  }
+
+  .feedback {
+    padding: 16px;
+  }
+}

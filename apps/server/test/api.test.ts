@@ -797,7 +797,22 @@ describe("creator to report journey", () => {
 
     const presets = await app.inject({ method: "GET", url: "/v1/experience-presets" });
     expect(presets.statusCode).toBe(200);
-    expect(presets.json<{ presets: unknown[] }>().presets).toHaveLength(7);
+    const presetList = presets.json<{ presets: Array<{ preset: { id: string } }> }>().presets;
+    expect(presetList).toHaveLength(14);
+    expect(presetList.map((preset) => preset.preset.id)).toEqual(
+      expect.arrayContaining([
+        "pops",
+        "focus",
+        "signal",
+        "observatory",
+        "breath",
+        "gallery",
+        "summit",
+        "grove",
+        "commons",
+        "midnight",
+      ]),
+    );
     const defaultInteractions = await app.inject({
       method: "GET",
       url: `/v1/sessions/${session.sessionId}/interactions/settings`,

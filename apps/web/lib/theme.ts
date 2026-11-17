@@ -1,10 +1,16 @@
-import type { BrandTheme, ExperienceThemeSnapshot } from "@openround/contracts";
+import {
+  colorContrastRatio,
+  type BrandTheme,
+  type ExperienceThemeSnapshot,
+} from "@openround/contracts";
 import type { CSSProperties } from "react";
 
 type ThemeProperties = CSSProperties & {
   "--brand-primary"?: string;
   "--brand-accent"?: string;
   "--experience-canvas"?: string;
+  "--experience-color-scheme"?: "light" | "dark";
+  "--experience-header-fill"?: string;
   "--experience-surface"?: string;
   "--experience-surface-strong"?: string;
   "--experience-text"?: string;
@@ -33,7 +39,11 @@ export function experienceThemeStyle(
   theme: ExperienceThemeSnapshot | null | undefined,
 ): ThemeProperties | undefined {
   if (!theme) return undefined;
+  const fill = theme.tokens.primaryFill ?? theme.tokens.primary;
   return {
+    "--experience-color-scheme": experienceColorScheme(theme),
+    "--experience-header-fill":
+      colorContrastRatio(fill, "#FFFFFF") >= 4.5 ? fill : theme.tokens.accent,
     "--experience-canvas": theme.tokens.canvas,
     "--experience-surface": theme.tokens.surface,
     "--experience-surface-strong": theme.tokens.surfaceStrong,
@@ -49,4 +59,15 @@ export function experienceThemeStyle(
     "--choice-5": theme.tokens.choiceColors[4],
     "--choice-6": theme.tokens.choiceColors[5],
   };
+}
+
+/** A room's saved surface, rather than a personal UI setting, controls native inputs. */
+export function experienceColorScheme(
+  theme: ExperienceThemeSnapshot | null | undefined,
+): "light" | "dark" | undefined {
+  if (!theme) return undefined;
+  return colorContrastRatio(theme.tokens.surface, "#000000") >=
+    colorContrastRatio(theme.tokens.surface, "#FFFFFF")
+    ? "light"
+    : "dark";
 }

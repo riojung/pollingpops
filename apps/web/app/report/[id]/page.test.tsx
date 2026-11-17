@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LegacyReportSchema,
+  ReportSchema,
   ReportV7Schema,
   supportedLocales,
   type Report,
@@ -15,7 +16,8 @@ import type * as ApiModule from "../../../lib/api";
 import { withEnglishLocale } from "../../../test-utils/english-locale";
 import ReportPage from "./page";
 import { followupCopy } from "../../../lib/i18n/followup-copy";
-import { AUTH_CHANGE_EVENT } from "../../../lib/api";
+import { API_URL, AUTH_CHANGE_EVENT } from "../../../lib/api";
+import { roundReportWorkspaceCopy } from "../../../lib/i18n/round-report-workspace-copy";
 
 interface ReportHooks {
   cursor: number;
@@ -297,7 +299,6 @@ async function renderReport(
   render();
   for (const effect of hooks.effects) effect();
   for (let index = 0; index < 8; index++) await Promise.resolve();
-  if (uxBeta) hooks.slots[5] = "questions";
   return renderToStaticMarkup(withEnglishLocale(render()));
 }
 
@@ -339,7 +340,8 @@ describe("Live Round opinion report compatibility", () => {
       const missing = rows.find((row) => row.includes("Missing assessment evidence"))!;
       const zero = rows.find((row) => row.includes("Observed incorrect response"))!;
       expect(missing).toContain(`<td>${unavailable}</td>`);
-      expect(missing.match(/<td>(?:Not measured|측정되지 않음)<\/td>/g)).toHaveLength(2);
+      expect(missing.match(/<td>(?:Not measured|측정되지 않음)<\/td>/g)).toHaveLength(1);
+      expect(missing).toContain("<td>—</td>");
       expect(missing).not.toContain("<td>0%</td>");
       expect(missing).not.toContain(`<td>${locale === "en-CA" ? "Review" : "검토"}</td>`);
       expect(zero).toContain("<td>0%</td>");
@@ -365,8 +367,9 @@ describe("Live Round opinion report compatibility", () => {
       ],
     });
     const markup = await renderReport(report);
-    expect(markup).toContain("<strong>—</strong><span>No assessed answers</span>");
-    expect(markup).toContain("<strong>0</strong><span>Checkpoints needing review</span>");
+    expect(markup).toContain("<strong>1</strong><span>Questions</span>");
+    expect(markup).toContain("No responses were recorded");
+    expect(markup).not.toContain("Questions needing review");
     expect(markup).not.toContain("0%");
   });
 
@@ -412,10 +415,10 @@ describe("Live Round opinion report compatibility", () => {
     expect(markup).toContain('dateTime="2026-10-13T12:00:00Z"');
   });
   it.each(distributions)(
-    "renders $format results in classic reports independently of UX beta",
+    "renders $format results in the workspace independently of UX beta",
     async ({ distribution, result }) => {
       const markup = await renderReport(opinionReport(distribution));
-      expect(markup).toContain("Checkpoint analysis");
+      expect(markup).toContain("Question analysis");
       expect(markup).toContain("<th>Distribution</th>");
       expect(markup).toContain(result);
       expect(markup).toContain("<td>Not scored</td>");
@@ -442,7 +445,7 @@ describe("Live Round opinion report compatibility", () => {
     expect(withheldText).not.toContain("text-response-list");
   });
 
-  it("keeps the existing classic layout for legacy assessed-only reports", async () => {
+  it("reads legacy assessed-only reports without inventing distributions or recovery evidence", async () => {
     const legacy = LegacyReportSchema.parse({
       ...opinionReport(),
       schemaVersion: 1,
@@ -460,11 +463,147 @@ describe("Live Round opinion report compatibility", () => {
       ],
     });
     const markup = await renderReport(legacy);
-    expect(markup).toContain("Checkpoint analysis");
+    expect(markup).toContain("Question analysis");
     expect(markup).toContain("<td>100%</td>");
     expect(markup).not.toContain("<th>Distribution</th>");
     expect(markup).not.toContain("<details>");
   });
+});
+
+describe("Round report workspace", () => {
+  async function load(report: Report, uxBeta = true) {
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === "/v1/auth/me"
+        ? { productFeatures: { uxBeta, workspaceShell: false }, creator: { role: "owner" } }
+        : {
+            report,
+            entitlements: { followups: true, csvExport: true, reportRetentionDays: 30 },
+            followup: null,
+          },
+    );
+    const page = hookView(() => ReportPage());
+    page.render();
+    const cleanup = await page.effects();
+    return { page, cleanup };
+  }
+  const markup = (tree: ReactModule.ReactNode) => renderToStaticMarkup(withEnglishLocale(tree));
+  const panel = (tree: ReactModule.ReactNode, id: string) =>
+    findElement(tree, (node) => node.props.id === `report-panel-${id}`)!;
+  const tab = (tree: ReactModule.ReactNode, id: string) =>
+    findElement(tree, (node) => node.props.id === `report-tab-${id}`)!;
+
+  it.each(supportedLocales)("starts with a useful no-response overview in %s", async (locale) => {
+    fixtures.locale = locale;
+    const report = ReportV7Schema.parse({
+      ...opinionReport(),
+      metrics: { participantCount: 0, completedCount: 0, answerCount: 0, accuracyPercent: null },
+      questions: opinionReport().questions.map((question) => ({ ...question, responses: 0 })),
+      participation: { participants: 0, respondents: 0, percent: 0 },
+    });
+    const view = await load(report);
+    const tree = view.page.render();
+    const overview = markup(panel(tree, "overview"));
+    const copy = roundReportWorkspaceCopy(locale);
+    expect(tab(tree, "overview").props["aria-selected"]).toBe(true);
+    expect(panel(tree, "overview").props.hidden).toBe(false);
+    for (const id of [
+      "questions",
+      "participants",
+      "evidence",
+      "interactions",
+      "decision_replay",
+      "manage",
+    ]) {
+      expect(panel(tree, id).props.hidden).toBe(true);
+      expect(tab(tree, id).props.tabIndex).toBe(-1);
+    }
+    expect(overview).toContain(copy("noResponsesTitle"));
+    expect(overview.match(new RegExp(copy("noResponsesTitle"), "g"))).toHaveLength(1);
+    expect(overview).toContain(copy("openRounds"));
+    expect(overview).toContain('href="/library?type=rounds"');
+    expect(overview).not.toContain("0/0");
+    expect(overview).not.toContain("recovery-summary");
+    expect(overview).not.toContain(copy("nextStep"));
+    expect(overview).not.toContain("Not measured");
+    view.cleanup();
+  });
+
+  it("places tab navigation before metrics and keeps recovery narrative collapsed", async () => {
+    const view = await load(opinionReport());
+    const tree = view.page.render();
+    const html = markup(tree);
+    expect(html.indexOf('role="tablist"')).toBeLessThan(html.indexOf('id="report-panel-overview"'));
+    const evidence = panel(tree, "evidence");
+    const narrative = findElement(
+      evidence,
+      (node) =>
+        node.type === "details" && markup(node).includes("Recovery story and interpretation"),
+    )!;
+    expect(narrative.props.open).toBeUndefined();
+    expect(markup(panel(tree, "overview"))).toContain(
+      "7 of 7 participants answered at least one question.",
+    );
+    view.cleanup();
+  });
+
+  it("supports automatic arrow, Home and End tab activation with one focusable tab", async () => {
+    const view = await load(opinionReport());
+    const focus = vi.fn();
+    const getElementById = vi.fn(() => ({ focus }));
+    vi.stubGlobal("document", { getElementById });
+    const press = (id: string, key: string) => {
+      const preventDefault = vi.fn();
+      const current = tab(view.page.render(), id);
+      (current.props.onKeyDown as (event: { key: string; preventDefault: () => void }) => void)({
+        key,
+        preventDefault,
+      });
+      expect(preventDefault).toHaveBeenCalledOnce();
+    };
+    press("overview", "ArrowRight");
+    let tree = view.page.render();
+    expect(tab(tree, "questions").props.tabIndex).toBe(0);
+    expect(panel(tree, "questions").props.hidden).toBe(false);
+    expect(panel(tree, "overview").props.hidden).toBe(true);
+    expect(getElementById).toHaveBeenLastCalledWith("report-tab-questions");
+    press("questions", "End");
+    expect(tab(view.page.render(), "manage").props["aria-selected"]).toBe(true);
+    press("manage", "Home");
+    expect(tab(view.page.render(), "overview").props["aria-selected"]).toBe(true);
+    press("overview", "ArrowLeft");
+    tree = view.page.render();
+    expect(tab(tree, "manage").props["aria-selected"]).toBe(true);
+    expect(panel(tree, "manage").props.hidden).toBe(false);
+    expect(focus).toHaveBeenCalledTimes(4);
+    view.cleanup();
+  });
+
+  it.each([1, 2, 3, 4] as const)(
+    "preserves version %s readers and gates available drilldowns",
+    async (schemaVersion) => {
+      const report = ReportSchema.parse({
+        ...opinionReport(),
+        schemaVersion,
+        metrics: { participantCount: 7, completedCount: 7, answerCount: 7, accuracyPercent: 0 },
+        questions: opinionReport().questions.map((question) => ({
+          ...question,
+          correct: 0,
+          accuracyPercent: 0,
+        })),
+        initialAccuracy: { correct: 0, responses: 7, percent: 0 },
+      });
+      const view = await load(report, false);
+      const tree = view.page.render();
+      expect(panel(tree, "overview").props.hidden).toBe(false);
+      expect(Boolean(panel(tree, "evidence"))).toBe(schemaVersion >= 2);
+      expect(Boolean(panel(tree, "interactions"))).toBe(schemaVersion >= 3);
+      expect(Boolean(panel(tree, "decision_replay"))).toBe(schemaVersion >= 4);
+      expect(markup(tree)).toContain(
+        `href="${API_URL}/v1/reports/00000000-0000-4000-8000-000000000001.csv"`,
+      );
+      view.cleanup();
+    },
+  );
 });
 
 describe("report follow-up access management", () => {

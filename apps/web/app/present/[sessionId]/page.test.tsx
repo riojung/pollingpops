@@ -108,11 +108,11 @@ describe("presenter frozen workspace appearance", () => {
   );
 
   it.each([null, brand])(
-    "preserves the legacy presenter shell for a mode-absent brand %j",
+    "uses the authored frozen experience for a mode-absent brand %j",
     (brandTheme) => {
       fixtures.snapshot = snapshot(brandTheme);
       const shell = PresenterPage();
-      expect(shell.props.className).toBe("live-shell");
+      expect(shell.props.className).toBe(`live-shell ${liveTheme.shell}`);
       expect(shell.props["data-workspace-color-mode"]).toBeUndefined();
       expect(shell.props.style).toEqual(experienceThemeStyle(fixtures.snapshot.experienceTheme));
     },

@@ -484,6 +484,93 @@ describe("session service ordering", () => {
     }
   });
 
+  it("freezes the published Round look, honors an explicit launch override, and preserves feature gates", async () => {
+    const { repository, service, creator, quizId } = await hostedRoundFixture();
+    const settings = {
+      audienceLimit: 20,
+      scoringMode: "accuracy",
+      resultVisibility: "private",
+      allowLateJoin: true,
+      nicknamePolicy: "custom",
+    } as const;
+    const { quiz } = quizFixture();
+    const published: QuizDraft = {
+      ...quiz,
+      category: "science",
+      experiencePreset: { id: "observatory", version: 1 },
+    };
+    try {
+      await repository.publishQuiz({
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        quizId,
+        version: 2,
+        content: published,
+        contentHash: randomUUID(),
+        publishedAt: new Date(),
+      });
+      // A newer editor draft must not influence the published launch.
+      const draft: QuizDraft = {
+        ...published,
+        category: "icebreaker",
+        experiencePreset: { id: "spark", version: 1 },
+      };
+      const record = await repository.getQuiz(creator.workspaceId, quizId);
+      await repository.updateQuizDraft({
+        workspaceId: creator.workspaceId,
+        quizId,
+        draft,
+        expectedRevision: record!.draftRevision ?? 0,
+        mutationId: randomUUID(),
+        editorId: creator.userId,
+        schemaVersion: 1,
+        draftHash: randomUUID(),
+      });
+      const room = await service.createSession(creator, quizId, settings);
+      expect(room.snapshot.experienceTheme).toMatchObject({
+        category: "science",
+        preset: { id: "observatory", version: 1 },
+        tokens: { canvas: "#11192E" },
+      });
+      const override = await service.createSession(creator, quizId, settings, {
+        experiencePresetOverride: "midnight",
+      });
+      expect(override.snapshot.experienceTheme).toMatchObject({
+        category: "science",
+        preset: { id: "midnight", version: 1 },
+        tokens: { canvas: "#1D1B29" },
+      });
+      // Publishing a different look affects future rooms only.
+      await repository.publishQuiz({
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        quizId,
+        version: 3,
+        content: draft,
+        contentHash: randomUUID(),
+        publishedAt: new Date(),
+      });
+      const retained = await service.snapshot({
+        sessionId: room.sessionId,
+        hostToken: room.hostToken,
+        role: "host",
+      });
+      expect(retained.experienceTheme).toEqual(room.snapshot.experienceTheme);
+      await repository.updateOperationalFeatures({ roundExperiences: false }, creator.userId);
+      const gated = await service.createSession(creator, quizId, settings, {
+        experiencePresetOverride: "midnight",
+        presenterSoundEnabled: true,
+      });
+      expect(gated.snapshot.experienceTheme).toMatchObject({
+        category: "icebreaker",
+        preset: { id: "focus", version: 1 },
+        soundEnabled: false,
+      });
+    } finally {
+      service.close();
+    }
+  });
+
   // Five real scrypt derivations exercise exact-password and resume boundaries on shared CI CPUs.
   it("gates protected creation and keeps password admission frozen across downgrade and resume", async () => {
     const { repository, service, creator, quizId } = await hostedRoundFixture();

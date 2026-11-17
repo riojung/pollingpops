@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("zh-TW"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "房間密碼",
   "live.protection.toggle": "本次活動需要密碼",
@@ -163,7 +165,6 @@ const messages = {
   "live.experience.category.icebreaker": "斷冰器",
   "live.experience.category.safety_compliance": "安全/合規",
   "live.experience.category.technical": "技術",
-  "live.experience.categoryHelp": "分類組織集並推薦一個經驗而不改變你的選擇.",
   "live.experience.categoryLabel": "回合類別",
   "live.experience.motion": "{motion} 動議",
   "live.experience.motion.calm": "冷靜",
@@ -459,7 +460,7 @@ const messages = {
   "live.roundSetup.readyTitle": "準備好創建大廳了嗎?",
   "live.roundSetup.recipe": "從食譜開始",
   "live.roundSetup.recipeTitle": "選擇便利樣式",
-  "live.roundSetup.recoveryDescription": "私人的,精度第一, 平靜的視覺默認。",
+  "live.roundSetup.recoveryDescription": "結果不公開，以準確度為優先的活動引導。",
   "live.roundSetup.recoveryTitle": "恢復",
   "live.roundSetup.resultVisibility": "回合的結果",
   "live.roundSetup.reviewHelp": "食譜已準備好使用。 僅在您需要更改時打開此區域 。",

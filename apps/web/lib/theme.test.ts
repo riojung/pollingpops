@@ -1,9 +1,33 @@
 import { colorContrastRatio } from "@openround/contracts";
-import { resolveExperienceTheme, workspaceThemePresets } from "@openround/experience";
+import {
+  experiencePresets,
+  resolveExperienceTheme,
+  workspaceThemePresets,
+} from "@openround/experience";
 import { describe, expect, it } from "vitest";
 import { experienceThemeStyle } from "./theme";
 
 describe("frozen experience CSS tokens", () => {
+  it("derives native control appearance and a readable header from every unbranded preset", () => {
+    for (const preset of experiencePresets) {
+      const theme = resolveExperienceTheme({
+        category: preset.category,
+        presetId: preset.preset.id,
+      });
+      const style = experienceThemeStyle(theme)!;
+      expect(style["--experience-surface"]).toBe(preset.tokens.surface);
+      expect(style["--experience-text"]).toBe(preset.tokens.text);
+      expect(style["--experience-color-scheme"]).toBe(
+        colorContrastRatio(preset.tokens.surface, "#000000") >=
+          colorContrastRatio(preset.tokens.surface, "#FFFFFF")
+          ? "light"
+          : "dark",
+      );
+      expect(
+        colorContrastRatio(style["--experience-header-fill"]!, "#FFFFFF"),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
   it("keeps readable dark-mode primary ink separate from white-label fills", () => {
     for (const preset of workspaceThemePresets) {
       const theme = resolveExperienceTheme({

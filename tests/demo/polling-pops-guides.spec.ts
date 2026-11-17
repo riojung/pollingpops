@@ -273,6 +273,11 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
       .getByRole("link", { name: "Open report" })
       .getAttribute("href");
     await chapter("quickStart", 7, reportHref!, async (page) => {
+      await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await click(page, page.getByRole("tab", { name: "Evidence", exact: true }));
       await expect(page.getByRole("heading", { name: "Recovery evidence" }).last()).toBeVisible();
       await page.mouse.wheel(0, 430);
       await beat(page, 2_500);
@@ -288,7 +293,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
       await page.getByLabel("Round category").selectOption("education");
       await beat(page);
       await click(page, page.getByRole("button", { name: "Use recommended Campus" }));
-      await expect(page.getByLabel("Experience preset")).toHaveValue("campus");
+      await expect(page.getByRole("radio", { name: "Campus", exact: true })).toBeChecked();
       await saved(page);
     });
     await chapter("userGuide", 1, `/quiz/${quizId}`, async (page) => {
@@ -387,7 +392,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
         for (const [key, value] of entries) sessionStorage.setItem(key, value);
       }, resume);
       await page.goto(`/play/${sessionId}`);
-      await click(page, page.getByTestId("audience-tray").locator("summary"));
+      await click(page, page.getByRole("tab", { name: "Pulse", exact: true }));
       await click(page, page.getByRole("button", { name: "Show an example" }));
       await beat(page, 2_000);
       await page.goto(`/host/${sessionId}`);
@@ -401,7 +406,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
       await click(page, page.getByRole("tab", { name: "Chat", exact: true }));
       await click(page, page.getByLabel("Room chat"));
       const participant = participants[0]!.page;
-      await participant.getByTestId("audience-tray").locator("summary").click();
+      await participant.getByRole("tab", { name: "Room chat", exact: true }).click();
       await participant
         .getByLabel("Chat message")
         .fill("Could we work through one practical example?");
@@ -414,6 +419,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
         .locator(".chat-message", { hasText: "Could we work through one practical example?" })
         .getByRole("button", { name: "Like: 0" })
         .click();
+      await participant.getByRole("tab", { name: "Q&A", exact: true }).click();
       await participant
         .getByLabel("Ask the facilitator")
         .fill("Why do we divide by the total number of checks?");
@@ -459,6 +465,7 @@ test("record current Polling Pops quick start and user guide", async ({ browser 
       .getByRole("link", { name: "Open report" })
       .getAttribute("href");
     await chapter("userGuide", 7, evidenceHref!, async (page) => {
+      await click(page, page.getByRole("tab", { name: "Evidence", exact: true }));
       const heading = page.getByRole("heading", { name: "Recovery evidence" }).last();
       await expect(heading).toBeVisible();
       await heading.scrollIntoViewIfNeeded();

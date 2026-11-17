@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("ja-JP"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "ルームのパスワード",
   "live.protection.toggle": "この開催にパスワードを設定する",
@@ -167,8 +169,6 @@ const messages = {
   "live.experience.category.icebreaker": "アイスブレーカー",
   "live.experience.category.safety_compliance": "安全・コンプライアンス",
   "live.experience.category.technical": "技術情報",
-  "live.experience.categoryHelp":
-    "カテゴリーは、あなたの選択を変更することなく、セットを整理し、経験を推薦します。",
   "live.experience.categoryLabel": "ラウンドカテゴリー",
   "live.experience.motion": "{motion} モーション",
   "live.experience.motion.calm": "落ち着き",
@@ -484,7 +484,7 @@ const messages = {
   "live.roundSetup.readyTitle": "ロビーを作る準備は?",
   "live.roundSetup.recipe": "レシピから始める",
   "live.roundSetup.recipeTitle": "ファシリテーションスタイルを選択する",
-  "live.roundSetup.recoveryDescription": "プライベート、精度優先、落ち着いたビジュアルデフォルト。",
+  "live.roundSetup.recoveryDescription": "結果は非公開で、正確さを重視した進行です。",
   "live.roundSetup.recoveryTitle": "回復重視",
   "live.roundSetup.resultVisibility": "ラウンド中の結果",
   "live.roundSetup.reviewHelp":

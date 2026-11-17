@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("fr-FR"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Mot de passe de la salle",
   "live.protection.toggle": "Exiger un mot de passe pour cette session",
@@ -173,8 +175,6 @@ const messages = {
   "live.experience.category.icebreaker": "brise-glace",
   "live.experience.category.safety_compliance": "Sécurité/conformité",
   "live.experience.category.technical": "Technique",
-  "live.experience.categoryHelp":
-    "Catégorie organise l'ensemble et recommande une expérience sans changer votre choix.",
   "live.experience.categoryLabel": "Catégorie du Round",
   "live.experience.motion": "Mouvement {motion}",
   "live.experience.motion.calm": "calme",
@@ -496,8 +496,7 @@ const messages = {
   "live.roundSetup.readyTitle": "Prêt à créer le hall ?",
   "live.roundSetup.recipe": "Commencez par une recette",
   "live.roundSetup.recipeTitle": "Choisissez le style de facilitation",
-  "live.roundSetup.recoveryDescription":
-    "Privé, précision-premier, avec des défauts visuels calmes.",
+  "live.roundSetup.recoveryDescription": "Résultats privés et animation axée sur l’exactitude.",
   "live.roundSetup.recoveryTitle": "Récupération",
   "live.roundSetup.resultVisibility": "Résultats pendant le Round",
   "live.roundSetup.reviewHelp":

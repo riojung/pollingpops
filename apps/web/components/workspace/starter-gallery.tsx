@@ -31,6 +31,12 @@ const categoryKeys: Record<RoundCategory, MessageKey> = {
   technical: "category.technical",
   safety_compliance: "category.safety_compliance",
   icebreaker: "category.icebreaker",
+  science: "category.science",
+  health_wellbeing: "category.health_wellbeing",
+  arts_culture: "category.arts_culture",
+  leadership: "category.leadership",
+  sustainability: "category.sustainability",
+  community: "category.community",
 };
 
 const questionTypeLabelKeys: Record<QuestionType, MessageKey> = {

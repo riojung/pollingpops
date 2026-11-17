@@ -160,6 +160,157 @@ const presetDefinitions = [
       corners: "round",
     },
   },
+  {
+    preset: { id: "observatory", version: 1 },
+    name: "Observatory",
+    description: "A deep indigo canvas for scientific discovery, evidence, and big questions.",
+    category: "science",
+    motion: "standard",
+    soundCue: "subtle",
+    tokens: {
+      canvas: "#11192E",
+      surface: "#1B2540",
+      surfaceStrong: "#2A3756",
+      text: "#F1F4FF",
+      mutedText: "#BECBE4",
+      primary: "#AFCFFF",
+      primaryFill: "#234D86",
+      accent: "#234D86",
+      choiceColors: ["#234D86", "#493D83", "#176459", "#7A4337", "#77354D", "#425674"],
+      pattern: "grid",
+      typography: "technical",
+      corners: "compact",
+    },
+  },
+  {
+    preset: { id: "breath", version: 1 },
+    name: "Breath",
+    description: "A soft sage and linen palette for reflective wellbeing conversations.",
+    category: "health_wellbeing",
+    motion: "calm",
+    soundCue: "none",
+    tokens: {
+      canvas: "#F2F6EF",
+      surface: "#FFFFFF",
+      surfaceStrong: "#DDE9DB",
+      text: "#233D32",
+      mutedText: "#4F6558",
+      primary: "#315E47",
+      accent: "#79512D",
+      choiceColors: ["#315E47", "#735164", "#77521C", "#3C5D77", "#61517F", "#7B4D3A"],
+      pattern: "none",
+      typography: "humanist",
+      corners: "round",
+    },
+  },
+  {
+    preset: { id: "gallery", version: 1 },
+    name: "Gallery",
+    description: "A warm paper and plum palette for creative practice, arts, and culture.",
+    category: "arts_culture",
+    motion: "standard",
+    soundCue: "subtle",
+    tokens: {
+      canvas: "#FAF2E8",
+      surface: "#FFFDFA",
+      surfaceStrong: "#EDDDD4",
+      text: "#412639",
+      mutedText: "#765466",
+      primary: "#763C65",
+      accent: "#9B4228",
+      choiceColors: ["#763C65", "#246257", "#9B4228", "#3D5283", "#873D4A", "#5D5B26"],
+      pattern: "stripes",
+      typography: "academic",
+      corners: "soft",
+    },
+  },
+  {
+    preset: { id: "summit", version: 1 },
+    name: "Summit",
+    description: "A dark slate and ice palette for strategy, leadership, and clear decisions.",
+    category: "leadership",
+    motion: "calm",
+    soundCue: "subtle",
+    tokens: {
+      canvas: "#14252C",
+      surface: "#1D333D",
+      surfaceStrong: "#294650",
+      text: "#EFF8FA",
+      mutedText: "#BAD1D8",
+      primary: "#A5DDE7",
+      primaryFill: "#215967",
+      accent: "#215967",
+      choiceColors: ["#215967", "#425674", "#684278", "#76511B", "#2F5688", "#315E47"],
+      pattern: "none",
+      typography: "studio",
+      corners: "compact",
+    },
+  },
+  {
+    preset: { id: "grove", version: 1 },
+    name: "Grove",
+    description: "A natural green and sand palette for sustainability and shared futures.",
+    category: "sustainability",
+    motion: "calm",
+    soundCue: "none",
+    tokens: {
+      canvas: "#F3F4E8",
+      surface: "#FFFFF9",
+      surfaceStrong: "#E1E8CC",
+      text: "#293D20",
+      mutedText: "#536344",
+      primary: "#426124",
+      accent: "#86521E",
+      choiceColors: ["#426124", "#86521E", "#315C69", "#794052", "#5D4B8B", "#506036"],
+      pattern: "dots",
+      typography: "humanist",
+      corners: "soft",
+    },
+  },
+  {
+    preset: { id: "commons", version: 1 },
+    name: "Commons",
+    description: "A welcoming terracotta and cream palette for community conversations.",
+    category: "community",
+    motion: "standard",
+    soundCue: "subtle",
+    tokens: {
+      canvas: "#FFF4EA",
+      surface: "#FFFDFA",
+      surfaceStrong: "#F1DFCE",
+      text: "#4C2F26",
+      mutedText: "#79584A",
+      primary: "#93482D",
+      accent: "#5D4B8B",
+      choiceColors: ["#93482D", "#5D4B8B", "#2E6259", "#79551F", "#35567D", "#793B53"],
+      pattern: "confetti",
+      typography: "playful",
+      corners: "round",
+    },
+  },
+  {
+    preset: { id: "midnight", version: 1 },
+    name: "Midnight",
+    description:
+      "A quiet charcoal and lavender palette for evening sessions and focused discussion.",
+    category: "general",
+    motion: "calm",
+    soundCue: "none",
+    tokens: {
+      canvas: "#1D1B29",
+      surface: "#292638",
+      surfaceStrong: "#39334A",
+      text: "#F6F1FF",
+      mutedText: "#D0C4DF",
+      primary: "#D6BFFF",
+      primaryFill: "#64498A",
+      accent: "#64498A",
+      choiceColors: ["#64498A", "#355C7D", "#7C405D", "#286153", "#70531D", "#775044"],
+      pattern: "dots",
+      typography: "humanist",
+      corners: "soft",
+    },
+  },
 ] as const satisfies readonly ExperiencePresetSummary[];
 
 const categoryDefaults: Record<RoundCategory, ExperiencePresetId> = {
@@ -169,16 +320,30 @@ const categoryDefaults: Record<RoundCategory, ExperiencePresetId> = {
   technical: "blueprint",
   safety_compliance: "signal",
   icebreaker: "spark",
+  science: "observatory",
+  health_wellbeing: "breath",
+  arts_culture: "gallery",
+  leadership: "summit",
+  sustainability: "grove",
+  community: "commons",
 };
 
 function validatePreset(preset: ExperiencePresetSummary) {
   const parsed = ExperiencePresetSummarySchema.parse(preset);
   const { tokens } = parsed;
-  if (colorContrastRatio(tokens.text, tokens.canvas) < 4.5) {
-    throw new Error(`${parsed.preset.id} text does not meet canvas contrast`);
+  for (const background of [tokens.canvas, tokens.surface, tokens.surfaceStrong]) {
+    for (const foreground of [tokens.text, tokens.mutedText, tokens.primary]) {
+      if (colorContrastRatio(foreground, background) < 4.5) {
+        throw new Error(
+          `${parsed.preset.id} foreground ${foreground} does not meet surface contrast`,
+        );
+      }
+    }
   }
-  if (colorContrastRatio(tokens.text, tokens.surface) < 4.5) {
-    throw new Error(`${parsed.preset.id} text does not meet surface contrast`);
+  for (const fill of [tokens.primaryFill ?? tokens.primary, tokens.accent]) {
+    if (colorContrastRatio(fill, "#FFFFFF") < 4.5) {
+      throw new Error(`${parsed.preset.id} button fill ${fill} does not support white text`);
+    }
   }
   for (const choice of tokens.choiceColors) {
     if (colorContrastRatio(choice, "#FFFFFF") < 4.5) {

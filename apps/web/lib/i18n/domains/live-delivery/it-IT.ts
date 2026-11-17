@@ -1,9 +1,11 @@
+import { experienceCatalogMessages } from "../../experience-catalog-messages";
 import { textPollTranslations } from "../../text-poll-translations";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import type { LiveDeliveryMessages } from "./en-CA";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const messages = {
+  ...experienceCatalogMessages("it-IT"),
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Password della stanza",
   "live.protection.toggle": "Richiedi una password per questa sessione",
@@ -171,8 +173,6 @@ const messages = {
   "live.experience.category.icebreaker": "Istruttore di ghiaccio",
   "live.experience.category.safety_compliance": "Sicurezza / conformità",
   "live.experience.category.technical": "Tecnica",
-  "live.experience.categoryHelp":
-    "Categoria organizza il set e consiglia un'esperienza senza cambiare la vostra scelta.",
   "live.experience.categoryLabel": "Categoria del Round",
   "live.experience.motion": "{motion} movimento",
   "live.experience.motion.calm": "calma.",
@@ -492,7 +492,8 @@ const messages = {
   "live.roundSetup.readyTitle": "Pronto a creare la hall?",
   "live.roundSetup.recipe": "Iniziare con una ricetta",
   "live.roundSetup.recipeTitle": "Scegli lo stile di facilitazione",
-  "live.roundSetup.recoveryDescription": "Privato, accuratezza-primo, con di default visivi calmi.",
+  "live.roundSetup.recoveryDescription":
+    "Risultati privati e conduzione orientata all’accuratezza.",
   "live.roundSetup.recoveryTitle": "Recupero",
   "live.roundSetup.resultVisibility": "Risultati durante il round",
   "live.roundSetup.reviewHelp":

@@ -28,7 +28,7 @@ import {
   createRealtimeClient,
   withRealtimeReceipt,
 } from "../../../lib/realtime";
-import { experienceThemeStyle } from "../../../lib/theme";
+import { experienceThemeStyle, experienceColorScheme } from "../../../lib/theme";
 import { playPresenterCue } from "../../../lib/sound";
 import { clientUuid } from "../../../lib/uuid";
 import liveTheme from "../../../components/round-live-theme.module.css";
@@ -176,12 +176,13 @@ export default function PresenterPage() {
 
   return (
     <div
-      className={`live-shell${snapshot?.brandTheme?.colorMode ? ` ${liveTheme.shell}` : ""}`}
+      className={`live-shell${snapshot ? ` ${liveTheme.shell}` : ""}`}
       data-corners={snapshot?.experienceTheme.tokens.corners}
       data-motion={snapshot?.experienceTheme.motion}
       data-pattern={snapshot?.experienceTheme.tokens.pattern}
       data-typography={snapshot?.experienceTheme.tokens.typography}
       data-workspace-color-mode={snapshot?.brandTheme?.colorMode}
+      data-experience-color-scheme={experienceColorScheme(snapshot?.experienceTheme)}
       style={experienceThemeStyle(snapshot?.experienceTheme)}
     >
       <header className="shell live-topbar">

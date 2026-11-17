@@ -1,7 +1,9 @@
+import { experienceCatalogEnglishMessages } from "../../experience-catalog-messages";
 import { textPollLiveEnglishMessages } from "../../text-poll-copy";
 import { companionEnglishMessages } from "./companion-en-CA";
 
 const liveDeliveryEnglishMessages = {
+  ...experienceCatalogEnglishMessages,
   ...textPollLiveEnglishMessages,
   "live.protection.title": "Room password",
   "live.protection.toggle": "Require a password for this run",
@@ -166,8 +168,6 @@ const liveDeliveryEnglishMessages = {
   "live.experience.category.icebreaker": "Icebreaker",
   "live.experience.category.safety_compliance": "Safety / compliance",
   "live.experience.category.technical": "Technical",
-  "live.experience.categoryHelp":
-    "Category organizes the set and recommends an experience without changing your choice.",
   "live.experience.categoryLabel": "Round category",
   "live.experience.motion": "{motion} motion",
   "live.experience.motion.calm": "calm",
@@ -482,7 +482,7 @@ const liveDeliveryEnglishMessages = {
   "live.roundSetup.readyTitle": "Ready to create the lobby?",
   "live.roundSetup.recipe": "Start with a recipe",
   "live.roundSetup.recipeTitle": "Choose the facilitation style",
-  "live.roundSetup.recoveryDescription": "Private, accuracy-first, with calm visual defaults.",
+  "live.roundSetup.recoveryDescription": "Private, accuracy-first facilitation.",
   "live.roundSetup.recoveryTitle": "Recovery",
   "live.roundSetup.resultVisibility": "Results during the round",
   "live.roundSetup.reviewHelp":

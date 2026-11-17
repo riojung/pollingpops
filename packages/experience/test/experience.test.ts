@@ -3,6 +3,8 @@ import {
   BrandThemeSchema,
   colorContrastRatio,
   ExperienceThemeSnapshotSchema,
+  RoundCategorySchema,
+  ExperiencePresetIdSchema,
 } from "@openround/contracts";
 import {
   experiencePresets,
@@ -22,13 +24,62 @@ describe("versioned experience presets", () => {
       "blueprint",
       "signal",
       "spark",
+      "observatory",
+      "breath",
+      "gallery",
+      "summit",
+      "grove",
+      "commons",
+      "midnight",
     ]);
     expect(presetForCategory("technical")).toBe("blueprint");
+    expect(experiencePresets.map(({ preset }) => preset.id)).toEqual(
+      ExperiencePresetIdSchema.options,
+    );
+    for (const category of RoundCategorySchema.options) {
+      expect(getExperiencePreset(presetForCategory(category))).toBeDefined();
+    }
     expect(Object.isFrozen(experiencePresets)).toBe(true);
     for (const preset of experiencePresets) {
       expect(Object.isFrozen(preset)).toBe(true);
       expect(Object.isFrozen(preset.tokens)).toBe(true);
       expect(Object.isFrozen(preset.tokens.choiceColors)).toBe(true);
+    }
+  });
+
+  it("supports readable authored dark palettes and preserves topic metadata independently of the look", () => {
+    for (const preset of experiencePresets) {
+      const theme = resolveExperienceTheme({ category: "community", presetId: preset.preset.id });
+      expect(theme.category).toBe("community");
+      expect(theme.preset).toEqual(preset.preset);
+      for (const background of [
+        preset.tokens.canvas,
+        preset.tokens.surface,
+        preset.tokens.surfaceStrong,
+      ]) {
+        for (const foreground of [
+          preset.tokens.text,
+          preset.tokens.mutedText,
+          preset.tokens.primary,
+        ]) {
+          expect(
+            colorContrastRatio(foreground, background),
+            `${preset.preset.id}:${foreground}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      for (const fill of [
+        preset.tokens.primaryFill ?? preset.tokens.primary,
+        preset.tokens.accent,
+        ...preset.tokens.choiceColors,
+      ]) {
+        expect(colorContrastRatio(fill, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    for (const id of ["observatory", "summit", "midnight"] as const) {
+      expect(
+        colorContrastRatio(getExperiencePreset(id).tokens.canvas, "#FFFFFF"),
+      ).toBeGreaterThanOrEqual(7);
     }
   });
 
@@ -72,7 +123,7 @@ describe("versioned experience presets", () => {
   });
 
   it("keeps every legacy preset and workspace override byte-for-byte compatible", () => {
-    for (const preset of experiencePresets) {
+    for (const preset of experiencePresets.slice(0, 7)) {
       const legacyBrand = {
         organizationName: "Legacy workspace",
         primaryColor: "#0B2239",
@@ -92,6 +143,26 @@ describe("versioned experience presets", () => {
         primary: legacyBrand.primaryColor,
         accent: legacyBrand.accentColor,
       });
+    }
+  });
+
+  it("keeps new authored dark palettes readable with legacy workspace brand records", () => {
+    for (const id of ["observatory", "summit", "midnight"] as const) {
+      for (const brand of workspaceThemePresets) {
+        const authored = getExperiencePreset(id);
+        const { tokens } = resolveExperienceTheme({
+          category: "general",
+          presetId: id,
+          brandTheme: { organizationName: "Legacy workspace", ...brand },
+        });
+        expect(tokens.canvas).toBe(authored.tokens.canvas);
+        expect(tokens.primaryFill).toBe(brand.primaryColor);
+        expect(tokens.accent).toBe(brand.accentColor);
+        for (const background of [tokens.canvas, tokens.surface, tokens.surfaceStrong]) {
+          expect(colorContrastRatio(tokens.primary, background)).toBeGreaterThanOrEqual(4.5);
+        }
+        expect(colorContrastRatio(tokens.primaryFill!, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 

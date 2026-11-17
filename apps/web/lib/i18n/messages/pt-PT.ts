@@ -193,6 +193,12 @@ const messages = {
   "starter.emptyTitle": "Ainda não existem modelos disponíveis",
   "starter.emptyDescription":
     "A biblioteca de modelos aparecerá aqui quando for ativada para este espaço de trabalho.",
+  "category.science": "Ciência",
+  "category.health_wellbeing": "Saúde e bem-estar",
+  "category.arts_culture": "Artes e cultura",
+  "category.leadership": "Liderança",
+  "category.sustainability": "Sustentabilidade",
+  "category.community": "Comunidade",
   "category.general": "Geral",
   "category.education": "Educação",
   "category.business": "Empresarial",

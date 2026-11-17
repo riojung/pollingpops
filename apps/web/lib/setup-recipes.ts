@@ -1,11 +1,9 @@
-import type { ExperiencePresetId, SessionSettings } from "@openround/contracts";
+import type { SessionSettings } from "@openround/contracts";
 
 export type SetupRecipe = "recovery" | "competition" | "discussion";
 
 export interface ResolvedSetupRecipe {
   settings: SessionSettings;
-  experiencePreset: ExperiencePresetId;
-  presenterSoundEnabled: false;
 }
 
 export function defaultSetupSettings(
@@ -29,7 +27,6 @@ export function resolveSetupRecipe(
   options: {
     segment: "education" | "workplace";
     maxParticipants: number;
-    roundExperiencesAvailable: boolean;
   },
 ): ResolvedSetupRecipe {
   const audienceLimit = Math.min(Math.max(1, current.audienceLimit), options.maxParticipants);
@@ -49,8 +46,6 @@ export function resolveSetupRecipe(
         scoringMode: "speed",
         resultVisibility: "leaderboard",
       },
-      experiencePreset: options.roundExperiencesAvailable ? "spark" : "focus",
-      presenterSoundEnabled: false,
     };
   }
 
@@ -61,8 +56,6 @@ export function resolveSetupRecipe(
         scoringMode: "accuracy",
         resultVisibility: "private",
       },
-      experiencePreset: "focus",
-      presenterSoundEnabled: false,
     };
   }
 
@@ -72,8 +65,6 @@ export function resolveSetupRecipe(
       scoringMode: "accuracy",
       resultVisibility: "private",
     },
-    experiencePreset: "focus",
-    presenterSoundEnabled: false,
   };
 }
 

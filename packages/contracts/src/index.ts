@@ -355,6 +355,12 @@ export const RoundCategorySchema = z.enum([
   "technical",
   "safety_compliance",
   "icebreaker",
+  "science",
+  "health_wellbeing",
+  "arts_culture",
+  "leadership",
+  "sustainability",
+  "community",
 ]);
 export type RoundCategory = z.infer<typeof RoundCategorySchema>;
 
@@ -366,6 +372,13 @@ export const ExperiencePresetIdSchema = z.enum([
   "blueprint",
   "signal",
   "spark",
+  "observatory",
+  "breath",
+  "gallery",
+  "summit",
+  "grove",
+  "commons",
+  "midnight",
 ]);
 export type ExperiencePresetId = z.infer<typeof ExperiencePresetIdSchema>;
 

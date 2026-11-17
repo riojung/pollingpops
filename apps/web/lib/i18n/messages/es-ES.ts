@@ -193,6 +193,12 @@ const messages = {
   "starter.emptyTitle": "Aún no hay plantillas disponibles",
   "starter.emptyDescription":
     "La biblioteca de plantillas aparecerá aquí cuando esté habilitada para este espacio de trabajo.",
+  "category.science": "Ciencia",
+  "category.health_wellbeing": "Salud y bienestar",
+  "category.arts_culture": "Arte y cultura",
+  "category.leadership": "Liderazgo",
+  "category.sustainability": "Sostenibilidad",
+  "category.community": "Comunidad",
   "category.general": "General",
   "category.education": "Educación",
   "category.business": "Empresa",

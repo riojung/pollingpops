@@ -33,6 +33,9 @@ import {
 } from "../../../lib/i18n/delivery-primary-copy";
 import { formatDate, formatDateTime, formatNumber } from "../../../lib/i18n/format";
 import { followupCopy, localizeFollowupMessage } from "../../../lib/i18n/followup-copy";
+import { roundReportWorkspaceCopy } from "../../../lib/i18n/round-report-workspace-copy";
+import { roundReportOverview } from "../../../lib/round-report-overview";
+import styles from "./report-workspace.module.css";
 
 interface ReportContext {
   quizId: string;
@@ -42,7 +45,13 @@ interface ReportContext {
 }
 
 type ReportTab =
-  "evidence" | "decision_replay" | "questions" | "participants" | "interactions" | "manage";
+  | "overview"
+  | "evidence"
+  | "decision_replay"
+  | "questions"
+  | "participants"
+  | "interactions"
+  | "manage";
 
 function RecoveryStory({
   report,
@@ -198,59 +207,9 @@ function EvidenceSections({
 }) {
   const { locale, t } = useLocale();
   const copy = deliveryPrimaryCopy(locale);
-  const note = localizeDeliveryMessage(locale, report.evidenceNote);
-  const summary = deriveRecoverySummary(report);
-  const recovered = summary.recovered;
-  const recoveryDenominator = summary.denominator;
+  const workspaceCopy = roundReportWorkspaceCopy(locale);
   return (
     <>
-      <p className="notice" lang={note.language} style={{ marginBottom: 26 }}>
-        {note.text}
-      </p>
-      <section
-        className="metric-grid"
-        aria-label={copy("Recovery evidence")}
-        style={{ marginBottom: 26 }}
-      >
-        <div className="metric">
-          <strong>
-            {summary.initialAccuracyPercent === null
-              ? t("reportRound.common.notMeasured")
-              : `${formatNumber(locale, report.initialAccuracy.correct)}/${formatNumber(locale, report.initialAccuracy.responses)}`}
-          </strong>
-          <span>{t("reportRound.story.initialAccuracy")}</span>
-        </div>
-        <div className="metric">
-          <strong>{report.participation.percent}%</strong>
-          <span>{t("reportRound.clarity.participation")}</span>
-        </div>
-        <div className="metric">
-          <strong>
-            {recoveryDenominator > 0
-              ? `${formatNumber(locale, recovered)}/${formatNumber(locale, recoveryDenominator)}`
-              : t("reportRound.common.notMeasured")}
-          </strong>
-          <span>
-            {recoveryDenominator > 0
-              ? t("reportRound.story.pairedRecovery")
-              : t("reportRound.clarity.noPairedResponses")}
-          </span>
-        </div>
-        <div className="metric">
-          <strong>
-            {summary.conceptEvidenceCount > 0
-              ? formatNumber(locale, summary.unresolved.length)
-              : t("reportRound.common.notMeasured")}
-          </strong>
-          <span>{t("reportRound.clarity.unresolvedConcepts")}</span>
-        </div>
-      </section>
-      {summary.initialSmallSample ? (
-        <p className="notice" lang={locale}>
-          {t("reportRound.clarity.initialSmallSample")}
-        </p>
-      ) : null}
-
       <section className="panel" style={{ marginBottom: 26 }}>
         <h2 style={{ fontSize: "1.7rem" }}>{copy("Recovery evidence")}</h2>
         {report.recovery.length === 0 ? (
@@ -296,43 +255,47 @@ function EvidenceSections({
 
       <section className="panel" style={{ marginBottom: 26 }}>
         <h2 style={{ fontSize: "1.7rem" }}>{copy("Confidence and correctness")}</h2>
-        <div
-          aria-label={copy("Confidence and correctness")}
-          role="region"
-          style={{ overflowX: "auto" }}
-          tabIndex={0}
-        >
-          <table className="report-table">
-            <thead>
-              <tr>
-                <th>{copy("Confidence")}</th>
-                <th>{t("reportRound.rehearsal.correct")}</th>
-                <th>{t("reportRound.rehearsal.outcome.incorrect")}</th>
-                <th>{copy("Total")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.confidenceMatrix.map((row) => (
-                <tr key={row.confidence}>
-                  <td>
-                    {t(
-                      (
-                        [
-                          "live.roundPlay.confidence.notSure",
-                          "live.roundPlay.confidence.somewhat",
-                          "live.roundPlay.confidence.very",
-                        ] as const
-                      )[row.confidence - 1]!,
-                    )}
-                  </td>
-                  <td>{row.correct}</td>
-                  <td>{row.incorrect}</td>
-                  <td>{row.total}</td>
+        {report.confidenceMatrix.length === 0 ? (
+          <p className="muted">{workspaceCopy("noConfidence")}</p>
+        ) : (
+          <div
+            aria-label={copy("Confidence and correctness")}
+            role="region"
+            style={{ overflowX: "auto" }}
+            tabIndex={0}
+          >
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>{copy("Confidence")}</th>
+                  <th>{t("reportRound.rehearsal.correct")}</th>
+                  <th>{t("reportRound.rehearsal.outcome.incorrect")}</th>
+                  <th>{copy("Total")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {report.confidenceMatrix.map((row) => (
+                  <tr key={row.confidence}>
+                    <td>
+                      {t(
+                        (
+                          [
+                            "live.roundPlay.confidence.notSure",
+                            "live.roundPlay.confidence.somewhat",
+                            "live.roundPlay.confidence.very",
+                          ] as const
+                        )[row.confidence - 1]!,
+                      )}
+                    </td>
+                    <td>{row.correct}</td>
+                    <td>{row.incorrect}</td>
+                    <td>{row.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {report.unresolvedConcepts.length > 0 ? (
@@ -1145,13 +1108,178 @@ function ReportReturnLink() {
   );
 }
 
+function ReportOverview({
+  report,
+  onSelectTab,
+}: {
+  report: Report;
+  onSelectTab: (tab: ReportTab) => void;
+}) {
+  const { locale, t } = useLocale();
+  const copy = deliveryPrimaryCopy(locale);
+  const workspaceCopy = roundReportWorkspaceCopy(locale);
+  const overview = roundReportOverview(report);
+  const coverage = overview.respondentCoverage;
+  const recovery = "recovery" in report ? deriveRecoverySummary(report) : null;
+  const percent = (value: number) =>
+    formatNumber(locale, value / 100, { style: "percent", maximumFractionDigits: 1 });
+  const coverageDescription = coverage
+    ? workspaceCopy("responseCoverageDetail", {
+        respondents: formatNumber(locale, coverage.respondents),
+        participants: formatNumber(locale, coverage.participants),
+      })
+    : workspaceCopy("questionCoverageDetail", {
+        answered: formatNumber(locale, overview.answeredQuestions),
+        total: formatNumber(locale, overview.questionCount),
+      });
+
+  return (
+    <>
+      <section className={styles.metrics} aria-label={workspaceCopy("overview")}>
+        <div className={styles.metric}>
+          <strong>{formatNumber(locale, report.metrics.participantCount)}</strong>
+          <span>{t("live.common.participants")}</span>
+        </div>
+        <div className={styles.metric}>
+          <strong>{formatNumber(locale, report.metrics.answerCount)}</strong>
+          <span>{t("live.common.responses")}</span>
+        </div>
+        <div className={styles.metric}>
+          <strong>
+            {coverage
+              ? percent(coverage.percent)
+              : overview.questionCount > 0
+                ? `${formatNumber(locale, overview.answeredQuestions)}/${formatNumber(locale, overview.questionCount)}`
+                : "—"}
+          </strong>
+          <span>{workspaceCopy(coverage ? "responseCoverage" : "questionCoverage")}</span>
+        </div>
+        <div className={styles.metric}>
+          <strong>
+            {overview.accuracyPercent === null
+              ? formatNumber(locale, overview.questionCount)
+              : percent(overview.accuracyPercent)}
+          </strong>
+          <span>
+            {overview.accuracyPercent === null ? copy("Questions") : t("live.common.accuracy")}
+          </span>
+        </div>
+      </section>
+      <p className={styles.coverageNote}>{coverageDescription}</p>
+
+      {!overview.hasResponses ? (
+        <section className={styles.emptyState} aria-labelledby="report-no-responses">
+          <span className={styles.emptyIcon} aria-hidden="true">
+            ↗
+          </span>
+          <div>
+            <h2 id="report-no-responses">{workspaceCopy("noResponsesTitle")}</h2>
+            <p>{workspaceCopy("noResponsesBody")}</p>
+            <div className="button-row">
+              <button
+                className="button small-button"
+                type="button"
+                onClick={() => onSelectTab("questions")}
+              >
+                {workspaceCopy("allQuestions")}
+              </button>
+              <Link className="button-quiet small-button" href="/library?type=rounds">
+                {workspaceCopy("openRounds")}
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <div className={styles.overviewGrid} data-empty={!overview.hasResponses}>
+        <section className={styles.overviewCard} aria-labelledby="report-question-overview">
+          <div className={styles.cardHeading}>
+            <h2 id="report-question-overview">{workspaceCopy("questionSnapshot")}</h2>
+            <button
+              className={styles.textButton}
+              type="button"
+              onClick={() => onSelectTab("questions")}
+            >
+              {workspaceCopy("allQuestions")} <span aria-hidden="true">→</span>
+            </button>
+          </div>
+          {overview.questionCount > 0 ? (
+            <ol className={styles.questionList}>
+              {overview.questionPreview.map((question, index) => (
+                <li key={question.questionId}>
+                  <span className={styles.questionIndex} aria-hidden="true">
+                    {formatNumber(locale, index + 1)}
+                  </span>
+                  <div className={styles.previewPrompt}>
+                    <p lang="">{question.prompt}</p>
+                    {question.responses > 0 && question.correct !== null && question.difficult ? (
+                      <span className={styles.reviewBadge}>{copy("Review")}</span>
+                    ) : null}
+                  </div>
+                  <span className={styles.responseCount}>
+                    {formatNumber(locale, question.responses)}{" "}
+                    <span>{t("live.common.responses")}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={styles.sectionDescription}>{workspaceCopy("noQuestionsBody")}</p>
+          )}
+        </section>
+
+        {overview.hasResponses ? (
+          <section className={styles.nextStep} aria-labelledby="report-next-step">
+            <p className="eyebrow">{workspaceCopy("nextStep")}</p>
+            <h2 id="report-next-step">
+              {overview.reviewQuestions.length > 0
+                ? copy("Questions needing review")
+                : overview.hasResponses
+                  ? copy("Question analysis")
+                  : copy("Questions")}
+            </h2>
+            <p>
+              {!overview.hasResponses
+                ? workspaceCopy("noResponsesBody")
+                : recovery?.unresolved.length
+                  ? t("reportRound.clarity.nextPractice")
+                  : report.questions.length > 0 &&
+                      report.questions.every((question) => question.correct === null)
+                    ? workspaceCopy("opinionNext")
+                    : overview.reviewQuestions.length > 0
+                      ? workspaceCopy("reviewNext")
+                      : workspaceCopy("recheckNext")}
+            </p>
+            {recovery && recovery.denominator > 0 ? (
+              <p className={styles.recoveryFact}>
+                <strong>
+                  {formatNumber(locale, recovery.recovered)}/
+                  {formatNumber(locale, recovery.denominator)}
+                </strong>{" "}
+                {t("reportRound.story.pairedRecovery")}
+              </p>
+            ) : null}
+            <button
+              className="button-quiet small-button"
+              type="button"
+              onClick={() => onSelectTab("questions")}
+            >
+              {workspaceCopy("allQuestions")}
+            </button>
+          </section>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 function ReportIdentity({ context }: { context: ReportContext | null }) {
   const { locale, t } = useLocale();
   return (
     <div lang={locale}>
       <p className="eyebrow">{t("reportRound.clarity.sessionReport")}</p>
       <h1 lang={context?.quizTitle ? "" : locale}>
-        {context?.quizTitle || t("reportRound.story.title")}
+        {context?.quizTitle || t("reportRound.clarity.sessionReport")}
       </h1>
       {context ? (
         <p className="muted">
@@ -1177,7 +1305,7 @@ export default function ReportPage() {
     WorkspaceProductFeatures,
     "uxBeta" | "workspaceShell"
   > | null>(null);
-  const [activeTab, setActiveTab] = useState<ReportTab>("evidence");
+  const [activeTab, setActiveTab] = useState<ReportTab>("overview");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [canEdit, setCanEdit] = useState(false);
@@ -1281,14 +1409,16 @@ export default function ReportPage() {
     report?.schemaVersion === 7
       ? report
       : null;
-  const detailTabs: { id: ReportTab; label: string }[] = [
+  const workspaceCopy = roundReportWorkspaceCopy(locale);
+  const detailTabs: { id: ReportTab; label: string; count?: number }[] = [
+    { id: "overview", label: workspaceCopy("overview") },
+    { id: "questions", label: copy("Questions"), count: report?.questions.length },
+    {
+      id: "participants",
+      label: t("live.common.participants"),
+      count: report?.metrics.participantCount,
+    },
     ...(evidence ? [{ id: "evidence" as const, label: copy("Evidence") }] : []),
-    ...(report?.schemaVersion === 4 ||
-    report?.schemaVersion === 5 ||
-    report?.schemaVersion === 6 ||
-    report?.schemaVersion === 7
-      ? [{ id: "decision_replay" as const, label: copy("Decision replay") }]
-      : []),
     ...(report?.schemaVersion === 3 ||
     report?.schemaVersion === 4 ||
     report?.schemaVersion === 5 ||
@@ -1296,13 +1426,22 @@ export default function ReportPage() {
     report?.schemaVersion === 7
       ? [{ id: "interactions" as const, label: t("live.audience.conversation") }]
       : []),
-    { id: "questions", label: copy("Questions") },
-    { id: "participants", label: t("live.common.participants") },
-    ...(uxBeta ? [{ id: "manage" as const, label: copy("Manage data") }] : []),
+    ...(report?.schemaVersion === 4 ||
+    report?.schemaVersion === 5 ||
+    report?.schemaVersion === 6 ||
+    report?.schemaVersion === 7
+      ? [{ id: "decision_replay" as const, label: copy("Decision replay") }]
+      : []),
+    { id: "manage", label: copy("Manage data") },
   ];
   const selectedTab = detailTabs.some((tab) => tab.id === activeTab)
     ? activeTab
     : detailTabs[0]?.id;
+
+  function selectTab(tab: ReportTab) {
+    setActiveTab(tab);
+    document.getElementById(`report-tab-${tab}`)?.focus();
+  }
 
   function moveTabFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
@@ -1338,30 +1477,25 @@ export default function ReportPage() {
 
   return (
     <>
-      <header className="shell topbar" lang={locale}>
+      <header className={`shell topbar ${styles.reportHeader}`} lang={locale}>
         <CreatorBrand productFeatures={productFeatures} />
         <ReportReturnLink />
       </header>
-      <main className="shell page-main" id="main" lang={locale}>
-        <div className="page-heading">
+      <main className={`shell page-main ${styles.workspace}`} id="main" lang={locale}>
+        <div className={styles.heading}>
           <ReportIdentity context={context} />
           <div className="button-row">
             {report?.status === "ready" ? (
               <SessionSummaryButton source={{ kind: "round", id: report.sessionId }} />
             ) : null}
-            {!uxBeta && report?.status === "ready" && entitlements?.csvExport ? (
-              <div className="button-row">
-                <a className="button" href={`${API_URL}/v1/reports/${id}.csv`}>
-                  {copy("Download CSV")}
-                </a>
-                <a className="button-quiet" href={`${API_URL}/v1/reports/${id}.json`}>
-                  {copy("Download JSON")}
-                </a>
-              </div>
-            ) : !uxBeta && report && entitlements ? (
-              <Link className="button-quiet" href="/pricing">
-                {copy("CSV was not included for this room")}
-              </Link>
+            {report?.status === "ready" ? (
+              <button
+                className="button-quiet small-button"
+                type="button"
+                onClick={() => selectTab("manage")}
+              >
+                {copy("Export report data")}
+              </button>
             ) : null}
           </div>
         </div>
@@ -1393,127 +1527,108 @@ export default function ReportPage() {
         ) : null}
         {report?.status === "ready" ? (
           <>
-            <p className="muted" lang={locale}>
-              {copy("Response timing")}:{" "}
-              {report.timeMode === "flex" ? t("live.common.flexMode") : t("live.common.timedMode")}
-            </p>
-            {!uxBeta ? (
-              <p className="notice" style={{ marginBottom: 26 }}>
-                {copy("Report retained until {date}. Current plan default: {days} days.", {
-                  date: formatDate(locale, report.expiresAt),
-                  days: entitlements?.reportRetentionDays ?? "—",
-                })}
-              </p>
-            ) : null}
-            {evidence && uxBeta ? (
-              <RecoveryStory report={evidence} />
-            ) : (
-              <section className="metric-grid" style={{ marginBottom: 26 }}>
-                <div className="metric">
-                  <strong>{report.metrics.participantCount}</strong>
-                  <span>{t("live.common.participants")}</span>
-                </div>
-                <div className="metric">
-                  <strong>{report.metrics.answerCount}</strong>
-                  <span>{t("live.common.responses")}</span>
-                </div>
-                <div className="metric">
-                  <strong>
-                    {report.metrics.accuracyPercent === null || report.metrics.answerCount === 0
-                      ? "—"
-                      : `${formatNumber(locale, report.metrics.accuracyPercent)}%`}
-                  </strong>
-                  <span>
-                    {report.metrics.accuracyPercent === null || report.metrics.answerCount === 0
-                      ? copy("No assessed answers")
-                      : t("live.common.accuracy")}
-                  </span>
-                </div>
-                <div className="metric">
-                  <strong>
-                    {
-                      report.questions.filter(
-                        (question) =>
-                          question.responses > 0 && question.correct !== null && question.difficult,
-                      ).length
-                    }
-                  </strong>
-                  <span>
-                    {copy(uxBeta ? "Questions needing review" : "Checkpoints needing review")}
-                  </span>
-                </div>
-              </section>
-            )}
-            {evidence && entitlements && uxBeta ? (
-              <FollowupBuilder
-                entitlement={entitlements.followups}
-                initialFollowup={followup}
-                canEdit={canEdit}
-                mayManage={() => authority.current.canEdit}
-                report={evidence}
-                uxBeta={uxBeta}
-              />
-            ) : null}
-            {uxBeta ? (
-              <nav className="report-tabs" aria-label={copy("Report details")} role="tablist">
-                {detailTabs.map((tab, index) => (
-                  <button
-                    aria-controls={`report-panel-${tab.id}`}
-                    aria-selected={selectedTab === tab.id}
-                    className={selectedTab === tab.id ? "active" : ""}
-                    id={`report-tab-${tab.id}`}
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    onKeyDown={(event) => moveTabFocus(event, index)}
-                    role="tab"
-                    tabIndex={selectedTab === tab.id ? 0 : -1}
-                    type="button"
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
-            ) : null}
-            {(!uxBeta || selectedTab === "evidence") && evidence ? (
+            <div className={styles.sessionContext}>
+              <span>
+                {copy("Response timing")}:{" "}
+                {report.timeMode === "flex"
+                  ? t("live.common.flexMode")
+                  : t("live.common.timedMode")}
+              </span>
+              <span>
+                {workspaceCopy("retainedUntil", { date: formatDate(locale, report.expiresAt) })}
+              </span>
+            </div>
+            <nav className={styles.tabs} aria-label={copy("Report details")} role="tablist">
+              {detailTabs.map((tab, index) => (
+                <button
+                  aria-controls={`report-panel-${tab.id}`}
+                  aria-selected={selectedTab === tab.id}
+                  id={`report-tab-${tab.id}`}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(event) => moveTabFocus(event, index)}
+                  role="tab"
+                  tabIndex={selectedTab === tab.id ? 0 : -1}
+                  type="button"
+                >
+                  {tab.label}
+                  {tab.count !== undefined ? (
+                    <span className={styles.tabCount} aria-hidden="true">
+                      {formatNumber(locale, tab.count)}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </nav>
+            <div
+              aria-labelledby="report-tab-overview"
+              id="report-panel-overview"
+              role="tabpanel"
+              hidden={selectedTab !== "overview"}
+              tabIndex={0}
+            >
+              <ReportOverview report={report} onSelectTab={selectTab} />
+              {evidence && entitlements ? (
+                <FollowupBuilder
+                  entitlement={entitlements.followups}
+                  initialFollowup={followup}
+                  canEdit={canEdit}
+                  mayManage={() => authority.current.canEdit}
+                  report={evidence}
+                  uxBeta={uxBeta}
+                />
+              ) : null}
+            </div>
+            {evidence ? (
               <div
-                aria-labelledby={uxBeta ? "report-tab-evidence" : undefined}
-                id={uxBeta ? "report-panel-evidence" : undefined}
-                role={uxBeta ? "tabpanel" : undefined}
+                aria-labelledby="report-tab-evidence"
+                id="report-panel-evidence"
+                role="tabpanel"
+                hidden={selectedTab !== "evidence"}
+                tabIndex={0}
+                className={styles.detailPanel}
               >
+                <p className={styles.sectionDescription}>{workspaceCopy("evidenceIntro")}</p>
                 <EvidenceSections report={evidence} />
-                {!uxBeta &&
-                (report.schemaVersion === 4 ||
-                  report.schemaVersion === 5 ||
-                  report.schemaVersion === 6 ||
-                  report.schemaVersion === 7) ? (
-                  <DecisionTimeline report={report} />
-                ) : null}
+                <details className={styles.disclosure}>
+                  <summary>{workspaceCopy("recoveryNarrative")}</summary>
+                  <RecoveryStory report={evidence} />
+                </details>
+                <details className={styles.disclosure}>
+                  <summary>{workspaceCopy("evidenceNotes")}</summary>
+                  <p lang={localizeDeliveryMessage(locale, evidence.evidenceNote).language}>
+                    {localizeDeliveryMessage(locale, evidence.evidenceNote).text}
+                  </p>
+                </details>
               </div>
             ) : null}
-            {uxBeta &&
-            selectedTab === "decision_replay" &&
-            (report.schemaVersion === 4 ||
-              report.schemaVersion === 5 ||
-              report.schemaVersion === 6 ||
-              report.schemaVersion === 7) ? (
+            {report.schemaVersion === 4 ||
+            report.schemaVersion === 5 ||
+            report.schemaVersion === 6 ||
+            report.schemaVersion === 7 ? (
               <div
                 aria-labelledby="report-tab-decision_replay"
                 id="report-panel-decision_replay"
                 role="tabpanel"
+                hidden={selectedTab !== "decision_replay"}
+                tabIndex={0}
+                className={styles.detailPanel}
               >
                 <DecisionTimeline report={report} />
               </div>
             ) : null}
-            {(!uxBeta || selectedTab === "interactions") &&
-            (report.schemaVersion === 3 ||
-              report.schemaVersion === 4 ||
-              report.schemaVersion === 5 ||
-              report.schemaVersion === 6 ||
-              report.schemaVersion === 7) ? (
+            {report.schemaVersion === 3 ||
+            report.schemaVersion === 4 ||
+            report.schemaVersion === 5 ||
+            report.schemaVersion === 6 ||
+            report.schemaVersion === 7 ? (
               <div
-                aria-labelledby={uxBeta ? "report-tab-interactions" : undefined}
-                id={uxBeta ? "report-panel-interactions" : undefined}
-                role={uxBeta ? "tabpanel" : undefined}
+                aria-labelledby="report-tab-interactions"
+                id="report-panel-interactions"
+                role="tabpanel"
+                hidden={selectedTab !== "interactions"}
+                tabIndex={0}
+                className={styles.detailPanel}
               >
                 <InteractionEvidenceSections
                   report={report}
@@ -1522,34 +1637,33 @@ export default function ReportPage() {
                 />
               </div>
             ) : null}
-            {!uxBeta && evidence && entitlements ? (
-              <FollowupBuilder
-                entitlement={entitlements.followups}
-                initialFollowup={followup}
-                canEdit={canEdit}
-                mayManage={() => authority.current.canEdit}
-                report={evidence}
-                uxBeta={uxBeta}
-              />
-            ) : null}
-            {!uxBeta || selectedTab === "questions" ? (
-              <section
-                aria-labelledby={uxBeta ? "report-tab-questions" : undefined}
-                className="panel"
-                id={uxBeta ? "report-panel-questions" : undefined}
-                role={uxBeta ? "tabpanel" : undefined}
-                style={{ marginBottom: 26 }}
-              >
-                <h2 style={{ fontSize: "1.7rem" }}>
-                  {copy(uxBeta ? "Question analysis" : "Checkpoint analysis")}
-                </h2>
+            <section
+              aria-labelledby="report-tab-questions"
+              className={`panel ${styles.detailPanel}`}
+              id="report-panel-questions"
+              role="tabpanel"
+              hidden={selectedTab !== "questions"}
+              tabIndex={0}
+              style={{ marginBottom: 26 }}
+            >
+              <h2 style={{ fontSize: "1.7rem" }}>{copy("Question analysis")}</h2>
+              <p className={styles.sectionDescription}>{workspaceCopy("questionIntro")}</p>
+              {report.questions.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <h3>{workspaceCopy("noQuestionsTitle")}</h3>
+                  <p>{workspaceCopy("noQuestionsBody")}</p>
+                  <Link className="button-quiet small-button" href="/library?type=rounds">
+                    {workspaceCopy("openRounds")}
+                  </Link>
+                </div>
+              ) : (
                 <div
                   aria-label={copy("Question analysis")}
                   role="region"
                   style={{ overflowX: "auto" }}
                   tabIndex={0}
                 >
-                  <table className="report-table">
+                  <table className={`report-table ${styles.questionsTable}`}>
                     <thead>
                       <tr>
                         <th>{t("reportRound.common.question")}</th>
@@ -1561,9 +1675,14 @@ export default function ReportPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {report.questions.map((question) => (
+                      {report.questions.map((question, index) => (
                         <tr key={question.questionId}>
-                          <td lang="">{question.prompt}</td>
+                          <td className={styles.questionCell}>
+                            <span className={styles.questionIndex} aria-hidden="true">
+                              {formatNumber(locale, index + 1)}
+                            </span>
+                            <span lang="">{question.prompt}</span>
+                          </td>
                           <td>{question.responses}</td>
                           <td>
                             {question.correct === null
@@ -1589,7 +1708,7 @@ export default function ReportPage() {
                             {question.correct === null
                               ? copy("Opinion feedback")
                               : question.responses === 0
-                                ? t("reportRound.common.notMeasured")
+                                ? "—"
                                 : question.difficult
                                   ? copy("Review")
                                   : copy("On track")}
@@ -1599,17 +1718,25 @@ export default function ReportPage() {
                     </tbody>
                   </table>
                 </div>
-              </section>
-            ) : null}
-            {!uxBeta || selectedTab === "participants" ? (
-              <section
-                aria-labelledby={uxBeta ? "report-tab-participants" : undefined}
-                className="panel"
-                id={uxBeta ? "report-panel-participants" : undefined}
-                role={uxBeta ? "tabpanel" : undefined}
-                style={{ marginBottom: 26 }}
-              >
-                <h2 style={{ fontSize: "1.7rem" }}>{copy("Participant outcomes")}</h2>
+              )}
+            </section>
+            <section
+              aria-labelledby="report-tab-participants"
+              className={`panel ${styles.detailPanel}`}
+              id="report-panel-participants"
+              role="tabpanel"
+              hidden={selectedTab !== "participants"}
+              tabIndex={0}
+              style={{ marginBottom: 26 }}
+            >
+              <h2 style={{ fontSize: "1.7rem" }}>{copy("Participant outcomes")}</h2>
+              <p className={styles.sectionDescription}>{workspaceCopy("participantIntro")}</p>
+              {report.participants.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <h3>{workspaceCopy("noParticipantsTitle")}</h3>
+                  <p>{workspaceCopy("noParticipantsBody")}</p>
+                </div>
+              ) : (
                 <div
                   aria-label={copy("Participant outcomes")}
                   role="region"
@@ -1644,71 +1771,58 @@ export default function ReportPage() {
                     </tbody>
                   </table>
                 </div>
-              </section>
-            ) : null}
-            {uxBeta && selectedTab === "manage" ? (
-              <div aria-labelledby="report-tab-manage" id="report-panel-manage" role="tabpanel">
-                <section className="panel" style={{ marginBottom: 26 }}>
-                  <h2 style={{ fontSize: "1.5rem" }}>{copy("Export report data")}</h2>
-                  {entitlements?.csvExport ? (
-                    <div className="button-row">
-                      <a className="button" href={`${API_URL}/v1/reports/${id}.csv`}>
-                        {copy("Download CSV")}
-                      </a>
-                      <a className="button-quiet" href={`${API_URL}/v1/reports/${id}.json`}>
-                        {copy("Download JSON")}
-                      </a>
-                    </div>
-                  ) : entitlements ? (
-                    <Link className="button-quiet" href="/pricing">
-                      {copy("CSV was not included for this room")}
-                    </Link>
-                  ) : null}
-                  <p className="muted" style={{ marginBottom: 0 }}>
-                    {copy("Report retained until {date}. Current plan default: {days} days.", {
-                      date: formatDate(locale, report.expiresAt),
-                      days: entitlements?.reportRetentionDays ?? "—",
-                    })}
-                  </p>
-                </section>
-                {canDelete ? (
-                  <section className="panel danger-panel">
-                    <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
-                    <p className="muted">
-                      {copy(
-                        "Permanently remove this session, its participant records, answers, and report.",
-                      )}
-                    </p>
-                    <button
-                      className="button-danger"
-                      disabled={deleting}
-                      onClick={() => void deleteSession()}
-                      type="button"
-                    >
-                      {deleting ? copy("Deleting…") : copy("Delete session and report")}
-                    </button>
-                  </section>
+              )}
+            </section>
+            <div
+              aria-labelledby="report-tab-manage"
+              id="report-panel-manage"
+              role="tabpanel"
+              hidden={selectedTab !== "manage"}
+              tabIndex={0}
+              className={styles.detailPanel}
+            >
+              <section className="panel" style={{ marginBottom: 26 }}>
+                <h2 style={{ fontSize: "1.5rem" }}>{copy("Export report data")}</h2>
+                {entitlements?.csvExport ? (
+                  <div className="button-row">
+                    <a className="button" href={`${API_URL}/v1/reports/${id}.csv`}>
+                      {copy("Download CSV")}
+                    </a>
+                    <a className="button-quiet" href={`${API_URL}/v1/reports/${id}.json`}>
+                      {copy("Download JSON")}
+                    </a>
+                  </div>
+                ) : entitlements ? (
+                  <Link className="button-quiet" href="/pricing">
+                    {copy("CSV was not included for this room")}
+                  </Link>
                 ) : null}
-              </div>
-            ) : null}
-            {!uxBeta && canDelete ? (
-              <section className="panel danger-panel">
-                <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
-                <p className="muted">
-                  {copy(
-                    "Permanently remove this session, its participant records, answers, and report.",
-                  )}
+                <p className="muted" style={{ marginBottom: 0 }}>
+                  {copy("Report retained until {date}. Current plan default: {days} days.", {
+                    date: formatDate(locale, report.expiresAt),
+                    days: entitlements?.reportRetentionDays ?? "—",
+                  })}
                 </p>
-                <button
-                  className="button-danger"
-                  disabled={deleting}
-                  onClick={() => void deleteSession()}
-                  type="button"
-                >
-                  {deleting ? copy("Deleting…") : copy("Delete session and report")}
-                </button>
               </section>
-            ) : null}
+              {canDelete ? (
+                <section className="panel danger-panel">
+                  <h2 style={{ fontSize: "1.5rem" }}>{copy("Delete session data")}</h2>
+                  <p className="muted">
+                    {copy(
+                      "Permanently remove this session, its participant records, answers, and report.",
+                    )}
+                  </p>
+                  <button
+                    className="button-danger"
+                    disabled={deleting}
+                    onClick={() => void deleteSession()}
+                    type="button"
+                  >
+                    {deleting ? copy("Deleting…") : copy("Delete session and report")}
+                  </button>
+                </section>
+              ) : null}
+            </div>
           </>
         ) : null}
       </main>

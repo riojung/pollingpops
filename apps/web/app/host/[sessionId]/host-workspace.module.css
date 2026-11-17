@@ -4,8 +4,6 @@
   --host-radius: 18px;
   --ui-shadow-sm: 0 2px 10px rgb(0 0 0 / 5%);
   --ui-shadow-md: 0 8px 24px rgb(0 0 0 / 8%);
-  background-color: color-mix(in srgb, var(--experience-surface) 78%, var(--experience-canvas));
-  background-image: none;
 }
 
 .topbar.topbar {
@@ -284,4 +282,9 @@
     grid-template-columns: minmax(0, 1fr);
     margin-top: 20px;
   }
+}
+
+.shell.shell:not([data-pattern]) {
+  background-color: color-mix(in srgb, var(--experience-surface) 78%, var(--experience-canvas));
+  background-image: none;
 }

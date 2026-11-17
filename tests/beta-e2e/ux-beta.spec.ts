@@ -1020,20 +1020,26 @@ test("creator and participants complete a beta Recovery loop through report", as
     await expect(page.getByText("Results are ready.")).toBeVisible();
     await page.getByTestId("host-stage").getByRole("link", { name: "Open report" }).click();
 
+    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+      { timeout: 20_000 },
+    );
+    await expect(page.getByRole("heading", { name: "Self-paced follow-up" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create follow-up and links" })).toBeVisible();
+    await page.getByRole("tab", { name: "Evidence", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Recovery evidence" }).last()).toBeVisible({
       timeout: 20_000,
     });
     const recoveryRow = page.getByRole("row", { name: /Linked recheck/ });
     await expect(recoveryRow).toContainText("4");
     await expect(recoveryRow).toContainText("5");
+    await page.getByText("Recovery story and interpretation", { exact: true }).click();
     await expect(
       page
         .getByRole("list", { name: "Intervention timeline" })
         .getByText("explain", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Self-paced follow-up" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create follow-up and links" })).toBeVisible();
-
     await page.getByRole("tab", { name: "Questions" }).click();
     const questionsPanel = page.getByRole("tabpanel", { name: "Questions" });
     await questionsPanel.getByText("5 respondents").first().click();

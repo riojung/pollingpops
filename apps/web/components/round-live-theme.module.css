@@ -67,9 +67,15 @@
   --teal-dark: var(--round-accent-ink);
   --navy: var(--round-header);
   --shadow: var(--ui-shadow-md);
-  background: radial-gradient(ellipse at 50% 0, var(--round-accent-soft), transparent 50%)
-    var(--round-canvas);
+  background-color: var(--round-canvas);
   color: var(--round-text);
+}
+
+.shell.shell:not([data-pattern]) {
+  background-image: radial-gradient(ellipse at 50% 0, var(--round-accent-soft), transparent 50%);
+}
+
+.shell.shell:not([data-typography]) {
   font-family:
     Inter,
     ui-sans-serif,
@@ -107,9 +113,9 @@
   color-scheme: dark;
 }
 
-/* Explicit workspace modes are frozen with the room. Browser appearance never
-   replaces those colors; older rooms keep the established neutral treatment. */
-:global(html) .shell.shell[data-workspace-color-mode] {
+/* Every room carries a frozen experience, including rooms without workspace
+   branding. Personal interface appearance must not replace that snapshot. */
+:global(html) .shell.shell[data-pattern] {
   --round-canvas: var(--experience-canvas);
   --round-surface: var(--experience-surface);
   --round-surface-raised: var(--experience-surface);
@@ -125,17 +131,57 @@
   --round-accent-ink: var(--experience-primary);
   --round-focus: var(--experience-primary);
   --round-on-accent: #ffffff;
-  --round-header: var(--experience-primary-fill);
-  color-scheme: light;
+  --round-header: var(--experience-header-fill, var(--experience-primary-fill));
+  --round-success: #176b50;
+  --round-success-soft: #e8f6ef;
+  --round-success-border: #65ae91;
+  --round-danger: #a52b38;
+  --round-danger-soft: #fff0f1;
+  --round-danger-border: #e7a0a9;
+  color-scheme: var(--experience-color-scheme, light);
 }
 
-:global(html) .shell.shell[data-workspace-color-mode="dark"] {
+:global(html) .shell.shell[data-experience-color-scheme="dark"] {
+  --round-success: #91ddbc;
+  --round-success-soft: #193b33;
+  --round-success-border: #4b9c7e;
+  --round-danger: #ffb2bd;
+  --round-danger-soft: #442833;
+  --round-danger-border: #a8596b;
   color-scheme: dark;
 }
 
-.shell.shell[data-workspace-color-mode] :global(.answer-button)[data-selected="true"] {
+.shell.shell[data-pattern] :global(.answer-button)[data-selected="true"] {
   border-color: var(--round-focus);
   box-shadow: 0 0 0 1px var(--round-focus);
+}
+
+/* Authored corners and answer colors remain part of the selected preset. */
+.shell.shell[data-corners="compact"] {
+  --round-card-radius: 10px;
+  --round-control-radius: 8px;
+}
+.shell.shell[data-corners="round"] {
+  --round-card-radius: 32px;
+  --round-control-radius: 16px;
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 1) {
+  --round-choice-border: var(--choice-1);
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 2) {
+  --round-choice-border: var(--choice-2);
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 3) {
+  --round-choice-border: var(--choice-3);
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 4) {
+  --round-choice-border: var(--choice-4);
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 5) {
+  --round-choice-border: var(--choice-5);
+}
+.shell.shell[data-pattern] :global(.answer-button):nth-child(6n + 6) {
+  --round-choice-border: var(--choice-6);
 }
 
 .shell.shell :is(h1, h2, h3, :global(.field-label)) {
@@ -233,7 +279,7 @@
 /* Saved custom fills may be right at the white-text contrast threshold.
    Darken header controls instead of washing their backgrounds toward white. */
 :global(html)
-  .shell.shell[data-workspace-color-mode]
+  .shell.shell[data-pattern]
   :global(.live-topbar)
   :is(:global(.button-quiet), :global(.experience-preferences) > summary) {
   background: rgb(0 0 0 / 16%);
@@ -241,7 +287,7 @@
 }
 
 :global(html)
-  .shell.shell[data-workspace-color-mode]
+  .shell.shell[data-pattern]
   :global(.live-topbar)
   :is(:global(.button-quiet), :global(.experience-preferences) > summary):hover {
   background: rgb(0 0 0 / 24%);
@@ -449,8 +495,8 @@
 .shell.shell :global(.answer-button) {
   align-content: center;
   background: var(--round-soft);
-  border: 1px solid var(--round-border);
-  border-radius: 12px;
+  border: 1px solid var(--round-choice-border, var(--round-border));
+  border-radius: var(--round-control-radius);
   color: var(--round-text);
   font-size: 1rem;
   font-weight: 550;
@@ -525,6 +571,7 @@
 :global(html[data-openround-contrast="high"]) .shell.shell {
   color-scheme: light;
   --round-canvas: #ffffff;
+  --round-header: #000000;
   --round-surface: #ffffff;
   --round-surface-raised: #ffffff;
   --round-soft: #f0f0f0;
@@ -552,6 +599,7 @@
   :global(html) .shell.shell.shell {
     color-scheme: light;
     --round-canvas: #ffffff;
+    --round-header: #000000;
     --round-surface: #ffffff;
     --round-surface-raised: #ffffff;
     --round-soft: #f0f0f0;
@@ -573,5 +621,14 @@
     --round-danger-soft: #ffffff;
     --round-danger-border: #000000;
     background-image: none;
+  }
+}
+
+:global(html[data-openround-contrast="high"]) .shell.shell :global(.answer-button) {
+  --round-choice-border: var(--round-border);
+}
+@media (prefers-contrast: more) {
+  :global(html) .shell.shell.shell :global(.answer-button) {
+    --round-choice-border: var(--round-border);
   }
 }

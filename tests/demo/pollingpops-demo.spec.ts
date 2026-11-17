@@ -390,11 +390,18 @@ test("record the Polling Pops product demo", async ({ browser }) => {
     await expect(page.getByText("Results are ready.")).toBeVisible();
     await click(page, page.getByRole("link", { name: "Open report" }), 1_700);
 
+    await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+      { timeout: 20_000 },
+    );
+    await click(page, page.getByRole("tab", { name: "Evidence", exact: true }));
+    await click(page, page.getByText("Recovery story and interpretation", { exact: true }));
     await expect(
       page
-        .locator(".metric")
-        .filter({ hasText: "initial accuracy" })
-        .getByText("20%", { exact: true }),
+        .locator(".recovery-comparison > div")
+        .filter({ has: page.getByText("Initial accuracy", { exact: true }) })
+        .getByText("1/5 · 20%", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
     await beat(page, 2_200);
     await page.getByRole("heading", { name: "Recovery evidence" }).last().scrollIntoViewIfNeeded();
@@ -405,6 +412,7 @@ test("record the Polling Pops product demo", async ({ browser }) => {
     await beat(page, 1_600);
     await page.getByRole("heading", { name: "Concept follow-up" }).scrollIntoViewIfNeeded();
     await beat(page, 1_600);
+    await click(page, page.getByRole("tab", { name: "Overview", exact: true }));
     await page.getByRole("heading", { name: "Self-paced follow-up" }).scrollIntoViewIfNeeded();
     await beat(page, 1_300);
     await click(page, page.getByRole("button", { name: "Create follow-up and links" }), 1_500);

@@ -43,6 +43,7 @@ const config = ConfigSchema.parse({
   BUSINESS_EVENT_CREDITS_ENABLED: "true",
   BILLING_MODE: "disabled",
   LOG_LEVEL: "silent",
+  ...(process.env.CANVAS_BROWSER_FIXTURE === "true" ? { FEATURE_ROUND_EXPERIENCES: "true" } : {}),
   ...(process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_IMAGES === "true"
     ? {
         FEATURE_MEDIA_UPLOADS: "true",
@@ -82,6 +83,15 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_
   installCanvasBrowserImages(built.app, built.storage, config.PUBLIC_API_URL);
 const platform = createPlatformRepository(repository);
 if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
+  // Exercise the normal reconciliation worker deterministically in browser tests.
+  built.app.post("/__test/round-reports/process", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+      return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
+    const token = request.cookies[config.COOKIE_NAME];
+    const actor = token ? await repository.getCreatorBySession(hashToken(token), new Date()) : null;
+    if (!actor) return reply.code(401).send({ error: { message: "Sign in required" } });
+    return { results: await built.reportWorker.runUntilIdle(10) };
+  });
   await platform.saveFeaturePolicy({
     expectedRevision: 0,
     features: {
@@ -89,6 +99,7 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
       workspaceShell: { enabled: true, plans: ["free", "pro", "team"] },
       builderV2: { enabled: true, plans: ["free", "pro", "team"] },
       roundClientProtocol: { enabled: true, plans: ["free", "pro", "team"] },
+      roundExperiences: { enabled: true, plans: ["free", "pro", "team"] },
       questionHealth: { enabled: true, plans: ["free", "pro", "team"] },
       groups: { enabled: true, plans: ["free", "pro", "team"] },
       practiceAssignments: { enabled: true, plans: ["free", "pro", "team"] },

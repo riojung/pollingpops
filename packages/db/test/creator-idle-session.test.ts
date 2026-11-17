@@ -520,7 +520,13 @@ for (const backend of ["memory", "postgres"] as const) {
             const beforeMigration = (
               await upgrade.pool.query("SELECT clock_timestamp() AS checked_at")
             ).rows[0].checked_at as Date;
-            await migrationOwner.migrate();
+            // This normal-owner fixture exercises the session backfill in migration110.
+            // Later migrations have separate ownership requirements and upgrade coverage.
+            await copyFile(
+              join(source, "110_workspace_idle_timeout.sql"),
+              join(temporaryMigrations, "110_workspace_idle_timeout.sql"),
+            );
+            await runMigrations(migrationOwner.pool, temporaryMigrations);
             const afterMigration = (
               await upgrade.pool.query("SELECT clock_timestamp() AS checked_at")
             ).rows[0].checked_at as Date;

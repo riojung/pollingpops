@@ -1,10 +1,16 @@
-import type { ArtifactType } from "@openround/contracts";
+import type {
+  ArtifactType,
+  CollaborationGroupPurpose,
+  CollaborationGroupStatus,
+} from "@openround/contracts";
 
 export interface CollaborationGroupRecord {
   id: string;
   workspaceId: string;
   name: string;
   description: string;
+  purpose?: CollaborationGroupPurpose;
+  status?: CollaborationGroupStatus;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +63,17 @@ export interface CollaborationGroupRepository {
     owner: CollaborationGroupMemberRecord,
   ): Promise<CollaborationGroupRecord>;
   getGroup(workspaceId: string, groupId: string): Promise<CollaborationGroupRecord | null>;
+  updateGroup(
+    workspaceId: string,
+    groupId: string,
+    update: Partial<Pick<CollaborationGroupRecord, "name" | "description" | "purpose" | "status">>,
+  ): Promise<CollaborationGroupRecord | null>;
+  changeMember(
+    workspaceId: string,
+    groupId: string,
+    userId: string,
+    role: "owner" | "member" | null,
+  ): Promise<boolean>;
   listMembers(groupId: string): Promise<CollaborationGroupMemberRecord[]>;
   addMember(member: CollaborationGroupMemberRecord): Promise<CollaborationGroupMemberRecord>;
   listArtifacts(groupId: string): Promise<CollaborationGroupArtifactRecord[]>;

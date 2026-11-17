@@ -1312,6 +1312,61 @@ Choosing **Format text** upgrades that slide and deck to the compatible rich-tex
 objects stay unchanged, and plain-text slides continue to work. Formatting supports up to 100
 paragraphs per object within the existing 160-character title and 4,000-character body limits.
 
+## Groups across workspaces and organizations
+
+When Groups is enabled, open **Groups** to see groups you belong to. Use **Scope**, **Purpose**,
+**My access** and **Status** to narrow the directory, then search or sort the results. An empty
+directory means you have no matching joined groups; it is not a catalogue of groups you can
+join. Ask a group owner to add you. Other groups, including their membership and discussion,
+are not exposed to nonmembers.
+
+**Workspace groups** retain their existing workspace members, Round/Presentation and board
+collections, discussion and schedules. The owning workspace's permissions continue to apply.
+**Organization groups** connect colleagues who work in separate workspaces in the same
+organization. A group does not add anyone to another workspace or allocate an authoring license.
+
+Organization owners and administrators can create organization groups. Choose **Create group**,
+select the scope, enter a name and optional description, then choose a purpose: **Team**,
+**Department**, **Project**, **Cohort**, **Community** or **Other**. Purpose is a directory label;
+it does not change permissions. The creator owns the new group. Organization administration
+does not let someone inspect an existing group they have not joined.
+
+Open a group and choose one focused panel:
+
+- **Content:** In an organization group, owners curate existing organization Library publications
+  of Rounds, Presentations and Surveys. The publication must already be shared with the whole
+  organization. Direct **Shared with me** publications cannot be added. Open an item in the shared
+  reader, or choose **Use a copy** when the publication and your destination workspace permit it.
+  **Review by** dates and personal progress help follow up. Review and publish a permitted copy
+  before hosting, assigning or collecting new responses from your own workspace.
+- **Members:** Group owners add current eligible organization members, promote another owner,
+  change roles or remove members. Promote a successor before removing or demoting the last owner.
+  Ordinary group members can view the roster but cannot manage it.
+- **Discussion:** Read the group's messages and post while the group is active. Only current
+  group members can access this discussion.
+- **Schedule:** Workspace groups keep their existing scheduling tools. Organization groups omit
+  this panel; their publication follow-up appears in **Content**.
+
+Organization-group invitations control coordination, not the audience of an organization-wide
+Library publication. Adding an item grants no extra content access. Removing you from a group
+stops access to its details and discussion, but an organization publication can still be available
+to you through the organization Library. Removing a group entry does not revoke that publication.
+Publication revocation, source availability and current organization membership are checked when
+content is opened, images are read, progress is saved or a copy is created. Group membership never
+grants editing, hosting or results access to the original.
+
+Owners can archive a group when its work is finished. Archived groups retain authorized reading
+of membership, content links and discussion, but stop new posts and group changes. Filter by
+**Archived** to find one, then restore it before changing it. This leaves the independently
+authorized Library publications and copies available under their own permissions. Existing
+workspace groups are preserved; creating an organization group does not move or convert them.
+An archived workspace group cannot receive new Canvas shares or grant-role changes. Existing
+board access remains governed by Canvas permissions, and an authorized board owner or
+facilitator can still revoke the group's access through the board's sharing controls.
+
+See [Groups, workspaces and organizations](groups-workspaces-organizations.md) for the access
+matrix, lifecycle and compatibility details.
+
 ## Organize and manage the Library
 
 ### Share published content with your company

@@ -13,6 +13,7 @@ import rawBody from "fastify-raw-body";
 import type Stripe from "stripe";
 import {
   createCollaborationGroupRepository,
+  createOrganizationGroupRepository,
   createAudienceScopeRepository,
   createScopedQnaRepository,
   createSurveyRepository,
@@ -258,6 +259,10 @@ export async function buildApp(
     concurrentResponseWrites: config.PRESENTATION_CONCURRENT_RESPONSE_WRITES,
   });
   const groups = createCollaborationGroupRepository(repository);
+  const organizationGroups = createOrganizationGroupRepository(repository);
+  const libraryShares = createLibrarySharingRepository(repository, {
+    communityMode: config.COMMUNITY_MODE,
+  });
   const libraryMetadata = createLibraryMetadataRepository(repository);
   const productEventsEnabled = (workspaceId: string) =>
     workspaceFeatureEnabled(repository, config, workspaceId, "uxBeta");
@@ -826,11 +831,30 @@ export async function buildApp(
     consumeAdmission: cache.consumeRateLimit.bind(cache),
     service: presentationService,
   });
+  const librarySharingService = await registerLibrarySharingRoutes(app, {
+    repository,
+    shares: libraryShares,
+    auth,
+    storage,
+    config,
+    consumeAdmission: cache.consumeRateLimit.bind(cache),
+    featureEnabled: async (workspaceId, artifactType) => {
+      if (!(await workspaceShellEnabled(workspaceId))) return false;
+      if (artifactType === "presentation") return presentationsEnabled(workspaceId);
+      if (artifactType === "survey")
+        return workspaceFeatureEnabled(repository, config, workspaceId, "surveys");
+      return true;
+    },
+  });
+
   {
     await registerGroupRoutes(app, {
       repository,
       presentations,
       groups,
+      organizationGroups,
+      libraryShares,
+      summarizeLibraryShare: librarySharingService.summary.bind(librarySharingService),
       auth,
       workspaceEnabled: groupsEnabled,
       presentationsEnabled,
@@ -863,22 +887,6 @@ export async function buildApp(
     auth,
     workspaceEnabled: workspaceShellEnabled,
     presentationsEnabled,
-  });
-
-  await registerLibrarySharingRoutes(app, {
-    repository,
-    shares: createLibrarySharingRepository(repository, { communityMode: config.COMMUNITY_MODE }),
-    auth,
-    storage,
-    config,
-    consumeAdmission: cache.consumeRateLimit.bind(cache),
-    featureEnabled: async (workspaceId, artifactType) => {
-      if (!(await workspaceShellEnabled(workspaceId))) return false;
-      if (artifactType === "presentation") return presentationsEnabled(workspaceId);
-      if (artifactType === "survey")
-        return workspaceFeatureEnabled(repository, config, workspaceId, "surveys");
-      return true;
-    },
   });
 
   app.addHook("onClose", async () => {

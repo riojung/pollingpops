@@ -7685,3 +7685,4 @@ export * from "./presentation-assignments";
 export * from "./presentation-reading-reports";
 export * from "./presentation-practice";
 export * from "./library-sharing";
+export * from "./collaboration-groups";

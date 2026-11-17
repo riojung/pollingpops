@@ -64,6 +64,17 @@ describe("authenticated library sharing client", () => {
     await expect(listLibraryShares("shared")).rejects.toThrow();
   });
 
+  it("keeps organization selection and cursor when browsing group publication candidates", async () => {
+    mocked.fetch.mockResolvedValue({ shares: [shareFixture()], nextCursor: "page-two" });
+    const active = new AbortController();
+    await listLibraryShares("organization", active.signal, "page-one", id);
+    const url = new URL(mocked.fetch.mock.calls[0]![0], "https://example.test");
+    expect(url.searchParams.get("scope")).toBe("organization");
+    expect(url.searchParams.get("organizationId")).toBe(id);
+    expect(url.searchParams.get("cursor")).toBe("page-one");
+    expect(mocked.fetch.mock.calls[0]![1]).toEqual({ signal: active.signal, cache: "no-store" });
+  });
+
   it("pins publication and preserves an identical create request across transport retries", async () => {
     const intent = {
       requestId,

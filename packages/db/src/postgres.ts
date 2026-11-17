@@ -8297,7 +8297,7 @@ export class PostgresRepository implements Repository {
            FROM audit_events WHERE workspace_id = ANY($1::uuid[]) ORDER BY created_at, id`,
         );
         const collaborationGroups = await queryWorkspaceData(
-          `SELECT id, workspace_id, name, description, created_by, created_at, updated_at
+          `SELECT id, workspace_id, name, description, purpose, status, created_by, created_at, updated_at
            FROM collaboration_groups WHERE workspace_id = ANY($1::uuid[])
            ORDER BY created_at, id`,
         );
@@ -8323,6 +8323,18 @@ export class PostgresRepository implements Repository {
                   note, created_by, created_at
            FROM collaboration_group_schedule WHERE workspace_id = ANY($1::uuid[])
            ORDER BY scheduled_for, id`,
+        );
+        const organizationGroups = await client.query(
+          "SELECT id,organization_id,name,description,purpose,status,created_by,created_at,updated_at FROM organization_collaboration_groups WHERE created_by=$1 ORDER BY created_at,id",
+          [userId],
+        );
+        const organizationGroupMemberships = await client.query(
+          "SELECT organization_id,group_id,user_id,role,joined_at FROM organization_collaboration_group_members WHERE user_id=$1 ORDER BY group_id",
+          [userId],
+        );
+        const organizationGroupMessages = await client.query(
+          "SELECT id,organization_id,group_id,author_id,body,created_at FROM organization_collaboration_group_messages WHERE author_id=$1 ORDER BY created_at,id",
+          [userId],
         );
         const consentRecords = await client.query(
           `SELECT document_type, document_version, accepted_at
@@ -8504,6 +8516,9 @@ export class PostgresRepository implements Repository {
           collaborationGroupArtifacts: collaborationGroupArtifacts.rows,
           collaborationGroupMessages: collaborationGroupMessages.rows,
           collaborationGroupSchedule: collaborationGroupSchedule.rows,
+          organizationGroups: organizationGroups.rows,
+          organizationGroupMemberships: organizationGroupMemberships.rows,
+          organizationGroupMessages: organizationGroupMessages.rows,
         };
       },
       { system: true },

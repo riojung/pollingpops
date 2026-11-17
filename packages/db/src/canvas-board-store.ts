@@ -161,17 +161,20 @@ export class MemoryCanvasBoards {
             (state.groupGrants ?? []).filter((grant) => joined.has(grant.groupId)),
           );
         },
-        sharingGroups: async (workspaceId, userId) => {
+        sharingGroups: async (workspaceId, userId, activeOnly = false) => {
           if (!this.repository.workspaceMembers.has(`${workspaceId}:${userId}`)) return [];
           const groups = createCollaborationGroupRepository(this.repository);
           return Promise.all(
-            (await groups.listGroups(workspaceId, userId)).slice(0, 1000).map(async (group) => ({
-              id: group.id,
-              name: group.name,
-              memberCount: (await groups.listMembers(group.id)).filter((member) =>
-                this.repository.workspaceMembers.has(`${workspaceId}:${member.userId}`),
-              ).length,
-            })),
+            (await groups.listGroups(workspaceId, userId))
+              .filter((group) => !activeOnly || group.status !== "archived")
+              .slice(0, 1000)
+              .map(async (group) => ({
+                id: group.id,
+                name: group.name,
+                memberCount: (await groups.listMembers(group.id)).filter((member) =>
+                  this.repository.workspaceMembers.has(`${workspaceId}:${member.userId}`),
+                ).length,
+              })),
           );
         },
         sharingGroup: async (workspaceId, groupId) => {
@@ -755,16 +758,16 @@ export function postgresCanvasRun(repository: PostgresRepository): CanvasRun {
             createdAt: new Date(row.created_at).toISOString(),
           }));
         },
-        sharingGroups: async (workspaceId, userId) => {
+        sharingGroups: async (workspaceId, userId, activeOnly = false) => {
           const result = await client.query(
             `SELECT groups.id,groups.name,
               (SELECT count(*)::integer FROM collaboration_group_members members JOIN workspace_members current_member ON current_member.workspace_id=members.workspace_id AND current_member.user_id=members.user_id WHERE members.group_id=groups.id AND members.workspace_id=groups.workspace_id) AS member_count
              FROM collaboration_groups groups
              JOIN collaboration_group_members membership ON membership.group_id=groups.id AND membership.workspace_id=groups.workspace_id AND membership.user_id=$2
              JOIN workspace_members workspace_member ON workspace_member.workspace_id=groups.workspace_id AND workspace_member.user_id=membership.user_id
-             WHERE groups.workspace_id=$1 ORDER BY groups.updated_at DESC,groups.id LIMIT 1000
+             WHERE groups.workspace_id=$1 AND (NOT $3::boolean OR groups.status='active') ORDER BY groups.updated_at DESC,groups.id LIMIT 1000
              FOR SHARE OF groups,membership,workspace_member`,
-            [workspaceId, userId],
+            [workspaceId, userId, activeOnly],
           );
           return result.rows.map((row) => ({
             id: String(row.id),

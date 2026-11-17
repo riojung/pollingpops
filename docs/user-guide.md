@@ -428,21 +428,46 @@ and customer sign-out only ends the customer session. See the
 
 ## Create and organize Rounds
 
-Choice answers use multiline fields with a separate trash button for each removable answer.
-Click inside the text field to edit; use the correctness control beside it for scored questions.
-Polls and ranking questions give that space to the answer text. At least two answers must remain.
-
 In the professional workspace, select **Create**, then **Round**, and choose a starter, trusted
 source, structured import, or blank Round. In the classic view, enter a title under **Your
 checkpoint sets** and select **Create checkpoint set**. Draft changes autosave after a short pause.
-Wait for **Saved** before leaving the editor.
+Wait for **Saved** before leaving the editor. After publishing, **Host live** opens setup for the
+published version. **Unpublished changes** identifies draft edits; hosting excludes them until you
+publish again. Hosting is unavailable while saving or while a save needs attention.
 
-The editor supports:
+The November 17, 2026 workspace centers the selected question between a **Question outline** and
+**Question tools**. Search the outline or filter **All**, **Needs attention**, or **Rechecks**;
+results retain their original question numbers and order. The selected question has move earlier,
+move later, duplicate, and delete actions. **Add question** opens a searchable picker grouped into
+knowledge questions and opinion activities. Available types still depend on workspace features.
+
+On desktop, drag either pane divider to adjust its width. Focus a divider and use Left/Right Arrow
+for keyboard resizing; hold Shift for larger steps, or use Home/End for its minimum/maximum width.
+On narrow screens, open navigation or tools as a drawer and close it to return to the question.
+
+Edit the prompt and responses directly. Choice answers use multiline fields, letter labels,
+separate correctness controls, and a trash button for each removable answer. At least two answers
+must remain, with a maximum of six. Numeric questions expose the correct value, absolute tolerance,
+and optional unit; ratings expose both endpoints and their labels. Open text and word clouds show
+their response limits and moderation guidance.
+
+The nine response types are:
 
 - Single select and true/false
 - Multiple select with exact-set scoring
 - Numeric responses with decimal normalization, absolute tolerance, and an optional unit
 - Unscored ratings and polls, plus gated live ranking, open text and word clouds
+
+**Question tools** follows the selected question. **Build** groups timing, scoring, answer
+explanation, and Round settings into collapsible sections. **Diagnose** groups purpose, optional
+confidence, concept tags, and an existing paired recheck. **Recover** creates or opens the selected
+question's recheck where supported. **References**, when enabled, and **Review Round** open separate
+dialogs; use Review Round for required fixes and available Question Health reviews.
+
+If saving fails, use **Retry save**. A conflicting server edit preserves local work and offers
+**Reload current**, **Preserve local copy**, and **Duplicate as new**; changes are not merged
+automatically. Viewers can navigate, inspect tools, and preview the saved draft while editing and
+publishing controls remain unavailable.
 
 For a diagnostic or practice checkpoint, turn confidence off or on with an optional response.
 Previously authored required settings remain readable for practice assignments. Confidence is always optional
@@ -480,13 +505,14 @@ normalized phrases without case differences and include a readable frequency lis
 are available in enabled Live Rounds; Presentation, practice, Companion and Recovery Pack paths
 do not accept them yet. Text rooms support up to ten text checkpoints and 250 participants.
 
-Use **Add linked recheck** to create a differently worded check for the same concept. Rechecks are
-unscored by default. A main checkpoint may link to one recheck; a recheck cannot link onward.
+In **Recover**, use **Add a recheck for this concept** to create a differently worded check for the
+same concept. Rechecks are unscored by default. A main checkpoint may link to one recheck; a recheck
+cannot link onward.
 
 ### Reuse questions from another Round
 
 When the UX beta is enabled, an owner or editor can select **Reuse from your workspace** in the
-question Insert area. Search by Round title, question prompt, response type, or concept, then choose
+question navigation area. Search by Round title, question prompt, response type, or concept, then choose
 one or more main questions. A valid linked recheck is included with its main question and counts
 toward the current Round's 200-question limit.
 
@@ -500,14 +526,21 @@ Optional images are private. When an operator enables malware scanning, provide 
 text, select a JPEG, PNG, or WebP file up to 10 MB, and wait for upload and safety checking to
 finish.
 
-Select **Preview** to inspect the participant experience, then **Publish**. Publishing creates an
-immutable version. Editing afterward changes only the draft until it is published again; an
-active round always retains the version it started with.
+Select **Preview** to rehearse the saved draft, including when the Round already has a published
+version. For owners and editors, Preview saves the current valid draft before opening; viewers
+preview the server's saved draft. Switch between **Audience view** and **Presenter view**, choose
+**Desktop** or **Phone** width, move between questions, and try local answers for all nine response
+types. Reveal an answer or explanation and use **Reset question** to try again. The authored timer
+is paused; test answers stay on this device and create no live session, participant response, or
+report. Live confidence remains optional.
+
+When ready, select **Publish** to create an immutable version. Editing afterward changes only the
+draft until it is published again; an active Round always retains the version it started with.
 
 ### Review Question Health
 
-When Question Health is enabled in the professional Round builder, expand **Question Health ·
-advisory** and select **Review saved draft**. Wait for **Saved** first: the review describes one
+When Question Health is enabled in the professional Round builder, open **Review Round**, expand
+**Question Health · advisory**, and select **Review saved draft**. Wait for **Saved** first: the review describes one
 saved draft revision and becomes stale after an edit. Each finding identifies the question and
 field, explains the observed evidence, and suggests an action. Checks include duplicate or
 overlapping choices, length cues, missing distractor feedback, explanations or citations, mobile

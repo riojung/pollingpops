@@ -8,7 +8,8 @@ import {
   loadDeliveryAuthoringMessages,
 } from "../../lib/i18n/domains/delivery-authoring";
 import { ResponseEditor } from "./response-editor";
-import type { ChoiceQuestionDraft, ChoiceQuestionUpdater } from "./types";
+import type { ChoiceQuestionDraft, ChoiceQuestionUpdater, QuestionUpdater } from "./types";
+import { roundToolsCopy } from "../../lib/i18n/round-tools-copy";
 
 const fixtures = vi.hoisted(() => ({
   locale: "en-CA",
@@ -236,5 +237,204 @@ describe("Round choice response editor", () => {
       );
       expect(button.props.lang).toBe(locale);
     }
+  });
+
+  it("preserves disabled poll and ranking features without silently changing their saved limits", () => {
+    for (const initial of [
+      { ...question("poll"), type: "poll", maxSelections: 3 },
+      { ...question("ranking"), type: "ranking", rankCount: 2, maxSelections: undefined },
+    ] as const) {
+      const update = vi.fn();
+      const wrapper = ResponseEditor({
+        question: initial,
+        uxBeta: true,
+        multiSelectPollsEnabled: false,
+        rankingPollsEnabled: false,
+        onStructuralChange: vi.fn(),
+        onUpdateChoiceQuestion: update,
+        onUpdateQuestion: vi.fn(),
+      }) as ReactElement<Record<string, unknown>>;
+      const tree = (wrapper.type as (props: Record<string, unknown>) => ReactNode)(wrapper.props);
+      const limit = elements(tree).find((element) => element.type === "select")!;
+      expect(limit.props.disabled).toBe(true);
+      expect(limit.props.value).toBe(initial.type === "poll" ? 3 : 2);
+      (limit.props.onChange as (event: { target: { value: string } }) => void)({
+        target: { value: "1" },
+      });
+      expect(update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("provides visible correctness labels and keeps opinion answers free of correctness controls", () => {
+    const scored = renderToStaticMarkup(editorHarness(question("single_select")).render());
+    expect(scored).toContain("Correct answer");
+    expect(scored).toContain("Mark correct");
+    expect(scored).toContain("Choose one correct answer.");
+    const poll = renderToStaticMarkup(editorHarness(question("poll")).render());
+    expect(poll).toContain("Collect opinions. There is no correct answer.");
+    expect(poll).not.toContain("Mark correct");
+    const ranking = renderToStaticMarkup(editorHarness(question("ranking")).render());
+    expect(ranking).toContain("The order here does not define a correct answer.");
+  });
+});
+
+function generalHarness(initial: QuestionDraft, uxBeta = true) {
+  let draft = initial;
+  const onUpdateQuestion: QuestionUpdater = (update) => {
+    draft = update(draft);
+  };
+  const render = () =>
+    ResponseEditor({
+      question: draft,
+      uxBeta,
+      onStructuralChange: vi.fn(),
+      onUpdateChoiceQuestion: vi.fn(),
+      onUpdateQuestion,
+    });
+  return {
+    draft: () => draft,
+    render,
+    change(index: number, value: string) {
+      const field = elements(render()).filter(
+        (element) => element.type === "input" || element.type === "select",
+      )[index]!;
+      (field.props.onChange as (event: { target: { value: string } }) => void)({
+        target: { value },
+      });
+    },
+  };
+}
+
+const numeric: QuestionDraft = {
+  id: "numeric-question",
+  prompt: "Estimate the area",
+  type: "numeric",
+  timeLimitSeconds: 30,
+  basePoints: 1000,
+  explanation: "Area is measured in square units.",
+  mediaId: null,
+  mediaAlt: null,
+  correctValue: "4",
+  tolerance: "0",
+  unit: "m²",
+};
+
+describe("Round number, rating, and text response editors", () => {
+  it("keeps decimal editing lossless and exposes invalid values without coercing them", () => {
+    const harness = generalHarness(numeric);
+    harness.change(0, "-0.0000000000000000004");
+    harness.change(1, "-0.2");
+    harness.change(2, "");
+    expect(harness.draft()).toMatchObject({
+      id: numeric.id,
+      correctValue: "-0.0000000000000000004",
+      tolerance: "-0.2",
+      unit: null,
+    });
+    const fields = elements(harness.render()).filter((element) => element.type === "input");
+    expect(fields[0]!.props["aria-invalid"]).toBe(false);
+    expect(fields[1]!.props["aria-invalid"]).toBe(true);
+    harness.change(0, "-");
+    expect(
+      elements(harness.render()).find((element) => element.type === "input")!.props["aria-invalid"],
+    ).toBe(true);
+    expect(harness.draft()).toMatchObject({ correctValue: "-" });
+  });
+
+  it("supports the full rating range and retains a valid pair of endpoints as either limit changes", () => {
+    const harness = generalHarness({
+      id: "rating-question",
+      type: "rating",
+      prompt: "How clear is this concept?",
+      timeLimitSeconds: 30,
+      basePoints: 0,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+      min: 1,
+      max: 5,
+      minLabel: "Unclear",
+      maxLabel: "Very clear",
+    });
+    const selectors = elements(harness.render()).filter((element) => element.type === "select");
+    expect(
+      elements(selectors[0])
+        .filter((element) => element.type === "option")
+        .map((element) => element.props.value),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(
+      elements(selectors[1])
+        .filter((element) => element.type === "option")
+        .map((element) => element.props.value),
+    ).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    harness.change(0, "9");
+    expect(harness.draft()).toMatchObject({ min: 9, max: 10 });
+    harness.change(1, "2");
+    expect(harness.draft()).toMatchObject({ min: 1, max: 2 });
+    harness.change(2, "New low label");
+    harness.change(3, "New high label");
+    expect(harness.draft()).toMatchObject({
+      minLabel: "New low label",
+      maxLabel: "New high label",
+    });
+    const markup = renderToStaticMarkup(harness.render());
+    expect(markup).toContain('aria-label="Scale preview"');
+    expect(markup).toContain("New low label");
+    expect(markup).not.toContain("choice-correct");
+  });
+
+  it.each(supportedLocales)(
+    "gives accurate moderated open-text and word-cloud limits in %s",
+    async (locale) => {
+      fixtures.locale = locale;
+      fixtures.messages = await loadDeliveryAuthoringMessages(locale);
+      const copy = roundToolsCopy(locale);
+      for (const [type, limit] of [
+        ["open_text", 1000],
+        ["word_cloud", 80],
+      ] as const) {
+        const harness = generalHarness({
+          id: `text-${type}`,
+          type,
+          prompt: "Share one idea",
+          timeLimitSeconds: 30,
+          basePoints: 0,
+          explanation: "",
+          mediaId: null,
+          mediaAlt: null,
+        });
+        const markup = renderToStaticMarkup(harness.render());
+        expect(markup).toContain(
+          copy("Up to {limit} characters per response", {
+            limit: new Intl.NumberFormat(locale).format(limit),
+          }),
+        );
+        expect(markup).toContain(
+          copy("Responses need moderator approval before appearing to the audience."),
+        );
+        expect(markup).not.toMatch(/<(input|textarea|select)\b/);
+        expect(harness.draft().id).toBe(`text-${type}`);
+      }
+    },
+  );
+
+  it("keeps the legacy text guidance available when the workspace beta is disabled", () => {
+    const markup = renderToStaticMarkup(
+      generalHarness(
+        {
+          id: "legacy-open-text",
+          type: "open_text",
+          prompt: "Share one idea",
+          timeLimitSeconds: 30,
+          basePoints: 0,
+          explanation: "",
+          mediaId: null,
+          mediaAlt: null,
+        },
+        false,
+      ).render(),
+    );
+    expect(markup).toContain("1000");
+    expect(markup).not.toContain("Participant response");
   });
 });

@@ -111,10 +111,10 @@ duplicates a visual event.
 
 Every checkpoint states its response type, purpose, confidence mode, delivery role, timer, score,
 and optional concepts. Supported response types are single select, true/false, multiple select,
-numeric, rating, and poll.
+numeric, rating, poll, and the gated live ranking, open text, and word cloud formats.
 
 - Diagnostic and practice checkpoints may be scored and collect confidence.
-- Opinion ratings and polls are always unscored with confidence off.
+- Opinion ratings, polls, rankings, and text responses are always unscored with confidence off.
 - Multiple select uses exact-set matching so partial guesses are not silently interpreted.
 - Numeric values use normalized decimal strings and absolute tolerance, avoiding binary floating
   point scoring surprises.
@@ -123,6 +123,35 @@ numeric, rating, and poll.
 
 Private choice feedback and misconception keys support diagnosis after lock. They never appear in
 an open participant payload.
+
+### Rounds workspace and rehearsal — November 17, 2026
+
+The Round editor applies the Presentation editor's focus on the selected content: a searchable,
+filterable outline retains original question order and numbering, a categorized Add picker separates
+knowledge questions from opinion activities, and selected-question actions keep move, duplicate,
+and delete controls together. Desktop navigation and tools panes have adjustable widths with
+keyboard-operable separators; narrow layouts use drawers. Direct prompt and response editing uses
+compact fields, visible correctness labels, type-specific limits, and contextual guidance.
+Build, Diagnose, and Recover retain their existing responsibilities with collapsible tool groups.
+References and Review Round use separate native dialogs so resource and advisory review do not
+displace the active question.
+
+Autosave acknowledges durable saves, exposes retry, and preserves local work when revision
+conflicts require a creator decision. Immutable publications and sessions retain their existing
+version boundaries. Viewers retain navigation, inspection, and preview while mutation controls
+remain unavailable. Draft rehearsal always reads the saved draft, even for published Rounds. It
+supports local test answers for all nine existing response types, answer/explanation reveal,
+presenter/audience views, and phone/desktop widths. Rehearsal pauses timers and creates no live
+session, real response, or report; live confidence remains optional.
+
+The applied reference patterns are the knowledge/opinion distinction in
+[Kahoot's question types](https://support.kahoot.com/hc/en-us/articles/115002308428-Kahoot-question-types),
+type-first question entry with explanations and time/points controls in
+[Wayground's assessment creation guide](https://help.wayground.com/support/solutions/articles/158000462332-create-an-assessment-quiz),
+and separate presenter/audience rehearsal with disposable test responses in
+[Mentimeter's preview guide](https://help.mentimeter.com/en/articles/5784859-preview-your-mentis).
+These are workflow references; no competitor assets, content, or source were copied. This note
+records implementation intent and behavior, not completion of release qualification.
 
 ### Source-grounded assistant
 

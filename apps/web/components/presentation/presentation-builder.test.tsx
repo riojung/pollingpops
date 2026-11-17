@@ -313,8 +313,12 @@ describe("Presentation Builder UI", () => {
     "shows the fixed %s limit and unscored authoring guidance without answer controls",
     (type) => {
       const markup = opinionMarkup(createQuestionBlock(type).question);
-      expect(markup).toContain(`plain text up to ${type === "open_text" ? 1000 : 80} characters`);
-      expect(markup).toContain("Responses wait for facilitator approval");
+      expect(markup).toContain(
+        `Up to ${type === "open_text" ? "1,000" : "80"} characters per response`,
+      );
+      expect(markup).toContain(
+        "Responses need moderator approval before appearing to the audience.",
+      );
       expect(field(markup, "Points").attributes).toContain("disabled");
       expect(markup).not.toContain("Mark choice");
       expect(markup).not.toContain("live Rounds only");

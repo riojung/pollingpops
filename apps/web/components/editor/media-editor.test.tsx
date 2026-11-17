@@ -69,12 +69,29 @@ describe("MediaEditor", () => {
   });
 
   it("keeps image settings open for an attached image even when preview loading fails", () => {
-    const markup = renderToStaticMarkup(
-      editor({ question: { ...question, mediaId: "attached-image" } }),
-    );
+    const onRemoveImage = vi.fn();
+    const node = editor({ question: { ...question, mediaId: "attached-image" }, onRemoveImage });
+    const markup = renderToStaticMarkup(node);
     expect(markup).toMatch(/<details[^>]*open=""/);
     expect(markup).toContain("Image settings");
     expect(markup).toContain('id="media-alt"');
+    expect(markup).toContain("Image attached. Preview unavailable.");
+    expect(markup).toContain("Remove image");
+    const remove = elements(node).find((item) => item.type === "button")!;
+    (remove.props.onClick as () => void)();
+    expect(onRemoveImage).toHaveBeenCalledOnce();
+  });
+
+  it("shows whether an attached image has a description and names the alternative-text field", () => {
+    const missing = renderToStaticMarkup(
+      editor({ question: { ...question, mediaId: "attached-image", mediaAlt: " " } }),
+    );
+    expect(missing).toContain("Alt text needed");
+    expect(missing).toContain('<label for="media-alt">Alternative text</label>');
+    expect(missing).toContain('aria-describedby="media-alt-help"');
+    expect(
+      renderToStaticMarkup(editor({ question: { ...question, mediaId: "attached-image" } })),
+    ).toContain("Alt text added");
   });
 
   it("preserves alternative text, preview removal, and repeated file selection", () => {

@@ -53,6 +53,14 @@ import {
   type RecoveryPackUpdateUndo,
 } from "../../../components/editor/recovery-pack-update-panel";
 import { ReadinessSummary } from "../../../components/editor/readiness-summary";
+import {
+  RoundPaneResize,
+  useRoundWorkspaceLayout,
+} from "../../../components/editor/round-workspace-layout";
+import { RoundWorkspaceDialog } from "../../../components/editor/round-workspace-dialog";
+import { RoundToolSection } from "../../../components/editor/round-tool-section";
+import { roundToolsCopy } from "../../../lib/i18n/round-tools-copy";
+import { roundWorkspaceCopy } from "../../../lib/i18n/round-workspace-copy";
 import { ResponseEditor } from "../../../components/editor/response-editor";
 import builderStyles from "../../../components/editor/round-builder.module.css";
 import { isChoiceQuestion, type ChoiceQuestionDraft } from "../../../components/editor/types";
@@ -162,6 +170,8 @@ function newQuestion(type: QuestionType, locale: SupportedLocale = "en-CA"): Que
 
 export default function QuizEditorPage() {
   const { locale, t } = useLocale();
+  const workspaceCopy = roundWorkspaceCopy(locale);
+  const toolsCopy = roundToolsCopy(locale);
   const workflowCopy = creatorWorkflowCopy(locale);
   const packInsertionUi = packInsertionCopy(locale);
   const authoringCopy = authoringWorkflowCopy(locale);
@@ -199,6 +209,9 @@ export default function QuizEditorPage() {
   const [mediaUploadsEnabled, setMediaUploadsEnabled] = useState(false);
   const [roundExperiencesAvailable, setRoundExperiencesAvailable] = useState(false);
   const [uxBeta, setUxBeta] = useState(false);
+  const workspaceLayout = useRoundWorkspaceLayout(uxBeta);
+  const [resourcePanel, setResourcePanel] = useState<"references" | "review" | null>(null);
+  const resourceOpener = useRef<HTMLElement | null>(null);
   const [productFeatures, setProductFeatures] = useState<EditorProductFeatures | null>(null);
   const [practiceAssignmentsAvailable, setPracticeAssignmentsAvailable] = useState(false);
   const [mediaState, setMediaState] = useState<"idle" | "uploading" | "scanning">("idle");
@@ -207,6 +220,8 @@ export default function QuizEditorPage() {
   const [errorIsRaw, setErrorIsRaw] = useState(false);
   const [validationAction, setValidationAction] = useState<"preview" | "publish" | null>(null);
   const [questionMapCollapsed, setQuestionMapCollapsed] = useState(false);
+  const [compactLayout, setCompactLayout] = useState(false);
+  const previousDrawer = useRef<"navigation" | "tools" | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("build");
   const loaded = useRef(false);
@@ -249,6 +264,10 @@ export default function QuizEditorPage() {
     setDraftMutationBusy(false);
     packMutationAttempt.current = null;
     setPackMutationRetryable(false);
+  }, [id]);
+
+  useEffect(() => {
+    setResourcePanel(null);
   }, [id]);
 
   useEffect(() => {
@@ -588,6 +607,7 @@ export default function QuizEditorPage() {
   useEffect(() => {
     const compact = window.matchMedia("(max-width: 1040px)");
     const syncLayout = (matches: boolean) => {
+      setCompactLayout(matches);
       setQuestionMapCollapsed(matches);
       setInspectorCollapsed(matches);
     };
@@ -596,6 +616,81 @@ export default function QuizEditorPage() {
     compact.addEventListener("change", onChange);
     return () => compact.removeEventListener("change", onChange);
   }, []);
+
+  useEffect(() => {
+    const open =
+      uxBeta && compactLayout
+        ? !questionMapCollapsed
+          ? "navigation"
+          : !inspectorCollapsed
+            ? "tools"
+            : null
+        : null;
+    if (!open) {
+      if (previousDrawer.current)
+        document
+          .getElementById(
+            previousDrawer.current === "navigation"
+              ? "round-toggle-navigation"
+              : "round-toggle-tools",
+          )
+          ?.focus();
+      previousDrawer.current = null;
+      return;
+    }
+    previousDrawer.current = open;
+    const pane = document.getElementById(
+      open === "navigation" ? "round-question-navigator" : "round-question-tools",
+    );
+    const focusable = () =>
+      Array.from(
+        pane?.querySelectorAll<HTMLElement>(
+          'a[href],button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length && element.tabIndex >= 0);
+    const frame = requestAnimationFrame(() => (focusable()[0] ?? pane)?.focus());
+    const keyboard = (event: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setQuestionMapCollapsed(true);
+        setInspectorCollapsed(true);
+      } else if (event.key === "Tab") {
+        const elements = focusable();
+        const first = elements[0],
+          last = elements.at(-1);
+        if (!first || !last) {
+          event.preventDefault();
+          pane?.focus();
+          return;
+        }
+        if (!pane?.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", keyboard);
+    };
+  }, [uxBeta, compactLayout, questionMapCollapsed, inspectorCollapsed]);
+
+  function toggleQuestionNavigation() {
+    setQuestionMapCollapsed((current) => !current);
+    if (compactLayout) setInspectorCollapsed(true);
+  }
+  function toggleQuestionTools() {
+    setInspectorCollapsed((current) => !current);
+    if (compactLayout) setQuestionMapCollapsed(true);
+  }
 
   useEffect(() => {
     loaded.current = false;
@@ -626,7 +721,8 @@ export default function QuizEditorPage() {
         lastSavedJson.current = JSON.stringify(loadedQuiz.draft);
         setSaveState("saved");
         setEntitlements(account.entitlements);
-        setCanEdit(account.creator.role === "owner" || account.creator.role === "editor");
+        const editable = account.creator.role === "owner" || account.creator.role === "editor";
+        setCanEdit(editable);
         setProductFeatures(account.productFeatures);
         setRoundExperiencesAvailable(account.productFeatures.roundExperiences);
         setUxBeta(account.productFeatures.uxBeta && account.productFeatures.builderV2);
@@ -651,11 +747,12 @@ export default function QuizEditorPage() {
         );
         setQuestionReuseOpen(false);
         if (
+          editable &&
           localRecovery &&
           JSON.stringify(localRecovery.draft) !== JSON.stringify(loadedQuiz.draft)
         ) {
           setRecoverySnapshot(localRecovery);
-        } else if (localRecovery) {
+        } else if (editable && localRecovery) {
           void clearBuilderRecovery(recoveryKey);
         }
         loaded.current = true;
@@ -690,6 +787,7 @@ export default function QuizEditorPage() {
     initialInsertHandled.current = true;
     if (
       uxBeta &&
+      canEdit &&
       draft.questions.length === 0 &&
       supportedTypes.includes(requestedType as QuestionType)
     ) {
@@ -709,6 +807,7 @@ export default function QuizEditorPage() {
     searchParams,
     locale,
     uxBeta,
+    canEdit,
     productFeatures?.rankingPolls,
     productFeatures?.openTextPolls,
     productFeatures?.wordCloudPolls,
@@ -923,6 +1022,7 @@ export default function QuizEditorPage() {
       },
     );
     setQuestionReuseOpen(false);
+    if (compactLayout) setQuestionMapCollapsed(true);
     window.setTimeout(() => document.getElementById("prompt")?.focus(), 0);
   }
 
@@ -1010,7 +1110,7 @@ export default function QuizEditorPage() {
   }
 
   function restoreRecoverySnapshot() {
-    if (!recoverySnapshot) return;
+    if (!canEdit || !recoverySnapshot) return;
     loadDraft(recoverySnapshot.draft);
     setRecoverySnapshot(null);
     setError("");
@@ -1085,8 +1185,34 @@ export default function QuizEditorPage() {
     }
   }
 
+  async function retryDraftSave() {
+    if (!draft || !canEdit || draftMutationBusy || saveConflict || saveState !== "error") return;
+    const capturedId = id;
+    const revision = ++latestSaveRevision.current;
+    setSaveState("saving");
+    setError("");
+    try {
+      const { quiz: saved } = await enqueueSave(draft);
+      if (activeQuizIdRef.current !== capturedId || revision !== latestSaveRevision.current) return;
+      setQuiz(saved);
+      setSaveState("saved");
+      setErrorIsRaw(false);
+      void clearBuilderRecovery(recoveryKey);
+    } catch (caught) {
+      if (activeQuizIdRef.current !== capturedId || revision !== latestSaveRevision.current) return;
+      if (caught instanceof ApiClientError && caught.code === "STALE_DRAFT") {
+        setSaveConflict(true);
+        setSaveState("conflict");
+      } else {
+        setError(humanError(caught));
+        setErrorIsRaw(true);
+        setSaveState("error");
+      }
+    }
+  }
+
   async function publish() {
-    if (!draft || saveState === "saving" || publishLimitReached) return;
+    if (!draft || !canEdit || saveState === "saving" || publishLimitReached) return;
     const guidance = roundReadinessIssues(draft, uxBeta)[0];
     if (guidance) {
       recordAuthoringEvent("publish_blocked", "round");
@@ -1112,7 +1238,12 @@ export default function QuizEditorPage() {
       });
       setQuiz((current) =>
         current
-          ? { ...current, status: "published", currentVersionId: published.version.id }
+          ? {
+              ...current,
+              status: "published",
+              currentVersionId: published.version.id,
+              publishedDraftRevision: saved.draftRevision,
+            }
           : current,
       );
       if (!quiz?.currentVersionId) setPublishedQuizCount((count) => count + 1);
@@ -1151,6 +1282,10 @@ export default function QuizEditorPage() {
     setValidationAction(null);
     setError("");
     setErrorIsRaw(false);
+    if (!canEdit) {
+      router.push(`/quiz/${id}/preview`);
+      return;
+    }
     const revision = ++latestSaveRevision.current;
     setSaveState("saving");
     try {
@@ -1398,7 +1533,7 @@ export default function QuizEditorPage() {
             ) : null}
           </div>
           {canvasSnapshotLinks}
-          {recoverySnapshot ? (
+          {canEdit && recoverySnapshot ? (
             <section className="notice" lang="en-CA" role="status">
               <strong>Unsaved local work is available</strong>
               <p>
@@ -1674,7 +1809,11 @@ export default function QuizEditorPage() {
                         question={question}
                         uxBeta={false}
                       />
-                      <DeliveryScoring onUpdateQuestion={updateQuestion} question={question} />
+                      <DeliveryScoring
+                        onUpdateQuestion={updateQuestion}
+                        question={question}
+                        uxBeta={uxBeta}
+                      />
                       {question.sourceCitations?.length ? (
                         <details className="notice source-citations" lang="en-CA">
                           <summary>Source evidence for this generated draft</summary>
@@ -1719,12 +1858,34 @@ export default function QuizEditorPage() {
   return (
     <fieldset
       className={builderStyles.builder}
+      lang={locale}
       disabled={draftMutationBusy}
-      style={mutationFieldsetStyle}
+      ref={workspaceLayout.builderRef}
+      style={{ ...mutationFieldsetStyle, ...workspaceLayout.style }}
     >
       <BuilderCommandBar
+        hostHref={
+          canEdit && quiz?.status === "published" && quiz.currentVersionId
+            ? `/host/setup/${id}`
+            : undefined
+        }
+        hasUnpublishedChanges={Boolean(
+          quiz?.currentVersionId &&
+          draft &&
+          (JSON.stringify(draft) !== lastSavedJson.current ||
+            (quiz.publishedDraftRevision !== undefined &&
+              quiz.publishedDraftRevision !== null &&
+              quiz.publishedDraftRevision !== serverRevision.current)),
+        )}
+        disabled={draftMutationBusy}
+        readOnly={!canEdit}
+        onRetrySave={() => void retryDraftSave()}
+        retrySaveDisabled={saveConflict || draftMutationBusy}
         assignHref={
-          practiceAssignmentsAvailable && quiz?.status === "published" && quiz.currentVersionId
+          canEdit &&
+          practiceAssignmentsAvailable &&
+          quiz?.status === "published" &&
+          quiz.currentVersionId
             ? `/quiz/${id}/assign`
             : undefined
         }
@@ -1735,11 +1896,13 @@ export default function QuizEditorPage() {
         onPublish={() => void publish()}
         onRedo={redoStructuralChange}
         onTitleChange={(title) => draft && setDraft({ ...draft, title })}
-        onToggleInspector={() => setInspectorCollapsed((current) => !current)}
-        onToggleQuestionMap={() => setQuestionMapCollapsed((current) => !current)}
+        onToggleInspector={toggleQuestionTools}
+        onToggleQuestionMap={toggleQuestionNavigation}
         onUndo={undoStructuralChange}
         previewDisabled={!draft?.questions.length || saveState === "saving"}
-        publishDisabled={!draft?.questions.length || saveState === "saving" || publishLimitReached}
+        publishDisabled={
+          !canEdit || !draft?.questions.length || saveState === "saving" || publishLimitReached
+        }
         publishLabel={t("delivery.common.publish")}
         productFeatures={productFeatures}
         questionMapOpen={!questionMapCollapsed}
@@ -1755,8 +1918,7 @@ export default function QuizEditorPage() {
             t("delivery.builder.titlePlaceholder")
           )}
         </h1>
-        {canvasSnapshotLinks}
-        {recoverySnapshot ? (
+        {canEdit && recoverySnapshot ? (
           <section className={builderStyles.recoveryBanner} lang="en-CA" role="status">
             <div>
               <strong>Unsaved local work is available</strong>
@@ -1823,21 +1985,35 @@ export default function QuizEditorPage() {
         ) : (
           <>
             {uxBeta && canEdit && questionReuseOpen ? (
-              <div className={builderStyles.reuseOverlay}>
+              <RoundWorkspaceDialog
+                open
+                title={t("delivery.reuse.title")}
+                onClose={closeQuestionReuse}
+                returnFocusTo={
+                  typeof document === "undefined"
+                    ? null
+                    : document.getElementById("open-private-question-bank")
+                }
+                className={builderStyles.reuseDialog}
+              >
                 <QuestionReusePicker
                   currentQuestionCount={draft.questions.length}
                   onCancel={closeQuestionReuse}
                   onReuse={reuseQuestions}
                   sources={questionReuseSources}
                 />
-              </div>
+              </RoundWorkspaceDialog>
             ) : null}
             <div
               className={builderStyles.workspace}
+              ref={workspaceLayout.workspaceRef}
               data-inspector-collapsed={inspectorCollapsed}
               data-map-collapsed={questionMapCollapsed}
             >
               <QuestionNavigator
+                modal={compactLayout}
+                disabled={draftMutationBusy}
+                readOnly={!canEdit}
                 rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
                 openTextPollsEnabled={Boolean(productFeatures?.openTextPolls)}
                 wordCloudPollsEnabled={Boolean(productFeatures?.wordCloudPolls)}
@@ -1846,7 +2022,13 @@ export default function QuizEditorPage() {
                 draft={draft}
                 insertType={insertType}
                 issueQuestionIds={issueQuestionIds}
-                onAddQuestion={addQuestion}
+                onAddQuestion={(type) => {
+                  addQuestion(type);
+                  if (compactLayout) {
+                    setQuestionMapCollapsed(true);
+                    window.requestAnimationFrame(() => document.getElementById("prompt")?.focus());
+                  }
+                }}
                 onDeleteQuestion={removeQuestion}
                 onDuplicateQuestion={duplicateQuestion}
                 onInsertTypeChange={setInsertType}
@@ -1854,16 +2036,91 @@ export default function QuizEditorPage() {
                 onOpenQuestionReuse={openQuestionReuse}
                 onSelectQuestion={(questionId) => {
                   setSelectedQuestionId(questionId);
-                  if (window.matchMedia("(max-width: 760px)").matches) {
+                  if (compactLayout) {
                     setQuestionMapCollapsed(true);
+                    requestAnimationFrame(() =>
+                      document.getElementById("round-active-question")?.focus(),
+                    );
                   }
                 }}
-                onToggleCollapsed={() => setQuestionMapCollapsed((current) => !current)}
+                onToggleCollapsed={toggleQuestionNavigation}
                 questionReuseOpen={questionReuseOpen}
                 selectedQuestionId={selectedQuestionId}
                 uxBeta={uxBeta}
               />
-              <section className={builderStyles.canvasColumn}>
+              <RoundPaneResize
+                pane="navigation"
+                width={workspaceLayout.widths.navigation}
+                otherWidth={inspectorCollapsed ? 0 : workspaceLayout.widths.tools}
+                workspaceRef={workspaceLayout.workspaceRef}
+                onChange={(value) => workspaceLayout.setWidth("navigation", value)}
+                hidden={questionMapCollapsed}
+              />
+              {compactLayout && (!questionMapCollapsed || !inspectorCollapsed) ? (
+                <button
+                  type="button"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className={builderStyles.drawerBackdrop}
+                  onClick={() => {
+                    setQuestionMapCollapsed(true);
+                    setInspectorCollapsed(true);
+                  }}
+                />
+              ) : null}
+              <section
+                className={builderStyles.canvasColumn}
+                inert={compactLayout && (!questionMapCollapsed || !inspectorCollapsed)}
+              >
+                <div className={builderStyles.contextToolbar}>
+                  <div className={builderStyles.contextIdentity}>
+                    <strong>
+                      {workspaceCopy("Question {current} of {total}", {
+                        current: draft.questions.length ? selectedIndex + 1 : 0,
+                        total: draft.questions.length,
+                      })}
+                    </strong>
+                    {question ? (
+                      <span>
+                        {workspaceCopy(
+                          !questionTypeDefinition(question.type).scored ||
+                            question.purpose === "opinion"
+                            ? "Opinion activity"
+                            : "Scored question",
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className={builderStyles.contextActions}>
+                    {quiz && productFeatures?.canvasBoards ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          resourceOpener.current = event.currentTarget;
+                          setResourcePanel("references");
+                        }}
+                      >
+                        {workspaceCopy("References")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        resourceOpener.current = event.currentTarget;
+                        setResourcePanel("review");
+                      }}
+                    >
+                      {workspaceCopy("Review Round")}
+                    </button>
+                  </div>
+                </div>
+                {!canEdit ? (
+                  <p className={builderStyles.readOnlyNotice} role="status">
+                    {workspaceCopy(
+                      "Read-only Round. Preview is available; editing requires an owner or editor.",
+                    )}
+                  </p>
+                ) : null}
                 <div className={builderStyles.alertStack}>
                   {error ? (
                     <p className="error" lang={packFeedback.lang} role="alert">
@@ -1884,32 +2141,7 @@ export default function QuizEditorPage() {
                   issues={readinessIssues}
                   onSelectIssue={focusReadinessIssue}
                 />
-                <details className={builderStyles.reviewTools}>
-                  <summary>{workflowCopy.health}</summary>
-                  <QuestionHealthPanel
-                    key={id}
-                    canEdit={canEdit}
-                    currentDraftRevision={serverRevision.current}
-                    draftSaved={
-                      saveState === "saved" &&
-                      !saveConflict &&
-                      JSON.stringify(draft) === lastSavedJson.current
-                    }
-                    featureEnabled={Boolean(productFeatures?.questionHealth)}
-                    onApplySuggestion={applyHealthSuggestion}
-                    onUndoSuggestion={undoHealthSuggestion}
-                    quizId={id}
-                  />
-                  <PublishedQuestionHealthPanel
-                    key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
-                    canEdit={canEdit}
-                    draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
-                    featureEnabled={Boolean(productFeatures?.questionHealth)}
-                    onOpenDraftQuestion={openPublishedFindingInDraft}
-                    quizId={id}
-                    versionId={quiz?.currentVersionId ?? null}
-                  />
-                </details>
+
                 {packUpdatePanels}
                 {recoveryPackInsertion && recoveryPackReferenceContent ? (
                   <details className="notice" lang={locale}>
@@ -1958,13 +2190,19 @@ export default function QuizEditorPage() {
                 <section
                   aria-label={t("delivery.builder.question", { number: selectedIndex + 1 })}
                   className={builderStyles.canvas}
+                  id="round-active-question"
+                  tabIndex={-1}
                 >
                   {!question ? (
-                    <div className={builderStyles.emptyCanvas} lang="en-CA">
+                    <div className={builderStyles.emptyCanvas}>
                       <div>
-                        <p className="eyebrow">Start building</p>
-                        <h2>Add the first {uxBeta ? "question" : "checkpoint"}</h2>
-                        <p className="muted">Choose a response format from the question map.</p>
+                        <p className="eyebrow">{workspaceCopy("Ready to build")}</p>
+                        <h2>{workspaceCopy("Add your first question")}</h2>
+                        <p className="muted">
+                          {workspaceCopy(
+                            "Choose a question type from the question navigation to begin.",
+                          )}
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -1977,78 +2215,81 @@ export default function QuizEditorPage() {
                               ? ` · ${t("delivery.builder.recheck")}`
                               : ""}
                           </span>
-                          <span className="muted" lang="en-CA">
-                            {selectedIndex + 1} of {draft.questions.length}
-                          </span>
                         </div>
-                        <div className="button-row">
+                        <div className={builderStyles.questionPaging}>
                           <button
-                            className="button-quiet small-button"
-                            onClick={() => duplicateQuestion(question.id)}
                             type="button"
+                            aria-label={workspaceCopy("Previous question")}
+                            disabled={selectedIndex === 0}
+                            onClick={() =>
+                              setSelectedQuestionId(draft.questions[selectedIndex - 1]!.id)
+                            }
                           >
-                            {t("delivery.common.duplicate")}
+                            ←
                           </button>
                           <button
-                            className="danger-link"
-                            onClick={() => removeQuestion(question.id)}
                             type="button"
+                            aria-label={workspaceCopy("Next question")}
+                            disabled={selectedIndex >= draft.questions.length - 1}
+                            onClick={() =>
+                              setSelectedQuestionId(draft.questions[selectedIndex + 1]!.id)
+                            }
                           >
-                            {t("delivery.common.delete")}
+                            →
                           </button>
                         </div>
                       </header>
                       <div className={builderStyles.canvasBody}>
-                        <div className={builderStyles.promptField}>
-                          <label className="sr-only" htmlFor="prompt">
-                            {t("delivery.builder.questionPrompt")}
-                          </label>
-                          <textarea
-                            aria-invalid={!question.prompt.trim()}
-                            className={builderStyles.promptInput}
-                            id="prompt"
-                            lang=""
-                            maxLength={500}
-                            onChange={(event) =>
-                              updateQuestion((item) => ({ ...item, prompt: event.target.value }))
-                            }
-                            placeholder={t("delivery.builder.questionPrompt")}
-                            value={question.prompt}
-                          />
-                        </div>
-                        <MediaEditor
-                          mediaPreviewUrl={mediaPreviewUrl}
-                          mediaState={mediaState}
-                          mediaUploadsEnabled={mediaUploadsEnabled}
-                          onRemoveImage={() => {
-                            applyQuestionStructuralChange(
-                              { ...question, mediaId: null, mediaAlt: null },
-                              "Image removed.",
-                            );
-                            setMediaPreviewUrl("");
-                          }}
-                          onUpdateQuestion={updateQuestion}
-                          onUploadImage={(file) => void uploadQuestionImage(file)}
-                          question={question}
-                          uxBeta={uxBeta}
-                        />
-                        <div className={builderStyles.canvasSection}>
-                          <div className={builderStyles.canvasSectionHeading}>
-                            <h2 lang={locale}>{authoringCopy.response}</h2>
-                            <span className="muted" lang={locale}>
-                              {authoringCopy.responseInstructions}
-                            </span>
+                        <fieldset disabled={!canEdit} className={builderStyles.contentFields}>
+                          <div className={builderStyles.promptField}>
+                            <div className={builderStyles.promptHeading}>
+                              <label htmlFor="prompt">{t("delivery.builder.questionPrompt")}</label>
+                              <span>{formatNumber(locale, question.prompt.length)} / 500</span>
+                            </div>
+                            <textarea
+                              aria-invalid={!question.prompt.trim()}
+                              className={builderStyles.promptInput}
+                              id="prompt"
+                              lang=""
+                              maxLength={500}
+                              onChange={(event) =>
+                                updateQuestion((item) => ({ ...item, prompt: event.target.value }))
+                              }
+                              placeholder={t("delivery.builder.questionPrompt")}
+                              value={question.prompt}
+                            />
                           </div>
-                          <ResponseEditor
-                            multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
-                            rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
-                            onStructuralChange={applyQuestionStructuralChange}
-                            onUpdateChoiceQuestion={updateChoiceQuestion}
+                          <MediaEditor
+                            mediaPreviewUrl={mediaPreviewUrl}
+                            mediaState={mediaState}
+                            mediaUploadsEnabled={mediaUploadsEnabled}
+                            onRemoveImage={() => {
+                              applyQuestionStructuralChange(
+                                { ...question, mediaId: null, mediaAlt: null },
+                                "Image removed.",
+                              );
+                              setMediaPreviewUrl("");
+                            }}
                             onUpdateQuestion={updateQuestion}
+                            onUploadImage={(file) => void uploadQuestionImage(file)}
                             question={question}
                             uxBeta={uxBeta}
                           />
-                        </div>
+                          <div className={builderStyles.canvasSection}>
+                            <div className={builderStyles.canvasSectionHeading}>
+                              <h2 lang={locale}>{authoringCopy.response}</h2>
+                            </div>
+                            <ResponseEditor
+                              multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
+                              rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
+                              onStructuralChange={applyQuestionStructuralChange}
+                              onUpdateChoiceQuestion={updateChoiceQuestion}
+                              onUpdateQuestion={updateQuestion}
+                              question={question}
+                              uxBeta={uxBeta}
+                            />
+                          </div>
+                        </fieldset>
                         {uxBeta ? (
                           <details className={builderStyles.settingsDisclosure}>
                             <summary>{t("delivery.builder.previewParticipant")}</summary>
@@ -2060,7 +2301,20 @@ export default function QuizEditorPage() {
                   )}
                 </section>
               </section>
+              <RoundPaneResize
+                pane="tools"
+                width={workspaceLayout.widths.tools}
+                otherWidth={questionMapCollapsed ? 72 : workspaceLayout.widths.navigation}
+                workspaceRef={workspaceLayout.workspaceRef}
+                onChange={(value) => workspaceLayout.setWidth("tools", value)}
+                hidden={inspectorCollapsed}
+              />
               <QuestionInspector
+                modal={compactLayout}
+                question={question}
+                questionNumber={selectedIndex + 1}
+                uxBeta={uxBeta}
+                readOnly={!canEdit}
                 activeTab={inspectorTab}
                 build={
                   question ? (
@@ -2069,11 +2323,14 @@ export default function QuizEditorPage() {
                       <p className={builderStyles.inspectorIntro} lang={locale}>
                         {authoringCopy.questionDeliveryHelp}
                       </p>
-                      <DeliveryScoring onUpdateQuestion={updateQuestion} question={question} />
-                      <details className={builderStyles.settingsDisclosure} lang="en-CA">
-                        <summary>Round settings</summary>
+                      <DeliveryScoring
+                        onUpdateQuestion={updateQuestion}
+                        question={question}
+                        uxBeta={uxBeta}
+                      />
+                      <RoundToolSection title={toolsCopy("Round settings")}>
                         <label className="field" htmlFor="quiz-description">
-                          <span>Description</span>
+                          <span>{toolsCopy("Description")}</span>
                           <textarea
                             className="textarea"
                             id="quiz-description"
@@ -2105,11 +2362,11 @@ export default function QuizEditorPage() {
                             is preserved and new sessions use Focus.
                           </p>
                         )}
-                      </details>
+                      </RoundToolSection>
                     </>
                   ) : (
-                    <p className={builderStyles.inspectorIntro} lang="en-CA">
-                      Add a question to see build settings.
+                    <p className={builderStyles.inspectorIntro}>
+                      {toolsCopy("Add a question to see build settings.")}
                     </p>
                   )
                 }
@@ -2117,9 +2374,11 @@ export default function QuizEditorPage() {
                 diagnose={
                   question ? (
                     <>
-                      <h3 lang="en-CA">Diagnostic signal</h3>
-                      <p className={builderStyles.inspectorIntro} lang="en-CA">
-                        Capture confidence, concepts, and misconception evidence for useful reports.
+                      <h3>{toolsCopy("Diagnostic signal")}</h3>
+                      <p className={builderStyles.inspectorIntro}>
+                        {toolsCopy(
+                          "Capture confidence, concepts, and misconception evidence for useful reports.",
+                        )}
                       </p>
                       <DiagnosticDetails
                         onUpdateQuestion={updateQuestion}
@@ -2128,8 +2387,8 @@ export default function QuizEditorPage() {
                         uxBeta={uxBeta}
                       />
                       {question.sourceCitations?.length ? (
-                        <details className="notice source-citations" lang="en-CA">
-                          <summary>Source evidence</summary>
+                        <details className="notice source-citations">
+                          <summary>{toolsCopy("Source evidence")}</summary>
                           <ul>
                             {question.sourceCitations.map((citation) => (
                               <li
@@ -2149,54 +2408,58 @@ export default function QuizEditorPage() {
                   ) : null
                 }
                 onTabChange={setInspectorTab}
-                onToggle={() => setInspectorCollapsed((current) => !current)}
+                onToggle={toggleQuestionTools}
                 recover={
                   question ? (
                     <>
-                      <h3 lang="en-CA">Recovery path</h3>
-                      <p className={builderStyles.inspectorIntro} lang="en-CA">
-                        Pair a second question to verify whether the concept recovered after
-                        support.
+                      <h3>{toolsCopy("Recovery path")}</h3>
+                      <p className={builderStyles.inspectorIntro}>
+                        {toolsCopy(
+                          "Pair a second question to verify whether the concept recovered after support.",
+                        )}
                       </p>
                       {linkedRecheck ? (
                         <div className={builderStyles.recoveryCard}>
-                          <strong lang="en-CA">Paired recheck</strong>
+                          <strong>{toolsCopy("Paired recheck")}</strong>
                           <p>
                             {linkedRecheck.prompt ? (
                               <span lang="">{linkedRecheck.prompt}</span>
                             ) : (
-                              <span lang="en-CA">Untitled recheck question</span>
+                              <span>{toolsCopy("Untitled recheck question")}</span>
                             )}
                           </p>
-                          <button
+                          <a
                             className="button-quiet small-button"
-                            lang="en-CA"
-                            onClick={() => setSelectedQuestionId(linkedRecheck.id)}
-                            type="button"
+                            href="#round-active-question"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setSelectedQuestionId(linkedRecheck.id);
+                              if (compactLayout) setInspectorCollapsed(true);
+                              window.requestAnimationFrame(() =>
+                                document.getElementById("round-active-question")?.focus(),
+                              );
+                            }}
                           >
-                            Open recheck
-                          </button>
+                            {toolsCopy("Open recheck")}
+                          </a>
                         </div>
                       ) : (question.delivery ?? "main") === "recheck" ? (
                         <div className={builderStyles.recoveryCard}>
-                          <strong lang="en-CA">This is a recheck question</strong>
-                          <p lang="en-CA">Use Diagnose to connect it to a main question.</p>
+                          <strong>{toolsCopy("This is a recheck question")}</strong>
+                          <p>{toolsCopy("Use Diagnose to connect it to a main question.")}</p>
                         </div>
                       ) : question.type !== "poll" &&
                         question.type !== "rating" &&
                         question.type !== "ranking" &&
                         !isTextQuestion(question.type) ? (
-                        <button
-                          className="button"
-                          lang="en-CA"
-                          onClick={addLinkedRecheck}
-                          type="button"
-                        >
-                          Add a recheck for this concept
+                        <button className="button" onClick={addLinkedRecheck} type="button">
+                          {toolsCopy("Add a recheck for this concept")}
                         </button>
                       ) : (
-                        <p className="notice" lang="en-CA">
-                          Opinion polls, ratings, and rankings do not use scored rechecks.
+                        <p className="notice">
+                          {toolsCopy(
+                            "Opinion polls, ratings, rankings, and text responses do not use scored rechecks.",
+                          )}
                         </p>
                       )}
                     </>
@@ -2206,6 +2469,64 @@ export default function QuizEditorPage() {
             </div>
           </>
         )}
+        {draft ? (
+          <RoundWorkspaceDialog
+            open={resourcePanel === "review"}
+            title={workspaceCopy("Review Round")}
+            onClose={() => setResourcePanel(null)}
+            returnFocusTo={resourceOpener.current}
+          >
+            <ReadinessSummary
+              action={validationAction}
+              entityLabel="Round"
+              issues={readinessIssues}
+              onSelectIssue={(issue) => {
+                setResourcePanel(null);
+                focusReadinessIssue(issue);
+              }}
+            />
+            <QuestionHealthPanel
+              key={id}
+              canEdit={canEdit}
+              currentDraftRevision={serverRevision.current}
+              draftSaved={
+                saveState === "saved" &&
+                !saveConflict &&
+                JSON.stringify(draft) === lastSavedJson.current
+              }
+              featureEnabled={Boolean(productFeatures?.questionHealth)}
+              onApplySuggestion={applyHealthSuggestion}
+              onUndoSuggestion={undoHealthSuggestion}
+              quizId={id}
+            />
+            <PublishedQuestionHealthPanel
+              key={`${id}:${quiz?.currentVersionId ?? "unpublished"}`}
+              canEdit={canEdit}
+              draftQuestionIds={new Set(draft.questions.map((candidate) => candidate.id))}
+              featureEnabled={Boolean(productFeatures?.questionHealth)}
+              onOpenDraftQuestion={(questionId) => {
+                setResourcePanel(null);
+                openPublishedFindingInDraft(questionId);
+              }}
+              quizId={id}
+              versionId={quiz?.currentVersionId ?? null}
+            />
+          </RoundWorkspaceDialog>
+        ) : null}
+        {quiz && productFeatures?.canvasBoards ? (
+          <RoundWorkspaceDialog
+            open={resourcePanel === "references"}
+            title={workspaceCopy("References")}
+            onClose={() => setResourcePanel(null)}
+            returnFocusTo={resourceOpener.current}
+          >
+            <CanvasArtifactLinks
+              target={{ kind: "round", targetId: id }}
+              editable={canEdit}
+              disabled={draftMutationBusy}
+            />
+          </RoundWorkspaceDialog>
+        ) : null}
       </main>
     </fieldset>
   );

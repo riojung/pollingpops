@@ -16,6 +16,7 @@ import { scoredResponseCopy } from "../lib/i18n/scored-response-copy";
 import { useLocale } from "./locale-provider";
 import { ParticipantIdentity } from "./participant-avatar";
 import { ScoredResponseReceipt } from "./scored-response-receipt";
+import { useCompetitionCelebration } from "./use-competition-celebration";
 import styles from "./competition-dashboard.module.css";
 
 const MOTION_STORAGE_KEY = "openround:competition-motion";
@@ -116,7 +117,6 @@ export function CompetitionDashboard({
     serverMotion,
   );
   const [motionOverride, setMotionOverride] = useState<boolean | null>(null);
-  const [replay, setReplay] = useState(0);
   const [view, setView] = useState<"race" | "table">("race");
   const motion = preference !== "reduced" && (motionOverride ?? preference === "on");
   const text = (key: CompetitionCopyKey, values?: Record<string, string | number>) =>
@@ -126,7 +126,8 @@ export function CompetitionDashboard({
   const isFinal = finished || standings.status === "final";
   const participantFinal = variant === "participant" && isFinal;
   const compactParticipant =
-    variant === "participant" && (compact || (isFinal && standings.entries.length < 2));
+    variant === "participant" &&
+    ((!isFinal && compact) || (isFinal && standings.entries.length < 2));
   const condensedPersonal = compactParticipant || participantFinal;
   const unscored = standings.status === "unscored";
   const released =
@@ -150,6 +151,13 @@ export function CompetitionDashboard({
   const pointsAvailable = (leader?.score ?? 0) > 0;
   const podiumAvailable = pointsAvailable && standings.entries.length > 1;
   const celebrationAvailable = isFinal && podiumAvailable;
+  const celebrationEligible = celebrationAvailable && !compactParticipant && !summary;
+  const celebration = useCompetitionCelebration({
+    eligible: celebrationEligible,
+    enabled: motion,
+    releaseKey,
+  });
+  const raceAvailable = !isFinal || pointsAvailable;
   const compactEntries = released ? standings.entries.slice(0, 3) : [];
   if (personal && !compactEntries.some((entry) => entry.id === personal.id))
     compactEntries.push(personal);
@@ -287,33 +295,83 @@ export function CompetitionDashboard({
     </footer>
   );
 
-  const dashboardOptions = (
-    <>
-      <div className={styles.effectsControls}>
+  const effectsControls = (
+    <div className={styles.effectsControls} data-testid="competition-effects-controls">
+      {celebrationEligible ? (
         <button
           type="button"
-          aria-pressed={motion}
-          disabled={preference === "reduced"}
-          onClick={toggleMotion}
-          data-testid="competition-motion-toggle"
+          className={styles.replayButton}
+          disabled={!motion}
+          onClick={celebration.replay}
+          aria-describedby={`${id}-motion-help`}
+          data-testid="competition-replay"
         >
-          <span aria-hidden="true">✧</span> {text("motion")}
+          <span aria-hidden="true">↻</span> {text("replay")}
         </button>
-        {celebrationAvailable ? (
-          <button
-            type="button"
-            disabled={!motion}
-            onClick={() => setReplay((current) => current + 1)}
-            data-testid="competition-replay"
-          >
-            <span aria-hidden="true">↻</span> {text("replay")}
-          </button>
-        ) : null}
-        <small>{text(preference === "reduced" ? "reducedMotion" : "motionHelp")}</small>
-      </div>
+      ) : null}
+      <button
+        type="button"
+        aria-pressed={motion}
+        disabled={preference === "reduced"}
+        onClick={toggleMotion}
+        data-testid="competition-motion-toggle"
+      >
+        <span aria-hidden="true">✧</span> {text("motion")}
+      </button>
+      <small id={`${id}-motion-help`}>
+        {text(preference === "reduced" ? "reducedMotion" : motion ? "motionHelp" : "motionOff")}
+      </small>
+    </div>
+  );
+
+  const dashboardOptions = (
+    <>
+      {!celebrationEligible ? effectsControls : null}
       {scoringPolicy}
     </>
   );
+
+  const finale = celebrationEligible ? (
+    <aside
+      className={styles.finishBanner}
+      data-testid="competition-finale"
+      aria-label={text("finishTitle")}
+    >
+      <span className={styles.finishEmblem} key={`emblem:${celebration.run}`} aria-hidden="true">
+        <svg viewBox="0 0 64 64" focusable="false">
+          <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="m13 23 9 7 10-14 10 14 9-7-5 22H18z" fill="currentColor" />
+          <path
+            d="M23 50h18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <path
+            d="m32 27 2.3 4.7 5.2.8-3.8 3.6.9 5.2-4.6-2.5-4.6 2.5.9-5.2-3.8-3.6 5.2-.8z"
+            fill="var(--ui-surface)"
+          />
+        </svg>
+      </span>
+      <div className={styles.finishCopy}>
+        <span className={styles.finishEyebrow}>{text("final")}</span>
+        <strong>{text(leader?.tied ? "sharedFinish" : "finishTitle")}</strong>
+        <p>
+          {leader && !leader.tied ? (
+            <>
+              {text("topFinisher")} <span aria-hidden="true">·</span>{" "}
+              <span lang="">{leader.nickname}</span>
+            </>
+          ) : (
+            text("podium")
+          )}
+        </p>
+      </div>
+      <span className={styles.finishCheckers} aria-hidden="true" />
+      {effectsControls}
+    </aside>
+  ) : null;
 
   const personalContent = personal ? (
     <section
@@ -405,45 +463,31 @@ export function CompetitionDashboard({
 
   const releasedContent = released ? (
     <>
+      {finale}
       {personalContent}
       {!pointsAvailable ? (
         <p className={styles.empty} data-testid="competition-zero-points" role="status">
           {scoredResponseCopy[locale].zeroPoints}
         </p>
       ) : null}
-      {!participantFinal && (isFinal ? celebrationAvailable : climbers.length > 0) ? (
+      {!isFinal && climbers.length > 0 ? (
         <aside
           className={styles.spotlight}
           data-testid="competition-spotlight"
-          aria-label={text(isFinal ? "finishTitle" : "biggestClimb")}
+          aria-label={text("biggestClimb")}
         >
           <span className={styles.spotlightIcon} aria-hidden="true">
-            {isFinal ? "✧" : "↗"}
+            ↗
           </span>
           <div>
-            <strong>
-              {text(isFinal ? (leader?.tied ? "sharedFinish" : "finishTitle") : "biggestClimb")}
-            </strong>
+            <strong>{text("biggestClimb")}</strong>
             <p>
-              {isFinal ? (
-                <>
-                  <span>
-                    {leader && !leader.tied && leader.score > 0 ? `${text("topFinisher")} · ` : ""}
-                  </span>
-                  <span lang="">
-                    {leader && !leader.tied && leader.score > 0 ? leader.nickname : text("podium")}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span lang="">
-                    {text("climbStory", { names: climberNames, count: number(biggestGain) })}
-                  </span>
-                  {climbers.length > 3
-                    ? ` · ${text("moreClimbers", { count: number(climbers.length - 3) })}`
-                    : ""}
-                </>
-              )}
+              <span lang="">
+                {text("climbStory", { names: climberNames, count: number(biggestGain) })}
+              </span>
+              {climbers.length > 3
+                ? ` · ${text("moreClimbers", { count: number(climbers.length - 3) })}`
+                : ""}
             </p>
           </div>
         </aside>
@@ -456,7 +500,7 @@ export function CompetitionDashboard({
             aria-label={text("podium")}
             data-testid="competition-podium"
             data-count={topThree.length}
-            key={`podium:${releaseKey}`}
+            key={`podium:${releaseKey}:${celebration.run}`}
           >
             {topThree.map((entry) => (
               <article
@@ -466,7 +510,9 @@ export function CompetitionDashboard({
                 data-self={entry.id === participantId || undefined}
               >
                 <div className={styles.podiumPerson}>
-                  <Medal rank={entry.rank} />
+                  <span className={styles.medalFrame} data-top={entry.rank === 1 || undefined}>
+                    <Medal rank={entry.rank} />
+                  </span>
                   <p className={styles.medal}>{competitionPlace(locale, entry.rank)}</p>
                   <span className={styles.identity}>
                     <ParticipantIdentity
@@ -497,15 +543,15 @@ export function CompetitionDashboard({
         ) : null}
         <section
           className={styles.scoreboard}
-          aria-label={text(participantFinal ? "standings" : "race")}
+          aria-label={text(raceAvailable ? "race" : "standings")}
           style={podiumAvailable ? undefined : { gridColumn: "1 / -1" }}
         >
           <div className={styles.scoreboardHeading}>
             <div>
-              <strong>{text(participantFinal ? "standings" : "race")}</strong>
-              {!participantFinal ? <p>{text("raceHelp")}</p> : null}
+              <strong>{text(raceAvailable ? "race" : "standings")}</strong>
+              {raceAvailable ? <p>{text("raceHelp")}</p> : null}
             </div>
-            {!participantFinal ? (
+            {raceAvailable ? (
               <div className={styles.viewControls} role="group" aria-label={text("scoreboardView")}>
                 <button
                   type="button"
@@ -524,11 +570,12 @@ export function CompetitionDashboard({
               </div>
             ) : null}
           </div>
-          {!participantFinal && view === "race" ? (
+          {raceAvailable && view === "race" ? (
             <ol
               className={styles.race}
               data-testid="competition-race"
               aria-label={text("standings")}
+              key={`race:${releaseKey}:${celebration.run}`}
             >
               {standings.entries.slice(0, 5).map((entry) => {
                 const ratio =
@@ -569,7 +616,26 @@ export function CompetitionDashboard({
                         data-testid="competition-race-fill"
                         data-score={entry.score}
                         style={{ width: `${ratio}%` }}
-                      />
+                      >
+                        {celebrationEligible ? (
+                          <span className={styles.runner} aria-hidden="true">
+                            <svg viewBox="0 0 28 28" focusable="false">
+                              <circle cx="17" cy="5" r="3" fill="currentColor" />
+                              <path
+                                d="m15 10-4 6 5 4-3 5m1-14 5 5 5-1M11 16l-5 1-3 5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </span>
+                        ) : null}
+                      </span>
+                      {celebrationEligible ? (
+                        <span className={styles.trackFinish} aria-hidden="true" />
+                      ) : null}
                     </div>
                     {streakBadge(entry)}
                   </li>
@@ -607,39 +673,52 @@ export function CompetitionDashboard({
 
   return (
     <section
+      ref={celebration.ref}
       className={`${styles.dashboard}${compact ? ` ${styles.compact}` : ""}${summary ? ` ${styles.summary}` : ""}${compactParticipant ? ` ${styles.compactParticipant}` : ""}${participantFinal ? ` ${styles.participantFinal}` : ""}`}
       aria-labelledby={`${id}-title`}
       data-testid="competition-dashboard"
       data-status={status}
+      data-celebrating={celebration.playing ? "true" : undefined}
+      data-celebration-run={celebration.run}
+      data-finale={celebrationEligible || undefined}
       data-motion={
-        !compactParticipant && motion && (!isFinal || celebrationAvailable) ? "on" : "off"
+        !compactParticipant && !summary && motion && (!isFinal || celebrationAvailable)
+          ? "on"
+          : "off"
       }
       data-compact-participant={compactParticipant || undefined}
       data-variant={variant}
       data-summary={summary || undefined}
       lang={locale}
     >
-      {celebrationAvailable && !compactParticipant ? (
+      {celebrationEligible && motion && celebration.playing ? (
         <div
-          key={`${releaseKey}:${replay}`}
+          key={`celebration:${celebration.run}`}
           className={styles.celebration}
           data-testid="competition-celebration"
-          data-replay={replay}
+          data-replay={celebration.run}
           aria-hidden="true"
         >
-          {Array.from({ length: 22 }, (_, index) => (
-            <i
-              key={index}
-              style={
-                {
-                  "--piece": index,
-                  "--x": `${(index * 37 + 7) % 100}%`,
-                  "--delay": `${(index % 5) * 0.07}s`,
-                  "--spin": `${index % 2 ? -340 : 360}deg`,
-                } as CSSProperties
-              }
-            />
-          ))}
+          {Array.from({ length: 84 }, (_, index) => {
+            const side = index % 2;
+            return (
+              <i
+                key={index}
+                data-kind={index % 7 === 0 ? "streamer" : "confetti"}
+                data-side={side}
+                style={
+                  {
+                    "--origin": side ? "100%" : "0%",
+                    "--travel-x": `${(side ? -1 : 1) * (90 + ((index * 47) % 460))}px`,
+                    "--rise": `${-80 - ((index * 31) % 170)}px`,
+                    "--fall": `${280 + ((index * 41) % 330)}px`,
+                    "--delay": `${(index % 7) * 0.055}s`,
+                    "--spin": `${(side ? -1 : 1) * (220 + ((index * 37) % 500))}deg`,
+                  } as CSSProperties
+                }
+              />
+            );
+          })}
         </div>
       ) : null}
       <header className={styles.header}>

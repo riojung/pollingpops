@@ -374,10 +374,19 @@ Switch between **Race view** and **Table view** to compare released scores. The 
 the biggest climb, the latest scored-question gain and correct streaks without bonus points.
 The host keeps a compact standings summary beside the question flow; **Show standings** and the
 final screen use the full main stage. Secondary recovery/staff tools are collapsed. On the host
-and projector, expand the scoring/motion disclosure for display controls. Audience tools use
+and projector, expand the scoring disclosure for the scoring policy. Audience tools use
 responsive participant cards in narrow drawers, with counts refreshed as participants join.
-At the finish, **Replay celebration** repeats only the visual effects. The **Motion effects** choice
-is saved for your browser; device and **Display & sound → Reduce motion** settings take precedence.
+At a scored finish with multiple participants and positive points, the final screen shows a
+finish-line banner, podium and race lanes. Participant devices can also switch between **Race view**
+and **Table view**. The celebration waits until the final standings are in view and the browser tab
+is active. Medals arrive in sequence, runners travel to their actual score positions, and a short
+confetti burst settles automatically. Scores and names remain readable throughout.
+
+**Replay celebration** and **Motion effects** are visible in the finish banner. Replay repeats the
+visual sequence without changing scores or ranks. Motion effects are saved for your browser;
+device and **Display & sound → Reduce motion** settings take precedence and keep a static finish.
+Turning motion off explains why replay is unavailable. Tied results retain their tie labels;
+single-person, zero-point, unrevealed and opinion-only results do not invent a winning celebration.
 
 ## Sign in and workspace access
 

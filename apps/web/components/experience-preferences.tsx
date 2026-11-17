@@ -12,6 +12,7 @@ const defaults: Preferences = { highContrast: false, reducedMotion: false, muted
 export function ExperiencePreferences() {
   const { t } = useLocale();
   const [preferences, setPreferences] = useState(defaults);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     try {
@@ -20,9 +21,13 @@ export function ExperiencePreferences() {
     } catch {
       setPreferences(defaults);
     }
+    setReady(true);
   }, []);
 
   useEffect(() => {
+    // Mount effects can replay before their state updates commit in Strict Mode.
+    // Keep the saved and pre-hydration DOM choices intact until the read finishes.
+    if (!ready) return;
     document.documentElement.dataset.openroundContrast = preferences.highContrast
       ? "high"
       : "theme";
@@ -30,8 +35,12 @@ export function ExperiencePreferences() {
       ? "reduced"
       : "theme";
     document.documentElement.dataset.openroundMuted = preferences.muted ? "true" : "false";
-    localStorage.setItem("openround:experience-preferences", JSON.stringify(preferences));
-  }, [preferences]);
+    try {
+      localStorage.setItem("openround:experience-preferences", JSON.stringify(preferences));
+    } catch {
+      // Accessibility choices still apply when browser storage is unavailable.
+    }
+  }, [preferences, ready]);
 
   function update(update: Partial<Preferences>) {
     setPreferences((current) => ({ ...current, ...update }));

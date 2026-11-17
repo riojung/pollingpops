@@ -82,13 +82,19 @@ describe("competition dashboard", () => {
     expect(markup).toContain('data-testid="competition-race"');
   });
 
-  it("discloses effects and score policy on projector and final participant views", () => {
+  it("keeps final replay and motion controls outside the closed scoring policy", () => {
     const presenter = render(fixture(), { variant: "presenter", finished: true });
     expect(presenter).toMatch(/<details[^>]*data-testid="competition-display-options"/);
     expect(presenter).not.toMatch(
       /<details[^>]*data-testid="competition-display-options"[^>]*open/,
     );
     expect(presenter).toContain('data-testid="competition-replay"');
+    const options = presenter.slice(presenter.indexOf('data-testid="competition-display-options"'));
+    expect(options).not.toContain('data-testid="competition-replay"');
+    expect(options).not.toContain('data-testid="competition-motion-toggle"');
+    expect(presenter.indexOf('data-testid="competition-replay"')).toBeLessThan(
+      presenter.indexOf("<details"),
+    );
     expect(presenter).toContain("Standings include revealed questions only.");
     const participant = render(fixture(), { variant: "participant", finished: true });
     expect(participant).toContain('data-testid="competition-display-options"');
@@ -246,8 +252,11 @@ describe("competition dashboard", () => {
     expect(markup).not.toContain('data-testid="competition-streak"');
     expect(markup).not.toContain("Top finisher");
     expect(markup).not.toContain("Biggest climb");
-    expect(markup).toContain('style="width:0%"');
-    expect(markup).not.toContain('style="width:100%"');
+    expect(markup).not.toContain('data-testid="competition-race"');
+    expect(markup).not.toContain('aria-label="Scoreboard view"');
+    const liveMarkup = render(standings, { variant: "host" });
+    expect(liveMarkup).toContain('style="width:0%"');
+    expect(liveMarkup).not.toContain('style="width:100%"');
     expect(markup).not.toContain("A finish worth sharing");
     expect(markup).not.toContain('data-testid="competition-celebration"');
     expect(markup).not.toContain('data-testid="competition-spotlight"');
@@ -334,13 +343,16 @@ describe("competition dashboard", () => {
     expect(render(standings)).toContain("Biggest climb");
   });
 
-  it("keeps decorative celebration separate from immediately accessible final results", () => {
+  it("renders complete final results and visible reduced-motion help before any celebration starts", () => {
     const standings = fixture();
     standings.status = "final";
     const markup = render(standings, { variant: "presenter" });
-    expect(markup).toContain(
-      'data-testid="competition-celebration" data-replay="0" aria-hidden="true"',
-    );
+    expect(markup).toContain('data-testid="competition-finale"');
+    expect(markup).toContain('data-celebration-run="0"');
+    expect(markup).not.toContain('data-celebrating="true"');
+    expect(markup).not.toContain('data-testid="competition-celebration"');
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*data-testid="competition-replay"/);
+    expect(markup).toContain("Reduced motion is on in your device or accessibility settings.");
     expect(markup).toContain('data-testid="competition-replay"');
     expect(markup).toContain("Replay celebration");
     expect(markup).toContain("Top finisher");
@@ -411,20 +423,69 @@ describe("competition dashboard", () => {
     expect(markup).not.toContain("<table");
   });
 
-  it("reserves a bounded podium and a single standings view for a multi-participant final", () => {
+  it("gives multi-participant finals a default race, view choices and the personal receipt", () => {
     const markup = render(fixture(), {
       variant: "participant",
       participantId: "person-1",
+      compact: true,
       finished: true,
+      responseSummary: {
+        answeredScoredQuestions: 2,
+        correctScoredQuestions: 1,
+        revealedScoredQuestions: 2,
+      },
     });
     expect(markup).toContain('data-testid="competition-podium"');
-    expect(markup).toContain('data-testid="competition-celebration"');
+    expect(markup).toContain('data-testid="competition-finale"');
     expect(markup).toContain('data-testid="competition-display-options"');
-    expect(markup).toContain('<th scope="col">Position</th>');
-    expect(markup).not.toContain('data-testid="competition-race"');
+    expect(markup).toContain('data-testid="competition-personal"');
+    expect(markup).toContain('data-testid="scored-response-receipt"');
+    expect(markup).toContain('data-testid="competition-race"');
+    expect(markup).toContain('aria-label="Scoreboard view"');
+    expect(markup).toContain('aria-pressed="true">Race view');
+    expect(markup).toContain('aria-pressed="false">Table view');
+    expect(markup).toContain('data-score="1750" style="width:87.5%"');
+    expect(markup).toContain('aria-label="Bea: 1,750 points, 88% of the leading score."');
+    expect(markup).not.toContain('data-compact-participant="true"');
     expect(markup).not.toContain('data-testid="competition-spotlight"');
-    expect(markup).not.toContain('aria-label="Scoreboard view"');
     expect(markup).not.toContain("Points to next place");
+  });
+
+  it("preserves shared server ranks and equal race distances in a tied final", () => {
+    const standings = fixture();
+    standings.status = "final";
+    standings.entries[0]!.tied = true;
+    standings.entries[1] = {
+      ...standings.entries[1]!,
+      rank: 1,
+      score: 2_000,
+      tied: true,
+      pointsToLeader: 0,
+      pointsToNextRank: null,
+    };
+    const markup = render(standings, { variant: "presenter" });
+    const podium = markup.slice(
+      markup.indexOf('data-testid="competition-podium"'),
+      markup.indexOf('aria-label="The race"'),
+    );
+    expect(podium.match(/<article[^>]*data-rank="1"/g)).toHaveLength(2);
+    expect(podium).not.toMatch(/<article[^>]*data-rank="2"/);
+    expect(markup).toContain("A finish worth sharing");
+    expect(markup).not.toContain("Top finisher");
+    expect(markup).toContain('aria-label="Ada: 2,000 points, 100% of the leading score."');
+    expect(markup).toContain('aria-label="Bea: 2,000 points, 100% of the leading score."');
+    expect(markup.match(/data-score="2000" style="width:100%"/g)).toHaveLength(2);
+  });
+
+  it("keeps a final summary modest until its full dashboard is shown", () => {
+    const markup = render(fixture(), { variant: "host", summary: true, finished: true });
+    expect(markup).toContain("Final standings");
+    expect(markup).toContain("Ada");
+    expect(markup).toContain("2,000");
+    expect(markup).not.toContain('data-testid="competition-finale"');
+    expect(markup).not.toContain('data-testid="competition-replay"');
+    expect(markup).not.toContain('data-testid="competition-celebration"');
+    expect(markup).not.toContain('data-celebrating="true"');
   });
 
   it("does not release names, scores or own receipts through the compact waiting or opinion states", () => {

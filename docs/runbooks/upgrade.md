@@ -246,6 +246,25 @@ retry envelopes to fit an older binary. Do not send existing E04 rooms to a lega
 Moderated open text and word clouds use the separate boundary below; migration 091 alone
 does not enable them in Presentation authoring, insertion, responses or reports.
 
+## Live Round Word Cloud compatibility
+
+Deploy matching contracts, API/realtime and web clients before creating live-cloud rooms. Updated
+clients advertise `response.word_cloud.live`; a live room freezes that requirement and older
+clients receive the standard refresh/update response. The additive `settings.wordCloudMode`
+setting is stored in the existing frozen session state and needs no database migration. An absent
+setting continues to mean moderated, including existing rooms and their pending responses.
+
+New capable room creation defaults Word Cloud to live; the launch screen can explicitly choose
+**Review before showing**. Live results use `/v1/sessions/:id/word-cloud`, with normal role-scoped
+credentials, current-version fences and private/no-store responses. The legacy response-results
+endpoint and stored reports retain the reveal/five-approved threshold. Do not convert retained
+moderated rooms or rewrite their published source to enable this behavior; create a new room.
+
+Verify first-response aggregation on host/presenter/participant, matching-phrase growth, removal,
+reconnect, older-client rejection, moderated withholding and final leaderboard placement before
+promotion. The local browser regression is `tests/canvas-e2e/live-word-cloud.spec.ts`, alongside
+the final-results coverage in `tests/canvas-e2e/round-celebration.spec.ts`.
+
 ## Presentation moderated text compatibility
 
 The second E04 family adds **Presentation document v10**, **response storage v3** and

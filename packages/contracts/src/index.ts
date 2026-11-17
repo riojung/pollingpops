@@ -541,7 +541,7 @@ export const QUESTION_TYPE_REGISTRY = {
     type: "word_cloud",
     label: "Word cloud",
     editorLabel: "Word cloud",
-    description: "Moderated short responses grouped into an accessible word cloud.",
+    description: "Short phrases grouped into a live or moderated accessible word cloud.",
     responseKind: "text",
     scored: false,
     supportsConfidence: false,
@@ -1805,6 +1805,8 @@ export const SessionSettingsSchema = z.object({
   trustMode: TrustModeSchema.default("learning"),
   /** New rooms default off; omitted retained legacy settings inherit authored collection. */
   confidenceEnabled: z.boolean().optional(),
+  /** Frozen room policy. Omitted retained rooms keep approval and reveal gates. */
+  wordCloudMode: z.enum(["live", "moderated"]).optional(),
 });
 /** Input remains source-compatible while parsing always resolves an explicit trust mode. */
 export type SessionSettings = z.input<typeof SessionSettingsSchema>;
@@ -1895,6 +1897,41 @@ export const RoundTextResponseResultsSchema = z
     "Unrevealed or small-sample text results cannot expose bodies",
   );
 export type RoundTextResponseResults = z.infer<typeof RoundTextResponseResultsSchema>;
+
+/** Aggregate-only live results; separate from the immutable moderated report contract. */
+export const RoundLiveWordCloudResultsSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    roundId: z.string().uuid(),
+    version: z.number().int().nonnegative(),
+    mode: z.literal("live"),
+    respondents: z.number().int().min(0).max(250),
+    totalTerms: z.number().int().min(0).max(250),
+    truncated: z.boolean(),
+    terms: z
+      .array(
+        z
+          .object({
+            value: z.string().min(1).max(240),
+            label: z.string().min(1).max(240),
+            count: z.number().int().positive().max(250),
+          })
+          .strict(),
+      )
+      .max(250),
+  })
+  .strict()
+  .refine(
+    (result) =>
+      result.terms.length === result.totalTerms &&
+      result.truncated === false &&
+      result.terms.reduce((total, term) => total + term.count, 0) === result.respondents &&
+      (result.respondents > 0 || result.totalTerms === 0) &&
+      result.terms.every((term) => term.count <= result.respondents) &&
+      new Set(result.terms.map((term) => term.value)).size === result.terms.length,
+    "Live cloud frequencies must reconcile with aggregate metadata",
+  );
+export type RoundLiveWordCloudResults = z.infer<typeof RoundLiveWordCloudResultsSchema>;
 
 export const AVATAR_IDS = [
   "comet",

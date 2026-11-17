@@ -1801,6 +1801,7 @@ export default function QuizEditorPage() {
                         uxBeta={false}
                       />
                       <ResponseEditor
+                        wordCloudLiveSupported
                         multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
                         rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
                         onStructuralChange={applyQuestionStructuralChange}
@@ -2280,6 +2281,7 @@ export default function QuizEditorPage() {
                               <h2 lang={locale}>{authoringCopy.response}</h2>
                             </div>
                             <ResponseEditor
+                              wordCloudLiveSupported
                               multiSelectPollsEnabled={Boolean(productFeatures?.multiSelectPolls)}
                               rankingPollsEnabled={Boolean(productFeatures?.rankingPolls)}
                               onStructuralChange={applyQuestionStructuralChange}

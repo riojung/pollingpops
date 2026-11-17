@@ -466,7 +466,7 @@ export function upgradeGameState(input: GameState): GameState {
     requiresExtendedRoundResponses(legacy.quiz) &&
     (!legacy.roundProtocol ||
       legacy.roundProtocol.minimumClientVersion !== 3 ||
-      !deriveRoundProtocol(legacy.quiz).requiredCapabilities.every((capability) =>
+      !deriveRoundProtocol(legacy.quiz, legacy.settings).requiredCapabilities.every((capability) =>
         legacy.roundProtocol!.requiredCapabilities.includes(capability),
       ))
   ) {
@@ -581,8 +581,8 @@ export function createGameState(input: {
     requiresExtendedRoundResponses(input.quiz) &&
     (!input.roundProtocol ||
       input.roundProtocol.minimumClientVersion <
-        deriveRoundProtocol(input.quiz).minimumClientVersion ||
-      !deriveRoundProtocol(input.quiz).requiredCapabilities.every((capability) =>
+        deriveRoundProtocol(input.quiz, input.settings).minimumClientVersion ||
+      !deriveRoundProtocol(input.quiz, input.settings).requiredCapabilities.every((capability) =>
         input.roundProtocol!.requiredCapabilities.includes(capability),
       ))
   ) {
@@ -1581,7 +1581,10 @@ export function acceptAnswer(
               [answer.answerId]: {
                 roundId: answer.roundId,
                 questionId: question.id,
-                status: "pending" as const,
+                status:
+                  question.type === "word_cloud" && state.settings.wordCloudMode === "live"
+                    ? ("approved" as const)
+                    : ("pending" as const),
                 acceptedAtMs: answer.acceptedAtMs,
               },
             },

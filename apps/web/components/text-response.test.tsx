@@ -37,6 +37,18 @@ describe("text response views", () => {
     expect(markup).toContain("5 approved respondents");
   });
 
+  it("explains immediate phrase visibility only for an explicitly live cloud", () => {
+    const live = renderToStaticMarkup(
+      withEnglishLocale(<TextResponseControl type="word_cloud" liveWordCloud />),
+    );
+    expect(live).toContain("Your phrase appears in the live cloud when saved");
+    expect(live).not.toContain("Only approved responses");
+    const moderated = renderToStaticMarkup(
+      withEnglishLocale(<TextResponseControl type="word_cloud" />),
+    );
+    expect(moderated).toContain("Only approved responses");
+  });
+
   it("uses server groups and counts verbatim in an accessible count table", () => {
     const markup = renderToStaticMarkup(
       withEnglishLocale(

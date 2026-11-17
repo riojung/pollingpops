@@ -77,6 +77,8 @@ for (const suffix of ["desktop", "@mobile"]) {
         exact: true,
       }),
     ).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Build cloud live", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Review before showing", exact: true }).check();
     const creation = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
@@ -84,6 +86,7 @@ for (const suffix of ["desktop", "@mobile"]) {
     );
     await page.getByRole("button", { name: "Create live session", exact: true }).click();
     const session = await (await creation).json();
+    expect(session.snapshot.settings.wordCloudMode).toBe("moderated");
     expect(session.snapshot.roundProtocol.requiredCapabilities).toEqual([
       "response.open_text",
       "response.word_cloud",

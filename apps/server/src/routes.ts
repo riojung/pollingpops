@@ -16,6 +16,7 @@ import {
   RoundClientCapabilitiesQuerySchema,
   RoundResponseModerationPageSchema,
   RoundTextResponseResultsSchema,
+  RoundLiveWordCloudResultsSchema,
   requiresExtendedRoundResponses,
   AcceptWorkspaceInvitationSchema,
   ApplyAuthoringJobSchema,
@@ -2805,6 +2806,25 @@ export async function registerRoutes(
       .parse(request.query);
     return RoundTextResponseResultsSchema.parse(
       await sessions.approvedResponseResults({
+        ...query,
+        sessionId: id,
+        token: request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "",
+      }),
+    );
+  });
+
+  app.get("/v1/sessions/:id/word-cloud", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
+    const { id } = IdParamsSchema.parse(request.params);
+    const query = z
+      .object({
+        roundId: z.string().uuid(),
+        role: z.enum(["host", "presenter", "participant"]).default("participant"),
+        clientCapabilities: RoundClientCapabilitiesQuerySchema,
+      })
+      .parse(request.query);
+    return RoundLiveWordCloudResultsSchema.parse(
+      await sessions.liveWordCloudResults({
         ...query,
         sessionId: id,
         token: request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "",

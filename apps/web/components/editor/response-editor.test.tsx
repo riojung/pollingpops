@@ -10,6 +10,7 @@ import {
 import { ResponseEditor } from "./response-editor";
 import type { ChoiceQuestionDraft, ChoiceQuestionUpdater, QuestionUpdater } from "./types";
 import { roundToolsCopy } from "../../lib/i18n/round-tools-copy";
+import { liveWordCloudCopy } from "../../lib/i18n/live-word-cloud-copy";
 
 const fixtures = vi.hoisted(() => ({
   locale: "en-CA",
@@ -287,6 +288,7 @@ function generalHarness(initial: QuestionDraft, uxBeta = true) {
     ResponseEditor({
       question: draft,
       uxBeta,
+      wordCloudLiveSupported: true,
       onStructuralChange: vi.fn(),
       onUpdateChoiceQuestion: vi.fn(),
       onUpdateQuestion,
@@ -320,6 +322,29 @@ const numeric: QuestionDraft = {
 };
 
 describe("Round number, rating, and text response editors", () => {
+  it("keeps moderation guidance for hosts that do not support live clouds", () => {
+    const markup = renderToStaticMarkup(
+      ResponseEditor({
+        question: {
+          id: "moderated-cloud",
+          type: "word_cloud",
+          prompt: "Share one idea",
+          timeLimitSeconds: 30,
+          basePoints: 0,
+          explanation: "",
+          mediaId: null,
+          mediaAlt: null,
+        },
+        uxBeta: true,
+        onStructuralChange: vi.fn(),
+        onUpdateChoiceQuestion: vi.fn(),
+        onUpdateQuestion: vi.fn(),
+      }),
+    );
+    expect(markup).toContain("Responses need moderator approval before appearing to the audience.");
+    expect(markup).not.toContain(liveWordCloudCopy("en-CA", "editorPolicy"));
+  });
+
   it("keeps decimal editing lossless and exposes invalid values without coercing them", () => {
     const harness = generalHarness(numeric);
     harness.change(0, "-0.0000000000000000004");
@@ -384,7 +409,7 @@ describe("Round number, rating, and text response editors", () => {
   });
 
   it.each(supportedLocales)(
-    "gives accurate moderated open-text and word-cloud limits in %s",
+    "gives accurate open-text moderation and live-cloud guidance in %s",
     async (locale) => {
       fixtures.locale = locale;
       fixtures.messages = await loadDeliveryAuthoringMessages(locale);
@@ -410,7 +435,9 @@ describe("Round number, rating, and text response editors", () => {
           }),
         );
         expect(markup).toContain(
-          copy("Responses need moderator approval before appearing to the audience."),
+          type === "word_cloud"
+            ? liveWordCloudCopy(locale, "editorPolicy")
+            : copy("Responses need moderator approval before appearing to the audience."),
         );
         expect(markup).not.toMatch(/<(input|textarea|select)\b/);
         expect(harness.draft().id).toBe(`text-${type}`);

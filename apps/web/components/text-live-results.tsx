@@ -13,17 +13,9 @@ import {
 } from "../lib/text-response-client";
 import { useLocale } from "./locale-provider";
 import { TextResultsView } from "./text-results-view";
+import { LiveWordCloudResults } from "./live-word-cloud-results";
 
-export function TextLiveResults({
-  sessionId,
-  roundId,
-  version,
-  phase,
-  credential,
-  role,
-  freshness = 0,
-  headingLevel = 2,
-}: {
+export interface TextLiveResultsProps {
   sessionId: string;
   roundId: string;
   version: number;
@@ -32,7 +24,23 @@ export function TextLiveResults({
   freshness?: number;
   headingLevel?: 2 | 3;
   role: "host" | "presenter" | "participant";
-}) {
+  liveWordCloud?: boolean;
+}
+
+export function TextLiveResults({ liveWordCloud = false, ...props }: TextLiveResultsProps) {
+  return liveWordCloud ? <LiveWordCloudResults {...props} /> : <ModeratedTextResults {...props} />;
+}
+
+function ModeratedTextResults({
+  sessionId,
+  roundId,
+  version,
+  phase,
+  credential,
+  role,
+  freshness = 0,
+  headingLevel = 2,
+}: TextLiveResultsProps) {
   const Heading = headingLevel === 3 ? "h3" : "h2";
   const { locale, t } = useLocale();
   const [cursor, setCursor] = useState<string | null>(null);

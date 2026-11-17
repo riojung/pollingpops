@@ -50,6 +50,16 @@ export function wordCloudGroupKey(value: string): string {
     .toLowerCase()
     .normalize("NFC");
 }
+/** Live grouping preserves historical report keys and meaningful C++/C# punctuation. */
+export function liveWordCloudGroupKey(value: string): string {
+  const normalized = wordCloudGroupKey(value);
+  return (
+    normalized.replace(
+      /^[\s.,!?;:…'"“”‘’«»()[\]{}¿¡。、！？：；，]+|[\s.,!?;:…'"“”‘’«»()[\]{}¿¡。、！？：；，]+$/gu,
+      "",
+    ) || normalized
+  );
+}
 export const TextResponseValueSchema = z
   .string()
   .max(10_000)

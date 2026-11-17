@@ -48,6 +48,10 @@
   gap: 18px;
 }
 
+.primary .resultsStage > [data-variant="participant"] {
+  max-width: none;
+}
+
 .stage > *,
 .workspace > *,
 .primary > * {
@@ -336,7 +340,7 @@
 
 @media (min-width: 1101px) {
   .stage[data-phase="finished"] .workspace[data-has-sidebar="true"] {
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.3fr);
   }
 }
 
@@ -349,6 +353,14 @@
   .workspace {
     gap: 18px;
     grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .stage[data-phase="finished"] .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage[data-phase="finished"] .sidebar {
+    position: static;
   }
 
   .card:global(.live-card) {

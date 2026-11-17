@@ -107,15 +107,16 @@ describe("participant side rail visibility", () => {
     }
   });
 
-  it("ends Pulse/chat while preserving final standings and Q&A", () => {
+  it("leaves final standings to the primary stage and keeps Q&A accessible", () => {
     const state = snapshot({ phase: "finished", roundKind: "linked_recheck" });
-    expect(participantSidebarTabs(state)).toEqual(["standings", "qna"]);
-    render(state);
+    expect(participantSidebarTabs(state)).toEqual(["qna"]);
+    const markup = render(state);
     expect(panels.audience).not.toHaveBeenCalled();
-    expect(panels.standings).toHaveBeenCalledWith(
-      expect.objectContaining({ finished: true, compact: false }),
-    );
+    expect(panels.standings).not.toHaveBeenCalled();
     expect(panels.qna).toHaveBeenCalledOnce();
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain(">Q&amp;A</button>");
+    expect(markup).not.toContain(' hidden=""');
   });
 
   it("passes private receipts, participant authorization and realtime revisions through", () => {

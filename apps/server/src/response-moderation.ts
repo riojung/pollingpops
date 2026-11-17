@@ -1,7 +1,9 @@
 import {
   normalizeTextResponse,
+  liveWordCloudGroupKey,
   type RoundResponseModerationPage,
   type RoundTextResponseResults,
+  type RoundLiveWordCloudResults,
 } from "@openround/contracts";
 import {
   approvedTextResponseDistribution,
@@ -148,6 +150,53 @@ export function approvedTextAnswerIds(state: GameState, roundId: string) {
   return metadata(state, roundId)
     .filter((entry) => entry.status === "approved")
     .map((entry) => entry.answerId);
+}
+
+/** Live-only phrase frequencies. Never used to change stored, moderated report distributions. */
+export function liveWordCloudResults(
+  state: GameState,
+  roundId: string,
+  answers: EngineAnswer[],
+): RoundLiveWordCloudResults {
+  const round = state.rounds[roundId];
+  const question = round && state.quiz.questions.find((entry) => entry.id === round.questionId);
+  if (!round || question?.type !== "word_cloud")
+    throw new TextResponseReadError("NOT_FOUND", "Word cloud checkpoint not found in this session");
+  if (state.settings.wordCloudMode !== "live")
+    throw new TextResponseReadError("CONFLICT", "This room uses moderated word cloud results");
+  const seen = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const answer of [...answers].sort(
+    (a, b) => a.acceptedAtMs - b.acceptedAtMs || a.answerId.localeCompare(b.answerId),
+  )) {
+    if (
+      answer.roundId !== roundId ||
+      answer.response.kind !== "text" ||
+      seen.has(answer.participantId) ||
+      !isApprovedTextAnswer(answer, state.responseModeration, question.id)
+    )
+      continue;
+    try {
+      const value = normalizeTextResponse(answer.response.value, "word_cloud");
+      seen.add(answer.participantId);
+      const key = liveWordCloudGroupKey(value);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    } catch {
+      // Invalid retained bodies never become public aggregate evidence.
+    }
+  }
+  return {
+    sessionId: state.sessionId,
+    roundId,
+    version: state.version,
+    mode: "live",
+    respondents: seen.size,
+    totalTerms: counts.size,
+    truncated: false,
+    terms: [...counts]
+      .sort(([left, a], [right, b]) => b - a || (left < right ? -1 : left > right ? 1 : 0))
+      .map(([value, count]) => ({ value, label: value, count })),
+  };
 }
 
 export function textResults(

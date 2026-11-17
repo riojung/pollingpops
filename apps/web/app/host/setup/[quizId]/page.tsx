@@ -34,6 +34,7 @@ import {
   roundLaunchExperience,
 } from "../../../../lib/round-launch-experience";
 import { confidenceControlCopy } from "../../../../lib/i18n/confidence-control-copy";
+import { liveWordCloudCopy } from "../../../../lib/i18n/live-word-cloud-copy";
 import {
   defaultSetupSettings,
   resolveSetupRecipe,
@@ -98,6 +99,7 @@ export default function HostSetupPage() {
   );
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
   const [settings, setSettings] = useState<SessionSettings | null>(null);
+  const [wordCloudMode, setWordCloudMode] = useState<"live" | "moderated">("live");
   const [experienceOverride, setExperienceOverride] = useState<ExperiencePresetId | null>(null);
   const [presenterSoundEnabled, setPresenterSoundEnabled] = useState(false);
   const [uxBeta, setUxBeta] = useState(false);
@@ -293,6 +295,9 @@ export default function HostSetupPage() {
         quizId: quiz.id,
         settings: {
           ...settings,
+          ...(publishedContent.questions.some((question) => question.type === "word_cloud")
+            ? { wordCloudMode }
+            : {}),
           ...(!launchFeatures?.liveFlexMode ? { timeMode: "timed" } : {}),
         },
         clientCapabilities: currentRoundClientCapabilities(),
@@ -377,6 +382,39 @@ export default function HostSetupPage() {
               <p className="muted" lang={locale}>
                 {t("live.text.roomCapacity", { limit: TEXT_RESPONSE_MAX_PER_ROUND })}
               </p>
+            ) : null}
+            {publishedContent?.questions.some((question) => question.type === "word_cloud") ? (
+              <fieldset className="panel" data-testid="word-cloud-mode">
+                <legend>{liveWordCloudCopy(locale, "modeLabel")}</legend>
+                <label className="checkbox-field">
+                  <input
+                    type="radio"
+                    name="wordCloudMode"
+                    value="live"
+                    checked={wordCloudMode === "live"}
+                    onChange={() => setWordCloudMode("live")}
+                  />
+                  <span>
+                    <strong>{liveWordCloudCopy(locale, "liveMode")}</strong>
+                    <br />
+                    {liveWordCloudCopy(locale, "modeHelp")}
+                  </span>
+                </label>
+                <label className="checkbox-field">
+                  <input
+                    type="radio"
+                    name="wordCloudMode"
+                    value="moderated"
+                    checked={wordCloudMode === "moderated"}
+                    onChange={() => setWordCloudMode("moderated")}
+                  />
+                  <span>
+                    <strong>{liveWordCloudCopy(locale, "moderatedMode")}</strong>
+                    <br />
+                    {liveWordCloudCopy(locale, "moderatedHelp")}
+                  </span>
+                </label>
+              </fieldset>
             ) : null}
             {uxBeta ? (
               <section className="panel setup-recipes" data-testid="session-setup">

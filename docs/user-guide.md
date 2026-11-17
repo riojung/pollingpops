@@ -9,7 +9,7 @@ For a local first run, complete the [quick start](quick-start.md) first.
 The Core-Parity foundation includes gated Presentation Q&A and a gated self-paced Survey beta
 using single- or multiple-selection opinion polls and ratings. Presentation replies/chat/Pulse,
 Q&A-only feedback rooms and advanced feedback exports remain pending. Live Rounds support gated
-multiple-selection polls, ranking, moderated open text and word clouds.
+multiple-selection polls, ranking, moderated open text and live or moderated word clouds.
 Presentations also support multiple-selection opinion polls and full/top-N rankings after the
 matching release is deployed. Moderated open text and word clouds additionally require the
 document-v10/response-v3/report-V5 release and migration 092.
@@ -370,6 +370,11 @@ phase; finishing retains the final podium and personal result after refresh. Int
 rechecks pause the audience race view. Private results remain private, and opinion-only polls
 show an unscored explanation without winners. See the [competition dashboard guide](idea-016-competition-dashboard-plan.md).
 
+After finishing, participant devices show final standings in the main results area, with Q&A
+beside it on a wide screen or below it on a phone. Selecting Q&A cannot hide the final leaderboard.
+The participant's saved-answer receipt remains available below the result stage. Private results
+show only that participant's completion details.
+
 Switch between **Race view** and **Table view** to compare released scores. The dashboard highlights
 the biggest climb, the latest scored-question gain and correct streaks without bonus points.
 The host keeps a compact standings summary beside the question flow; **Show standings** and the
@@ -387,6 +392,31 @@ visual sequence without changing scores or ranks. Motion effects are saved for y
 device and **Display & sound → Reduce motion** settings take precedence and keep a static finish.
 Turning motion off explains why replay is unavailable. Tied results retain their tie labels;
 single-person, zero-point, unrevealed and opinion-only results do not invent a winning celebration.
+
+### Build a live Word Cloud
+
+Add a **Word cloud** question, ask for one word or short phrase, and publish the Round. On the
+launch screen, **Build cloud live** is selected by default. **Review before showing** keeps the
+facilitator-approval workflow instead. This choice is frozen for that room; older rooms keep their
+existing moderation policy.
+
+In live mode, the first saved response appears immediately while the question is open. Every
+joined participant can contribute once. Matching phrases combine without splitting them into
+individual words: case, extra whitespace and surrounding sentence punctuation are normalized.
+For example, “Better team communication!” and “better team communication” form one cluster.
+Meaningful distinctions such as **C++** and **C#** remain separate.
+
+New phrases enter the cloud and repeated phrases grow and move as responses arrive. Device/app
+reduced motion shows the same counts without animation. The visual shows the 40 most frequent
+phrases to stay readable; **View exact counts** includes all collected groups, up to the room's
+250 responses. Host, presenter and participant views update automatically. The host can remove a
+response from **Visible responses** in the moderation panel; removed responses disappear from
+the live aggregate. A final cloud remains visible when its question ends the Round.
+
+Live clouds are public aggregates from the first contribution. Participants are reminded to avoid
+private information. Open text and moderated clouds keep their approval, reveal and threshold of
+five approved respondents. Historical reports keep those evidence thresholds even when the live cloud
+was shown to a smaller group. Word clouds are unscored and do not create a winner leaderboard.
 
 ## Sign in and workspace access
 
@@ -458,7 +488,7 @@ Edit the prompt and responses directly. Choice answers use multiline fields, let
 separate correctness controls, and a trash button for each removable answer. At least two answers
 must remain, with a maximum of six. Numeric questions expose the correct value, absolute tolerance,
 and optional unit; ratings expose both endpoints and their labels. Open text and word clouds show
-their response limits and moderation guidance.
+their response limits and display-policy guidance.
 
 The nine response types are:
 

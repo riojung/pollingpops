@@ -13,6 +13,7 @@ import {
 } from "../lib/text-response-client";
 import { useLocale } from "./locale-provider";
 import { localizeQnaModerationError } from "../lib/i18n/qna-moderation-copy";
+import { liveWordCloudCopy } from "../lib/i18n/live-word-cloud-copy";
 
 export function TextModerationPanel({
   sessionId,
@@ -23,6 +24,7 @@ export function TextModerationPanel({
   disabled,
   onModerate,
   freshness = 0,
+  liveWordCloud = false,
 }: {
   sessionId: string;
   roundId?: string | null;
@@ -31,11 +33,14 @@ export function TextModerationPanel({
   credential: string;
   freshness?: number;
   disabled: boolean;
+  liveWordCloud?: boolean;
   onModerate: (answerId: string, responseStatus: "approved" | "removed") => void;
 }) {
   const { locale, t } = useLocale();
   const [scope, setScope] = useState<"current" | "all">("current");
   const [status, setStatus] = useState<"pending" | "approved" | "removed">("pending");
+  const liveScope = liveWordCloud && scope === "current";
+  const activeStatus = liveScope && status === "pending" ? "approved" : status;
   const [cursor, setCursor] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<string | null>>([]);
   const [retry, setRetry] = useState(0);
@@ -46,7 +51,7 @@ export function TextModerationPanel({
     version,
     phase,
     scope,
-    status,
+    activeStatus,
     cursor,
     retry,
     freshness,
@@ -58,14 +63,14 @@ export function TextModerationPanel({
   useEffect(() => {
     setCursor(null);
     setHistory([]);
-  }, [sessionId, roundId, version, credential, status, scope]);
+  }, [sessionId, roundId, version, credential, activeStatus, scope]);
   useEffect(() => {
     setState({ key, credential, data: null, error: "" });
     if (!credential || finished) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       const query = new URLSearchParams({
-        status,
+        status: activeStatus,
         limit: "10",
         clientCapabilities: JSON.stringify(currentRoundClientCapabilities()),
         ...(scope === "current" && roundId ? { roundId } : {}),
@@ -99,12 +104,26 @@ export function TextModerationPanel({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [sessionId, roundId, version, phase, credential, status, scope, cursor, retry, finished, key]);
+  }, [
+    sessionId,
+    roundId,
+    version,
+    phase,
+    credential,
+    activeStatus,
+    scope,
+    cursor,
+    retry,
+    finished,
+    key,
+  ]);
 
   return (
     <section lang={locale} className="distribution-card" aria-label={t("live.text.moderation")}>
       <h2 style={{ fontSize: "1.2rem" }}>{t("live.text.moderation")}</h2>
-      <p className="muted">{t("live.text.moderationHelp")}</p>
+      <p className="muted">
+        {liveScope ? liveWordCloudCopy(locale, "modeHelp") : t("live.text.moderationHelp")}
+      </p>
       {finished ? (
         <p className="notice">{t("live.text.moderationClosed")}</p>
       ) : (
@@ -130,15 +149,20 @@ export function TextModerationPanel({
             </div>
           ) : null}
           <div className="button-row" role="group" aria-label={t("live.text.filter")}>
-            {(["pending", "approved", "removed"] as const).map((value) => (
+            {(liveScope
+              ? (["approved", "removed"] as const)
+              : (["pending", "approved", "removed"] as const)
+            ).map((value) => (
               <button
                 className="button-quiet small-button"
                 type="button"
                 key={value}
-                aria-pressed={status === value}
+                aria-pressed={activeStatus === value}
                 onClick={() => setStatus(value)}
               >
-                {t(`live.text.status.${value}`)}
+                {liveScope && value === "approved"
+                  ? liveWordCloudCopy(locale, "visible")
+                  : t(`live.text.status.${value}`)}
               </button>
             ))}
           </div>

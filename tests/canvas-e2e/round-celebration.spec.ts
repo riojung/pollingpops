@@ -275,14 +275,27 @@ for (const suffix of ["", " @mobile"]) {
         await expect(dashboard(audience)).not.toHaveAttribute("data-celebrating", "true");
       }
 
-      // Finish through the real server while neither of these dashboards can be seen.
+      // Keep Q&A selected through the finish; final standings must move onto the primary stage.
       await participant.getByRole("tab", { name: "Q&A", exact: true }).click();
+      // Keep the final podium offscreen until its visibility behavior is checked below.
+      await participant.setViewportSize({ width: suffix ? 390 : 1280, height: 200 });
+      await participant.evaluate(() => window.scrollTo(0, 0));
       await host.setViewportSize({ width: 1280, height: 200 });
       await host.evaluate(() => window.scrollTo(0, 0));
       expect((await command(host, room, "next")).phase).toBe("finished");
       await expect(host.getByTestId("host-session")).toHaveAttribute("data-phase", "finished");
       await expect(dashboard(host)).not.toBeInViewport();
-      await expect(dashboard(participant)).toBeHidden();
+      await expect(dashboard(participant)).toBeVisible();
+      await expect(
+        participant.getByTestId("participant-final-results").getByTestId("competition-dashboard"),
+      ).toBeVisible();
+      await expect(dashboard(participant).getByTestId("competition-stage")).not.toBeInViewport();
+      await expect(participant.getByRole("tab", { name: "Standings", exact: true })).toHaveCount(0);
+      await expect(participant.getByRole("tab", { name: "Q&A", exact: true })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await expect(participant.getByTestId("scored-response-receipt")).toHaveCount(1);
       const hostAllStandings = dashboard(host)
         .locator("details")
         .filter({
@@ -376,8 +389,8 @@ for (const suffix of ["", " @mobile"]) {
         await showFinale(dashboard(host));
         await expect(dashboard(host)).toHaveAttribute("data-celebration-run", "1");
       }
+      await participant.setViewportSize({ width: suffix ? 390 : 1280, height: suffix ? 844 : 900 });
       await participant.bringToFront();
-      await participant.getByRole("tab", { name: "Standings", exact: true }).click();
       const root = dashboard(participant);
       await showFinale(root);
       await expect(root).toHaveAttribute("data-status", "final");
@@ -408,13 +421,24 @@ for (const suffix of ["", " @mobile"]) {
         await expect.poll(() => runningAnimations(root.getByTestId(testId))).toBeGreaterThan(0);
       }
 
-      const beforeInterruption = Number(await root.getAttribute("data-celebration-run"));
-      await participant.getByRole("tab", { name: "Q&A", exact: true }).click();
-      await expect(root).toBeHidden();
-      await expect(root).not.toHaveAttribute("data-celebrating", "true");
-      await participant.getByRole("tab", { name: "Standings", exact: true }).click();
+      const beforeQna = await root.getAttribute("data-celebration-run");
+      const qnaTab = participant.getByRole("tab", { name: "Q&A", exact: true });
+      // Keyboard interaction with the side tool must not hide or remount a playing finale.
+      // Keep the viewport still here so mobile scrolling does not interrupt playback.
+      await qnaTab.evaluate((button) =>
+        (button as HTMLButtonElement).focus({ preventScroll: true }),
+      );
+      await qnaTab.press("Enter");
+      await expect(root).toBeVisible();
+      await expect(root).toHaveAttribute("data-celebration-run", beforeQna!);
+      await expect(qnaTab).toHaveAttribute("aria-selected", "true");
+      await expect(root).not.toHaveAttribute("data-celebrating", "true", { timeout: 7_000 });
+      // Visiting Q&A after playback also keeps completed results and their controls intact.
+      await qnaTab.click();
+      await expect(root).toBeVisible();
       await showFinale(root);
-      await expect(root).toHaveAttribute("data-celebration-run", String(beforeInterruption + 1));
+      await expect(root).toHaveAttribute("data-celebration-run", beforeQna!);
+      await expectStill(root);
       expect(await scoreboardControl!.evaluate((button) => button.isConnected)).toBe(true);
       await expect(allStandings).toHaveAttribute("open", "");
       await allStandings.locator("summary").click();

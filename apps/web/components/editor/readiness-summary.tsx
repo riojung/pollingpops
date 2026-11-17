@@ -1,6 +1,7 @@
 import type { RoundReadinessIssue } from "../../lib/round-readiness";
 import styles from "./round-builder.module.css";
 import { useLocale } from "../locale-provider";
+import { roundWorkspaceCopy } from "../../lib/i18n/round-workspace-copy";
 
 export function ReadinessSummary({
   issues,
@@ -14,6 +15,7 @@ export function ReadinessSummary({
   onSelectIssue: (issue: RoundReadinessIssue) => void;
 }) {
   const { locale, t } = useLocale();
+  const copy = roundWorkspaceCopy(locale);
   const ready = issues.length === 0;
   const localizedAction =
     action === "preview"
@@ -56,21 +58,24 @@ export function ReadinessSummary({
           <span className="sr-only" lang="en-CA">
             Source: {issues[0]?.source}. How to fix: {issues[0]?.resolution}
           </span>
-          <div className={styles.issueList}>
-            {issues.map((issue) => (
-              <button
-                className={styles.issueButton}
-                key={issue.id}
-                lang="en-CA"
-                onClick={() => onSelectIssue(issue)}
-                title={issue.resolution}
-                type="button"
-              >
-                {issue.source}: {issue.resolution}
-              </button>
-            ))}
-          </div>
-          <small lang="en-CA">Your in-progress draft is still saved automatically.</small>
+          <details className={styles.readinessDetails} open={Boolean(action)}>
+            <summary>{copy("Review required fixes")}</summary>
+            <div className={styles.issueList}>
+              {issues.map((issue) => (
+                <button
+                  className={styles.issueButton}
+                  key={issue.id}
+                  lang="en-CA"
+                  onClick={() => onSelectIssue(issue)}
+                  title={issue.resolution}
+                  type="button"
+                >
+                  {issue.source}: {issue.resolution}
+                </button>
+              ))}
+            </div>
+            <small>{copy("Draft edits are saved automatically.")}</small>
+          </details>
         </>
       ) : null}
     </section>

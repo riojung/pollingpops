@@ -99,10 +99,13 @@ describe("editor views", () => {
           onSelectQuestion={noopUpdate}
         />,
       );
-    expect(nav(false, 1)).not.toContain('<option value="open_text">');
-    expect(nav(false, 1)).not.toContain('<option value="word_cloud">');
-    expect(nav(true, 1)).toMatch(/<option value="open_text"[^>]*>Open text<\/option>/);
-    expect(nav(true, 10)).toMatch(/disabled=""[^>]*>Add question/);
+    expect(nav(false, 1)).not.toContain("<strong>Open text</strong>");
+    expect(nav(false, 1)).not.toContain("<strong>Word cloud</strong>");
+    expect(nav(true, 1)).toContain("<strong>Open text</strong>");
+    expect(nav(true, 10)).toMatch(
+      /<button[^>]*disabled=""[^>]*>[\s\S]*?<strong>Open text<\/strong>/,
+    );
+    expect(nav(true, 10)).toContain("Use up to 10 open-text or word-cloud questions in one Round.");
     const editor = renderLocalized(
       <ResponseEditor
         question={text}
@@ -112,7 +115,8 @@ describe("editor views", () => {
         onUpdateQuestion={noopUpdate}
       />,
     );
-    expect(editor).toContain("up to 1000 characters");
+    expect(editor).toContain("Up to 1,000 characters per response");
+    expect(editor).toContain("Responses need moderator approval before appearing to the audience.");
     expect(editor).not.toContain("Minimum");
     const preview = renderLocalized(<ParticipantPreview question={text} />);
     expect(preview).toContain("Your response");
@@ -155,8 +159,8 @@ describe("editor views", () => {
           onSelectQuestion={noopUpdate}
         />,
       );
-    expect(navigation(false)).not.toContain('<option value="ranking">');
-    expect(navigation(true)).toContain('<option value="ranking">Ranking</option>');
+    expect(navigation(false)).not.toContain("<strong>Ranking</strong>");
+    expect(navigation(true)).toContain("<strong>Ranking</strong>");
     const editor = renderLocalized(
       <ResponseEditor
         question={ranking}
@@ -172,7 +176,7 @@ describe("editor views", () => {
     expect(editor).not.toContain("Diagnostic rationale");
     expect(
       renderLocalized(<DeliveryScoring question={ranking} onUpdateQuestion={noopUpdate} />),
-    ).toContain('<select class="select" disabled=""');
+    ).toMatch(/<select\b[^>]*\bdisabled=""/);
     const preview = renderLocalized(<ParticipantPreview question={ranking} />);
     expect(preview).toContain("Your ranking");
     expect(preview).toContain('aria-label="Move down: Model A"');
@@ -237,8 +241,10 @@ describe("editor views", () => {
       />,
     );
 
-    expect(markup).toContain('id="insert-question-type"');
-    expect(markup).toContain('id="insert-question-guidance"');
+    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain("Choose a question type");
+    expect(markup).toContain("Test knowledge");
+    expect(markup).toContain("Collect opinions");
     expect(markup).toContain("A numeric answer with optional tolerance and unit.");
     expect(markup).toContain("Add question");
     expect(markup).toContain("Reuse from your workspace");
@@ -247,8 +253,10 @@ describe("editor views", () => {
     expect(markup).toContain('aria-current="true"');
     expect(markup).toContain("Which model fits the new evidence?");
     expect(markup).toContain('<span lang="">Which model fits the new evidence?</span>');
-    expect(markup).toContain("Single select · recheck");
-    expect(markup).toMatch(/aria-label="Question 1 actions"[^>]*lang="en-CA"/);
+    expect(markup).toContain("Single select");
+    expect(markup).toContain(">recheck</span>");
+    expect(markup).toContain('aria-label="Question 2 actions"');
+    expect(markup).not.toContain('aria-label="Question 1 actions"');
   });
 
   it("preserves the feature-off checkpoint navigator", () => {
@@ -273,7 +281,7 @@ describe("editor views", () => {
     expect(markup).not.toContain("Collapse question map");
   });
 
-  it("renders diagnostic details as a beta disclosure without exposing IDs as labels", () => {
+  it("groups diagnostic controls by purpose, concepts, and paired recheck without exposing IDs as labels", () => {
     const markup = renderLocalized(
       <DiagnosticDetails
         onUpdateQuestion={noopUpdate}
@@ -284,7 +292,8 @@ describe("editor views", () => {
     );
 
     expect(markup).toContain('id="question-diagnostic-details"');
-    expect(markup).toContain("Diagnostic details and recheck link");
+    expect(markup).toContain("Purpose and confidence");
+    expect(markup).toContain("Concept tags");
     expect(markup).toContain("Paired recheck question");
     expect(markup).toMatch(/<option lang="" value="22222222-2222-4222-8222-222222222222"[^>]*>/);
     expect(markup).toContain("Which model fits the new evidence?");
@@ -293,7 +302,7 @@ describe("editor views", () => {
     expect(markup).toMatch(
       /<option lang="en-CA" value="optional" selected="">On \(optional\)<\/option>/,
     );
-    expect(markup).toContain("You can answer without choosing a confidence level.");
+    expect(markup).toContain("Confidence does not affect scores.");
   });
 
   it("keeps legacy diagnostic controls expanded when the beta is off", () => {

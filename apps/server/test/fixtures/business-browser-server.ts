@@ -88,6 +88,8 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
       uxBeta: { enabled: true, plans: ["free", "pro", "team"] },
       workspaceShell: { enabled: true, plans: ["free", "pro", "team"] },
       builderV2: { enabled: true, plans: ["free", "pro", "team"] },
+      roundClientProtocol: { enabled: true, plans: ["free", "pro", "team"] },
+      questionHealth: { enabled: true, plans: ["free", "pro", "team"] },
       groups: { enabled: true, plans: ["free", "pro", "team"] },
       practiceAssignments: { enabled: true, plans: ["free", "pro", "team"] },
       presentations: { enabled: true, plans: ["free", "pro", "team"] },

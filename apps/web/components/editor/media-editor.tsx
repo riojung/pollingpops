@@ -3,6 +3,7 @@ import type { QuestionUpdater } from "./types";
 import { useLocale } from "../locale-provider";
 import { authoringWorkflowCopy } from "./authoring-workflow-copy";
 import { creatorWorkflowCopy } from "./creator-workflow-copy";
+import { roundToolsCopy } from "../../lib/i18n/round-tools-copy";
 import styles from "./media-editor.module.css";
 
 export type MediaEditorState = "idle" | "uploading" | "scanning";
@@ -31,6 +32,8 @@ export function MediaEditor({
   const { t, locale } = useLocale();
   const copy = creatorWorkflowCopy(locale);
   const authoring = authoringWorkflowCopy(locale);
+  const toolsCopy = roundToolsCopy(locale);
+  const attached = Boolean(question.mediaId || mediaPreviewUrl);
   return (
     <details
       className={styles.container}
@@ -40,12 +43,24 @@ export function MediaEditor({
       }
     >
       <summary className={styles.summary}>
-        {question.mediaId || mediaPreviewUrl ? copy.imageSettings : copy.addImage}
+        <span>{attached ? copy.imageSettings : copy.addImage}</span>
+        {uxBeta && attached ? (
+          <span
+            className={styles.altStatus}
+            data-complete={Boolean(question.mediaAlt?.trim())}
+            lang={locale}
+          >
+            {toolsCopy(question.mediaAlt?.trim() ? "Alt text added" : "Alt text needed")}
+          </span>
+        ) : null}
       </summary>
       <div className={`media-editor ${styles.editor}`} data-has-preview={Boolean(mediaPreviewUrl)}>
         <div className={`field ${styles.fields}`}>
-          <label htmlFor="media-alt">{t("delivery.builder.media")}</label>
+          <label htmlFor="media-alt">
+            {uxBeta ? toolsCopy("Alternative text") : t("delivery.builder.media")}
+          </label>
           <input
+            aria-describedby={uxBeta ? "media-alt-help" : undefined}
             className="input"
             id="media-alt"
             lang={question.mediaAlt ? "" : locale}
@@ -59,6 +74,11 @@ export function MediaEditor({
             placeholder={authoring.imageAlt}
             value={question.mediaAlt ?? ""}
           />
+          {uxBeta ? (
+            <small className={styles.help} id="media-alt-help" lang={locale}>
+              {toolsCopy("Describe the image information needed to answer the question.")}
+            </small>
+          ) : null}
           <label className={uxBeta ? undefined : "sr-only"} htmlFor="media-upload" lang={locale}>
             {authoring.chooseImage}
           </label>
@@ -97,7 +117,20 @@ export function MediaEditor({
               src={mediaPreviewUrl}
               width={640}
             />
-            <button className="danger-link" onClick={onRemoveImage} type="button">
+          </div>
+        ) : null}
+        {attached ? (
+          <div className={styles.imageActions}>
+            {!mediaPreviewUrl ? (
+              <span className={styles.help} lang={locale}>
+                {toolsCopy("Image attached. Preview unavailable.")}
+              </span>
+            ) : null}
+            <button
+              className={`danger-link ${styles.remove}`}
+              onClick={onRemoveImage}
+              type="button"
+            >
               {t("delivery.builder.removeImage")}
             </button>
           </div>

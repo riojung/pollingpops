@@ -261,6 +261,27 @@ facilitator can still review the staff dashboard. Rechecks and revotes remain un
 standings retain the top-three podium, disclosed ties and each participant's own rank and score
 gaps. See the [competition dashboard](idea-016-competition-dashboard-plan.md).
 
+#### Final-standings celebration (2026-11-17)
+
+Finale effects start when the final dashboard is actually viewed in an active tab, rather than
+when a background snapshot mounts it. An interrupted sequence can play on return; completed
+effects do not restart for presence updates or ordinary scrolling. A visible replay control
+restarts the podium, finish halo, score-relative runner sweep and bounded two-sided confetti
+together. No effect hides names or final scores, changes server-owned rank, blocks input, adds
+sound, flashes or loops indefinitely. Each sequence settles within 4.4 seconds.
+
+Multi-participant scored finishes use the same race/table choice on phones and the shared display.
+Single-participant, zero-point, unscored and unrevealed results remain modest, with no fabricated
+winner. Ties remain explicit. Device/app reduced motion and the local effects choice override
+decorative playback; a static finish retains the same results and explains disabled replay.
+
+Research references: [Kahoot's podium access from reports](https://support.kahoot.com/hc/en-us/articles/360035063054-Kahoot-quiz-reports)
+supports making the finish easy to revisit; its [Missions results reveal](https://support.kahoot.com/hc/en-us/articles/44749018875923-How-to-use-Kahoot-Missions)
+uses a distinct animated finish. [Mentimeter's Quiz Competition](https://help.mentimeter.com/en/articles/410463-how-to-create-a-quiz-competition)
+separates cumulative scoring from a final leaderboard reveal. Polling Pops applies that deliberate
+finish and replay pattern with original CSS/SVG artwork, immediate readable results and local
+accessibility controls; no competitor assets, audio or scoring mechanics are copied.
+
 ### Prove, carefully
 
 Reports show initial evidence, confidence × correctness, misconception distribution,

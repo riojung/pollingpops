@@ -405,15 +405,19 @@ test("competition standings release after reveal and remain on the final project
     const presenterDashboard = dashboard(presenter);
     await presenterDashboard.getByTestId("competition-display-options").locator("summary").click();
     const motion = presenterDashboard.getByTestId("competition-motion-toggle");
-    const replay = presenterDashboard.getByTestId("competition-replay");
+    const visibleReplay = presenterDashboard.getByTestId("competition-replay");
     await expect(motion).toBeEnabled();
     await expect(motion).toHaveAttribute("aria-pressed", "true");
-    await expect(replay).toBeEnabled();
+    await expect(visibleReplay).toBeVisible();
+    await expect(visibleReplay).toBeEnabled();
+    const replayBefore = Number(await presenterDashboard.getAttribute("data-celebration-run"));
+    await visibleReplay.click();
+    await expect(presenterDashboard).toHaveAttribute(
+      "data-celebration-run",
+      String(replayBefore + 1),
+    );
     const celebration = presenterDashboard.getByTestId("competition-celebration");
     await expect(celebration).toHaveAttribute("aria-hidden", "true");
-    const replayBefore = Number(await celebration.getAttribute("data-replay"));
-    await replay.click();
-    await expect(celebration).toHaveAttribute("data-replay", String(replayBefore + 1));
     await expectPodium(presenter, ["3,000", "1,000", "0"], ["Bea", "Ada", "Cy"]);
     await presenterDashboard.getByRole("button", { name: "Table view", exact: true }).click();
     await expect(presenterDashboard.getByRole("table")).toBeVisible();
@@ -424,7 +428,7 @@ test("competition standings release after reveal and remain on the final project
     await expect(presenterDashboard.getByTestId("competition-race")).toBeVisible();
     await motion.click();
     await expect(motion).toHaveAttribute("aria-pressed", "false");
-    await expect(replay).toBeDisabled();
+    await expect(visibleReplay).toBeDisabled();
     await presenter.reload();
     await expect(dashboard(presenter).getByTestId("competition-motion-toggle")).toHaveAttribute(
       "aria-pressed",

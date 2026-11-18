@@ -118,7 +118,7 @@ function elements(node: ReactNode): Array<ReactElement<Record<string, unknown>>>
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
-function harness(survey = false, compact = true) {
+function harness(survey = false, compact = true, collection: "team-meetings" | null = null) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
   return {
@@ -126,13 +126,19 @@ function harness(survey = false, compact = true) {
       hooks.cursor = 0;
       mocked.hooks = hooks;
       try {
-        tree = StarterGallery({ survey, compact });
+        tree = StarterGallery({ survey, compact, collection });
       } finally {
         mocked.hooks = null;
       }
       for (const effect of hooks.effects.splice(0)) effect();
     },
     markup: () => renderToStaticMarkup(tree),
+    changeCollection(next: "team-meetings" | null) {
+      collection = next;
+    },
+    searchValue: () =>
+      elements(tree).find((element) => element.type === "input" && element.props.type === "search")
+        ?.props.value,
     preview() {
       const found = elements(tree).find((element) => element.type === StarterTemplatePreview);
       if (!found) throw new Error("Missing preview");
@@ -244,6 +250,137 @@ describe("creation-locale starter gallery", () => {
     }
     view.render();
   }
+
+  describe("collection changes during a copy", () => {
+    function source(survey: boolean) {
+      const member = {
+        ...summary("ko-KR"),
+        id: survey ? "team-collaboration" : "meeting-priorities",
+      } as StarterSummary;
+      const content = draft("ko-KR");
+      return {
+        member,
+        catalog: survey
+          ? { templates: [member, summary("ko-KR")] }
+          : { starters: [member, summary("ko-KR")] },
+        preview: {
+          draft: survey
+            ? {
+                ...content,
+                schemaVersion: 2,
+                items: [{ question: content.questions[0], required: false }],
+              }
+            : content,
+        },
+      };
+    }
+
+    it.each([false, true])(
+      "keeps the busy guard and successful navigation across collection changes (Survey=%s)",
+      async (survey) => {
+        const pending = deferred<unknown>();
+        const fixture = source(survey);
+        mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+          if (options?.method === "POST") return pending.promise;
+          return url.includes("templates?") || url.startsWith("/v1/starters?")
+            ? fixture.catalog
+            : fixture.preview;
+        });
+        const view = harness(survey, false, "team-meetings");
+        await ready(view);
+        view.preview().onUse!();
+        view.changeCollection(null);
+        await ready(view);
+        expect(view.preview().useDisabled).toBe(true);
+        view.preview().onUse!();
+        view.changeCollection("team-meetings");
+        await ready(view);
+        view.preview().onUse!();
+        expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(
+          1,
+        );
+        pending.resolve(survey ? { survey: { id: "one-copy" } } : { quiz: { id: "one-copy" } });
+        await settle();
+        expect(mocked.push).toHaveBeenCalledExactlyOnceWith(
+          survey ? "/surveys/one-copy" : "/quiz/one-copy",
+        );
+      },
+    );
+
+    it("retains a failed Survey intent and resets browsing filters across both collection directions", async () => {
+      const pending = deferred<unknown>();
+      const fixture = source(true);
+      let attempts = 0;
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") {
+          if (++attempts === 1) throw new Error("Acknowledgement lost");
+          return pending.promise;
+        }
+        return url.includes("templates?") ? fixture.catalog : fixture.preview;
+      });
+      const view = harness(true, false);
+      await ready(view);
+      view.preview().onUse!();
+      await settle();
+      view.changeSearch("No matching templates");
+      await ready(view);
+      expect(view.markup()).toContain("starter.noMatches");
+      view.changeCollection("team-meetings");
+      await ready(view);
+      expect(view.searchValue()).toBe("");
+      expect(view.preview().id).toBe(fixture.member.id);
+      expect(view.preview().actionError).toBe("Acknowledgement lost");
+      view.preview().onUse!();
+      const requests = mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST");
+      expect(requests).toHaveLength(2);
+      expect(requests[1]![1].body).toBe(requests[0]![1].body);
+      view.changeSearch("No matching templates");
+      await ready(view);
+      view.changeCollection(null);
+      await ready(view);
+      expect(view.searchValue()).toBe("");
+      expect(view.preview().useDisabled).toBe(true);
+      pending.resolve({ survey: { id: "original-copy" } });
+      await settle();
+      expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/surveys/original-copy");
+    });
+  });
+
+  it.each([false, true])(
+    "filters the collection before automatic preview and matching counts (Survey=%s)",
+    async (survey) => {
+      const originals: StarterSummary[] = [
+        { ...summary("ko-KR"), id: "meeting-priorities", title: "Meeting priorities" },
+        { ...summary("ko-KR"), id: "team-retrospective", title: "Team retrospective" },
+        { ...summary("ko-KR"), id: "team-collaboration", title: "How we work together" },
+        summary("ko-KR"),
+      ];
+      mocked.fetch.mockImplementation(async (url: string) => {
+        if (url.startsWith("/v1/starters?")) return { starters: originals };
+        if (url.startsWith("/v1/surveys/templates?")) return { templates: originals };
+        return {
+          draft: survey
+            ? { items: [{ question: draft("ko-KR").questions[0], required: false }] }
+            : draft("ko-KR"),
+        };
+      });
+      const view = harness(survey, false, "team-meetings");
+      await ready(view);
+      const html = view.markup();
+      expect(html.match(/data-template-id=/g)).toHaveLength(survey ? 1 : 2);
+      expect(html).not.toContain('data-template-id="training-feedback"');
+      expect(view.preview().id).toBe(survey ? "team-collaboration" : "meeting-priorities");
+      expect(
+        mocked.fetch.mock.calls.every(
+          ([url, options]) => !url.includes("training-feedback") && !options?.method,
+        ),
+      ).toBe(true);
+      view.changeSearch("missing topic");
+      await ready(view);
+      expect(view.markup()).toContain("starter.noMatches");
+      expect(view.markup()).not.toContain("starter-preview-");
+    },
+  );
 
   it("browses summaries beside the full selected preview without writes, then creates one independent Round copy", async () => {
     const pending = deferred<{ quiz: { id: string } }>();

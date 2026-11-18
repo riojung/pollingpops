@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ContentSlideDraft, PresentationDraft, SupportedLocale } from "@openround/contracts";
+import type {
+  ContentSlideDraft,
+  PresentationDraft,
+  SupportedLocale,
+  StarterGuide,
+} from "@openround/contracts";
 import {
   isNativePresentationTemplateId,
   nativePresentationTemplateThumbnail,
@@ -18,6 +23,7 @@ import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
 import { ContentSlideView } from "../presentation/content-slide-view";
 import { handleModalKeyDown } from "../presentation/presentation-modal-focus";
 import styles from "./presentation-template-preview.module.css";
+import { TemplateGuide } from "./template-guide";
 
 function templateThumbnail(
   templateId: PresentationTemplateId,
@@ -128,10 +134,12 @@ export function PresentationTemplatePreview({
   draft,
   contentLocale = "en-CA",
   onClose,
+  guide,
 }: {
   draft: PresentationDraft;
   contentLocale?: SupportedLocale;
   onClose: () => void;
+  guide?: StarterGuide;
 }) {
   const { locale } = useLocale();
   const copy = presentationTemplateCopy(locale);
@@ -222,6 +230,9 @@ export function PresentationTemplatePreview({
       <div className={styles.stage} data-template-preview-slide={index + 1} lang={contentLocale}>
         {block ? <PresentationTemplateSlide block={block} contentLocale={contentLocale} /> : null}
       </div>
+      {guide ? (
+        <TemplateGuide guide={guide} contentLocale={contentLocale} uiLocale={locale} />
+      ) : null}
       {block?.kind === "content" && block.speakerNotes ? (
         <details className={styles.notes} data-template-notes>
           <summary>{guideCopy("Presenter guide")}</summary>

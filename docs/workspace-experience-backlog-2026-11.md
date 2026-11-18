@@ -6,8 +6,9 @@ Research: [Wayground and Mentimeter benchmark](workspace-experience-benchmark-20
 The product owner selected a simpler, more polished workspace and compatible feature expansion.
 This plan breaks that request into reviewable increments. **WX-01 and WX-02 are the selected first
 delivery**, merged through [PR #271](https://github.com/riojung/pollingpops/pull/271) at `7c537d5`.
-The next delivery, **WX-03**, is implemented on `codex/library-all-content` with qualification in
-[Library discovery](library-discovery.md). Later items are scoped backlog,
+**WX-03** merged through [PR #272](https://github.com/riojung/pollingpops/pull/272) at `edac7b6`,
+with qualification in [Library discovery](library-discovery.md). **WX-04** is the current
+team-meetings collection increment on `codex/team-meeting-collection`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -27,8 +28,8 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------- |
 | WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below      | Frontend + product design       |
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Implemented; All content discovery checkpoint  | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Ready; reuse existing catalog                  | Content design + localization   |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Implemented; Team meetings collection          | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Ready; retain existing factories               | Authoring + frontend            |
 | WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
@@ -150,6 +151,16 @@ available translations. No copied vendor templates, artificial popularity counts
 **Dependencies:** WX-02; use the existing content/localization review workflow. Public creator
 publishing remains IDEA-003. Owner: content design + localization.
 
+**Selected collection:** Team meetings, using two existing Rounds, two Presentations and one
+Survey. The two Rounds now have four purposeful questions each; the Survey keeps four items with
+one optional context item. Neutral choices, realistic time estimates, audience/preparation guides,
+interpretation limits and concrete follow-up help facilitators choose and adapt the material.
+The URL-backed collection shortcut filters existing catalogs and independent-copy routes.
+No new catalog persistence, publication format, dependency or asset is introduced.
+See the [named editorial and verification record](evidence/team-meetings-editorial-review-2026-11.md).
+Automated content/code review is distinct from pending human editorial and native-language
+acceptance; existing Preview labels remain. Other customer-job collections remain later increments.
+
 ### WX-05 Creation: consolidate methods and source intake
 
 **Existing:** goal-based creation, blank/template/source/import methods, reviewed source assistance
@@ -167,6 +178,31 @@ review-before-publication remain intact. No silent rewrite of existing drafts or
 
 **Dependencies:** current factories/import APIs; retire or redirect duplicate discovery routes only
 after link/feature-policy migration is tested. Owner: authoring + frontend.
+
+**Next bounded checkpoint (WX-05A): consistent goal and method navigation.** Extend the existing
+`workspace-creation-model.ts` rather than adding another launcher or factory. Use the same pure
+destination/compatibility resolver and method descriptions in Home, the global Create menu,
+Round/Presentation/Survey launchers, Discover links and catalog blank links.
+
+- Selecting a goal or method navigates without writing. Keep writes on explicit create/use/import
+  actions; align the current quick-poll action with Home's poll setup destination.
+- Preserve Round `product=round`, `type=quiz|poll|custom`, `start=blank|starters|source|import`
+  and legacy method hashes; Presentation `start=source|template|outline|design`; Survey and
+  Templates format/collection links; and `/dashboard` fallback when the builder is unavailable.
+  Explain incompatible methods instead of silently substituting a blank poll.
+- Describe input, limits, AI involvement and the next action using the existing implementations
+  as authority. Keep source review, outline generation and saved-editor visual conversion distinct.
+  Source-assistant availability must not stand in for the separate Presentation outline service.
+- Apply current edit/feature authority consistently. A paused provider must not disable ordinary
+  blank creation, eligible templates, editing or structured import. Use customer explanations,
+  retaining source disclosure, scan/allowance checks and review controls.
+- Test the resolver's legacy/unknown/duplicate queries and hashes, feature/role fallbacks,
+  navigation without POST, reload/history and all entry surfaces. Browser coverage should include
+  provider-disabled ordinary creation, keyboard/mobile behavior and a CJK locale.
+
+Keep **WX-05B** for parsed structured-import preview before creation: the current import endpoint
+validates **and creates**, so the first navigation checkpoint must keep that action honest.
+Keep the durable Round starter-copy intent below as its own API/storage checkpoint.
 
 **Bounded reliability follow-up:** the existing Round starter-copy endpoint has no durable
 idempotency intent. The new client blocks simultaneous submissions, but a lost successful response
@@ -364,8 +400,8 @@ assistive-technology, native-language or physical-device review. Run the reposit
 `pnpm check` before opening a pull request, as required by the contribution guide.
 
 The next work session should select **one ID/checkpoint**, confirm its current baseline and scope,
-assign an owner and define a testable completion target. The next P1 delivery is one **WX-04**
-editorial collection, followed by a bounded WX-05 creation/source-intake checkpoint.
+assign an owner and define a testable completion target. After the first **WX-04 Team meetings**
+collection, the next P1 delivery is a bounded **WX-05** creation/source-intake checkpoint.
 Do not mark all later items implemented because the first UI slice is complete.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),

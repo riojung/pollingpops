@@ -3,6 +3,8 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TemplatesPage from "./page";
+import { StarterGallery } from "../../components/workspace/starter-gallery";
+import { PresentationTemplateGallery } from "../../components/workspace/presentation-template-gallery";
 
 interface Hooks {
   cursor: number;
@@ -76,12 +78,16 @@ vi.mock("../../components/workspace/workspace-shell", () => ({
   ),
 }));
 vi.mock("../../components/workspace/starter-gallery", () => ({
-  StarterGallery: ({ survey }: { survey?: boolean }) => (
-    <div>{survey ? "Survey content gallery" : "Round content gallery"}</div>
+  StarterGallery: ({ survey, collection }: { survey?: boolean; collection?: string }) => (
+    <div data-test-collection={collection}>
+      {survey ? "Survey content gallery" : "Round content gallery"}
+    </div>
   ),
 }));
 vi.mock("../../components/workspace/presentation-template-gallery", () => ({
-  PresentationTemplateGallery: () => <div>Presentation content gallery</div>,
+  PresentationTemplateGallery: ({ collection }: { collection?: string }) => (
+    <div data-test-collection={collection}>Presentation content gallery</div>
+  ),
 }));
 vi.mock("../../components/workspace/presentation-design-gallery", () => ({
   PresentationDesignGallery: () => <div>Presentation design gallery</div>,
@@ -112,6 +118,18 @@ function harness() {
       if (!tab) throw new Error("Expected tab");
       return tab;
     },
+    collection(id: string) {
+      const control = elements(tree).find((node) => node.props["data-collection"] === id);
+      if (!control) throw new Error("Expected collection control");
+      return control;
+    },
+    gallery() {
+      const gallery = elements(tree).find(
+        (node) => node.type === StarterGallery || node.type === PresentationTemplateGallery,
+      );
+      if (!gallery) throw new Error("Expected gallery");
+      return gallery;
+    },
     markup: () => renderToStaticMarkup(tree),
   };
 }
@@ -131,6 +149,67 @@ afterEach(() => {
 });
 
 describe("Template library sections", () => {
+  it.each(["rounds", "surveys", "presentations"])(
+    "preserves the %s gallery identity across collection navigation",
+    (type) => {
+      mocked.search = `?type=${type}&collection=team-meetings`;
+      const view = harness();
+      view.render();
+      const identity = view.gallery().key;
+      (view.collection("all").props.onClick as () => void)();
+      view.render();
+      expect(view.gallery().key).toBe(identity);
+      expect(view.gallery().props.collection).toBeNull();
+      (view.collection("team-meetings").props.onClick as () => void)();
+      view.render();
+      expect(view.gallery().key).toBe(identity);
+      expect(view.gallery().props.collection).toBe("team-meetings");
+    },
+  );
+  it("keeps the selected collection in format navigation, reloads and browser history", () => {
+    mocked.search = "?campaign=meeting&type=rounds&collection=team-meetings";
+    const view = harness();
+    view.render();
+    expect(view.collection("team-meetings").props["aria-pressed"]).toBe(true);
+    expect(view.markup()).toContain('data-test-collection="team-meetings"');
+    (view.tab("presentations").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenLastCalledWith(
+      "/templates?campaign=meeting&type=presentations&collection=team-meetings",
+      { scroll: false },
+    );
+    view.render();
+    expect(view.markup()).toContain("Presentation content gallery");
+    expect(view.markup()).toContain('data-test-collection="team-meetings"');
+    mocked.search = "?campaign=meeting&type=rounds&collection=team-meetings";
+    view.render();
+    expect(view.tab("rounds").props["aria-selected"]).toBe(true);
+    (view.collection("all").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenLastCalledWith("/templates?campaign=meeting&type=rounds", {
+      scroll: false,
+    });
+    view.render();
+    expect(view.collection("all").props["aria-pressed"]).toBe(true);
+  });
+
+  it("returns from Designs to the collection's Rounds and clears collection filtering on Designs", () => {
+    mocked.search = "?type=designs&campaign=meeting";
+    const view = harness();
+    view.render();
+    (view.collection("team-meetings").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenLastCalledWith(
+      "/templates?type=rounds&campaign=meeting&collection=team-meetings",
+      { scroll: false },
+    );
+    view.render();
+    (view.tab("designs").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenLastCalledWith("/templates?type=designs&campaign=meeting", {
+      scroll: false,
+    });
+    mocked.search = "?type=surveys&collection=unknown";
+    view.render();
+    expect(view.collection("all").props["aria-pressed"]).toBe(true);
+    expect(view.markup()).not.toContain("data-test-collection=");
+  });
   it.each(["rounds", "presentations", "surveys", "designs"])(
     "opens the linked %s section directly",
     (type) => {

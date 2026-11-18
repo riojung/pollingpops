@@ -1,5 +1,23 @@
 # Home workspace overview
 
+## November 17 workspace experience follow-up
+
+The `codex/workspace-experience-foundation` follow-up prioritizes active sessions, a concise
+creation/template entry, and **Continue working** for returning editors with existing work.
+Empty/viewer workspaces retain the neutral **Recent work** label. Overview evidence moves below
+work and uses a compact two-column layout. The existing first-session checklist uses a native
+disclosure; its scoped dismissal remains available without expanding the checklist.
+
+Format-specific template shortcuts use `/templates?type=rounds|presentations|surveys|designs`,
+respect editing rights and effective grants, and do not mount catalogs or add requests to Home.
+The global Templates destination is independent of Discover's feature grant. Existing bounded
+summary reads, freshness/scope fencing, truthful evidence, retained work and canonical actions
+remain authoritative. The historical implementation and verification below describe the earlier
+checkpoint; current follow-up verification is tracked with the
+[workspace experience delivery](workspace-experience-backlog-2026-11.md).
+
+## November 12 dashboard checkpoint
+
 The November 12, 2026 `codex/home-insights-workspace` implementation makes Home a compact
 workspace dashboard while preserving the existing authorized summary and destinations.
 

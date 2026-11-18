@@ -2,6 +2,12 @@
 
 Captured: 2026-10-27 · Repository baseline: `main` at `948d515`
 
+**November 17 follow-up:** the product owner separately selected a workspace-experience foundation.
+See the [current benchmark](workspace-experience-benchmark-2026-11.md) and
+[small delivery chunks](workspace-experience-backlog-2026-11.md). They reconcile later implemented
+capabilities, reuse relevant IDEA/R2 parents, and do not mark these historical research candidates
+or their evidence gates complete.
+
 This backlog turns the [October competitor research](competitor-research-2026-10-27.md) into
 scoped discovery and delivery candidates. The product owner requested research and backlog
 creation, not implementation. **Every feature increment below remains Deferred.** R2-00 continues

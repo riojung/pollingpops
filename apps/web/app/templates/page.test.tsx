@@ -12,6 +12,14 @@ const mocked = vi.hoisted(() => ({
   hooks: null as Hooks | null,
   presentations: true,
   canEdit: true,
+  surveys: true,
+  search: "",
+  hash: "",
+  push: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(mocked.search),
+  useRouter: () => ({ push: mocked.push }),
 }));
 vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
@@ -39,6 +47,14 @@ vi.mock("react", async (original) => {
     useEffect: (effect: ReactModule.EffectCallback, deps: ReactModule.DependencyList) => {
       if (!mocked.hooks) react.useEffect(effect, deps);
     },
+    useSyncExternalStore: <T,>(
+      subscribe: (onChange: () => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ) =>
+      mocked.hooks
+        ? (mocked.hash as T)
+        : react.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot),
   };
 });
 vi.mock("../../components/locale-provider", () => ({
@@ -48,7 +64,7 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
   WorkspaceProvider: ({ children }: { children: ReactNode }) => children,
   useWorkspace: () => ({
     canEdit: mocked.canEdit,
-    productFeatures: { presentations: mocked.presentations, surveys: true },
+    productFeatures: { presentations: mocked.presentations, surveys: mocked.surveys },
   }),
 }));
 vi.mock("../../components/workspace/workspace-shell", () => ({
@@ -84,7 +100,8 @@ function harness() {
       hooks.cursor = 0;
       mocked.hooks = hooks;
       try {
-        const inner = TemplatesPage().props.children as ReactElement;
+        const boundary = TemplatesPage().props.children as ReactElement<{ children: ReactElement }>;
+        const inner = boundary.props.children;
         tree = (inner.type as () => ReactElement)();
       } finally {
         mocked.hooks = null;
@@ -101,12 +118,68 @@ function harness() {
 beforeEach(() => {
   mocked.presentations = true;
   mocked.canEdit = true;
+  mocked.surveys = true;
+  mocked.search = "";
+  mocked.hash = "";
+  mocked.push.mockReset().mockImplementation((href: string) => {
+    mocked.search = new URL(href, "https://pollingpops.test").search;
+    mocked.hash = "";
+  });
 });
 afterEach(() => {
   mocked.hooks = null;
 });
 
 describe("Template library sections", () => {
+  it.each(["rounds", "presentations", "surveys", "designs"])(
+    "opens the linked %s section directly",
+    (type) => {
+      mocked.search = `?type=${type}`;
+      const view = harness();
+      view.render();
+      expect(view.tab(type).props["aria-selected"]).toBe(true);
+    },
+  );
+  it("follows URL changes in a mounted catalog and preserves unrelated search parameters", () => {
+    mocked.search = "?campaign=intro&type=presentations";
+    const view = harness();
+    view.render();
+    (view.tab("surveys").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenCalledWith("/templates?campaign=intro&type=surveys", {
+      scroll: false,
+    });
+    view.render();
+    expect(view.tab("surveys").props["aria-selected"]).toBe(true);
+    mocked.search = "?campaign=intro&type=presentations";
+    view.render();
+    expect(view.tab("presentations").props["aria-selected"]).toBe(true);
+    expect(view.markup()).not.toContain("Survey content gallery");
+  });
+  it("retains the legacy Designs hash only when there is no explicit format", () => {
+    mocked.hash = "#designs";
+    const view = harness();
+    view.render();
+    expect(view.tab("designs").props["aria-selected"]).toBe(true);
+    mocked.search = "?type=surveys";
+    view.render();
+    expect(view.tab("surveys").props["aria-selected"]).toBe(true);
+    mocked.search = "?type=unsupported";
+    view.render();
+    expect(view.tab("rounds").props["aria-selected"]).toBe(true);
+  });
+  it("keeps paused formats browseable without offering creation", () => {
+    mocked.surveys = false;
+    mocked.search = "?type=surveys";
+    const view = harness();
+    view.render();
+    expect(view.tab("surveys").props["aria-selected"]).toBe(true);
+    expect(view.markup()).toContain("templateLibrary.surveyUnavailable");
+    expect(view.markup()).not.toContain('href="/surveys/new"');
+    mocked.canEdit = false;
+    mocked.surveys = true;
+    view.render();
+    expect(view.markup()).not.toContain("templateLibrary.startBlank");
+  });
   it("preserves round starting content and offers a separate Designs section", () => {
     const view = harness();
     view.render();

@@ -7,6 +7,8 @@ import { hasHomeWork, homeMilestones, homeWorkAction, recentHomeWork } from "./h
 
 const mocked = vi.hoisted(() => ({
   summary: null as HomeSummary | null,
+  summaryLoading: false,
+  summaryError: "",
   contextKeys: [] as Array<string | null>,
   creator: {
     userId: "user-a",
@@ -51,7 +53,12 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
 vi.mock("./home-summary", () => ({
   useHomeSummary: (contextKey: string | null) => {
     mocked.contextKeys.push(contextKey);
-    return { summary: mocked.summary, loading: false, error: "", refresh: vi.fn() };
+    return {
+      summary: mocked.summary,
+      loading: mocked.summaryLoading,
+      error: mocked.summaryError,
+      refresh: vi.fn(),
+    };
   },
 }));
 
@@ -158,6 +165,8 @@ function renderHome() {
 }
 beforeEach(() => {
   mocked.summary = null;
+  mocked.summaryLoading = false;
+  mocked.summaryError = "";
   mocked.creator.userId = "user-a";
   mocked.creator.workspaceId = "workspace-a";
   mocked.creator.role = "owner";
@@ -402,13 +411,90 @@ describe("workspace Home", () => {
       },
     ];
     const markup = renderHome();
-    expect(markup.indexOf("Audience waiting")).toBeLessThan(markup.indexOf("Recent work"));
+    expect(markup.indexOf("Audience waiting")).toBeLessThan(
+      markup.indexOf('id="home-start-title"'),
+    );
+    expect(markup.indexOf('id="home-start-title"')).toBeLessThan(
+      markup.indexOf("Continue working"),
+    );
     expect(markup).toContain('href="/sessions">Open Sessions');
     expect(homeMilestones(mocked.summary)).toEqual({
       created: true,
       published: true,
       delivered: false,
     });
+  });
+  it("puts existing work before secondary evidence and the progressive first-session checklist", () => {
+    mocked.summary = mixedSummary();
+    const markup = renderHome();
+    expect(markup).toContain("Continue working");
+    expect(markup.indexOf("data-work-row")).toBeLessThan(
+      markup.indexOf('id="home-overview-title"'),
+    );
+    expect(markup.indexOf("data-work-row")).toBeLessThan(
+      markup.indexOf('id="home-guidance-title"'),
+    );
+    const guidance = markup.match(
+      /<section[^>]*aria-labelledby="home-guidance-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(guidance).toMatch(/<details\b[^>]*><summary><h2/);
+    expect(guidance?.match(/<details\b[^>]*>/)?.[0]).not.toContain("open");
+    expect(guidance).toContain('aria-label="Dismiss getting started"');
+  });
+
+  it("offers granted goals and direct template formats without requiring Discover", () => {
+    Object.assign(mocked.productFeatures, { builderV2: true, presentations: true, surveys: true });
+    const markup = renderHome();
+    const start = markup.match(
+      /<section[^>]*aria-labelledby="home-start-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(start).toContain('href="/create?type=poll"');
+    expect(start).toContain('href="/create?type=quiz"');
+    expect(start).toContain('href="/create/presentation"');
+    for (const type of ["rounds", "presentations", "surveys", "designs"])
+      expect(start).toContain(`href="/templates?type=${type}"`);
+    expect(start).not.toContain('href="/discover"');
+    expect(start).not.toContain("data-template-id");
+  });
+
+  it("retains a legacy Round goal and only exposes available template formats", () => {
+    const start = renderHome().match(
+      /<section[^>]*aria-labelledby="home-start-title"[\s\S]*?<\/section>/,
+    )?.[0];
+    expect(start).toContain('href="/dashboard"');
+    expect(start).toContain('href="/templates?type=rounds"');
+    expect(start).not.toContain("/templates?type=presentations");
+    expect(start).not.toContain("/templates?type=surveys");
+    expect(start).not.toContain("/templates?type=designs");
+    expect(start).not.toContain("/create?type=poll");
+    expect(start).not.toContain("/create?type=quiz");
+  });
+
+  it("keeps creation usable while summary evidence loads or fails without inventing work", () => {
+    mocked.summaryLoading = true;
+    let markup = renderHome();
+    expect(markup).toContain('id="home-start-title"');
+    expect(markup).not.toContain('id="home-overview-title"');
+    expect(markup).not.toContain("Continue working");
+    mocked.summaryLoading = false;
+    mocked.summaryError = "Summary service unavailable";
+    markup = renderHome();
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("Summary service unavailable");
+    expect(markup).toContain('id="home-start-title"');
+    expect(markup).not.toContain('data-widget="work"');
+  });
+
+  it("keeps viewer Home focused on accessible work even when all creation features are granted", () => {
+    mocked.summary = mixedSummary();
+    mocked.creator.role = "viewer";
+    mocked.canEdit = false;
+    Object.assign(mocked.productFeatures, { builderV2: true, presentations: true, surveys: true });
+    const markup = renderHome();
+    expect(markup).toContain("Recent work");
+    expect(markup).not.toContain('id="home-start-title"');
+    expect(markup).not.toContain('href="/templates?type=');
+    expect(markup).not.toContain('href="/create?type=');
   });
   it("routes Home creation to the universal hub without requiring advanced builder features", () => {
     const markup = renderHome();

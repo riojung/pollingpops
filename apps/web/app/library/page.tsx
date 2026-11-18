@@ -1534,24 +1534,29 @@ function EmptyLibrary({
           {t("pages.results.clearFilters")}
         </button>
       ) : canEdit ? (
-        <Link
-          className="button"
-          href={
-            type === "surveys"
-              ? "/surveys/new"
-              : type === "rounds"
-                ? "/create"
-                : "/create/presentation"
-          }
-        >
-          {t(
-            type === "surveys"
-              ? "pages.library.createSurvey"
-              : type === "rounds"
-                ? "pages.library.createRound"
-                : "pages.library.createPresentation",
-          )}
-        </Link>
+        <div className={styles.emptyActions}>
+          <Link
+            className="button"
+            href={
+              type === "surveys"
+                ? "/surveys/new"
+                : type === "rounds"
+                  ? "/create"
+                  : "/create/presentation"
+            }
+          >
+            {t(
+              type === "surveys"
+                ? "pages.library.createSurvey"
+                : type === "rounds"
+                  ? "pages.library.createRound"
+                  : "pages.library.createPresentation",
+            )}
+          </Link>
+          <Link className="button-quiet" href={`/templates?type=${type}`}>
+            {t("workspace.nav.templates")}
+          </Link>
+        </div>
       ) : null}
     </section>
   );

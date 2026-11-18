@@ -30,7 +30,7 @@ type IconName =
   | "sessions"
   | "assignments"
   | "results"
-  | "discover"
+  | "templates"
   | "groups"
   | "workspace"
   | "search"
@@ -109,11 +109,10 @@ const destinations: Array<{
     match: (path) => path.startsWith("/results") || path.startsWith("/report/"),
   },
   {
-    href: "/discover",
-    icon: "discover",
-    label: "workspace.nav.discover",
-    match: (path) => path.startsWith("/discover") || path.startsWith("/templates"),
-    feature: "discover",
+    href: "/templates",
+    icon: "templates",
+    label: "workspace.nav.templates",
+    match: (path) => path.startsWith("/templates"),
   },
   {
     href: "/boards",
@@ -183,11 +182,13 @@ function ShellIcon({ name }: { name: IconName }) {
           <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
         </svg>
       );
-    case "discover":
+    case "templates":
       return (
         <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <path d="m15.5 8.5-2.2 4.8-4.8 2.2 2.2-4.8z" />
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
       );
     case "groups":

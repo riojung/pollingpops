@@ -37,11 +37,53 @@ export function HomeGuidance({
   const latestDraft = summary.recentArtifacts.find((item) => item.status !== "archived");
   return (
     <section className={styles.onboarding} aria-labelledby="home-guidance-title" lang={locale}>
-      <div className={styles.sectionHeading}>
-        <div>
-          <h2 id="home-guidance-title">{copy.guidance}</h2>
-          <p>{copy.intro}</p>
-        </div>
+      <div className={styles.guidanceHeader}>
+        <details className={styles.guidanceDetails}>
+          <summary>
+            <h2 id="home-guidance-title">{copy.guidance}</h2>
+          </summary>
+          <p className={styles.panelDescription}>{copy.intro}</p>
+          {!milestones.created && creationGoals.length ? (
+            <nav className={styles.goalActions} aria-label={goals.title}>
+              {creationGoals.map((goal) => (
+                <Link className={styles.goalAction} key={goal.kind} href={goal.href}>
+                  {goal.kind === "round" ? t("common.round") : goals[goal.kind]}{" "}
+                  <span aria-hidden="true">→</span>
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+          <ol className={styles.onboardingSteps}>
+            {[
+              { label: copy.create, done: milestones.created },
+              { label: copy.publish, done: milestones.published },
+              { label: copy.invite, done: milestones.delivered },
+            ].map((step, index) => (
+              <li key={step.label} data-complete={step.done}>
+                <span aria-hidden="true">{step.done ? "✓" : index + 1}</span>
+                <strong>
+                  {step.label}
+                  {step.done ? <span className="sr-only"> · {copy.complete}</span> : null}
+                </strong>
+              </li>
+            ))}
+          </ol>
+          <div className={styles.onboardingActions}>
+            <Link
+              className="button-quiet small-button"
+              href={milestones.published ? "/library" : (latestDraft?.editHref ?? "/create")}
+            >
+              {milestones.published
+                ? t("pages.common.viewLibrary")
+                : latestDraft
+                  ? t("pages.home.authoring.continueEditing")
+                  : t("pages.home.firstRun.create")}
+            </Link>
+            {guideAvailable ? (
+              <Link href="/help#quick-start">{t("pages.home.firstRun.watch")}</Link>
+            ) : null}
+          </div>
+        </details>
         <button
           className="button-quiet small-button"
           aria-label={copy.dismiss}
@@ -57,46 +99,6 @@ export function HomeGuidance({
         >
           ×
         </button>
-      </div>
-      {!milestones.created && creationGoals.length ? (
-        <nav className={styles.goalActions} aria-label={goals.title}>
-          {creationGoals.map((goal) => (
-            <Link className={styles.goalAction} key={goal.kind} href={goal.href}>
-              {goal.kind === "round" ? t("common.round") : goals[goal.kind]}{" "}
-              <span aria-hidden="true">→</span>
-            </Link>
-          ))}
-        </nav>
-      ) : null}
-      <ol className={styles.onboardingSteps}>
-        {[
-          { label: copy.create, done: milestones.created },
-          { label: copy.publish, done: milestones.published },
-          { label: copy.invite, done: milestones.delivered },
-        ].map((step, index) => (
-          <li key={step.label} data-complete={step.done}>
-            <span aria-hidden="true">{step.done ? "✓" : index + 1}</span>
-            <strong>
-              {step.label}
-              {step.done ? <span className="sr-only"> · {copy.complete}</span> : null}
-            </strong>
-          </li>
-        ))}
-      </ol>
-      <div className={styles.onboardingActions}>
-        <Link
-          className="button-quiet small-button"
-          href={milestones.published ? "/library" : (latestDraft?.editHref ?? "/create")}
-        >
-          {milestones.published
-            ? t("pages.common.viewLibrary")
-            : latestDraft
-              ? t("pages.home.authoring.continueEditing")
-              : t("pages.home.firstRun.create")}
-        </Link>
-        {guideAvailable ? (
-          <Link href="/help#quick-start">{t("pages.home.firstRun.watch")}</Link>
-        ) : null}
       </div>
     </section>
   );

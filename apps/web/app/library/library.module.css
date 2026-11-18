@@ -835,6 +835,14 @@
   overflow-wrap: anywhere;
 }
 
+.emptyActions {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
 .loadingGrid {
   min-height: 280px;
   border-radius: 12px;

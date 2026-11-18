@@ -251,6 +251,29 @@ describe("Library workspace", () => {
     expect(markup).toContain('aria-pressed="true"');
   });
 
+  it.each(["rounds", "presentations", "surveys"])(
+    "links an empty %s Library to the matching template section",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      fixtures.apiFetch.mockImplementation(async (path: string) => emptyLibraryResponse(path));
+      const markup = await libraryHarness().settle();
+      expect(markup).toContain(`href="/templates?type=${type}"`);
+      expect(markup).toContain("Templates");
+    },
+  );
+
+  it("keeps filtered and read-only Library empty states free of copy actions", async () => {
+    fixtures.apiFetch.mockImplementation(async (path: string) => emptyLibraryResponse(path));
+    fixtures.canEdit = false;
+    let markup = await libraryHarness().settle();
+    expect(markup).not.toContain('href="/templates?type=rounds"');
+    fixtures.canEdit = true;
+    fixtures.query = "q=missing";
+    markup = await libraryHarness().settle();
+    expect(markup).toContain("Clear filters");
+    expect(markup).not.toContain('href="/templates?type=rounds"');
+  });
+
   it("keeps a read-only Library discoverable without offering creation", () => {
     fixtures.canEdit = false;
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
@@ -709,6 +732,13 @@ function libraryResponse(path: string) {
     };
   if (path === "/v1/library/favorites") return { favorites: [] };
   return {};
+}
+
+function emptyLibraryResponse(path: string) {
+  if (path.startsWith("/v1/quizzes?")) return { quizzes: [] };
+  if (path.startsWith("/v1/presentations?")) return { presentations: [] };
+  if (path.startsWith("/v1/surveys?")) return { surveys: [], nextCursor: null };
+  return libraryResponse(path);
 }
 
 function libraryResponseWithStatus(path: string, status: "published" | "archived") {

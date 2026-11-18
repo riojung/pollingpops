@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace start and template reuse November 17, 2026
+
+The `codex/workspace-experience-foundation` slice follows the product owner's Wayground/Mentimeter
+benchmark request. Home foregrounds active sessions, concise creation/template destinations and
+existing work before secondary evidence. The scoped first-session checklist remains available in
+a small disclosure; existing summary authorization, sample labels and canonical actions remain.
+
+Templates is a direct core navigation destination. Format query links, browser history and the
+legacy Designs hash select the appropriate catalog. Empty Library states link to the matching
+format. Round/Survey catalog browsing pairs summaries with substantial read-only previews and an
+explicit independent-copy action; compact card/dialog callers and specialized Presentation previews
+remain supported. Actor/workspace/language/rights changes fence stale content and copy navigation.
+
+The [benchmark](workspace-experience-benchmark-2026-11.md) distinguishes public marketing,
+help-documented behavior, supplied screenshot observations and actual repository capability.
+The [delivery backlog](workspace-experience-backlog-2026-11.md) scopes fourteen increments and
+reuses existing IDEA/R2 parents. Larger Survey, recurrence, response-format, comparison and native
+integration candidates are not implemented by this first slice. Local verification is recorded in
+the workspace implementation notes; commercial/public release gates remain separate.
+
 ### Expanded presentation designs and full application November 13, 2026
 
 The `codex/presentation-expanded-designs` iteration grows the visual library from eight to

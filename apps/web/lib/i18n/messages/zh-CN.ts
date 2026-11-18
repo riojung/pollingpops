@@ -53,6 +53,7 @@ const messages = {
   "workspace.nav.assignments": "作业",
   "workspace.nav.results": "结果",
   "workspace.nav.discover": "发现",
+  "workspace.nav.templates": "模板",
   "workspace.nav.groups": "小组",
   "workspace.nav.boards": "创意看板",
   "workspace.nav.workspace": "工作区",

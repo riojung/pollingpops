@@ -53,6 +53,7 @@ const messages = {
   "workspace.nav.assignments": "과제",
   "workspace.nav.results": "결과",
   "workspace.nav.discover": "둘러보기",
+  "workspace.nav.templates": "템플릿",
   "workspace.nav.groups": "그룹",
   "workspace.nav.boards": "아이디어 보드",
   "workspace.nav.workspace": "워크스페이스",

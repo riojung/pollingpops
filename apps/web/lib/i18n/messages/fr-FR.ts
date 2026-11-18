@@ -54,6 +54,7 @@ const messages = {
   "workspace.nav.assignments": "Travaux",
   "workspace.nav.results": "Résultats",
   "workspace.nav.discover": "Découvrir",
+  "workspace.nav.templates": "Modèles",
   "workspace.nav.groups": "Groupes",
   "workspace.nav.boards": "Tableaux d’idées",
   "workspace.nav.workspace": "Espace de travail",

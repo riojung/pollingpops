@@ -2,6 +2,13 @@
 
 Captured: 2026-10-13
 
+Latest workflow benchmark: **2026-11-17**. The product owner selected the first two
+[workspace experience delivery slices](workspace-experience-backlog-2026-11.md): a task-focused Home
+and direct template discovery/preview/reuse. The [Wayground/Mentimeter comparison](workspace-experience-benchmark-2026-11.md)
+also scopes later candidates without duplicating the IDEA/R2 records below. Historical absence
+claims are superseded by its source inventory and current implementation status. Later candidates
+remain unimplemented; this UI selection does not close customer-research or release gates.
+
 Latest research round: **2026-10-27**. See the [competitor research](competitor-research-2026-10-27.md)
 and [twelve prioritized backlog items](competitor-backlog-2026-10-27.md) for evidence, scoped acceptance
 criteria, dependencies and selection gates. This round adds IDEA-009–015 and refines remaining work

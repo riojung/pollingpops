@@ -327,7 +327,7 @@ describe("professional workspace shell", () => {
       ["/sessions", "Sessions"],
       ["/assignments", "Assignments"],
       ["/results", "Results"],
-      ["/discover", "Discover"],
+      ["/templates", "Templates"],
       ["/groups", "Groups"],
       ["/account", "Workspace"],
     ]) {
@@ -538,6 +538,18 @@ describe("professional workspace shell", () => {
     expect(markup).toContain("Read only");
   });
 
+  it.each([false, true])(
+    "keeps core Templates current when Discover is disabled (mobile=%s)",
+    (mobile) => {
+      fixtures.pathname = "/templates";
+      fixtures.workspace.productFeatures.discover = false;
+      const markup = renderToStaticMarkup(<WorkspaceNav mobile={mobile} />);
+      expect(markup).toMatch(/aria-current="page"[^>]*href="\/templates"/);
+      expect(markup).toContain("Templates");
+      expect(markup).not.toContain('href="/discover"');
+    },
+  );
+
   it("removes independently disabled destinations and preserves the legacy Round fallback", () => {
     fixtures.workspace.productFeatures.builderV2 = false;
     fixtures.workspace.productFeatures.presentations = false;
@@ -554,6 +566,7 @@ describe("professional workspace shell", () => {
     expect(markup).not.toContain('href="/create/presentation"');
     expect(markup).not.toContain('href="/groups"');
     expect(markup).not.toContain('href="/discover"');
+    expect(markup).toContain('href="/templates"');
   });
 
   it("keeps explicitly non-beta surfaces available when the workspace shell rollout is off", () => {

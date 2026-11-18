@@ -57,7 +57,7 @@ for (const suffix of ["", " @mobile"]) {
       .getByRole("heading", { name: "Your audience is waiting" })
       .boundingBox();
     const recent = await page
-      .getByRole("heading", { name: "Recent work", exact: true })
+      .getByRole("heading", { name: "Continue working", exact: true })
       .boundingBox();
     expect(live!.y).toBeLessThan(recent!.y);
     await expect(page.getByRole("heading", { name: "Finish your first session" })).toBeVisible();

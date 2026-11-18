@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useRef, useSyncExternalStore } from "react";
 import { useLocale } from "../../components/locale-provider";
 import { StarterGallery } from "../../components/workspace/starter-gallery";
 import { PresentationDesignGallery } from "../../components/workspace/presentation-design-gallery";
@@ -15,19 +16,35 @@ import galleryStyles from "../../components/workspace/template-gallery.module.cs
 const types = ["designs", "rounds", "presentations", "surveys"] as const;
 type TemplateType = (typeof types)[number];
 
+function subscribeToHashChange(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener("hashchange", onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}
+const getHash = () => window.location.hash;
+const getServerHash = () => "";
+
 function TemplatesWorkspace() {
   const { t, locale } = useLocale();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const hash = useSyncExternalStore(subscribeToHashChange, getHash, getServerHash);
   const designCopy = presentationDesignCopy(locale);
   const { canEdit, productFeatures } = useWorkspace();
-  const [type, setType] = useState<TemplateType>("rounds");
-  useEffect(() => {
-    const selectLinkedSection = () => {
-      if (window.location.hash === "#designs" && productFeatures?.presentations) setType("designs");
-    };
-    selectLinkedSection();
-    window.addEventListener("hashchange", selectLinkedSection);
-    return () => window.removeEventListener("hashchange", selectLinkedSection);
-  }, [productFeatures?.presentations]);
+  const requestedType = searchParams.get("type");
+  const type: TemplateType = types.some((value) => value === requestedType)
+    ? (requestedType as TemplateType)
+    : requestedType === null && hash === "#designs" && productFeatures?.presentations
+      ? "designs"
+      : "rounds";
+  function selectType(next: TemplateType) {
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("type", next);
+    router.push(`/templates?${query}`, { scroll: false });
+  }
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const enabled =
     type === "rounds" ||
@@ -74,7 +91,7 @@ function TemplatesWorkspace() {
               ref={(element) => {
                 tabRefs.current[index] = element;
               }}
-              onClick={() => setType(value)}
+              onClick={() => selectType(value)}
               onKeyDown={(event) => {
                 const nextIndex =
                   event.key === "ArrowRight"
@@ -88,7 +105,7 @@ function TemplatesWorkspace() {
                           : null;
                 if (nextIndex === null) return;
                 event.preventDefault();
-                setType(types[nextIndex]!);
+                selectType(types[nextIndex]!);
                 tabRefs.current[nextIndex]?.focus();
               }}
             >
@@ -144,9 +161,18 @@ function TemplatesWorkspace() {
 }
 
 export default function TemplatesPage() {
+  const { locale, t } = useLocale();
   return (
     <WorkspaceProvider>
-      <TemplatesWorkspace />
+      <Suspense
+        fallback={
+          <p role="status" lang={locale}>
+            {t("common.loading")}
+          </p>
+        }
+      >
+        <TemplatesWorkspace />
+      </Suspense>
     </WorkspaceProvider>
   );
 }

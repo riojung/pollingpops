@@ -316,7 +316,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     await command(process.execPath, service, options);
   } catch (error) {
     throw new Error(
-      `Docker is ready, but Polling Pops services could not start. Source: Compose/application startup. Inspect pnpm service development logs --profile ${profile} --docker-context ${context}. Existing volumes are retained.`,
+      `Docker is ready, but Polling Pops services could not start. Source: Compose/application startup. Check the preceding image-build output for dependency download or DNS errors. For services that started, inspect pnpm service development logs --profile ${profile} --docker-context ${context}. Existing volumes are retained.`,
       { cause: error },
     );
   }

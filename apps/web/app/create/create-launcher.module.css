@@ -17,15 +17,6 @@
 .goalCard h2 {
   margin-top: 0;
 }
-.cardTitle {
-  margin: 0 0 0.45rem;
-  color: var(--ui-text-strong);
-  font-size: 1.2rem;
-}
-.cardDescription {
-  color: var(--ui-text-subtle);
-  line-height: 1.5;
-}
 .moreFormats {
   border-top: 1px solid var(--ui-border);
   padding-top: 12px;
@@ -43,6 +34,21 @@
 .draftNote {
   color: var(--ui-text-subtle);
   margin: 0;
+}
+.selectionNotice {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+.selectionNotice p {
+  margin: 0;
+  color: var(--ui-text-subtle);
+  line-height: 1.5;
 }
 .startTabs {
   display: flex;

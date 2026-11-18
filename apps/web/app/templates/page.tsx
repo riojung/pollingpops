@@ -14,6 +14,7 @@ import styles from "../../components/workspace/workspace-content.module.css";
 import galleryStyles from "../../components/workspace/template-gallery.module.css";
 import { parseTemplateCollection, type TemplateCollectionId } from "../../lib/template-collections";
 import { templateCollectionCopy } from "../../lib/i18n/template-collection-copy";
+import { workspaceBlankCreationHref } from "../../components/workspace/workspace-creation-model";
 
 const types = ["designs", "rounds", "presentations", "surveys"] as const;
 type TemplateType = (typeof types)[number];
@@ -65,17 +66,15 @@ function TemplatesWorkspace() {
     (type === "presentations" || type === "designs"
       ? productFeatures?.presentations
       : productFeatures?.surveys);
-  const blankHref =
-    type === "rounds"
-      ? "/create?start=blank"
-      : type === "presentations" || type === "designs"
-        ? "/create/presentation"
-        : "/surveys/new";
+  const blankHref = workspaceBlankCreationHref(
+    type === "rounds" ? "round" : type === "surveys" ? "survey" : "presentation",
+    { canEdit, productFeatures },
+  );
 
   return (
     <WorkspaceShell
       actions={
-        canEdit && enabled ? (
+        blankHref ? (
           <Link className="button" href={blankHref}>
             {t("templateLibrary.startBlank")}
           </Link>

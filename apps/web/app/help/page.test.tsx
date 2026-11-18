@@ -93,7 +93,7 @@ describe("Help centre video guides", () => {
     expect(markup).toContain("Chat starts off.");
     expect(markup).not.toContain("recorded before the Polling Pops rebrand");
     expect(markup).toContain('href="/help/first-round"');
-    expect(markup).toContain('href="/create?start=blank"');
+    expect(markup).toContain('href="/create?type=custom&amp;start=blank"');
   });
 
   it("shows accurate classic guidance without beta-only media or links", () => {
@@ -111,7 +111,7 @@ describe("Help centre video guides", () => {
     expect(markup).toContain("Open the dashboard, name a checkpoint set");
     expect(markup).toContain('href="/dashboard"');
     expect(markup).not.toContain("polling-pops-quick-start.mp4");
-    expect(markup).not.toContain('href="/create?start=starters"');
+    expect(markup).not.toContain('href="/create?type=custom&amp;start=starters"');
     expect(markup).not.toContain("Presentations have their own grounded starting methods");
     expect(markup).not.toContain("Groups lets facilitator teams");
   });
@@ -125,7 +125,7 @@ describe("Help centre video guides", () => {
     expect(markup).toContain('href="/help/first-round"');
     expect(markup).toContain("polling-pops-quick-start.mp4");
     expect(markup).not.toContain("polling-pops-user-guide.mp4");
-    expect(markup).toContain('href="/create?start=blank"');
+    expect(markup).toContain('href="/create?type=custom&amp;start=blank"');
   });
 
   it("sends read-only members to Library instead of a creation route", () => {
@@ -135,7 +135,7 @@ describe("Help centre video guides", () => {
 
     expect(markup.match(/href="\/library"/g)?.length).toBeGreaterThan(1);
     expect(markup).toContain("Open Library");
-    expect(markup).not.toContain('href="/create?start=blank"');
+    expect(markup).not.toContain('href="/create?type=custom&amp;start=blank"');
     expect(markup).not.toContain("Start a blank Round");
   });
 

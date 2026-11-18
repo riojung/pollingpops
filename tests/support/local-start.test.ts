@@ -209,15 +209,23 @@ describe("post-reboot local startup", () => {
     await expect(main([], f.dependencies)).rejects.toThrow("not confirmed as Docker-backed");
     expect(f.runtimeCalls()).toEqual([]);
   });
-  it("keeps application failures distinct from runtime startup failures", async () => {
+  it("preserves the service failure and build guidance without retrying services or restarting the runtime", async () => {
     const f = fixture({ status: "Running", readyAt: 1 });
     const original = f.command.getMockImplementation()!;
+    const failure = new Error("private application diagnostics");
     f.command.mockImplementation(async (program, args, options) => {
-      if (program === process.execPath) throw new Error("private application diagnostics");
+      if (program === process.execPath) throw failure;
       return original(program, args, options);
     });
-    await expect(main([], f.dependencies)).rejects.toThrow("Source: Compose/application startup");
+    await expect(main(["--restart-runtime"], f.dependencies)).rejects.toMatchObject({
+      cause: failure,
+      message: expect.stringMatching(
+        /Source: Compose\/application startup.*preceding image-build output for dependency download or DNS errors.*For services that started/,
+      ),
+    });
+    expect(f.serviceCalls()).toHaveLength(1);
     expect(f.runtimeCalls()).toEqual([]);
+    expect(f.dependencies.sleep).not.toHaveBeenCalled();
   });
   it("does not proceed after Colima fails to start", async () => {
     const f = fixture();

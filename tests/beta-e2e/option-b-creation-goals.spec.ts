@@ -23,7 +23,7 @@ for (const suffix of ["", " @mobile"]) {
       if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/quizzes")
         writes.push(request.url());
     });
-    await expect(page.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Ask a quick poll/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Build a presentation/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Custom Round/ })).toBeHidden();
     await page.screenshot({ path: info.outputPath("option-b-goals.png"), fullPage: true });
@@ -77,7 +77,7 @@ for (const suffix of ["", " @mobile"]) {
       await expect(
         page.getByRole("heading", { name: "무엇을 하고 싶으세요?", level: 1 }),
       ).toBeVisible();
-      await expect(page.getByRole("button", { name: /^빠른 투표 진행/ })).toBeVisible();
+      await expect(page.getByRole("link", { name: /^빠른 투표 진행/ })).toBeVisible();
       await page.getByRole("link", { name: /^이해도 확인/ }).click();
       const tabs = page.getByRole("tablist", { name: "시작 방법" });
       await expect(tabs.getByRole("tab", { name: "빈 문서", exact: true })).toHaveAttribute(

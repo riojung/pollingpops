@@ -182,6 +182,25 @@ Use it only when that interruption is acceptable. It does not delete the VM or v
 Stale Docker endpoint, TLS, and API-version overrides are cleared for child commands only;
 your shell environment and saved Colima configuration are unchanged.
 
+If Docker is ready but an image build fails with `getaddrinfo EAI_AGAIN registry.npmjs.org`
+while Corepack downloads pnpm, the build cannot resolve the package registry. Docker readiness
+only checks the daemon; it does not check the build network. Read the preceding build output;
+container logs help with services that started.
+
+Compare DNS resolution on the host and inside a container, using your selected Docker context:
+
+```bash
+node --input-type=module -e "import { lookup } from 'node:dns/promises'; console.log(await lookup('registry.npmjs.org'))"
+docker --context colima run --rm --pull=never node:22-alpine \
+  node --input-type=module -e "import { lookup } from 'node:dns/promises'; console.log(await lookup('registry.npmjs.org'))"
+```
+
+The container probe requires an already-cached `node:22-alpine` image; `--pull=never` prevents an
+image download. If both probes fail, inspect the host's network/DNS connection first. If only
+the container fails, inspect the selected Colima VM/container network. Retry `pnpm local:start`
+after resolution recovers. `--restart-runtime` does not restart a VM whose Docker daemon responds,
+and `--no-build` is suitable only when the current, unchanged application images are cached.
+
 ## 1. Start the core stack
 
 The core profile includes the product, API/realtime server, management console, dedicated jobs,

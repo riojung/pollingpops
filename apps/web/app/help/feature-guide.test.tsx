@@ -72,7 +72,7 @@ describe("feature guide reading page", () => {
       <FeatureGuideContent guide={findHelpGuide("first-round")!} />,
     );
     expect(markup).toContain("Your workspace role is read-only");
-    expect(markup).not.toContain('href="/create?start=blank"');
+    expect(markup).not.toContain('href="/create?type=custom&amp;start=blank"');
     expect(markup).toContain("Watch related chapter");
   });
 

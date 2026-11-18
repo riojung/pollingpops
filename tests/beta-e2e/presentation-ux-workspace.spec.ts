@@ -89,11 +89,12 @@ for (const suffix of ["", " @mobile"]) {
     await page.setViewportSize(narrow ? { width: 390, height: 844 } : { width: 1280, height: 720 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await signInBeta(page, undefined, { returnTo: "/create/presentation" });
-    await expect(page.getByRole("button", { name: /^Start blank/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Start blank/ })).toBeVisible();
     await expectAccessible(page);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ scale: "css", path: info.outputPath("creation-start.png") });
 
+    await page.locator('a[href="/create/presentation?start=template"]').click();
     const search = page.getByRole("searchbox", {
       name: "Search presentation templates",
       exact: true,

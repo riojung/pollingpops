@@ -1,11 +1,18 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
 import type { SupportedLocale, WorkspaceProductFeatures } from "@openround/contracts";
 import { creationContent } from "../../lib/i18n/creation-content";
 import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
+import { creationMethodCopy } from "../../lib/i18n/creation-method-copy";
+
+interface Hooks {
+  cursor: number;
+  slots: unknown[];
+  effects: Array<{ effect: () => unknown; dependencies?: readonly unknown[] }>;
+}
 
 const allFeatures = () =>
   WorkspaceProductFeaturesSchema.parse({
@@ -31,7 +38,7 @@ const fixtures = vi.hoisted(() => ({
   push: vi.fn(),
   features: null as WorkspaceProductFeatures | null,
   canEdit: true,
-  capture: false,
+  hooks: null as Hooks | null,
   request: vi.fn(),
   locale: "en-CA" as SupportedLocale,
 }));
@@ -40,10 +47,32 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
-    useState: <T,>(initial: T) => (fixtures.capture ? [initial, vi.fn()] : react.useState(initial)),
-    useRef: <T,>(initial: T) => (fixtures.capture ? { current: initial } : react.useRef(initial)),
-    useEffect: (...args: Parameters<typeof react.useEffect>) => {
-      if (!fixtures.capture) react.useEffect(...args);
+    useState: <T,>(initial: T | (() => T)) => {
+      const hooks = fixtures.hooks;
+      if (!hooks) return react.useState(initial);
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots))
+        hooks.slots[index] = typeof initial === "function" ? (initial as () => T)() : initial;
+      return [
+        hooks.slots[index] as T,
+        (value: T | ((previous: T) => T)) => {
+          hooks.slots[index] =
+            typeof value === "function"
+              ? (value as (previous: T) => T)(hooks.slots[index] as T)
+              : value;
+        },
+      ];
+    },
+    useRef: <T,>(initial: T) => {
+      const hooks = fixtures.hooks;
+      if (!hooks) return react.useRef(initial);
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots)) hooks.slots[index] = { current: initial };
+      return hooks.slots[index] as { current: T };
+    },
+    useEffect: (effect: () => unknown, dependencies?: readonly unknown[]) => {
+      if (fixtures.hooks) fixtures.hooks.effects.push({ effect, dependencies });
+      else react.useEffect(effect as Parameters<typeof react.useEffect>[0], dependencies);
     },
   };
 });
@@ -97,15 +126,87 @@ vi.mock("../../components/workspace/starter-gallery", () => ({
 
 import CreatePage from "./page";
 
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+
+const cleanups: Array<() => void> = [];
+function view() {
+  const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
+  const committedEffects: Array<{ dependencies?: readonly unknown[]; cleanup: unknown }> = [];
+  const page = CreatePage();
+  const shell = page.props.children as ReactElement<{ children: ReactElement }>;
+  const content = shell.props.children.type as () => ReactElement;
+  const cleanup = () => {
+    committedEffects.forEach(({ cleanup }) => {
+      if (typeof cleanup === "function") cleanup();
+    });
+  };
+  cleanups.push(cleanup);
+  return {
+    render() {
+      hooks.cursor = 0;
+      hooks.effects = [];
+      fixtures.hooks = hooks;
+      try {
+        return content();
+      } finally {
+        fixtures.hooks = null;
+      }
+    },
+    effects() {
+      for (const [index, incoming] of hooks.effects.entries()) {
+        const previous = committedEffects[index];
+        if (
+          previous &&
+          incoming.dependencies &&
+          previous.dependencies &&
+          incoming.dependencies.length === previous.dependencies.length &&
+          incoming.dependencies.every((value, offset) =>
+            Object.is(value, previous.dependencies![offset]),
+          )
+        )
+          continue;
+        if (typeof previous?.cleanup === "function") previous.cleanup();
+        committedEffects[index] = {
+          dependencies: incoming.dependencies,
+          cleanup: incoming.effect(),
+        };
+      }
+    },
+    cleanup,
+  };
+}
+
+const html = (tree: ReactNode) => renderToStaticMarkup(tree);
+const form = (tree: ReactNode) => elements(tree).find((element) => element.type === "form")!;
+const submit = (element: ReactElement<Record<string, unknown>>) =>
+  (element.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({
+    preventDefault: vi.fn(),
+  });
+
+afterEach(() => {
+  cleanups.splice(0).forEach((cleanup) => cleanup());
+  vi.unstubAllGlobals();
+});
+
 describe("Round creation launcher", () => {
   beforeEach(() => {
     fixtures.query = "";
     fixtures.push.mockClear();
     fixtures.features = allFeatures();
     fixtures.canEdit = true;
-    fixtures.capture = false;
+    fixtures.hooks = null;
     fixtures.request.mockReset();
     fixtures.locale = "en-CA";
+    vi.stubGlobal(
+      "window",
+      Object.assign(new EventTarget(), {
+        location: new URL("https://example.test/create"),
+      }),
+    );
   });
 
   it("leads with common goals and keeps additional formats in a disclosure", () => {
@@ -113,11 +214,12 @@ describe("Round creation launcher", () => {
 
     expect(markup).toContain("What would you like to do?");
     expect(markup).toContain('href="/create?type=quiz"');
+    expect(markup).toContain('href="/create?type=poll"');
     expect(markup).toContain("Ask a quick poll");
     expect(markup).toContain("Check understanding");
     expect(markup).toContain("Build a presentation");
     expect(markup).toContain("<summary>More formats</summary>");
-    expect(markup).toContain('type="button"');
+    expect(markup).not.toContain('type="button"');
     expect(markup).toContain('href="/surveys/new"');
     expect(markup).toContain('href="/create?type=custom"');
     expect(markup).toContain('href="/create/presentation"');
@@ -125,6 +227,7 @@ describe("Round creation launcher", () => {
     expect(markup).toContain("at their own pace");
     expect(markup).not.toContain("Source authoring workflow");
     expect(markup).not.toContain("Structured import workflow");
+    expect(fixtures.request).not.toHaveBeenCalled();
   });
 
   it("opens a quiz blank draft form immediately and keeps alternatives in the same surface", () => {
@@ -140,15 +243,132 @@ describe("Round creation launcher", () => {
     expect(fixtures.request).not.toHaveBeenCalled();
   });
 
-  it("retains source deep links but prevents scored import methods for a poll", () => {
+  it("navigates from a poll goal through every allowed starting method without creating a draft", () => {
+    const page = view();
+    const poll = elements(page.render()).find(
+      (element) => element.props.href === "/create?type=poll",
+    );
+    expect(poll).toBeDefined();
+    expect(poll!.type).not.toBe("button");
+    fixtures.query = new URL(poll!.props.href as string, "https://example.test").search.slice(1);
+    const blank = page.render();
+    expect(html(blank)).toContain("Start a blank Round");
+    expect(fixtures.request).not.toHaveBeenCalled();
+    const templates = elements(blank).find(
+      (element) => element.props.id === "creation-start-starters",
+    )!;
+    (templates.props.onClick as () => void)();
+    expect(fixtures.push).toHaveBeenLastCalledWith("/create?type=poll&start=starters", {
+      scroll: false,
+    });
+    fixtures.query = "type=poll&start=starters";
+    expect(html(page.render())).toContain("Starter gallery");
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["blank", "roundBlank"],
+    ["starters", "roundTemplate"],
+    ["source", "roundSource"],
+    ["import", "roundImport"],
+  ] as const)("selects the quiz %s workflow through navigation only", (method, explanationKey) => {
+    fixtures.query = "type=quiz";
+    const page = view();
+    const tab = elements(page.render()).find(
+      (element) => element.props.id === `creation-start-${method}`,
+    )!;
+    (tab.props.onClick as () => void)();
+    expect(fixtures.push).toHaveBeenLastCalledWith(`/create?type=quiz&start=${method}`, {
+      scroll: false,
+    });
+    fixtures.query = `type=quiz&start=${method}`;
+    const markup = html(page.render());
+    expect(markup).toContain(`aria-selected="true" id="creation-start-${method}"`);
+    expect(markup).toContain(`aria-labelledby="creation-start-${method}"`);
+    const explanation = creationMethodCopy("en-CA").methods[explanationKey];
+    expect(markup).toContain(html(explanation.input));
+    expect(markup).toContain(html(explanation.assistance));
+    expect(markup).toContain(html(explanation.nextStep));
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it("retains source deep links and explains incompatible poll imports without opening blank", () => {
     fixtures.query = "type=quiz&start=source";
     expect(renderToStaticMarkup(<CreatePage />)).toContain("Source authoring workflow");
     fixtures.query = "type=poll&start=import";
     const markup = renderToStaticMarkup(<CreatePage />);
-    expect(markup).toContain("Start a blank Round");
+    expect(markup).toContain(creationMethodCopy("en-CA").incompatiblePoll);
+    expect(markup).toContain('href="/create?type=custom&amp;start=import"');
+    expect(markup).not.toContain("Start a blank Round");
     expect(markup).not.toContain("Structured import workflow");
     expect(markup).not.toContain('id="creation-start-import"');
     expect(markup).not.toContain('id="creation-start-source"');
+  });
+
+  it.each([
+    "type=unknown",
+    "type=quiz&type=poll",
+    "type=quiz&type=quiz",
+    "type=quiz&start=unknown",
+    "type=quiz&start=blank&start=source",
+    "type=quiz&start=source&start=source",
+  ])("explains invalid selection %s without choosing a workflow or posting", (query) => {
+    fixtures.query = query;
+    const markup = renderToStaticMarkup(<CreatePage />);
+    expect(markup).toContain(creationMethodCopy("en-CA").invalidSelection);
+    expect(markup).not.toContain('role="tabpanel"');
+    expect(markup).not.toContain("Source authoring workflow");
+    expect(markup).not.toContain("Structured import workflow");
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it("follows legacy hashes on initial load, hash changes, and back navigation without posting", () => {
+    window.location.hash = "#source";
+    const page = view();
+    page.render();
+    page.effects();
+    expect(html(page.render())).toContain("Source authoring workflow");
+    window.location.hash = "#import";
+    window.dispatchEvent(new Event("hashchange"));
+    expect(html(page.render())).toContain("Structured import workflow");
+    window.location.hash = "#starters";
+    window.dispatchEvent(new Event("popstate"));
+    expect(html(page.render())).toContain("Starter gallery");
+    window.location.hash = "";
+    window.dispatchEvent(new Event("popstate"));
+    expect(html(page.render())).toContain('href="/create?type=poll"');
+    expect(html(page.render())).not.toContain('role="tabpanel"');
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it("keeps explicit methods authoritative over hashes, including invalid explicit methods", () => {
+    fixtures.query = "type=quiz&start=blank";
+    window.location.hash = "#source";
+    const page = view();
+    page.render();
+    page.effects();
+    expect(html(page.render())).toContain("Start a blank Round");
+    window.location.hash = "#import";
+    window.dispatchEvent(new Event("hashchange"));
+    expect(html(page.render())).not.toContain("Structured import workflow");
+    fixtures.query = "type=quiz&start=unknown";
+    const markup = html(page.render());
+    expect(markup).toContain(creationMethodCopy("en-CA").invalidSelection);
+    expect(markup).not.toContain('role="tabpanel"');
+    expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it("explains an incompatible legacy poll source hash and offers the same method for custom Rounds", () => {
+    fixtures.query = "type=poll";
+    window.location.hash = "#source";
+    const page = view();
+    page.render();
+    page.effects();
+    const markup = html(page.render());
+    expect(markup).toContain(creationMethodCopy("en-CA").incompatiblePoll);
+    expect(markup).toContain('href="/create?type=custom&amp;start=source"');
+    expect(markup).not.toContain('role="tabpanel"');
+    expect(fixtures.request).not.toHaveBeenCalled();
   });
 
   it("localizes goal names and starting method controls in the selected language", () => {
@@ -168,6 +388,7 @@ describe("Round creation launcher", () => {
     "creates one private unscored draft after the explicit action and captures %s through a locale change",
     async (locale) => {
       fixtures.locale = locale;
+      fixtures.query = "type=poll";
       let acknowledge!: (value: unknown) => void;
       fixtures.request.mockImplementation(
         () =>
@@ -175,25 +396,15 @@ describe("Round creation launcher", () => {
             acknowledge = resolve;
           }),
       );
-      fixtures.capture = true;
-      const page = CreatePage();
-      const shell = page.props.children as ReactElement<{ children: ReactElement }>;
-      const content = shell.props.children;
-      const tree = (content.type as () => ReactElement)();
-      fixtures.capture = false;
-      function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
-        if (Array.isArray(node)) return node.flatMap(elements);
-        if (!isValidElement<Record<string, unknown>>(node)) return [];
-        return [node, ...elements(node.props.children as ReactNode)];
-      }
-      const button = elements(tree).find((element) => element.type === "button");
-      expect(button).toBeDefined();
+      const page = view();
+      const createForm = form(page.render());
+      expect(createForm).toBeDefined();
       expect(fixtures.request).not.toHaveBeenCalled();
-      (button!.props.onClick as () => void)();
-      (button!.props.onClick as () => void)();
+      const first = submit(createForm);
+      const second = submit(createForm);
       fixtures.locale = locale === "ko-KR" ? "en-CA" : "ko-KR";
       acknowledge({ quiz: { id: "new-poll" } });
-      for (let index = 0; index < 8; index++) await Promise.resolve();
+      await Promise.all([first, second]);
       expect(fixtures.request).toHaveBeenCalledExactlyOnceWith("/v1/quizzes", {
         method: "POST",
         body: JSON.stringify({ title: creationContent(locale)("untitledRound"), description: "" }),
@@ -232,6 +443,33 @@ describe("Round creation launcher", () => {
     expect(viewer).not.toContain('href="/surveys/new"');
     expect(viewer).not.toContain('href="/boards?create=1"');
   });
+
+  it.each(["viewer", "feature"])(
+    "blocks an earlier create handler after %s access is revoked",
+    async (restriction) => {
+      fixtures.query = "type=poll&start=blank";
+      const page = view();
+      const earlierForm = form(page.render());
+      if (restriction === "viewer") fixtures.canEdit = false;
+      else fixtures.features = { ...allFeatures(), builderV2: false };
+      expect(html(page.render())).not.toContain('type="submit"');
+      await submit(earlierForm);
+      expect(fixtures.request).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["source", "import", "starters"])(
+    "does not mount the %s workflow without editing authority",
+    (method) => {
+      fixtures.query = `type=quiz&start=${method}`;
+      fixtures.canEdit = false;
+      const markup = renderToStaticMarkup(<CreatePage />);
+      expect(markup).not.toContain("Source authoring workflow");
+      expect(markup).not.toContain("Structured import workflow");
+      expect(markup).not.toContain("Starter gallery");
+      expect(fixtures.request).not.toHaveBeenCalled();
+    },
+  );
 
   it("offers only unscored responses for a live poll", () => {
     fixtures.query = "type=poll&start=blank";

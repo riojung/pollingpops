@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { supportedLocales, type StarterId } from "../../packages/contracts/src/index";
+import { creationMethodCopyEntries } from "../../apps/web/lib/i18n/creation-method-copy";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -95,6 +96,7 @@ describe("native-language review preparation", () => {
         "presentation-insights",
         "creation-goal",
         "creation",
+        "creation-method",
         "template",
         "template-guide",
         "presentation-workspace",
@@ -156,6 +158,36 @@ describe("native-language review preparation", () => {
       });
     }
   }, 60_000);
+
+  it("exports every creation method explanation and Survey phrase as pending review material", () => {
+    const english = creationMethodCopyEntries("en-CA");
+    const target = creationMethodCopyEntries("ko-KR");
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/creation-method/"));
+    expect(items).toHaveLength(Object.keys(english).length);
+    expect(items.map((item) => item.id).sort()).toEqual(
+      Object.keys(english)
+        .map((key) => `ui/creation-method/${encodeURIComponent(key)}`)
+        .sort(),
+    );
+    expect(bundle.sourceBinding.files).toContainEqual({
+      path: "apps/web/lib/i18n/creation-method-copy.ts",
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    const decisions = createReviewDecisions(bundle);
+    for (const key of Object.keys(english)) {
+      const id = `ui/creation-method/${encodeURIComponent(key)}`;
+      expect(items.find((item) => item.id === id)).toMatchObject({
+        source: { file: "apps/web/lib/i18n/creation-method-copy.ts", helper: "creationMethodCopy" },
+        english: { template: english[key] },
+        target: { template: target[key] },
+      });
+      expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+        decision: "pending",
+        reviewerReference: null,
+        reviewedAt: null,
+      });
+    }
+  });
 
   it("includes all 164 exact report and insights phrases with bound sources and pending decisions", () => {
     const groups = [

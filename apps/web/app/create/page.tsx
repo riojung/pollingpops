@@ -8,6 +8,7 @@ import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CheckpointSetImport } from "../../components/checkpoint-set-import";
 import { useLocale } from "../../components/locale-provider";
 import { StarterGallery } from "../../components/workspace/starter-gallery";
+import { CreationMethodDetails } from "../../components/workspace/creation-method-details";
 import { questionTypeOptions } from "../../components/workspace/workspace-model";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
@@ -15,14 +16,25 @@ import styles from "../../components/workspace/workspace-content.module.css";
 import { apiFetch, humanError } from "../../lib/api";
 import type { MessageKey } from "../../lib/i18n/catalog";
 import { recordCreationEvent } from "../../components/workspace/product-events";
-import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
+import {
+  resolveRoundCreation,
+  roundCreationHref,
+  roundCreationMethods,
+  workspaceCreationOptions,
+  type RoundCreationMethod,
+} from "../../components/workspace/workspace-creation-model";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import { creationGoalMessages } from "../../lib/i18n/creation-goal-messages";
 import { creationContent } from "../../lib/i18n/creation-content";
+import { creationMethodCopy } from "../../lib/i18n/creation-method-copy";
 import launcherStyles from "./create-launcher.module.css";
 
-const starts = ["blank", "starters", "source", "import"] as const;
-type StartMethod = (typeof starts)[number];
+const methodDetails = {
+  blank: "roundBlank",
+  starters: "roundTemplate",
+  source: "roundSource",
+  import: "roundImport",
+} as const;
 
 const questionTypeKeys: Record<QuestionType, { label: MessageKey; description: MessageKey }> = {
   single_select: {
@@ -60,39 +72,33 @@ const questionTypeKeys: Record<QuestionType, { label: MessageKey; description: M
   },
 };
 
-function startMethod(value: string | null): StartMethod | null {
-  return starts.some((start) => start === value) ? (value as StartMethod) : null;
-}
-
 function CreateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t, locale } = useLocale();
   const copy = workspaceDiscoveryCopy(locale);
   const goals = creationGoalMessages(locale);
+  const methodCopy = creationMethodCopy(locale);
   const { canEdit, entitlements, productFeatures } = useWorkspace();
   const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
   const builderEnabled = productFeatures?.builderV2 === true;
-  const [legacyHashMethod, setLegacyHashMethod] = useState<StartMethod | null>(null);
+  const [legacyHash, setLegacyHash] = useState("");
   const [title, setTitle] = useState("");
   const [questionType, setQuestionType] = useState<QuestionType>("single_select");
   const [busy, setBusy] = useState(false);
   const creatingRef = useRef(false);
+  const creationAllowed = useRef(canEdit && builderEnabled);
+  creationAllowed.current = canEdit && builderEnabled;
   const [error, setError] = useState("");
-  const requestedMethod = startMethod(searchParams.get("start")) ?? legacyHashMethod;
-  const requestedKind = searchParams.get("type");
-  const kind = !builderEnabled
-    ? null
-    : requestedKind === "quiz" || requestedKind === "poll" || requestedKind === "custom"
-      ? requestedKind
-      : requestedMethod
-        ? "custom"
-        : null;
-  const selectedMethod = !kind
-    ? null
-    : kind === "poll" && (requestedMethod === "source" || requestedMethod === "import")
-      ? "blank"
-      : (requestedMethod ?? "blank");
+  const {
+    kind,
+    method: selectedMethod,
+    issue,
+    roundOnly,
+  } = resolveRoundCreation(searchParams, legacyHash, builderEnabled);
+  const incompatibleMethod = searchParams.getAll("start").length
+    ? searchParams.get("start")
+    : legacyHash.slice(1);
   const availableTypes = questionTypeOptions
     .filter(
       (option) =>
@@ -116,7 +122,7 @@ function CreateContent() {
   const roundCards = builderEnabled
     ? (["quiz", "poll", "custom"] as const).map((type) => ({
         id: type,
-        href: `/create?type=${type}${type === "poll" ? "&start=blank" : ""}`,
+        href: roundCreationHref(type),
         label: t(`create.kind.${type}`),
         description: t(`create.kind.${type}.description`),
       }))
@@ -146,16 +152,16 @@ function CreateContent() {
             ? t("create.kind.survey.description")
             : copy.ideaBoardDescription,
     }));
-  const launcherCards =
-    searchParams.get("product") === "round" ? roundCards : [...roundCards, ...productCards];
+  const launcherCards = roundOnly ? roundCards : [...roundCards, ...productCards];
   const primaryCards = ["poll", "quiz", "presentation", "round"].flatMap((id) =>
     launcherCards.filter((card) => card.id === id),
   );
   const moreCards = launcherCards.filter((card) => !primaryCards.includes(card));
-  const methods = starts.filter(
+  const methods = roundCreationMethods.filter(
     (start) => kind !== "poll" || start === "starters" || start === "blank",
   );
-  const methodLabel = (method: StartMethod) => goals[method === "starters" ? "templates" : method];
+  const methodLabel = (method: RoundCreationMethod) =>
+    goals[method === "starters" ? "templates" : method];
   function goalLabel(card: (typeof launcherCards)[number]) {
     return card.id === "poll"
       ? goals.poll
@@ -166,21 +172,7 @@ function CreateContent() {
           : card.label;
   }
   function goalCard(option: (typeof launcherCards)[number]) {
-    return option.id === "poll" ? (
-      <button
-        className={`${styles.startCard} ${launcherStyles.goalCard}`}
-        disabled={busy}
-        key={option.id}
-        onClick={() => void createRound("poll")}
-        type="button"
-      >
-        <strong className={launcherStyles.cardTitle}>{goalLabel(option)}</strong>
-        <span className={launcherStyles.cardDescription}>{option.description}</span>
-        <span className={styles.startLink}>
-          {busy ? t("create.round.blank.creating") : t("create.round.blank.submit")}
-        </span>
-      </button>
-    ) : (
+    return (
       <Link
         className={`${styles.startCard} ${launcherStyles.goalCard}`}
         href={option.href}
@@ -194,8 +186,14 @@ function CreateContent() {
   }
 
   useEffect(() => {
-    if (startMethod(searchParams.get("start"))) return;
-    setLegacyHashMethod(startMethod(window.location.hash.slice(1)));
+    const syncHash = () => setLegacyHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
   }, [searchParams]);
 
   async function createBlank(event: FormEvent) {
@@ -204,7 +202,7 @@ function CreateContent() {
   }
 
   async function createRound(firstResponse: QuestionType) {
-    if (!canEdit || !builderEnabled || creatingRef.current) return;
+    if (!creationAllowed.current || creatingRef.current) return;
     creatingRef.current = true;
     setBusy(true);
     setError("");
@@ -242,6 +240,26 @@ function CreateContent() {
 
   return (
     <>
+      {issue ? (
+        <div className={launcherStyles.selectionNotice} role="alert">
+          <p>
+            {issue === "incompatible-method"
+              ? methodCopy.incompatiblePoll
+              : methodCopy.invalidSelection}
+          </p>
+          {issue === "incompatible-method" ? (
+            <Link
+              className="button-quiet small-button"
+              href={roundCreationHref(
+                "custom",
+                incompatibleMethod === "import" ? "import" : "source",
+              )}
+            >
+              {methodCopy.switchToRound}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
       {error && !selectedMethod ? (
         <p className="error" role="alert" lang="en-CA">
           {error}
@@ -263,10 +281,13 @@ function CreateContent() {
           <p className={launcherStyles.draftNote}>{goals.privateDraft}</p>
         </div>
       ) : null}
-      {selectedMethod ? (
+      {kind ? (
         <div className={styles.focusedCreate}>
           <div className={styles.methodToolbar}>
-            <Link className="button-quiet small-button" href="/create">
+            <Link
+              className="button-quiet small-button"
+              href={roundOnly ? roundCreationHref() : "/create"}
+            >
               {goals.allGoals}
             </Link>
             <span>
@@ -306,11 +327,11 @@ function CreateContent() {
                 disabled={busy}
                 id={`creation-start-${start}`}
                 key={start}
-                onClick={() =>
-                  router.push(`/create?type=${kind}&start=${start}`, { scroll: false })
-                }
+                onClick={() => router.push(roundCreationHref(kind, start), { scroll: false })}
                 role="tab"
-                tabIndex={selectedMethod === start ? 0 : -1}
+                tabIndex={
+                  selectedMethod === start || (!selectedMethod && start === "blank") ? 0 : -1
+                }
                 type="button"
               >
                 {methodLabel(start)}
@@ -318,10 +339,13 @@ function CreateContent() {
             ))}
           </div>
           <div
-            role="tabpanel"
+            role={selectedMethod ? "tabpanel" : undefined}
             id="creation-workflow-panel"
-            aria-labelledby={`creation-start-${selectedMethod}`}
+            aria-labelledby={selectedMethod ? `creation-start-${selectedMethod}` : undefined}
           >
+            {selectedMethod ? (
+              <CreationMethodDetails method={methodDetails[selectedMethod]} />
+            ) : null}
             {selectedMethod === "starters" ? (
               <section className={styles.panel} id="starters">
                 <div className={styles.sectionHeader}>
@@ -346,7 +370,12 @@ function CreateContent() {
                   </div>
                 </div>
                 <div>
-                  <AuthoringAssistant canEdit plain terminology="round" trackCreation />
+                  <AuthoringAssistant
+                    canEdit={canEdit && builderEnabled}
+                    plain
+                    terminology="round"
+                    trackCreation
+                  />
                 </div>
               </section>
             ) : null}
@@ -355,7 +384,7 @@ function CreateContent() {
               <section className={styles.panel} id="import">
                 <div>
                   <CheckpointSetImport
-                    enabled={Boolean(entitlements?.csvExport)}
+                    enabled={canEdit && builderEnabled && Boolean(entitlements?.csvExport)}
                     onImported={async (quiz) => {
                       router.push(`/quiz/${quiz.id}`);
                     }}

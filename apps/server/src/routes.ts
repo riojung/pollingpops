@@ -21,7 +21,6 @@ import {
   AcceptWorkspaceInvitationSchema,
   ApplyAuthoringJobSchema,
   BrandThemeSchema,
-  CheckpointSetImportRequestSchema,
   CreateFolderSchema,
   FolderListQuerySchema,
   CreateAuthoringJobSchema,
@@ -133,8 +132,8 @@ import {
 import { validationIssueMessage } from "./validation.js";
 import type { QnaService } from "./qna-service.js";
 import { QnaError } from "./qna-service.js";
-import { checkpointSetCsv, importCheckpointSet, openRoundJson } from "./portability.js";
-import { exportQtiPackage, importQtiPackage } from "./qti.js";
+import { checkpointSetCsv, openRoundJson } from "./portability.js";
+import { exportQtiPackage } from "./qti.js";
 import { FollowupError, type FollowupService } from "./followup-service.js";
 import { AuthoringError, type AuthoringService } from "./authoring-service.js";
 import { OidcError, type OidcService } from "./oidc-service.js";
@@ -152,6 +151,7 @@ import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
 import { TextResponseReadError } from "./response-moderation.js";
 import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
 import { registerCustomerAccountRoutes, workspaceAccountContext } from "./customer-account.js";
+import { registerCheckpointSetImportRoutes } from "./checkpoint-set-import-routes.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const RoundHistoryParamsSchema = z.object({
@@ -1131,6 +1131,7 @@ export async function registerRoutes(
   });
 
   registerCustomerAccountRoutes(app, { repository, config, auth });
+  registerCheckpointSetImportRoutes(app, { repository, config, auth });
 
   app.put("/v1/account/locale", async (request, reply) => {
     const user = await auth.requireUser(request, reply);
@@ -2025,110 +2026,6 @@ export async function registerRoutes(
       requestId: request.id,
     });
     return reply.code(201).send({ quiz });
-  });
-
-  app.post("/v1/quizzes/import", { bodyLimit: 8_100_000 }, async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
-    if (
-      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
-        .csvExport
-    ) {
-      return apiError(
-        reply,
-        402,
-        "ENTITLEMENT_LIMIT",
-        "Checkpoint-set import is available on the Pro plan",
-        request.id,
-      );
-    }
-    const input = CheckpointSetImportRequestSchema.parse(request.body);
-    const result =
-      input.format === "qti3"
-        ? await importQtiPackage(input.data, input.title)
-        : importCheckpointSet(input.format, input.data, input.title);
-    if (!result.draft) {
-      return reply.code(422).send({
-        error: {
-          code: "IMPORT_VALIDATION_FAILED",
-          message: "The checkpoint set could not be imported. Review the validation details.",
-          requestId: request.id,
-        },
-        validation: result.validation,
-      });
-    }
-    if (
-      (await requireRoundResponseWrite(creator.workspaceId, result.draft, reply, request.id)) !==
-      true
-    )
-      return;
-    // A Pack baseline is immutable evidence, unlike portable destination question media. Never
-    // strip its media IDs under an unchanged hash or grant access to another workspace's media.
-    const baselineMediaIds = new Set(
-      (result.draft.recoveryPackInsertions ?? []).flatMap(({ originalContent, updateBaseline }) =>
-        [originalContent, ...(updateBaseline ? [updateBaseline.content] : [])].flatMap((content) =>
-          [content.diagnostic, content.recheck, content.delayedProbe].flatMap((question) =>
-            question?.mediaId ? [question.mediaId] : [],
-          ),
-        ),
-      ),
-    );
-    for (const mediaId of baselineMediaIds) {
-      const asset = await repository.getMediaAsset(creator.workspaceId, mediaId);
-      if (!asset || asset.deletionStartedAt || asset.scanStatus === "rejected") {
-        return reply.code(422).send({
-          error: {
-            code: "IMPORT_VALIDATION_FAILED",
-            message:
-              "A Recovery Pack baseline references private media unavailable in this workspace. Import into the source workspace or prepare a media-free Pack before exporting.",
-            requestId: request.id,
-          },
-          validation: {
-            ...result.validation,
-            errors: [
-              ...result.validation.errors,
-              {
-                severity: "error",
-                code: "RECOVERY_PACK_MEDIA_UNAVAILABLE",
-                field: "recoveryPackInsertions",
-                message: "The frozen Pack baseline was not changed or imported.",
-              },
-            ],
-          },
-        });
-      }
-    }
-    const now = new Date();
-    const quiz = await repository.createQuiz({
-      id: randomUUID(),
-      workspaceId: creator.workspaceId,
-      title: result.draft.title,
-      description: result.draft.description,
-      status: "draft",
-      draft: result.draft,
-      draftSchemaVersion: roundArtifactSchemaVersion(result.draft),
-      lastEditedBy: creator.userId,
-      currentVersionId: null,
-      folderId: null,
-      tags: [],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await repository.recordAudit({
-      workspaceId: creator.workspaceId,
-      actorId: creator.userId,
-      action: "quiz.import",
-      targetType: "quiz",
-      targetId: quiz.id,
-      requestId: request.id,
-      metadata: {
-        format: input.format,
-        importedCheckpoints: result.validation.importedCheckpoints,
-        warningCount: result.validation.warnings.length,
-      },
-    });
-    return reply.code(201).send({ quiz, validation: result.validation });
   });
 
   app.get("/v1/quizzes/:id", async (request, reply) => {

@@ -30,7 +30,7 @@ describe("creation method explanations", () => {
       expect(localeOptions.find((option) => option.value === locale)?.previewLabel).toBeTruthy();
   });
 
-  it("describes source proposals separately from validate-and-create import", () => {
+  it("describes source proposals and structured import review before explicit creation", () => {
     const { methods } = creationMethodCopy();
     for (const method of [methods.roundSource, methods.presentationSource]) {
       expect(method.input).toMatch(/PDF.*DOCX.*PPTX.*6 MB/);
@@ -44,8 +44,12 @@ describe("creation method explanations", () => {
     );
     expect(methods.roundImport.input).toContain("Requires Pro");
     expect(methods.roundImport.assistance).toBe("No AI is used.");
-    expect(methods.roundImport.nextStep).toMatch(/checks the data and creates.*same action/);
-    expect(methods.roundImport.nextStep).toContain("Review import warnings");
+    expect(methods.roundImport.nextStep).toMatch(
+      /Preview the import.*review questions and warnings/,
+    );
+    expect(methods.roundImport.nextStep).toContain(
+      "Then choose Create draft to create a private editable Round draft",
+    );
   });
 
   it("explains explicit template copies and draft-first outline assistance", () => {

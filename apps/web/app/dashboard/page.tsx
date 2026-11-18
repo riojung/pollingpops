@@ -47,7 +47,13 @@ interface QuizRecord {
 
 function LegacyDashboardPage() {
   const router = useRouter();
-  const { management, productFeatures: workspaceFeatures, startUpgrade } = useWorkspace();
+  const {
+    management,
+    creator: workspaceCreator,
+    canEdit: workspaceCanEdit,
+    productFeatures: workspaceFeatures,
+    startUpgrade,
+  } = useWorkspace();
   const { t } = useLocale();
   const [creator, setCreator] = useState<Creator | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
@@ -321,6 +327,13 @@ function LegacyDashboardPage() {
         {canEdit && entitlements ? (
           <CheckpointSetImport
             enabled={entitlements.csvExport}
+            authority={{
+              actorId: workspaceCreator?.userId ?? "",
+              workspaceId: workspaceCreator?.workspaceId ?? "",
+              role: workspaceCreator?.role ?? "",
+              canEdit: workspaceCanEdit,
+              featureKey: JSON.stringify(workspaceFeatures),
+            }}
             onImported={() => refresh(showArchived)}
             onUpgrade={() => void upgrade()}
           />

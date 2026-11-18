@@ -29,11 +29,13 @@ Each locale receives:
 - `bundle.json`: deterministic canonical content and source binding.
 - `decisions.json`: a separate human-owned record, initially entirely pending.
 
-The current scope has **679 entries per locale**: all 21 Presentation template definitions
+The current scope has **716 entries per locale**: all 21 Presentation template definitions
 and generated drafts, all 36 Round starters and 17 Survey-compatible projections, typed
 creation/practice/report/insights interface inventories, and action-created default/scaffold examples.
 This includes 54 creation-method, navigation and Survey interface phrases covering inputs,
 assistance, explicit draft creation and the existing editor’s visual-import guidance.
+It also includes 37 exact structured-import preview, explicit-creation and confirmation-recovery
+phrases, with one review item for each displayed string from `importPreviewCopy`.
 The team-meetings collection adds its five memberships, all collection interface copy and two
 complete Presentation guides. Existing Round/Survey entries include updated meeting content,
 owner guides and item requirements. See the [collection editorial record](team-meetings-editorial-review-2026-11.md).

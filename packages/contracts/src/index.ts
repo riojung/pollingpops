@@ -1697,6 +1697,21 @@ export const CheckpointSetImportRequestSchema = z
       });
     }
   });
+export type CheckpointSetImportRequest = z.infer<typeof CheckpointSetImportRequestSchema>;
+
+export const CheckpointSetImportCreationContextSchema = z
+  .object({
+    actorId: z.string().uuid().toLowerCase(),
+    workspaceId: z.string().uuid().toLowerCase(),
+  })
+  .strict();
+
+export const CheckpointSetImportPreviewRequestSchema = CheckpointSetImportRequestSchema.strict();
+export const CheckpointSetImportConfirmRequestSchema = CheckpointSetImportRequestSchema.safeExtend({
+  previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKey: z.string().uuid().toLowerCase(),
+  creationContext: CheckpointSetImportCreationContextSchema,
+}).strict();
 
 export const ImportValidationIssueSchema = z.object({
   severity: z.enum(["error", "warning"]),
@@ -1713,6 +1728,17 @@ export const ImportValidationReportSchema = z.object({
   warnings: z.array(ImportValidationIssueSchema),
 });
 export type ImportValidationReport = z.infer<typeof ImportValidationReportSchema>;
+
+export const CheckpointSetImportPreviewResponseSchema = z.object({
+  draft: QuizDraftSchema.nullable(),
+  validation: ImportValidationReportSchema,
+  sourceDigest: CheckpointSetImportConfirmRequestSchema.shape.previewFingerprint,
+  previewFingerprint: CheckpointSetImportConfirmRequestSchema.shape.previewFingerprint,
+  creationContext: CheckpointSetImportCreationContextSchema,
+});
+export type CheckpointSetImportPreviewResponse = z.infer<
+  typeof CheckpointSetImportPreviewResponseSchema
+>;
 
 export const FolderArtifactTypeSchema = z.enum(["round", "presentation", "survey"]);
 export type FolderArtifactType = z.infer<typeof FolderArtifactTypeSchema>;

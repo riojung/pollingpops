@@ -11,6 +11,7 @@ import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
+import { RoundImportError, roundImportKey, type RoundImportIdentity } from "./round-imports.js";
 import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./platform-memory.js";
 import {
   AudienceStoreError,
@@ -332,6 +333,10 @@ export class MemoryRepository implements Repository {
   readonly quizzes = new Map<string, QuizRecord>();
   readonly quizDraftHistory = new Map<string, QuizDraftHistoryRecord>();
   readonly quizDraftMutations = new Map<string, QuizDraftMutationReceipt>();
+  private readonly roundImportReceipts = new Map<
+    string,
+    { workspaceId: string; quizId: string; requestHash: string; createdAt: Date }
+  >();
   readonly questionHealthDismissals = new Map<string, QuestionHealthDismissalRecord>();
   readonly questionHealthApplications = new Map<string, QuestionHealthApplicationRecord>();
   readonly folders = new Map<string, FolderRecord>();
@@ -1409,7 +1414,7 @@ export class MemoryRepository implements Repository {
     return structuredClone(normalizeQuizRecord(quiz));
   }
 
-  async createQuiz(input: QuizRecord) {
+  private insertQuiz(input: QuizRecord) {
     const parsed = normalizeQuizRecord({
       ...input,
       draftSchemaVersion: input.draftSchemaVersion ?? roundArtifactSchemaVersion(input.draft),
@@ -1445,14 +1450,14 @@ export class MemoryRepository implements Repository {
       mutationId: null,
       createdAt: normalized.createdAt,
     });
-    await this.replaceMediaReferences(
+    this.replaceMediaReferencesState(
       normalized.workspaceId,
       "quiz_draft",
       normalized.id,
       quizMediaIds(normalized.draft),
       normalized.createdAt,
     );
-    await this.replaceMediaReferences(
+    this.replaceMediaReferencesState(
       normalized.workspaceId,
       "quiz_history",
       historyId,
@@ -1460,6 +1465,83 @@ export class MemoryRepository implements Repository {
       normalized.createdAt,
     );
     return structuredClone(normalized);
+  }
+
+  async createQuiz(input: QuizRecord) {
+    return this.insertQuiz(input);
+  }
+
+  private assertRoundImportActor(identity: RoundImportIdentity, write = false) {
+    const actor = this.users.get(identity.actorId);
+    const member = this.workspaceMembers.get(`${identity.workspaceId}:${identity.actorId}`);
+    if (
+      !actor ||
+      actor.deletedAt ||
+      !member ||
+      (write && !["owner", "editor"].includes(member.role)) ||
+      !this.workspaces.has(identity.workspaceId) ||
+      this.workspaceMediaDeletionClaims.has(identity.workspaceId)
+    )
+      throw new RoundImportError("UNAUTHORIZED");
+  }
+
+  async getImportedQuiz(identity: RoundImportIdentity) {
+    this.assertRoundImportActor(identity);
+    const prior = this.roundImportReceipts.get(roundImportKey(identity));
+    if (!prior) return null;
+    if (prior.requestHash !== identity.requestHash)
+      throw new RoundImportError("IDEMPOTENCY_CONFLICT");
+    const quiz = this.quizzes.get(prior.quizId);
+    if (!quiz || quiz.workspaceId !== identity.workspaceId || quiz.status === "archived")
+      throw new RoundImportError("IMPORT_TARGET_UNAVAILABLE");
+    return structuredClone(normalizeQuizRecord(quiz));
+  }
+
+  async createImportedQuiz(input: QuizRecord, identity: RoundImportIdentity) {
+    return this.withPublicationLock(identity.workspaceId, async () => {
+      const prior = await this.getImportedQuiz(identity);
+      if (prior) return { status: "duplicate" as const, quiz: prior };
+      this.assertRoundImportActor(identity, true);
+      if (
+        input.workspaceId !== identity.workspaceId ||
+        input.lastEditedBy !== identity.actorId ||
+        input.status !== "draft" ||
+        input.currentVersionId !== null ||
+        (input.draftRevision ?? 0) !== 0 ||
+        this.quizzes.has(input.id)
+      )
+        throw new RoundImportError("IDEMPOTENCY_CONFLICT");
+      try {
+        // Keep the draft, initial history, media references and receipt in one synchronous
+        // section so actor/workspace erasure cannot interleave between these writes.
+        const quiz = this.insertQuiz(input);
+        this.roundImportReceipts.set(roundImportKey(identity), {
+          workspaceId: identity.workspaceId,
+          quizId: quiz.id,
+          requestHash: identity.requestHash,
+          createdAt: new Date(input.createdAt),
+        });
+        return { status: "created" as const, quiz };
+      } catch (error) {
+        this.quizzes.delete(input.id);
+        const historyIds = new Set<string>();
+        for (const [key, history] of this.quizDraftHistory) {
+          if (history.quizId === input.id) {
+            historyIds.add(history.id);
+            this.quizDraftHistory.delete(key);
+          }
+        }
+        for (const [key, reference] of this.mediaReferences) {
+          if (
+            reference.workspaceId === input.workspaceId &&
+            ((reference.ownerType === "quiz_draft" && reference.ownerId === input.id) ||
+              (reference.ownerType === "quiz_history" && historyIds.has(reference.ownerId)))
+          )
+            this.mediaReferences.delete(key);
+        }
+        throw error;
+      }
+    });
   }
 
   async getQuiz(workspaceId: string, quizId: string) {
@@ -3867,7 +3949,7 @@ export class MemoryRepository implements Repository {
     }
   }
 
-  async replaceMediaReferences(
+  private replaceMediaReferencesState(
     workspaceId: string,
     ownerType: MediaReferenceOwnerType,
     ownerId: string,
@@ -3897,11 +3979,24 @@ export class MemoryRepository implements Repository {
       };
       this.mediaReferences.set(`${workspaceId}:${mediaId}:${ownerType}:${ownerId}`, reference);
     }
-    return this.listMediaReferences(workspaceId).then((references) =>
-      references.filter(
-        (reference) => reference.ownerType === ownerType && reference.ownerId === ownerId,
-      ),
-    );
+    return [...this.mediaReferences.values()]
+      .filter(
+        (reference) =>
+          reference.workspaceId === workspaceId &&
+          reference.ownerType === ownerType &&
+          reference.ownerId === ownerId,
+      )
+      .map((reference) => structuredClone(reference));
+  }
+
+  async replaceMediaReferences(
+    workspaceId: string,
+    ownerType: MediaReferenceOwnerType,
+    ownerId: string,
+    mediaIds: string[],
+    createdAt = new Date(),
+  ) {
+    return this.replaceMediaReferencesState(workspaceId, ownerType, ownerId, mediaIds, createdAt);
   }
 
   validateMediaReferences(
@@ -5708,6 +5803,9 @@ export class MemoryRepository implements Repository {
     }
     for (const [key, mutation] of this.quizDraftMutations) {
       if (ownedWorkspaceIds.has(mutation.workspaceId)) this.quizDraftMutations.delete(key);
+    }
+    for (const [key, receipt] of this.roundImportReceipts) {
+      if (ownedWorkspaceIds.has(receipt.workspaceId)) this.roundImportReceipts.delete(key);
     }
     for (const [key, dismissal] of this.questionHealthDismissals) {
       if (ownedWorkspaceIds.has(dismissal.workspaceId)) this.questionHealthDismissals.delete(key);

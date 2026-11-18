@@ -116,7 +116,7 @@ const rows = {
       ],
       roundImport: [
         "Polling Pops JSON, CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB. Requires Pro.",
-        "Validate and create checks the data and creates a private Round draft in the same action. Review import warnings and the draft.",
+        "Preview the import and review questions and warnings. Then choose Create draft to create a private editable Round draft.",
       ],
       presentationBlank: [
         "Start empty; add a title and your own slides in the editor.",
@@ -193,7 +193,7 @@ const rows = {
       ],
       roundImport: [
         "JSON Polling Pops, CSV ou texte en bloc de 2 MB maximum ; ZIP QTI 3 de 6 MB maximum. Offre Pro requise.",
-        "Valider et créer vérifie les données et crée un brouillon de Round privé en une seule action. Vérifiez les avertissements d’import et le brouillon.",
+        "Prévisualisez l’import et vérifiez les questions et les avertissements. Choisissez ensuite Créer le brouillon pour créer un brouillon de Round privé et modifiable.",
       ],
       presentationBlank: [
         "Commencez à vide ; ajoutez un titre et vos diapositives dans l’éditeur.",
@@ -270,7 +270,7 @@ const rows = {
       ],
       roundImport: [
         "Polling Pops JSON, CSV oder Sammeltext bis 2 MB; QTI-3-ZIP bis 6 MB. Erfordert Pro.",
-        "Prüfen und erstellen prüft die Daten und erstellt im selben Schritt einen privaten Round-Entwurf. Prüfen Sie Importwarnungen und den Entwurf.",
+        "Zeigen Sie die Importvorschau an und prüfen Sie Fragen und Warnungen. Wählen Sie dann Entwurf erstellen, um einen privaten, bearbeitbaren Round-Entwurf zu erstellen.",
       ],
       presentationBlank: [
         "Beginnen Sie leer; Titel und eigene Folien ergänzen Sie im Editor.",
@@ -347,7 +347,7 @@ const rows = {
       ],
       roundImport: [
         "JSON de Polling Pops, CSV o texto en bloque de hasta 2 MB; ZIP QTI 3 de hasta 6 MB. Requiere Pro.",
-        "Validar y crear comprueba los datos y crea un borrador de Round privado en la misma acción. Revisa los avisos de importación y el borrador.",
+        "Previsualiza la importación y revisa las preguntas y los avisos. Después elige Crear borrador para crear un borrador de Round privado y editable.",
       ],
       presentationBlank: [
         "Empieza en blanco; añade un título y tus diapositivas en el editor.",
@@ -424,7 +424,7 @@ const rows = {
       ],
       roundImport: [
         "JSON Polling Pops, CSV o testo in blocco fino a 2 MB; ZIP QTI 3 fino a 6 MB. Richiede Pro.",
-        "Convalida e crea controlla i dati e crea una bozza di Round privata con la stessa azione. Esamina gli avvisi di importazione e la bozza.",
+        "Visualizza l’anteprima dell’importazione ed esamina le domande e gli avvisi. Poi scegli Crea bozza per creare una bozza di Round privata e modificabile.",
       ],
       presentationBlank: [
         "Inizia da vuoto; aggiungi un titolo e le tue diapositive nell’editor.",
@@ -501,7 +501,7 @@ const rows = {
       ],
       roundImport: [
         "JSON Polling Pops, CSV ou texto em bloco até 2 MB; ZIP QTI 3 até 6 MB. Requer Pro.",
-        "Validar e criar verifica os dados e cria um rascunho de Round privado na mesma ação. Reveja os avisos de importação e o rascunho.",
+        "Pré-visualize a importação e reveja as perguntas e os avisos. Depois escolha Criar rascunho para criar um rascunho de Round privado e editável.",
       ],
       presentationBlank: [
         "Comece em branco; adicione um título e os seus diapositivos no editor.",
@@ -578,7 +578,7 @@ const rows = {
       ],
       roundImport: [
         "2 MB以下のPolling Pops JSON・CSV・一括テキスト、または6 MB以下のQTI 3 ZIP。Proが必要です。",
-        "「検証して作成」はデータを検証し、同じ操作で非公開のRoundの下書きを作成します。インポートの警告と下書きを確認してください。",
+        "インポートをプレビューし、質問と警告を確認してください。その後「下書きを作成」を選ぶと、非公開の編集可能なRoundの下書きを作成します。",
       ],
       presentationBlank: [
         "空白から始めて、エディターでタイトルとスライドを追加します。",
@@ -655,7 +655,7 @@ const rows = {
       ],
       roundImport: [
         "최대 2 MB의 Polling Pops JSON, CSV, 일괄 텍스트 또는 최대 6 MB의 QTI 3 ZIP. Pro가 필요합니다.",
-        "검증하고 만들기는 데이터를 검증하고 같은 작업에서 비공개 Round 초안을 만듭니다. 가져오기 경고와 초안을 검토하세요.",
+        "가져오기를 미리 보고 질문과 경고를 검토하세요. 그런 다음 초안 만들기를 선택하여 편집 가능한 비공개 Round 초안을 만드세요.",
       ],
       presentationBlank: [
         "빈 상태로 시작한 뒤 편집기에서 제목과 슬라이드를 추가하세요.",
@@ -729,7 +729,7 @@ const rows = {
       ],
       roundImport: [
         "不超过 2 MB 的 Polling Pops JSON、CSV 或批量文本；不超过 6 MB 的 QTI 3 ZIP。需要 Pro。",
-        "“验证并创建”会检查数据，并在同一操作中创建私密 Round 草稿。请查看导入警告并审核草稿。",
+        "先预览导入内容，检查题目和警告。然后选择“创建草稿”，创建可编辑的私密 Round 草稿。",
       ],
       presentationBlank: [
         "从空白开始，然后在编辑器中添加标题和幻灯片。",
@@ -800,7 +800,7 @@ const rows = {
       ],
       roundImport: [
         "不超過 2 MB 的 Polling Pops JSON、CSV 或批次文字；不超過 6 MB 的 QTI 3 ZIP。需要 Pro。",
-        "「驗證並建立」會檢查資料，並在同一操作中建立私人 Round 草稿。請檢視匯入警告並審閱草稿。",
+        "先預覽匯入內容，檢查題目和警告。然後選擇「建立草稿」，建立可編輯的私人 Round 草稿。",
       ],
       presentationBlank: [
         "從空白開始，然後在編輯器中新增標題和投影片。",

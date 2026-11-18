@@ -79,7 +79,7 @@ function CreateContent() {
   const copy = workspaceDiscoveryCopy(locale);
   const goals = creationGoalMessages(locale);
   const methodCopy = creationMethodCopy(locale);
-  const { canEdit, entitlements, productFeatures } = useWorkspace();
+  const { creator, canEdit, entitlements, productFeatures } = useWorkspace();
   const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
   const builderEnabled = productFeatures?.builderV2 === true;
   const [legacyHash, setLegacyHash] = useState("");
@@ -385,6 +385,13 @@ function CreateContent() {
                 <div>
                   <CheckpointSetImport
                     enabled={canEdit && builderEnabled && Boolean(entitlements?.csvExport)}
+                    authority={{
+                      actorId: creator?.userId ?? "",
+                      workspaceId: creator?.workspaceId ?? "",
+                      role: creator?.role ?? "",
+                      canEdit,
+                      featureKey: JSON.stringify(productFeatures),
+                    }}
                     onImported={async (quiz) => {
                       router.push(`/quiz/${quiz.id}`);
                     }}

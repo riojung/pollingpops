@@ -13,6 +13,12 @@ import {
 } from "./platform-postgres.js";
 import { PlatformService } from "./platform-service.js";
 import { PlatformError } from "./platform-types.js";
+import {
+  RoundImportError,
+  roundImportActorHash,
+  roundImportKey,
+  type RoundImportIdentity,
+} from "./round-imports.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
@@ -2439,55 +2445,148 @@ export class PostgresRepository implements Repository {
     return result.rows[0] ? mapQuiz(result.rows[0]) : null;
   }
 
-  async createQuiz(input: QuizRecord) {
+  private async insertQuiz(client: PoolClient, input: QuizRecord) {
     const draftSchemaVersion = input.draftSchemaVersion ?? roundArtifactSchemaVersion(input.draft);
     const draft = upcastRoundDraft(input.draft, draftSchemaVersion);
-    return this.transaction(
-      async (client) => {
-        const result = await client.query(
-          `INSERT INTO quizzes (
+    const result = await client.query(
+      `INSERT INTO quizzes (
              id, workspace_id, title, description, status, draft, folder_id, tags,
              draft_revision, draft_schema_version, published_draft_revision, last_edited_by,
              created_at, updated_at
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9, $10, $11, $12, $13, $14)
            RETURNING *`,
-          [
-            input.id,
-            input.workspaceId,
-            draft.title,
-            draft.description,
-            input.status,
-            JSON.stringify(draft),
-            input.folderId ?? null,
-            input.tags ?? [],
-            input.draftRevision ?? 0,
-            draftSchemaVersion,
-            input.publishedDraftRevision ?? null,
-            input.lastEditedBy ?? null,
-            input.createdAt,
-            input.updatedAt,
-          ],
-        );
-        await client.query(
-          `INSERT INTO quiz_draft_history
+      [
+        input.id,
+        input.workspaceId,
+        draft.title,
+        draft.description,
+        input.status,
+        JSON.stringify(draft),
+        input.folderId ?? null,
+        input.tags ?? [],
+        input.draftRevision ?? 0,
+        draftSchemaVersion,
+        input.publishedDraftRevision ?? null,
+        input.lastEditedBy ?? null,
+        input.createdAt,
+        input.updatedAt,
+      ],
+    );
+    await client.query(
+      `INSERT INTO quiz_draft_history
              (id, workspace_id, quiz_id, revision, draft, draft_schema_version,
               saved_by, mutation_id, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8)
            ON CONFLICT (quiz_id, revision) DO NOTHING`,
+      [
+        randomUUID(),
+        input.workspaceId,
+        input.id,
+        input.draftRevision ?? 0,
+        JSON.stringify(draft),
+        draftSchemaVersion,
+        input.lastEditedBy ?? null,
+        input.createdAt,
+      ],
+    );
+    return mapQuiz(result.rows[0]!);
+  }
+
+  async createQuiz(input: QuizRecord) {
+    return this.transaction((client) => this.insertQuiz(client, input), {
+      workspaceId: input.workspaceId,
+    });
+  }
+
+  private async assertRoundImportActor(
+    client: PoolClient,
+    identity: RoundImportIdentity,
+    write = false,
+  ) {
+    // Identity rows have system-only RLS. Restore the workspace scope before touching content.
+    await client.query("SELECT set_config('app.system_access','on',true)");
+    const actor = await client.query(
+      "SELECT id FROM users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+      [identity.actorId],
+    );
+    await client.query("SELECT set_config('app.system_access','',true)");
+    const workspace = await client.query(
+      "SELECT id FROM workspaces WHERE id=$1 AND deletion_started_at IS NULL AND NOT EXISTS(SELECT 1 FROM workspace_media_deletion_jobs deletion WHERE deletion.workspace_id=workspaces.id) FOR SHARE",
+      [identity.workspaceId],
+    );
+    const member = await client.query(
+      "SELECT role FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+      [identity.workspaceId, identity.actorId],
+    );
+    if (
+      actor.rowCount !== 1 ||
+      workspace.rowCount !== 1 ||
+      member.rowCount !== 1 ||
+      (write && !["owner", "editor"].includes(member.rows[0]?.role))
+    )
+      throw new RoundImportError("UNAUTHORIZED");
+  }
+
+  private async importedQuizForTransaction(client: PoolClient, identity: RoundImportIdentity) {
+    const prior = await client.query(
+      "SELECT request_hash,quiz_id FROM round_import_receipts WHERE workspace_id=$1 AND actor_hash=$2 AND idempotency_key=$3",
+      [identity.workspaceId, roundImportActorHash(identity.actorId), identity.idempotencyKey],
+    );
+    if (!prior.rows[0]) return null;
+    if (prior.rows[0].request_hash !== identity.requestHash)
+      throw new RoundImportError("IDEMPOTENCY_CONFLICT");
+    const current = await client.query(
+      "SELECT * FROM quizzes WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+      [identity.workspaceId, prior.rows[0].quiz_id],
+    );
+    if (!current.rows[0] || current.rows[0].status === "archived")
+      throw new RoundImportError("IMPORT_TARGET_UNAVAILABLE");
+    return mapQuiz(current.rows[0]);
+  }
+
+  async getImportedQuiz(identity: RoundImportIdentity) {
+    return this.transaction(
+      async (client) => {
+        await this.assertRoundImportActor(client, identity);
+        return this.importedQuizForTransaction(client, identity);
+      },
+      { workspaceId: identity.workspaceId },
+    );
+  }
+
+  async createImportedQuiz(input: QuizRecord, identity: RoundImportIdentity) {
+    return this.transaction(
+      async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `round-import:${roundImportKey(identity)}`,
+        ]);
+        await this.assertRoundImportActor(client, identity);
+        const prior = await this.importedQuizForTransaction(client, identity);
+        if (prior) return { status: "duplicate" as const, quiz: prior };
+        await this.assertRoundImportActor(client, identity, true);
+        if (
+          input.workspaceId !== identity.workspaceId ||
+          input.lastEditedBy !== identity.actorId ||
+          input.status !== "draft" ||
+          input.currentVersionId !== null ||
+          (input.draftRevision ?? 0) !== 0
+        )
+          throw new RoundImportError("IDEMPOTENCY_CONFLICT");
+        const quiz = await this.insertQuiz(client, input);
+        await client.query(
+          "INSERT INTO round_import_receipts(workspace_id,actor_hash,idempotency_key,request_hash,quiz_id,created_at) VALUES($1,$2,$3,$4,$5,$6)",
           [
-            randomUUID(),
-            input.workspaceId,
-            input.id,
-            input.draftRevision ?? 0,
-            JSON.stringify(draft),
-            draftSchemaVersion,
-            input.lastEditedBy ?? null,
+            identity.workspaceId,
+            roundImportActorHash(identity.actorId),
+            identity.idempotencyKey,
+            identity.requestHash,
+            quiz.id,
             input.createdAt,
           ],
         );
-        return mapQuiz(result.rows[0]!);
+        return { status: "created" as const, quiz };
       },
-      { workspaceId: input.workspaceId },
+      { workspaceId: identity.workspaceId },
     );
   }
 

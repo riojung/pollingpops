@@ -160,7 +160,9 @@ describe("explicit starter creation languages", () => {
         .templates.find((entry) => entry.id === "team-collaboration")!;
       expect(survey.draft.title).toBe(summary.title);
       expect(survey.draft.items[0].question.prompt).toBe(summary.previewPrompt);
-      expect(survey.draft.description).toBe(surveyCreationCopy(locale).description);
+      expect(survey.draft.description).toBe(
+        instantiateSurveyStarter("team-collaboration", locale)!.description,
+      );
       const blank = await app.inject({
         method: "POST",
         url: "/v1/surveys",

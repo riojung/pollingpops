@@ -17,6 +17,14 @@ import {
   templateGuideCopyKeys,
 } from "../../apps/web/lib/i18n/template-guide-copy";
 import {
+  templateCollectionCopy,
+  templateCollectionCopyKeys,
+} from "../../apps/web/lib/i18n/template-collection-copy";
+import {
+  templateCollectionGuide,
+  templateCollectionMemberships,
+} from "../../apps/web/lib/template-collections";
+import {
   presentationWorkspaceCopy,
   presentationWorkspaceCopyKeys,
 } from "../../apps/web/lib/i18n/presentation-workspace-copy";
@@ -232,6 +240,40 @@ describe("native-language review preparation", () => {
     ).toBe(true);
   });
 
+  it("includes the collection selection, all copy and full Presentation guides as pending review", () => {
+    for (const key of templateCollectionCopyKeys) {
+      expect(
+        bundle.items.find((item) => item.id === `ui/template-collection/${key}`),
+      ).toMatchObject({
+        english: { template: templateCollectionCopy("en-CA")[key] },
+        target: { template: templateCollectionCopy("ko-KR")[key] },
+      });
+    }
+    expect(
+      bundle.items.find((item) => item.id === "collection/team-meetings/memberships")?.english,
+    ).toEqual(templateCollectionMemberships);
+    for (const id of ["meeting", "retrospective"]) {
+      expect(bundle.items.find((item) => item.id === `presentation/${id}/guide`)).toMatchObject({
+        english: templateCollectionGuide("presentation", id, "en-CA"),
+        target: templateCollectionGuide("presentation", id, "ko-KR"),
+      });
+    }
+    const decisions = createReviewDecisions(bundle);
+    expect(
+      decisions.entries.every(
+        (entry) => entry.decision === "pending" && entry.reviewerReference === null,
+      ),
+    ).toBe(true);
+    expect(bundle.sourceBinding.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "apps/web/lib/template-collections.ts" }),
+        expect.objectContaining({ path: "apps/web/lib/i18n/template-collection-copy.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-meeting-collection.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-meeting-copy.ts" }),
+      ]),
+    );
+  });
+
   it("is byte deterministic despite fresh generated identities and changing invocation time", async () => {
     const again = await buildReviewBundle("ko-KR", sourceRef);
     expect(canonicalJson(again)).toBe(canonicalJson(bundle));
@@ -320,8 +362,17 @@ describe("native-language review preparation", () => {
     expect(eventContext.guide.facilitation).not.toBe((eventRound.target as any).guide.facilitation);
     expect(eventContext.description).not.toBe(eventContext.guide.facilitation);
     expect(eventContext.guide.minutes).toBe(5);
-    const legacySurvey = bundle.items.find(
+    const collaborationSurvey = bundle.items.find(
       (item) => item.id === "survey/team-collaboration/context",
+    )!;
+    expect((collaborationSurvey.target as any).items.map((item: any) => item.required)).toEqual([
+      true,
+      true,
+      false,
+      true,
+    ]);
+    const legacySurvey = bundle.items.find(
+      (item) => item.id === "survey/training-feedback/context",
     )!;
     expect((legacySurvey.target as any).items.every((item: any) => item.required)).toBe(true);
     const defaults = bundle.items.find((item) => item.id === "defaults/question-scaffolds")!;

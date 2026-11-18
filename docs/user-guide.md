@@ -27,6 +27,12 @@ later in the Round editor. A live poll is not a self-paced Survey.
 Open **Templates** from the workspace navigation and choose **Designs**, **Rounds**,
 **Presentations**, or **Surveys**. Home offers format-specific template shortcuts, and an empty
 Library links to the matching section. Template format links survive reload and browser history.
+
+Choose **Collections → Team meetings** to narrow the formats to two short Rounds, two guided
+Presentations and one follow-up Survey. Each works on its own. The collection stays selected when
+you switch between those formats and survives reload and back/forward navigation. Choose
+**All templates** to browse the complete catalog; choosing **Designs** clears the collection.
+Open the template guide for audience, estimated time, preparation and a concrete follow-up.
 Search original Round and Survey templates and filter by category/type. On a wide screen, browse
 summaries beside the selected preview; on a phone, choose a template above the preview. Prompts,
 options, answer explanations and facilitator guidance can be inspected without creating content.

@@ -38,13 +38,13 @@ function structure(draft: QuizDraft) {
 }
 
 describe("creation-only original starter catalogs", () => {
-  it("pins reviewed English content and guides alongside complete localized factories", () => {
+  it("pins original English content and guides alongside complete localized factories", () => {
     const original = JSON.stringify(
       starterSummaries.map((summary) => ({ summary, draft: instantiateStarter(summary.id) })),
     ).replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/giu, "<id>");
     expect(createHash("sha256").update(original).digest("hex")).toBe(
-      // Launch collection v2: eight reviewed deeper originals, keyed translations, and guides.
-      "c3bc7f80dc6edd78f43e1408da74cc441cb8143dfc9b4d016149b8fa75712be0",
+      // Launch originals plus three keyed team-meeting originals; human language review is separate.
+      "ae95e5cf328da33292e7b880c4e9846ed52dcb50c218e243faefd7bba9c21b1b",
     );
   });
   it.each(supportedLocales)(

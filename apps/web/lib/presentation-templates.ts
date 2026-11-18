@@ -228,7 +228,7 @@ export const presentationTemplates = [
         "Unclear priorities",
         "Slow feedback",
         "Handoffs and dependencies",
-        "Interruptions",
+        "Nothing to raise",
       ]),
       slide(
         "Turn an observation into an experiment",

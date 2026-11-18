@@ -29,9 +29,12 @@ Each locale receives:
 - `bundle.json`: deterministic canonical content and source binding.
 - `decisions.json`: a separate human-owned record, initially entirely pending.
 
-The current scope has **374 entries per locale**: all 21 Presentation template definitions
+The current scope has **625 entries per locale**: all 21 Presentation template definitions
 and generated drafts, all 36 Round starters and 17 Survey-compatible projections, typed
-creation/practice interface inventories, and action-created default/scaffold examples.
+creation/practice/report/insights interface inventories, and action-created default/scaffold examples.
+The team-meetings collection adds its five memberships, all collection interface copy and two
+complete Presentation guides. Existing Round/Survey entries include updated meeting content,
+owner guides and item requirements. See the [collection editorial record](team-meetings-editorial-review-2026-11.md).
 This is a bounded review inventory, not a claim that every product message is included.
 It contains repository copy and synthetic authored examples, not customer records.
 

@@ -12,6 +12,8 @@ import { useWorkspace, WorkspaceProvider } from "../../components/workspace/work
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import styles from "../../components/workspace/workspace-content.module.css";
 import galleryStyles from "../../components/workspace/template-gallery.module.css";
+import { parseTemplateCollection, type TemplateCollectionId } from "../../lib/template-collections";
+import { templateCollectionCopy } from "../../lib/i18n/template-collection-copy";
 
 const types = ["designs", "rounds", "presentations", "surveys"] as const;
 type TemplateType = (typeof types)[number];
@@ -40,9 +42,21 @@ function TemplatesWorkspace() {
     : requestedType === null && hash === "#designs" && productFeatures?.presentations
       ? "designs"
       : "rounds";
+  const collectionCopy = templateCollectionCopy(locale);
+  const collection =
+    type === "designs" ? null : parseTemplateCollection(searchParams.get("collection"));
   function selectType(next: TemplateType) {
     const query = new URLSearchParams(searchParams.toString());
     query.set("type", next);
+    if (next === "designs") query.delete("collection");
+    router.push(`/templates?${query}`, { scroll: false });
+  }
+  function selectCollection(next: TemplateCollectionId | null) {
+    const query = new URLSearchParams(searchParams.toString());
+    if (next) {
+      query.set("collection", next);
+      if (type === "designs") query.set("type", "rounds");
+    } else query.delete("collection");
     router.push(`/templates?${query}`, { scroll: false });
   }
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -73,6 +87,42 @@ function TemplatesWorkspace() {
       translationLevel="full"
     >
       <div className={styles.panel}>
+        <section
+          className={galleryStyles.collectionHeader}
+          aria-labelledby="template-collection-heading"
+          data-template-collection={collection ?? "all"}
+        >
+          <div>
+            <h2 id="template-collection-heading" className={galleryStyles.sectionTitle}>
+              {collectionCopy.label}
+            </h2>
+            {collection ? <p>{collectionCopy.description}</p> : null}
+          </div>
+          <div
+            className={galleryStyles.collectionChoices}
+            role="group"
+            aria-label={collectionCopy.chooseCollection}
+          >
+            <button
+              type="button"
+              className={galleryStyles.collectionChoice}
+              aria-pressed={collection === null}
+              data-collection="all"
+              onClick={() => selectCollection(null)}
+            >
+              {collectionCopy.allTemplates}
+            </button>
+            <button
+              type="button"
+              className={galleryStyles.collectionChoice}
+              aria-pressed={collection === "team-meetings"}
+              data-collection="team-meetings"
+              onClick={() => selectCollection("team-meetings")}
+            >
+              {collectionCopy.title}
+            </button>
+          </div>
+        </section>
         <div
           className={galleryStyles.tabs}
           role="tablist"
@@ -147,9 +197,13 @@ function TemplatesWorkspace() {
                 {value === "designs" ? (
                   <PresentationDesignGallery />
                 ) : value === "presentations" ? (
-                  <PresentationTemplateGallery />
+                  <PresentationTemplateGallery key={value} collection={collection} />
                 ) : (
-                  <StarterGallery survey={value === "surveys"} />
+                  <StarterGallery
+                    key={value}
+                    survey={value === "surveys"}
+                    collection={collection}
+                  />
                 )}
               </>
             ) : null}

@@ -130,6 +130,92 @@ afterEach(() => {
 });
 
 describe("Presentation template gallery", () => {
+  it("preserves pending saves and exact retry bodies when collection changes reset browsing", async () => {
+    let collection: "team-meetings" | null = "team-meetings";
+    let rejectSave!: (error: Error) => void;
+    const firstSave = new Promise((_, reject) => {
+      rejectSave = reject;
+    });
+    let saves = 0;
+    const id = "00000000-0000-4000-8000-000000000021";
+    mocked.fetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/presentations") return { presentation: { id, draftRevision: 0 } };
+      if (++saves === 1) return firstSave;
+      return { presentation: { id, draftRevision: 1 } };
+    });
+    const view = harness(() => PresentationTemplateGallery({ collection }));
+    view.render();
+    const useTemplate = () =>
+      (
+        button(view.card("meeting"), "templateLibrary.usePresentation").props.onClick as () => void
+      )();
+    const originalUse = button(view.card("meeting"), "templateLibrary.usePresentation").props
+      .onClick as () => void;
+    originalUse();
+    await settle();
+    view.render();
+    (view.find((node) => node.type === "input").props.onChange as (event: unknown) => void)({
+      target: { value: "No results" },
+    });
+    view.render();
+    collection = null;
+    view.render();
+    view.render();
+    expect(view.find((node) => node.type === "input").props.value).toBe("");
+    expect(
+      button(view.card("meeting"), "templateLibrary.creatingPresentation").props.disabled,
+    ).toBe(true);
+    originalUse();
+    expect(mocked.fetch.mock.calls.filter(([path]) => path === "/v1/presentations")).toHaveLength(
+      1,
+    );
+    rejectSave(new Error("Save acknowledgement lost"));
+    await settle();
+    collection = "team-meetings";
+    view.render();
+    view.render();
+    expect(view.markup()).toContain("Save acknowledgement lost");
+    useTemplate();
+    await settle();
+    const puts = mocked.fetch.mock.calls.filter(
+      ([path]) => path === `/v1/presentations/${id}/draft`,
+    );
+    expect(puts).toHaveLength(2);
+    expect(puts[1]![1].body).toBe(puts[0]![1].body);
+    expect(mocked.fetch.mock.calls.filter(([path]) => path === "/v1/presentations")).toHaveLength(
+      1,
+    );
+    expect(mocked.push).toHaveBeenCalledExactlyOnceWith(`/presentation/${id}`);
+  });
+  it("limits the team collection to its two original Presentations with contextual guides", () => {
+    const view = harness(() => PresentationTemplateGallery({ collection: "team-meetings" }));
+    view.render();
+    expect(view.markup().match(/data-template-id=/g)).toHaveLength(2);
+    expect(view.card("meeting")).toBeDefined();
+    expect(view.card("retrospective")).toBeDefined();
+    expect(view.markup()).not.toContain('data-template-id="native-startup-pitch"');
+    expect(renderToStaticMarkup(view.card("meeting"))).toContain("About 20 min");
+    (
+      button(view.card("meeting"), "templateLibrary.previewStructure").props.onClick as (
+        event: unknown,
+      ) => void
+    )({ currentTarget: { focus: vi.fn() } });
+    view.render();
+    expect(
+      view.find((node) => node.type === PresentationTemplatePreview).props.guide,
+    ).toMatchObject({ minutes: 20 });
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    const clear = view.find((node) => node.type === "input");
+    (clear.props.onChange as (event: unknown) => void)({ target: { value: "missing" } });
+    view.render();
+    expect(view.markup()).toContain("starter.noMatches");
+    (
+      view.find((node) => node.type === "button" && node.props.children === "Clear filters").props
+        .onClick as () => void
+    )();
+    view.render();
+    expect(view.markup().match(/data-template-id=/g)).toHaveLength(2);
+  });
   it("localizes catalog metadata and freezes reviewed content across interface language changes", () => {
     mocked.locale = "fr-FR";
     const view = harness(() => PresentationTemplateGallery());

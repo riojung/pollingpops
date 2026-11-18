@@ -8,9 +8,25 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-04 Team meetings template collection
+
+The next bounded increment on `codex/team-meeting-collection` groups five existing originals:
+two Rounds, two Presentations and one follow-up Survey. Collection selection survives format
+changes and browser navigation; existing catalogs, previews and independent-copy factories remain
+the source of content and actions. The two Rounds now have four opinion questions each, and the
+four-item collaboration Survey has an optional context item. Guides add audience/time estimates,
+preparation, interpretation limits and practical follow-up. Opinion choices remain unscored and
+include neutral alternatives.
+
+Ten-locale seed content and complete collection guides enter source-bound review packets.
+The [editorial record](evidence/team-meetings-editorial-review-2026-11.md) distinguishes automated
+content/code checks from pending human editorial and native-language acceptance. No migration,
+publication-format change, dependency, new asset or customer-outcome claim is introduced.
+WX-05 creation/source-intake consolidation remains the next P1 checkpoint.
+
 ### WX-03 All content Library discovery
 
-WX-01 and WX-02 merged in PR #271. The next focused increment on `codex/library-all-content`
+WX-01 and WX-02 merged in PR #271. WX-03 merged in PR #272 at `edac7b6` and
 adds All content across Rounds, Presentations and Surveys for workspace, organization and direct
 sharing scopes. Search/filter/sort work on authorized server metadata before pagination; exact
 result totals remain distinct from loaded rows. Existing explicit content-type management links

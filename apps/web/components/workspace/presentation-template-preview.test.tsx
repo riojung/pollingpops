@@ -5,6 +5,7 @@ import { instantiatePresentationTemplate } from "../../lib/presentation-template
 import { loadPresentationTemplateLocale } from "../../lib/presentation-template-locales";
 import { presentationTemplateCopy } from "../../lib/i18n/presentation-template-copy";
 import { nativeAudienceCopy } from "../presentation/native-audience-copy";
+import { templateCollectionGuide } from "../../lib/template-collections";
 import {
   PresentationTemplatePreview,
   PresentationTemplateSlide,
@@ -18,6 +19,23 @@ beforeAll(async () => {
 });
 
 describe("template creation-language rendering", () => {
+  it("renders the activity guide in the captured content language without changing the draft", () => {
+    const draft = instantiatePresentationTemplate("meeting", "fr-FR");
+    const guide = templateCollectionGuide("presentation", "meeting", "fr-FR")!;
+    const before = JSON.stringify(draft);
+    const html = renderToStaticMarkup(
+      <PresentationTemplatePreview
+        draft={draft}
+        guide={guide}
+        contentLocale="fr-FR"
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain(renderToStaticMarkup(<dd lang="fr-FR">{guide.preparation}</dd>));
+    expect(html).toContain(renderToStaticMarkup(<dd lang="fr-FR">{guide.followUp}</dd>));
+    expect(html).toContain('<dd lang="fr-FR">');
+    expect(JSON.stringify(draft)).toBe(before);
+  });
   it.each(supportedLocales)(
     "%s marks captured native and facilitated thumbnail copy without changing the draft",
     (locale) => {

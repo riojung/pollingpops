@@ -21,6 +21,7 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 | Understand product behavior and interaction choices                  | [Product and experience design](design.md)                                                   |
 | Compare current Wayground and Mentimeter workflows and offers        | [November workspace experience benchmark](workspace-experience-benchmark-2026-11.md)         |
 | Plan small workspace polish and compatible feature increments        | [Workspace experience delivery backlog](workspace-experience-backlog-2026-11.md)             |
+| Check Team meetings content, provenance and pending language review  | [Team meetings editorial record](evidence/team-meetings-editorial-review-2026-11.md)         |
 | Review the October competitor and customer-needs synthesis           | [October 27 competitor research](competitor-research-2026-10-27.md)                          |
 | Benchmark broad presentation creation, especially Genially and Prezi | [November presentation benchmark](presentation-benchmark-2026-11.md)                         |
 | Plan a low-priced presentation creator with Codex                    | [Presentation implementation plan](presentation-implementation-plan-2026-11.md)              |

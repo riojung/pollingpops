@@ -20,6 +20,7 @@ import styles from "./workspace-content.module.css";
 import galleryStyles from "./template-gallery.module.css";
 import { recordAuthoringEvent, recordCreationEvent } from "./product-events";
 import { surveyMutationKey } from "../../lib/survey-client";
+import { collectionTemplateIds, type TemplateCollectionId } from "../../lib/template-collections";
 
 const categoryKeys: Record<RoundCategory, MessageKey> = {
   general: "category.general",
@@ -58,14 +59,23 @@ type PreviewState = {
   reveal?: boolean;
 };
 
+type StarterFilters = {
+  collection: TemplateCollectionId | null;
+  search: string;
+  category: RoundCategory | "all";
+  type: "all" | "quiz" | "poll" | "custom";
+};
+
 export function StarterGallery({
   compact = false,
   roundType = "all",
   survey = false,
+  collection = null,
 }: {
   compact?: boolean;
   roundType?: "all" | "quiz" | "poll" | "custom";
   survey?: boolean;
+  collection?: TemplateCollectionId | null;
 }) {
   const router = useRouter();
   const { locale, t } = useLocale();
@@ -86,9 +96,15 @@ export function StarterGallery({
   const [busyId, setBusyId] = useState("");
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<RoundCategory | "all">("all");
-  const [type, setType] = useState(roundType);
+  const defaults: StarterFilters = { collection, search: "", category: "all", type: roundType };
+  const [filters, setFilters] = useState<StarterFilters>(defaults);
+  const currentFilters = filters.collection === collection ? filters : defaults;
+  // Reset browsing without unmounting the owner of pending copies and retry intents.
+  if (filters.collection !== collection) setFilters(currentFilters);
+  const { search, category, type } = currentFilters;
+  function updateFilters(change: Partial<Omit<StarterFilters, "collection">>) {
+    setFilters((current) => ({ ...current, ...change }));
+  }
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [contentLocale, setContentLocale] = useState(locale);
   const [catalogScope, setCatalogScope] = useState("");
@@ -371,10 +387,12 @@ export function StarterGallery({
   }
 
   const effectiveType = survey ? "poll" : roundType !== "all" ? roundType : type;
+  const collectionIds = collectionTemplateIds(survey ? "survey" : "round", collection);
   const orderedStarters = [...prioritizeStartersForSegment(visibleStarters, creator?.segment)]
     .sort((first, second) => Number(Boolean(second.guide)) - Number(Boolean(first.guide)))
     .filter(
       (starter) =>
+        (!collectionIds || collectionIds.includes(starter.id)) &&
         (!survey ||
           starter.responseTypes.every(
             (responseType) => responseType === "poll" || responseType === "rating",
@@ -498,7 +516,7 @@ export function StarterGallery({
             className="input"
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => updateFilters({ search: event.target.value })}
           />
         </label>
         <label className="field">
@@ -506,7 +524,9 @@ export function StarterGallery({
           <select
             className="input"
             value={category}
-            onChange={(event) => setCategory(event.target.value as RoundCategory | "all")}
+            onChange={(event) =>
+              updateFilters({ category: event.target.value as RoundCategory | "all" })
+            }
           >
             <option value="all">{t("starter.allCategories")}</option>
             {Object.entries(categoryKeys).map(([value, key]) => (
@@ -522,7 +542,7 @@ export function StarterGallery({
             <select
               className="input"
               value={type}
-              onChange={(event) => setType(event.target.value as typeof type)}
+              onChange={(event) => updateFilters({ type: event.target.value as typeof type })}
             >
               <option value="all">{t("starter.allTypes")}</option>
               {(["quiz", "poll", "custom"] as const).map((value) => (

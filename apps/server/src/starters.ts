@@ -11,6 +11,7 @@ import {
   type StarterSummary,
   type RoundCategory,
   type SupportedLocale,
+  type StarterGuide,
 } from "@openround/contracts";
 import { localizedStarter, localizedStarterDescription } from "./starter-localization.js";
 import { SurveyDraftSchema, type SurveyDraft } from "@openround/contracts/surveys";
@@ -21,6 +22,12 @@ import {
   launchStarterGuide,
   launchSurveyOptions,
 } from "./starter-launch-collection.js";
+import {
+  MEETING_STARTER_IDS,
+  meetingStarter,
+  meetingStarterGuide,
+  meetingSurveyOptions,
+} from "./starter-meeting-collection.js";
 
 const ids = {
   q1: "00000000-0000-4000-8000-000000000001",
@@ -1162,6 +1169,12 @@ for (const id of LAUNCH_STARTER_IDS) {
   metadata[id] = { ...metadata[id]!, description: draft.description };
 }
 
+for (const id of MEETING_STARTER_IDS) {
+  const draft = meetingStarter(id, "en-CA")!;
+  starterDrafts[id] = draft;
+  metadata[id] = { ...metadata[id]!, description: draft.description };
+}
+
 for (const [id, draft] of Object.entries(starterDrafts)) {
   starterDrafts[id as StarterId] = QuizContentSchema.parse(draft);
 }
@@ -1178,7 +1191,7 @@ export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map(
     questionCount: draft.questions.length,
     previewPrompt: draft.questions[0]!.prompt,
     responseTypes: [...new Set(draft.questions.map((question) => question.type))],
-    guide: launchStarterGuide(id, "en-CA"),
+    guide: starterGuideForLocale(id, "en-CA"),
     version: 1,
     roundType: draft.questions.every((q) => !questionTypeDefinition(q.type).scored)
       ? "poll"
@@ -1190,7 +1203,7 @@ export const starterSummaries = (Object.keys(starterDrafts) as StarterId[]).map(
 
 /** Locale is chosen only for a new copy; canonical originals and existing records are immutable. */
 export function instantiateStarter(id: StarterId, locale: SupportedLocale = "en-CA"): QuizDraft {
-  const source = localizedStarter(starterDrafts[id]!, id, locale);
+  const source = starterForLocale(id, locale);
   const questionIds = new Map(source.questions.map((question) => [question.id, randomUUID()]));
   return QuizDraftSchema.parse({
     ...structuredClone(source),
@@ -1215,18 +1228,32 @@ export function instantiateStarter(id: StarterId, locale: SupportedLocale = "en-
 export function starterSummariesForLocale(locale: SupportedLocale = "en-CA"): StarterSummary[] {
   if (locale === "en-CA") return structuredClone(starterSummaries);
   return starterSummaries.map((summary) => {
-    const draft = localizedStarter(starterDrafts[summary.id]!, summary.id, locale);
+    const meeting = meetingStarter(summary.id, locale);
+    const draft = meeting ?? localizedStarter(starterDrafts[summary.id]!, summary.id, locale);
     return StarterSummarySchema.parse({
       ...summary,
       title: draft.title,
-      description: localizedStarterDescription(summary.description, draft, locale, summary.id),
+      description:
+        meeting?.description ??
+        localizedStarterDescription(summary.description, draft, locale, summary.id),
       previewPrompt: draft.questions[0]!.prompt,
-      guide: launchStarterGuide(summary.id, locale),
+      guide: starterGuideForLocale(summary.id, locale),
     });
   });
 }
 
-export const starterGuideForLocale = launchStarterGuide;
+export function starterGuideForLocale(
+  id: StarterId,
+  locale: SupportedLocale,
+  survey = false,
+): StarterGuide | undefined {
+  return meetingStarterGuide(id, locale, survey) ?? launchStarterGuide(id, locale, survey);
+}
+
+function starterForLocale(id: StarterId, locale: SupportedLocale): QuizDraft {
+  // New keyed originals bypass legacy positional translations before any field is consumed.
+  return meetingStarter(id, locale) ?? localizedStarter(starterDrafts[id]!, id, locale);
+}
 
 /** The Survey catalog is deliberately curated; legacy opinion template IDs still copy. */
 export function surveyStarterSummariesForLocale(
@@ -1250,12 +1277,12 @@ export function instantiateSurveyStarter(
   id: StarterId,
   locale: SupportedLocale = "en-CA",
 ): SurveyDraft | undefined {
-  const template = localizedStarter(starterDrafts[id]!, id, locale);
+  const template = starterForLocale(id, locale);
   if (
     !template.questions.every((question) => question.type === "poll" || question.type === "rating")
   )
     return undefined;
-  const options = launchSurveyOptions(id, locale);
+  const options = meetingSurveyOptions(id, locale) ?? launchSurveyOptions(id, locale);
   return SurveyDraftSchema.parse({
     schemaVersion: 2,
     title: template.title,

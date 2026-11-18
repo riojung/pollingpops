@@ -20,6 +20,11 @@ import {
   loadPresentationTemplateLocale,
 } from "../../lib/presentation-template-locales";
 import { clientUuid } from "../../lib/uuid";
+import {
+  collectionTemplateIds,
+  templateCollectionGuide,
+  type TemplateCollectionId,
+} from "../../lib/template-collections";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "./workspace-provider";
 import { recordAuthoringEvent, recordCreationEvent } from "./product-events";
@@ -104,20 +109,43 @@ type PendingTemplate = {
   draft: PresentationDraft;
 };
 
-export function PresentationTemplateGallery() {
+type PresentationFilters = {
+  collection: TemplateCollectionId | null;
+  search: string;
+  scenario: string;
+  visualStyle: VisualStyle | "all";
+};
+
+export function PresentationTemplateGallery({
+  collection = null,
+}: { collection?: TemplateCollectionId | null } = {}) {
   const router = useRouter();
   const { locale, t } = useLocale();
   const copy = presentationTemplateCopy(locale);
   const guideCopy = templateGuideCopy(locale);
   const { canEdit, productFeatures } = useWorkspace();
-  const [search, setSearch] = useState("");
-  const [scenario, setScenario] = useState("all");
-  const [visualStyle, setVisualStyle] = useState<VisualStyle | "all">("all");
+  const defaults: PresentationFilters = {
+    collection,
+    search: "",
+    scenario: "all",
+    visualStyle: "all",
+  };
+  const [filters, setFilters] = useState<PresentationFilters>(defaults);
+  const currentFilters = filters.collection === collection ? filters : defaults;
+  const { search, scenario, visualStyle } = currentFilters;
   const [preview, setPreview] = useState<{
     id: PresentationTemplateId;
     locale: SupportedLocale;
     draft: PresentationDraft;
   } | null>(null);
+  if (filters.collection !== collection) {
+    // Browsing can reset while the pending POST/PUT and its exact retry body survive.
+    setFilters(currentFilters);
+    setPreview(null);
+  }
+  function updateFilters(change: Partial<Omit<PresentationFilters, "collection">>) {
+    setFilters((current) => ({ ...current, ...change }));
+  }
   const [busyId, setBusyId] = useState<PresentationTemplateId | null>(null);
   const [error, setError] = useState("");
   const [loadState, setLoadState] = useState<{ locale: SupportedLocale; failed: boolean } | null>(
@@ -147,8 +175,10 @@ export function PresentationTemplateGallery() {
     () => (ready ? allPresentationTemplatesForLocale(locale) : []),
     [locale, ready],
   );
+  const collectionIds = collectionTemplateIds("presentation", collection);
   const visibleTemplates = templates.filter(
     (template) =>
+      (!collectionIds || collectionIds.includes(template.id)) &&
       (scenario === "all" || selectedFilter.templates.includes(template.id)) &&
       (visualStyle === "all" ||
         (template.collection === "native" && template.visualStyle === visualStyle)) &&
@@ -159,9 +189,7 @@ export function PresentationTemplateGallery() {
   const filtered = search.length > 0 || scenario !== "all" || visualStyle !== "all";
 
   function clearFilters() {
-    setSearch("");
-    setScenario("all");
-    setVisualStyle("all");
+    updateFilters({ search: "", scenario: "all", visualStyle: "all" });
   }
 
   async function useTemplate(id: PresentationTemplateId) {
@@ -219,7 +247,7 @@ export function PresentationTemplateGallery() {
               type="search"
               aria-controls="presentation-template-results"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => updateFilters({ search: event.target.value })}
             />
           </label>
           <label className={`field ${styles.styleFilter}`}>
@@ -227,7 +255,9 @@ export function PresentationTemplateGallery() {
             <select
               className="input"
               value={visualStyle}
-              onChange={(event) => setVisualStyle(event.target.value as VisualStyle | "all")}
+              onChange={(event) =>
+                updateFilters({ visualStyle: event.target.value as VisualStyle | "all" })
+              }
               aria-controls="presentation-template-results"
             >
               <option value="all">{guideCopy("All styles")}</option>
@@ -251,7 +281,7 @@ export function PresentationTemplateGallery() {
               type="button"
               aria-pressed={scenario === filter.id}
               aria-controls="presentation-template-results"
-              onClick={() => setScenario(filter.id)}
+              onClick={() => updateFilters({ scenario: filter.id })}
             >
               {copy(filter.label)}
             </button>
@@ -297,6 +327,7 @@ export function PresentationTemplateGallery() {
       ) : null}
       <div className={styles.starterGrid} id="presentation-template-results">
         {visibleTemplates.map((template) => {
+          const guide = templateCollectionGuide("presentation", template.id, locale);
           const contentCount = template.blocks.filter((block) => block.kind === "content").length;
           const activityCount = template.blocks.length - contentCount;
           return (
@@ -324,6 +355,13 @@ export function PresentationTemplateGallery() {
                 <h3>{template.title}</h3>
                 <p>{template.description}</p>
                 <div className={styles.metaLine}>
+                  {guide ? (
+                    <span>
+                      {guideCopy("About {minutes} min", {
+                        minutes: formatNumber(locale, guide.minutes),
+                      })}
+                    </span>
+                  ) : null}
                   {template.collection === "native" ? (
                     <span className={styles.designTag}>
                       {guideCopy(visualStyleLabels[template.visualStyle])}
@@ -385,6 +423,7 @@ export function PresentationTemplateGallery() {
           key={preview.id}
           draft={preview.draft}
           contentLocale={preview.locale}
+          guide={templateCollectionGuide("presentation", preview.id, preview.locale)}
           onClose={() => setPreview(null)}
         />
       ) : null}

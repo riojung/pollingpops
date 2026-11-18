@@ -7,6 +7,7 @@ import ts from "typescript";
 import {
   PresentationContentSchema,
   QuizContentSchema,
+  StarterGuideSchema,
   supportedLocales,
   type SupportedLocale,
 } from "../packages/contracts/src/index";
@@ -48,6 +49,11 @@ import {
   presentationInsightsCopyKeys,
 } from "../apps/web/lib/i18n/presentation-insights-copy";
 import { templateGuideCopy, templateGuideCopyKeys } from "../apps/web/lib/i18n/template-guide-copy";
+import { templateCollectionCopy } from "../apps/web/lib/i18n/template-collection-copy";
+import {
+  templateCollectionGuide,
+  templateCollectionMemberships,
+} from "../apps/web/lib/template-collections";
 import {
   presentationWorkspaceCopy,
   presentationWorkspaceCopyKeys,
@@ -109,7 +115,7 @@ export interface ReviewDecisions {
 export const reviewExampleSource =
   "Synthetic authored source: 12345678-1234-4123-8123-123456789abc $& $` $' {title} <img src=x onerror=alert(1)>";
 const scope =
-  "Creation, practice, Presentation report, Session insights and template-guide copy; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
+  "Creation, practice, Presentation report, Session insights, template-guide and collection copy; the five-entry team-meetings selection and its two Presentation guides; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
 const shaPattern = /^[a-f0-9]{40}$/;
 const hashPattern = /^sha256:[a-f0-9]{64}$/;
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -499,6 +505,22 @@ export async function buildReviewBundle(
   ] as const)
     ui(group, `apps/web/lib/i18n/${group}-messages.ts`, helper, factory("en-CA"), factory(locale));
 
+  ui(
+    "template-collection",
+    "apps/web/lib/i18n/template-collection-copy.ts",
+    "templateCollectionCopy",
+    templateCollectionCopy("en-CA"),
+    templateCollectionCopy(locale),
+  );
+  add(
+    "collection/team-meetings/memberships",
+    "Five existing original templates grouped as alternatives for a team meeting, not a required sequence or popularity ranking.",
+    "apps/web/lib/template-collections.ts",
+    "templateCollectionMemberships",
+    templateCollectionMemberships,
+    templateCollectionMemberships,
+  );
+
   const definitions = allPresentationTemplatesForLocale("en-CA");
   const translated = allPresentationTemplatesForLocale(locale);
   if (definitions.length !== 21 || translated.length !== 21) fail("expected 21 Presentations");
@@ -537,6 +559,22 @@ export async function buildReviewBundle(
       normalizeGeneratedIds(english),
       normalizeGeneratedIds(target),
     );
+    const englishGuide = templateCollectionGuide("presentation", definition.id, "en-CA");
+    const targetGuide = templateCollectionGuide("presentation", definition.id, locale);
+    if (Boolean(englishGuide) !== Boolean(targetGuide)) fail("Presentation guide locale parity");
+    if (englishGuide && targetGuide) {
+      StarterGuideSchema.parse(englishGuide);
+      StarterGuideSchema.parse(targetGuide);
+      assertInvariantParity(englishGuide, targetGuide, `presentation/${definition.id}/guide`);
+      add(
+        `presentation/${definition.id}/guide`,
+        "Owner-only activity guide: editorial time estimate, audience, preparation, facilitation, interpretation limits and concrete follow-up. No human acceptance is inferred.",
+        "apps/web/lib/template-collections.ts",
+        "templateCollectionGuide",
+        englishGuide,
+        targetGuide,
+      );
+    }
   }
 
   const summaries = starterSummariesForLocale("en-CA");

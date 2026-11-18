@@ -1,3 +1,4 @@
+import type { RoundImportIdentity } from "./round-imports.js";
 import type {
   AudienceSignal,
   BrandTheme,
@@ -1201,6 +1202,11 @@ export interface Repository {
     tags?: string[],
   ): Promise<QuizRecord | null>;
   createQuiz(input: QuizRecord): Promise<QuizRecord>;
+  getImportedQuiz(identity: RoundImportIdentity): Promise<QuizRecord | null>;
+  createImportedQuiz(
+    input: QuizRecord,
+    identity: RoundImportIdentity,
+  ): Promise<{ status: "created" | "duplicate"; quiz: QuizRecord }>;
   getQuiz(workspaceId: string, quizId: string): Promise<QuizRecord | null>;
   updateQuiz(
     workspaceId: string,

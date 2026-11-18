@@ -18,6 +18,36 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Structured Round import preview and recovery
+
+WX-05B adds read-only import preview and explicit, retryable confirmation. Apply migration
+`115_round_import_receipts.sql` with the owner migration connection before deploying the matching
+API/database adapter, then deploy the web workflow. Preserve earlier migrations and checksums.
+The existing parsers and Round draft/publication schemas retain their meanings; legacy
+`POST /v1/quizzes/import` clients continue to validate and create in one action.
+
+Before exposing the new web, verify all existing formats with valid and invalid sources:
+
+1. Preview returns parsed content and row/field warnings or errors without creating a Round,
+   draft history, audit creation or import receipt. Invalid content cannot be confirmed.
+2. Confirmation reparses source under current actor/workspace, import entitlement, response-writer
+   and media checks. Changed source/title/context requires a fresh preview.
+3. Concurrent and lost-response retries with the same actor/workspace/key create one Round and
+   recover its current original record. Later draft edits/publication remain intact; changed
+   accepted requests conflict. Matching recovery after a writer/plan rollback is a retained read,
+   not permission for another creation.
+4. Archived/deleted targets cannot be recreated through an old receipt. Forced RLS isolates
+   receipts, account/workspace deletion follows existing lifecycle rules, and workspace erasure
+   removes its receipts. Receipt rows contain no imported source text, answers or file data.
+5. Reload/reselect of the same source/title recovers the per-tab pending request identity without
+   storing source content. Blocked browser storage shows recovery guidance before creation.
+
+Retain the additive receipt table and confirmation-recovery API during rollback. Roll the web
+back first or pause new import entry while keeping accepted attempts recoverable. An older API
+cannot serve the new preview/confirmation endpoints or honor their retry identity. Do not drop
+receipts or route interrupted confirmations through the legacy creation endpoint. Ordinary
+retained Round readers remain compatible; imported drafts still require explicit publication.
+
 ## Library discovery compatibility
 
 WX-03 adds the metadata-only `GET /v1/library/items` reader and additive shared-list query filters

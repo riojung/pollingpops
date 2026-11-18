@@ -543,6 +543,29 @@ Legacy `/v1/quizzes` naming is intentionally stable through v1 even though the U
 - `PATCH|DELETE /v1/folders/{id}`
 - `PATCH /v1/quizzes/{id}/organization`
 - `POST /v1/quizzes/import` for `bulk`, `csv`, `openround_json`, or base64 `qti3`
+- `POST /v1/quizzes/import/preview` — authenticated, read-only parsing for the same formats.
+  Accepts the existing `{format,data,encoding?,title?}` source body and returns
+  `{draft,validation,sourceDigest,previewFingerprint,creationContext:{actorId,workspaceId}}`. The
+  source-only digest supports per-tab recovery across preview-protocol or authority changes.
+  A matching saved intent can use that digest to recover a committed confirmation even when
+  the current preview returns `draft:null`; it must reuse the original fingerprint, context and key.
+  Invalid parsed
+  content returns `draft:null` with row/field diagnostics; no Round, history or creation receipt
+  is written. Malformed request bodies still return 400. Preview requires editing permission,
+  the existing import entitlement and applicable response-writer grants. No AI is used.
+- `POST /v1/quizzes/import/confirm` — explicit creation after preview. Accepts the same source
+  fields plus `previewFingerprint`, `creationContext` and a UUID `idempotencyKey`. The server
+  reparses and validates the source, current authority and media references; it never accepts a
+  client-supplied draft as validation evidence. The fingerprint binds the source, import protocol
+  and actor/workspace/authority context; it is a freshness check, not an authorization token.
+  First creation returns 201 and `{quiz,validation,replayed:false}`. Exact accepted retries return
+  200 and `{quiz,validation,replayed:true}`, recovering the current original Round without
+  revalidation or overwriting later edits. Replay validation counts may reflect that current
+  draft; they do not replay the original warnings. Receipts are scoped by workspace, actor and key.
+  Changed consumed requests return 409 `IDEMPOTENCY_CONFLICT`; stale preview/source/authority
+  returns `IMPORT_PREVIEW_STALE`, mismatched user/workspace `IMPORT_CONTEXT_CHANGED`, and an
+  archived or deleted original `IMPORT_TARGET_UNAVAILABLE`. Unaccepted validation errors return
+  422 and create nothing. A deleted target's receipt prevents its key from recreating content.
 - `GET /v1/quizzes/{id}/export.json`
 - `GET /v1/quizzes/{id}/export.csv`
 - `GET /v1/quizzes/{id}/export.qti.zip`
@@ -558,6 +581,13 @@ Imports always return a validation report. Polling Pops JSON is lossless and ver
 profile supports single select, true/false, multiple select, and numeric response; unsupported
 types and omitted media are explicit warnings/errors. CSV output escapes spreadsheet formula
 prefixes.
+
+The UI uses preview followed by confirmation. The retained legacy `POST /v1/quizzes/import`
+continues to validate and create in one action for existing clients; it does not provide the new
+confirmation retry guarantee. Source text and file contents are not stored in import receipts.
+Matching committed confirmation retries can recover an authorized retained draft after a writer
+feature or plan rollback; they do not authorize a fresh creation. Migration 115 must precede
+deployment of the preview/confirmation workflow.
 
 ## Question Health APIs
 

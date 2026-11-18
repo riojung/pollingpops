@@ -63,13 +63,13 @@ choose **Ask a quick poll**, select a response type, then explicitly create the 
 
 Each selected method explains its input, assistance and next step:
 
-| Method                          | Input and draft boundary                                                                                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Blank                           | Write your own content. An explicit Create action opens a private draft; no AI is used.                                                                                     |
-| Template or Presentation design | Preview existing material, then choose Use to create an independent editable copy; no AI is used.                                                                           |
-| Source assistance               | Paste trusted text or upload PDF/DOCX/PPTX up to 6 MB. Review the AI proposals and citations before explicitly creating a draft.                                            |
-| Round structured import         | Polling Pops JSON/CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB. This Pro action validates **and creates** the draft together. Review warnings and the resulting draft. |
-| Presentation outline            | Create/open a saved private draft first, then use optional AI in the editor to propose 3–8 slides. Review, select and insert the proposed slides explicitly.                |
+| Method                          | Input and draft boundary                                                                                                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blank                           | Write your own content. An explicit Create action opens a private draft; no AI is used.                                                                                                                 |
+| Template or Presentation design | Preview existing material, then choose Use to create an independent editable copy; no AI is used.                                                                                                       |
+| Source assistance               | Paste trusted text or upload PDF/DOCX/PPTX up to 6 MB. Review the AI proposals and citations before explicitly creating a draft.                                                                        |
+| Round structured import         | Polling Pops JSON/CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB. Preview the parsed questions and warnings first, then explicitly create a private draft. Requires the existing import entitlement. |
+| Presentation outline            | Create/open a saved private draft first, then use optional AI in the editor to propose 3–8 slides. Review, select and insert the proposed slides explicitly.                                            |
 
 Poll-only setup offers blank and compatible templates. A source/import link intended for a poll
 explains the limitation and offers an explicit switch to a Round. Unknown or ambiguous method
@@ -1545,6 +1545,26 @@ Polling Pops JSON, and the supported QTI 3 profile. Every import displays valida
 warnings; unsupported content is never silently discarded. Polling Pops JSON is the lossless native
 format. QTI supports selected-response, multiple-select, and numeric checkpoints; unsupported
 types and omitted media are reported.
+
+Choose a format, paste content or select a file, and optionally set the destination title.
+**Preview import** parses the source without creating a Round. Check the parsed title, questions,
+answer choices, correct answers, explanations, timing and scoring, together with all row/field
+errors and warnings. A preview containing errors cannot create a new draft. Changing the source,
+format or title requires a fresh preview.
+
+Choose **Create draft** only after reviewing the preview. If its response is interrupted, retry
+the same creation rather than starting another import. The same accepted attempt recovers its
+original draft without overwriting later edits. Per-tab recovery stores only an opaque request
+identity and source fingerprint; source content and answers are not saved in browser storage.
+After reloading, select the same source and title and preview again to recover that attempt.
+A matching saved attempt can still offer **Retry same creation** when current response-feature
+rules block a new import. This recovers only an already-created draft; a fresh invalid preview
+cannot create one.
+If opening an already-created draft fails, use its open action again; this does not re-import.
+After creation is confirmed, or its original target is confirmed unavailable, **Import another
+source** starts a separate, intentional import with a fresh preview and request identity.
+An archived or deleted original cannot be recreated with its old retry identity. Ordinary
+creation remains available when AI is paused; structured import uses no AI.
 
 Export a checkpoint set as Polling Pops JSON, formula-safe UTF-8 CSV, or QTI ZIP. Hosted portability
 exports require Pro; community deployments do not impose an application paywall.

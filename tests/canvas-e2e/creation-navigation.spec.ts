@@ -82,9 +82,7 @@ test("WX05 paused source assistance leaves ordinary creation and separate outlin
   await expect(page.getByText(/The authoring assistant is disabled/)).toBeVisible();
   await page.getByRole("tab", { name: "Import", exact: true }).click();
   await method(page, "roundImport");
-  await expect(
-    page.getByRole("button", { name: "Validate and import draft", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview import", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Templates", exact: true }).click();
   await method(page, "roundTemplate");
   await page.getByRole("tab", { name: "Blank", exact: true }).click();
@@ -146,10 +144,22 @@ for (const locale of ["en-CA", "ko-KR"] as const) {
     page,
   }, info) => {
     await organization(page, info);
-    await page.request.put(`${api}/v1/account/locale`, { data: { locale } });
-    await page
-      .context()
-      .addCookies([{ name: "openround-locale", value: locale, url: web, sameSite: "Lax" }]);
+    await page.goto("/create?type=quiz&start=import");
+    await expect(page.getByRole("button", { name: "Preview import", exact: true })).toBeVisible();
+    if (locale === "ko-KR") {
+      const changed = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PUT" &&
+          new URL(response.url()).pathname === "/v1/account/locale" &&
+          response.request().postDataJSON().locale === locale,
+      );
+      await page
+        .getByRole("button", { name: "EN: Language: English (Canada)", exact: true })
+        .click();
+      await page.getByRole("radio", { name: /한국어/ }).click();
+      expect((await changed).status()).toBe(200);
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+    }
     await page.setViewportSize({ width: 320, height: 844 });
     const writes = contentWrites(page);
     for (const [path, key] of [

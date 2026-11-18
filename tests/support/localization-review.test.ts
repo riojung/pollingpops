@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { supportedLocales, type StarterId } from "../../packages/contracts/src/index";
 import { creationMethodCopyEntries } from "../../apps/web/lib/i18n/creation-method-copy";
+import { importPreviewCopyEntries } from "../../apps/web/lib/i18n/import-preview-copy";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -97,6 +98,7 @@ describe("native-language review preparation", () => {
         "creation-goal",
         "creation",
         "creation-method",
+        "import-preview",
         "template",
         "template-guide",
         "presentation-workspace",
@@ -185,6 +187,42 @@ describe("native-language review preparation", () => {
         decision: "pending",
         reviewerReference: null,
         reviewedAt: null,
+      });
+    }
+  });
+
+  it("exports each exact structured-import preview and recovery phrase with pending decisions", () => {
+    const english = importPreviewCopyEntries("en-CA");
+    const target = importPreviewCopyEntries("ko-KR");
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/import-preview/"));
+    expect(items).toHaveLength(37);
+    expect(items.map((item) => item.id).sort()).toEqual(
+      Object.keys(english)
+        .map((key) => `ui/import-preview/${encodeURIComponent(key)}`)
+        .sort(),
+    );
+    expect(bundle.sourceBinding.files).toContainEqual({
+      path: "apps/web/lib/i18n/import-preview-copy.ts",
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    const decisions = createReviewDecisions(bundle);
+    for (const key of Object.keys(english)) {
+      const id = `ui/import-preview/${encodeURIComponent(key)}`;
+      expect(items.find((item) => item.id === id)).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/import-preview-copy.ts",
+          helper: "importPreviewCopy",
+          contentVersion: "repository-source",
+        },
+        english: { template: english[key] },
+        target: { template: target[key] },
+      });
+      expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+        decision: "pending",
+        reviewerReference: null,
+        reviewedAt: null,
+        issue: null,
+        evidenceReference: null,
       });
     }
   });

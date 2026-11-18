@@ -1356,19 +1356,79 @@ test("source and import starts reach real review drafts through mocked external 
   await expect(page).toHaveURL(new RegExp(`/quiz/${sourceQuizId}$`));
   await expect(page.getByLabel("Title")).toHaveValue("Source review draft");
 
+  const importAccountResponse = await page.request.get(`${apiUrl}/v1/auth/me`);
+  expect(importAccountResponse.status()).toBe(200);
+  const importAccount = await importAccountResponse.json();
+  const creationContext = {
+    actorId: importAccount.creator.userId,
+    workspaceId: importAccount.creator.workspaceId,
+  };
+  const importedRecordResponse = await page.request.get(`${apiUrl}/v1/quizzes/${importQuizId}`);
+  expect(importedRecordResponse.status()).toBe(200);
+  const importedRecord = await importedRecordResponse.json();
+  const previewFingerprint = "a".repeat(64);
+  const importValidation = {
+    format: "bulk",
+    importedCheckpoints: 1,
+    errors: [],
+    warnings: [],
+  };
+  const importEvents: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== "/v1/product-events")
+      return;
+    const { events } = request.postDataJSON() as {
+      events?: Array<{ name: string; dimensions?: { creationPath?: string } }>;
+    };
+    for (const event of events ?? [])
+      if (event.dimensions?.creationPath === "import") importEvents.push(event.name);
+  });
+  let importPreviewPayload: Record<string, unknown> | null = null;
   let importPayload: Record<string, unknown> | null = null;
-  await page.route("**/v1/quizzes/import", async (route) => {
+  await page.route("**/v1/quizzes/import/preview", async (route) => {
+    importPreviewPayload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        draft: {
+          ...importedRecord.quiz.draft,
+          questions: [
+            {
+              id: randomUUID(),
+              type: "single_select",
+              prompt: "Which action is safest?",
+              purpose: "diagnostic",
+              confidence: "off",
+              delivery: "main",
+              conceptKeys: [],
+              linkedRecheckQuestionId: null,
+              choices: [
+                { id: randomUUID(), label: "Follow the complete procedure", isCorrect: true },
+                { id: randomUUID(), label: "Take an undocumented shortcut", isCorrect: false },
+              ],
+              timeLimitSeconds: 20,
+              basePoints: 1000,
+              explanation: "",
+              mediaId: null,
+              mediaAlt: null,
+            },
+          ],
+        },
+        validation: importValidation,
+        sourceDigest: "b".repeat(64),
+        previewFingerprint,
+        creationContext,
+      },
+      status: 200,
+    });
+  });
+  await page.route("**/v1/quizzes/import/confirm", async (route) => {
     importPayload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({
       contentType: "application/json",
       json: {
         quiz: { id: importQuizId, title: "Imported review draft" },
-        validation: {
-          format: "bulk",
-          importedCheckpoints: 1,
-          errors: [],
-          warnings: [],
-        },
+        validation: importValidation,
       },
       status: 201,
     });
@@ -1378,17 +1438,30 @@ test("source and import starts reach real review drafts through mocked external 
   await page.getByLabel("New Round title (optional)").fill("Imported review draft");
   const bulkContent =
     "Which action is safest?\n* Follow the complete procedure\n- Take an undocumented shortcut";
-  await page.getByLabel("Import content").fill(bulkContent);
-  const importStarted = waitForCreationEvent(page, "creation_started", "import");
-  const importCompleted = waitForCreationEvent(page, "creation_completed", "import");
-  await page.getByRole("button", { name: "Validate and import draft" }).click();
-  expect((await importStarted).status()).toBe(202);
-  expect((await importCompleted).status()).toBe(202);
-  expect(importPayload).toEqual({
+  const importSourcePayload = {
     format: "bulk",
     data: bulkContent,
     encoding: "text",
     title: "Imported review draft",
+  };
+  await page.getByLabel("Import content").fill(bulkContent);
+  await page.getByRole("button", { name: "Preview import", exact: true }).click();
+  await expect(
+    page.getByText("Preview only. No draft has been created.", { exact: true }),
+  ).toBeVisible();
+  expect(importPayload).toBeNull();
+  expect(importEvents).toEqual([]);
+  expect(importPreviewPayload).toEqual(importSourcePayload);
+  const importStarted = waitForCreationEvent(page, "creation_started", "import");
+  const importCompleted = waitForCreationEvent(page, "creation_completed", "import");
+  await page.getByRole("button", { name: "Create draft", exact: true }).click();
+  expect((await importStarted).status()).toBe(202);
+  expect((await importCompleted).status()).toBe(202);
+  expect(importPayload).toEqual({
+    ...importSourcePayload,
+    previewFingerprint,
+    creationContext,
+    idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
   await expect(page).toHaveURL(new RegExp(`/quiz/${importQuizId}$`));
   await expect(page.getByLabel("Title")).toHaveValue("Imported review draft");

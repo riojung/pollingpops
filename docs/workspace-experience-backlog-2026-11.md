@@ -9,7 +9,8 @@ delivery**, merged through [PR #271](https://github.com/riojung/pollingpops/pull
 **WX-03** merged through [PR #272](https://github.com/riojung/pollingpops/pull/272) at `edac7b6`,
 with qualification in [Library discovery](library-discovery.md). **WX-04** merged through
 [PR #273](https://github.com/riojung/pollingpops/pull/273) at `efc0254`.
-**WX-05A** is the current creation-navigation increment on `codex/creation-navigation`. Later items are scoped backlog,
+**WX-05A** merged through [PR #281](https://github.com/riojung/pollingpops/pull/281) at `a68df09`.
+**WX-05B** is the current structured-import increment on `codex/import-preview`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -31,7 +32,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A implemented locally; B is next               | Authoring + frontend            |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A merged in PR #281; B implemented locally     | Authoring + frontend            |
 | WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
@@ -229,9 +230,39 @@ review found no remaining actionable issue after the method-description correcti
 All ten source-bound editorial packets contain 679 pending entries each, including 54 new method
 and Survey strings; automated checks do not supply human/native-language acceptance.
 
-Keep **WX-05B** for parsed structured-import preview before creation: the current import endpoint
-validates **and creates**, so the first navigation checkpoint must keep that action honest.
-Keep the durable Round starter-copy intent below as its own API/storage checkpoint.
+**WX-05B: parsed structured-import preview.** Existing JSON, CSV, bulk-text and QTI parsers now
+support a read-only preview of the destination title, questions and validation diagnostics.
+Only a separate explicit confirmation creates a draft; source/title/format changes invalidate
+uncommitted previews. The confirmation endpoint reparses the original source and enforces current
+authority and media rules. Migration115 stores compact actor/workspace-bound import receipts so
+same-intent retries recover the current original draft, including after a lost response. Input and
+answers remain in memory; per-tab browser recovery retains only the request identity, fingerprint
+and actor/workspace context. Accepted receipts survive target deletion, preventing recreation with
+the same key. The legacy validate-and-create API remains compatible.
+
+**WX-05B local verification — 2026-11-18:** `VITEST_MAX_WORKERS=1 pnpm check` passes formatting,
+lint, strict types, package/support tests, production builds and compiled-server startup. It
+includes 6,100 web, 1,643 server and 525 support tests; default optional integration skips remain.
+All 15 isolated-fixture browser scenarios pass across desktop Chromium and mobile Chromium/WebKit,
+including four real import formats, warnings/errors, source/title/format invalidation, exact
+lost-response/reload recovery, 320px English/Korean layouts, keyboard, light/dark contrast and axe.
+Recovery also works when current response-feature rules block a fresh preview: the browser
+regression mocks only that blocked preview snapshot and retries the original confirmation over
+real HTTP. A paired API regression disables the actual feature after a committed import and
+verifies that the original request recovers its draft while fresh creation remains blocked.
+Safari full-control keyboard traversal uses Option+Tab; native Tab behavior is recorded separately.
+The updated legacy beta journey has static TypeScript/lint coverage; that beta fixture was not run.
+Seven PostgreSQL conformance tests pass on a fresh isolated PostgreSQL17 fixture with a restricted
+runtime role, including concurrency, transaction rollback, tenant isolation, deletion/tombstones
+and the durable no-media workspace-deletion fence found in independent review. The fixture and
+temporary credentials were removed; application data was not used. Independent read-only review
+verified both the deletion-fence fix and saved-confirmation recovery with an invalid fresh preview.
+All ten fresh source-bound editorial packets have 716 pending entries each, including 37 new import
+phrases. Automated verification does not grant human/native-language acceptance.
+
+The durable Round **starter-copy** intent below remains its own API/storage checkpoint. Import
+receipts do not change starter-copy semantics. Survey pages/conditional paths (WX-06) still require
+their separate contract/design checkpoint after these P1 reliability increments.
 
 **Bounded reliability follow-up:** the existing Round starter-copy endpoint has no durable
 idempotency intent. The new client blocks simultaneous submissions, but a lost successful response

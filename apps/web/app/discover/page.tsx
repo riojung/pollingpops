@@ -8,13 +8,21 @@ import { WorkspacePage } from "../../components/workspace/workspace-shell";
 import { useWorkspace } from "../../components/workspace/workspace-provider";
 import hub from "../../components/workspace/workspace-hub.module.css";
 import content from "../../components/workspace/workspace-content.module.css";
+import {
+  roundCreationHref,
+  templateCatalogHref,
+  workspaceCreationOptions,
+} from "../../components/workspace/workspace-creation-model";
 
 function PresentationCreateLink({ card = false }: { card?: boolean }) {
   const { t } = useLocale();
-  const { productFeatures } = useWorkspace();
-  if (!productFeatures?.presentations) return null;
+  const { canEdit, productFeatures } = useWorkspace();
+  const destination = workspaceCreationOptions({ canEdit, productFeatures }).find(
+    (option) => option.kind === "presentation",
+  );
+  if (!destination) return null;
   return card ? (
-    <Link className={hub.quickCard} href="/create/presentation">
+    <Link className={hub.quickCard} href={destination.href}>
       <span className={hub.cardIcon} data-tone="violet">
         P
       </span>
@@ -23,7 +31,7 @@ function PresentationCreateLink({ card = false }: { card?: boolean }) {
       <span className={hub.cardLink}>{t("pages.discover.presentation.action")} →</span>
     </Link>
   ) : (
-    <Link className={hub.heroPrimary} href="/create/presentation">
+    <Link className={hub.heroPrimary} href={destination.href}>
       {t("pages.discover.presentation.create")}
     </Link>
   );
@@ -34,7 +42,7 @@ function PresentationDesignLink() {
   const { productFeatures } = useWorkspace();
   if (!productFeatures?.presentations) return null;
   return (
-    <Link className="button-quiet" href="/templates#designs">
+    <Link className="button-quiet" href={templateCatalogHref("designs")}>
       {presentationDesignCopy(locale).browseDesigns}
     </Link>
   );
@@ -42,10 +50,10 @@ function PresentationDesignLink() {
 
 function RoundSourceLink({ card = false }: { card?: boolean }) {
   const { t } = useLocale();
-  const { productFeatures } = useWorkspace();
-  if (!productFeatures?.builderV2) return null;
+  const { canEdit, productFeatures } = useWorkspace();
+  if (!canEdit || !productFeatures?.builderV2) return null;
   return card ? (
-    <Link className={hub.quickCard} href="/create?start=source">
+    <Link className={hub.quickCard} href={roundCreationHref("custom", "source")}>
       <span className={hub.cardIcon} data-tone="coral">
         S
       </span>
@@ -54,7 +62,7 @@ function RoundSourceLink({ card = false }: { card?: boolean }) {
       <span className={hub.cardLink}>{t("pages.discover.source.action")} →</span>
     </Link>
   ) : (
-    <Link className={hub.heroSecondary} href="/create?start=source">
+    <Link className={hub.heroSecondary} href={roundCreationHref("custom", "source")}>
       {t("pages.discover.source.create")}
     </Link>
   );

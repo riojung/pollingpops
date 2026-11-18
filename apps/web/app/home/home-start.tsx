@@ -4,6 +4,7 @@ import { useWorkspace } from "../../components/workspace/workspace-provider";
 import {
   workspaceCreationGoals,
   workspaceCreationOptions,
+  templateCatalogHref,
 } from "../../components/workspace/workspace-creation-model";
 import { creationGoalMessages } from "../../lib/i18n/creation-goal-messages";
 import { homeStartCopy } from "../../lib/i18n/home-start-copy";
@@ -51,15 +52,17 @@ export function HomeStart() {
       </nav>
       <nav className={styles.templateStarts} aria-label={copy.templates}>
         <span>{copy.templates}</span>
-        <Link href="/templates?type=rounds">{copy.roundTemplates}</Link>
+        <Link href={templateCatalogHref("rounds")}>{copy.roundTemplates}</Link>
         {productFeatures?.presentations ? (
           <>
-            <Link href="/templates?type=presentations">{t("pages.common.presentations")}</Link>
-            <Link href="/templates?type=designs">{copy.designTemplates}</Link>
+            <Link href={templateCatalogHref("presentations")}>
+              {t("pages.common.presentations")}
+            </Link>
+            <Link href={templateCatalogHref("designs")}>{copy.designTemplates}</Link>
           </>
         ) : null}
         {productFeatures?.surveys ? (
-          <Link href="/templates?type=surveys">{t("pages.common.surveys")}</Link>
+          <Link href={templateCatalogHref("surveys")}>{t("pages.common.surveys")}</Link>
         ) : null}
       </nav>
     </section>

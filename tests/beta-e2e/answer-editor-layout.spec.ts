@@ -172,7 +172,7 @@ for (const suffix of ["desktop", "@mobile"]) {
   }) => {
     test.setTimeout(120_000);
     await signInBeta(page);
-    await page.goto("/surveys/new");
+    await page.goto("/surveys/new?start=blank");
     await page.getByRole("button", { name: "Create blank Survey", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
     await page

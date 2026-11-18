@@ -13,6 +13,7 @@ interface Hooks {
 const mocked = vi.hoisted(() => ({
   hooks: null as Hooks | null,
   presentations: true,
+  builderV2: true,
   canEdit: true,
   surveys: true,
   search: "",
@@ -66,7 +67,11 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
   WorkspaceProvider: ({ children }: { children: ReactNode }) => children,
   useWorkspace: () => ({
     canEdit: mocked.canEdit,
-    productFeatures: { presentations: mocked.presentations, surveys: mocked.surveys },
+    productFeatures: {
+      builderV2: mocked.builderV2,
+      presentations: mocked.presentations,
+      surveys: mocked.surveys,
+    },
   }),
 }));
 vi.mock("../../components/workspace/workspace-shell", () => ({
@@ -135,6 +140,7 @@ function harness() {
 }
 beforeEach(() => {
   mocked.presentations = true;
+  mocked.builderV2 = true;
   mocked.canEdit = true;
   mocked.surveys = true;
   mocked.search = "";
@@ -293,11 +299,18 @@ describe("Template library sections", () => {
     expect(view.tab("surveys").props.tabIndex).toBe(0);
     expect(preventDefault).toHaveBeenCalledTimes(2);
   });
+  it("uses the existing Round dashboard when the modern builder is disabled", () => {
+    mocked.builderV2 = false;
+    const view = harness();
+    view.render();
+    expect(view.markup()).toContain('href="/dashboard"');
+    expect(view.markup()).not.toContain('href="/create?');
+  });
   it("keeps round creation available when presentations are disabled", () => {
     mocked.presentations = false;
     const view = harness();
     view.render();
-    expect(view.markup()).toContain('href="/create?start=blank"');
+    expect(view.markup()).toContain('href="/create?type=custom&amp;start=blank"');
     expect(view.markup()).toContain("Round content gallery");
     (view.tab("designs").props.onClick as () => void)();
     view.render();

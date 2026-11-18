@@ -7,8 +7,9 @@ The product owner selected a simpler, more polished workspace and compatible fea
 This plan breaks that request into reviewable increments. **WX-01 and WX-02 are the selected first
 delivery**, merged through [PR #271](https://github.com/riojung/pollingpops/pull/271) at `7c537d5`.
 **WX-03** merged through [PR #272](https://github.com/riojung/pollingpops/pull/272) at `edac7b6`,
-with qualification in [Library discovery](library-discovery.md). **WX-04** is the current
-team-meetings collection increment on `codex/team-meeting-collection`. Later items are scoped backlog,
+with qualification in [Library discovery](library-discovery.md). **WX-04** merged through
+[PR #273](https://github.com/riojung/pollingpops/pull/273) at `efc0254`.
+**WX-05A** is the current creation-navigation increment on `codex/creation-navigation`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -29,8 +30,8 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below      | Frontend + product design       |
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Implemented; Team meetings collection          | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Ready; retain existing factories               | Authoring + frontend            |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A implemented locally; B is next               | Authoring + frontend            |
 | WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
@@ -179,7 +180,7 @@ review-before-publication remain intact. No silent rewrite of existing drafts or
 **Dependencies:** current factories/import APIs; retire or redirect duplicate discovery routes only
 after link/feature-policy migration is tested. Owner: authoring + frontend.
 
-**Next bounded checkpoint (WX-05A): consistent goal and method navigation.** Extend the existing
+**WX-05A: consistent goal and method navigation.** Extend the existing
 `workspace-creation-model.ts` rather than adding another launcher or factory. Use the same pure
 destination/compatibility resolver and method descriptions in Home, the global Create menu,
 Round/Presentation/Survey launchers, Discover links and catalog blank links.
@@ -199,6 +200,34 @@ Round/Presentation/Survey launchers, Discover links and catalog blank links.
 - Test the resolver's legacy/unknown/duplicate queries and hashes, feature/role fallbacks,
   navigation without POST, reload/history and all entry surfaces. Browser coverage should include
   provider-disabled ordinary creation, keyboard/mobile behavior and a CJK locale.
+
+**Local implementation:** Home, the global Create menu, Discover and Library use shared format
+destinations; catalog blank actions use the same grants and retain the classic Round fallback.
+Round, Presentation and Survey launchers resolve methods in the existing pure model. Goal/method
+selection performs navigation; only explicit Create/Use/import actions write. Presentation and
+Survey overview pages link to one selected workflow rather than repeating full galleries.
+Invalid/ambiguous selections require a new choice, and incompatible poll source/import links offer
+an explicit Round alternative. Legacy Round hashes follow history/hash navigation. Shared method
+explanations cover input, AI, limits and draft boundaries in all ten interface locales; Survey
+creation now uses those locale messages and customer-facing unavailable guidance. All translations
+remain subject to the existing Preview/native-review gate.
+
+See [creation navigation guidance](user-guide.md#choose-a-creation-method). This increment retains
+the existing factories, provider checks, scanning, quotas, review and immutable-publication rules.
+It introduces no new parser, provider, storage schema or durable Round-copy intent.
+
+**Local verification — 2026-11-18:** `VITEST_MAX_WORKERS=1 pnpm check` passes formatting, lint,
+strict types, package/support tests, production builds and compiled-server startup. This includes
+6,018 web tests, 1,636 server tests and 524 support tests; the default optional integration skips
+remain. Nine browser scenarios pass using the isolated fixture API: seven new creation checks
+across desktop Chromium and mobile Chromium/WebKit, plus the existing owner/viewer workspace
+discovery journeys. They cover navigation without content writes, explicit blank creation with
+source AI disabled, legacy hashes/history, invalid selections, 320px English/Korean layouts,
+light-mode accessibility and dark-mode method-details contrast. This run also verifies the
+file-picker/grid sizing repair and valid Home list-row semantics. Independent read-only code
+review found no remaining actionable issue after the method-description corrections.
+All ten source-bound editorial packets contain 679 pending entries each, including 54 new method
+and Survey strings; automated checks do not supply human/native-language acceptance.
 
 Keep **WX-05B** for parsed structured-import preview before creation: the current import endpoint
 validates **and creates**, so the first navigation checkpoint must keep that action honest.

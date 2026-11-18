@@ -268,7 +268,7 @@ function HomeWorkspace() {
                     const count = workCount(artifact);
                     const action = workAction(artifact);
                     return (
-                      <article
+                      <div
                         className={styles.artifactCard}
                         key={`${artifact.artifactType}:${artifact.id}`}
                         data-work-row
@@ -312,7 +312,7 @@ function HomeWorkspace() {
                         >
                           {action.label} →
                         </Link>
-                      </article>
+                      </div>
                     );
                   })}
                 </div>

@@ -8,6 +8,7 @@ import guideStyles from "../../components/workspace/video-guide.module.css";
 import styles from "../../components/workspace/workspace-hub.module.css";
 import { helpVideoScripts } from "../../lib/help-video-scripts";
 import videoMetadata from "../../lib/help-video-metadata.json";
+import { roundCreationHref } from "../../components/workspace/workspace-creation-model";
 import {
   professionalBuilderGuidesAvailable,
   professionalRoundBuilderAvailable,
@@ -23,7 +24,7 @@ export function HelpGuidance() {
   const roundBuilderAvailable = professionalRoundBuilderAvailable(productFeatures);
   const workspaceAvailable = productFeatures?.workspaceShell === true;
   const assignmentsAvailable = productFeatures?.practiceAssignments === true;
-  const createHref = roundBuilderAvailable ? "/create?start=starters" : "/dashboard";
+  const createHref = roundBuilderAvailable ? roundCreationHref("custom", "starters") : "/dashboard";
   const libraryHref = workspaceAvailable ? "/library" : "/dashboard";
   const fallbackHref = canEdit ? createHref : libraryHref;
 
@@ -67,7 +68,7 @@ export function HelpGuidance() {
                 posterSrc="/guides/polling-pops-quick-start-poster.jpg"
                 title={t("pages.help.quickStart.title")}
                 transcript={quickStartTranscript}
-                tryHref={canEdit ? "/create?start=blank" : "/library"}
+                tryHref={canEdit ? roundCreationHref("custom", "blank") : "/library"}
                 tryLabel={canEdit ? t("pages.help.quickStart.try") : t("pages.common.openLibrary")}
                 videoSrc="/guides/polling-pops-quick-start.mp4"
               />
@@ -81,7 +82,7 @@ export function HelpGuidance() {
                   posterSrc="/guides/polling-pops-user-guide-poster.jpg"
                   title={t("pages.help.builder.title")}
                   transcript={builderGuideTranscript}
-                  tryHref={canEdit ? "/create?start=blank" : "/library"}
+                  tryHref={canEdit ? roundCreationHref("custom", "blank") : "/library"}
                   tryLabel={canEdit ? t("pages.help.builder.try") : t("pages.common.openLibrary")}
                   videoSrc="/guides/polling-pops-user-guide.mp4"
                 />

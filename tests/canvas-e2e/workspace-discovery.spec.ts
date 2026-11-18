@@ -30,7 +30,9 @@ test("universal creation opens board setup and Home includes every authoring for
   ] as const)
     await expect(menu.getByRole("link", { name })).toHaveAttribute("href", href);
   await create.click();
-  const homeCreation = page.getByRole("main").getByRole("link", { name: "Create", exact: true });
+  const homeCreation = page
+    .getByRole("main")
+    .getByRole("link", { name: "More formats", exact: true });
   await expect(homeCreation).toHaveCount(1);
   for (const link of await homeCreation.all())
     await expect(link).toHaveAttribute("href", "/create");
@@ -40,7 +42,7 @@ test("universal creation opens board setup and Home includes every authoring for
     name: "What would you like to do?",
     exact: true,
   });
-  await expect(primaryChoices.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+  await expect(primaryChoices.getByRole("link", { name: /^Ask a quick poll/ })).toBeVisible();
   for (const label of ["Check understanding", "Build a presentation"])
     await expect(primaryChoices.getByRole("heading", { name: label, exact: true })).toBeVisible();
   await page

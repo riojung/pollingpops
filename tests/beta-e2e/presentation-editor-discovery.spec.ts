@@ -112,7 +112,7 @@ for (const suffix of ["", " @mobile"]) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await signInBeta(page);
     const narrow = (testInfo.project.use.viewport?.width ?? 1280) <= 700;
-    await page.goto("/create/presentation");
+    await page.goto("/create/presentation?start=blank");
     const creating = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&

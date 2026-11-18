@@ -6,7 +6,7 @@ import { signInBeta } from "./sign-in";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 async function openSurvey(page: Page) {
   await signInBeta(page);
-  await page.goto("/surveys/new");
+  await page.goto("/surveys/new?start=template");
   await page.getByLabel("Search templates").fill("Training feedback");
   await page.getByRole("button", { name: "Use this starter", exact: true }).click();
   await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
@@ -358,7 +358,7 @@ for (const surface of ["", "@mobile "]) {
       const copy = await download;
       expect(copy.suggestedFilename()).toBe(`polling-pops-survey-${id}-local-draft.json`);
       const data = await json(await copy.createReadStream());
-      expect(data.title).toBe("Synthetic local work to keep");
+      expect(data).toHaveProperty("title", "Synthetic local work to keep");
       expect(data).not.toHaveProperty("workspaceId");
 
       other.once("dialog", (dialog) => dialog.dismiss());

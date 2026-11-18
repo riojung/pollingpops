@@ -10,7 +10,7 @@ for (const surface of ["", "@mobile "]) {
     browser,
   }) => {
     await signInBeta(page);
-    await page.goto("/surveys/new");
+    await page.goto("/surveys/new?start=blank");
     await page.getByRole("button", { name: "Create blank Survey", exact: true }).click();
     await page.getByLabel("Title", { exact: true }).fill("Synthetic multi-selection Survey");
     await page.getByRole("button", { name: "Add poll", exact: true }).click();
@@ -146,7 +146,7 @@ for (const surface of ["", "@mobile "]) {
   }) => {
     await signInBeta(page);
     await page.goto("/create");
-    await expect(page.getByRole("button", { name: /^Ask a quick poll/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Ask a quick poll/ })).toBeVisible();
     await page
       .locator("summary")
       .filter({ hasText: /^More formats$/ })
@@ -309,7 +309,7 @@ for (const surface of ["", "@mobile "]) {
     page,
   }) => {
     await signInBeta(page);
-    await page.goto("/surveys/new");
+    await page.goto("/surveys/new?start=blank");
     await page.getByRole("button", { name: "Create blank Survey", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
     const originalUrl = page.url();

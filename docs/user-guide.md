@@ -55,6 +55,37 @@ Review every answer, explanation and recheck for your audience before publishing
 content is available in the ten supported creation languages; chooser/filter controls are localized.
 Changing the interface language does not rewrite an existing draft.
 
+### Choose a creation method
+
+Choosing a goal or starting method opens setup; it does not create a draft. Home, **Create**,
+Library and template blank actions lead to the same format-specific setup. For a quick poll,
+choose **Ask a quick poll**, select a response type, then explicitly create the Round.
+
+Each selected method explains its input, assistance and next step:
+
+| Method                          | Input and draft boundary                                                                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Blank                           | Write your own content. An explicit Create action opens a private draft; no AI is used.                                                                                     |
+| Template or Presentation design | Preview existing material, then choose Use to create an independent editable copy; no AI is used.                                                                           |
+| Source assistance               | Paste trusted text or upload PDF/DOCX/PPTX up to 6 MB. Review the AI proposals and citations before explicitly creating a draft.                                            |
+| Round structured import         | Polling Pops JSON/CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB. This Pro action validates **and creates** the draft together. Review warnings and the resulting draft. |
+| Presentation outline            | Create/open a saved private draft first, then use optional AI in the editor to propose 3–8 slides. Review, select and insert the proposed slides explicitly.                |
+
+Poll-only setup offers blank and compatible templates. A source/import link intended for a poll
+explains the limitation and offers an explicit switch to a Round. Unknown or ambiguous method
+links ask you to choose again. Existing Round method hashes and Presentation method links still
+open their corresponding workflow, including after reload or browser history navigation.
+
+Paused AI does not disable ordinary blank creation, eligible templates, editing or structured
+import. Source assistance and outline assistance check their own availability; one service's
+status is not a substitute for the other. Workspace features, plan and editing permission still
+determine which actions are available. Viewers can browse authorized templates and existing work.
+
+Presentation **PDF / images** conversion remains a saved-editor tool. Open a saved draft before
+uploading PDF (6 MB) or PNG/JPEG/WebP (10 MiB each, 20 MB per set), up to 40 pages/images.
+It makes flattened slide visuals with an editable reading version; review reading order and
+losses such as animation, links and individual-object editing before inserting.
+
 ## Idea Boards and shared canvases
 
 When enabled for your workspace, open **Idea boards → New board** and choose **Team canvas**

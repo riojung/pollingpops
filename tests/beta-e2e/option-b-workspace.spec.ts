@@ -130,8 +130,13 @@ for (const suffix of ["", " @mobile"]) {
       if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/quizzes")
         writes.push(request.url());
     });
-    await page.getByRole("button", { name: /^Ask a quick poll/ }).click();
-    await expect(page).toHaveURL(/\/quiz\/[^/?]+(?:\?insert=poll)?$/);
+    await page.getByRole("link", { name: /^Ask a quick poll/ }).click();
+    await expect(page).toHaveURL(/\/create\?type=poll$/);
+    expect(writes).toHaveLength(0);
+    await page
+      .getByRole("button", { name: "Create Round and write question", exact: true })
+      .click();
+    await expect(page).toHaveURL((url) => /^\/quiz\/[^/]+$/.test(url.pathname));
     const quizId = new URL(page.url()).pathname.split("/").pop();
     await expect
       .poll(async () => {

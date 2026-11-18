@@ -134,11 +134,19 @@
 
 .focusedCreate {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
   gap: 1rem;
+}
+
+.focusedCreate input[type="file"] {
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .methodToolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;

@@ -203,7 +203,7 @@ describe("Library workspace", () => {
     expect(markup).toContain('role="tablist"');
     expect(markup).toMatch(/aria-selected="true"[^>]*id="rounds-tab"[^>]*role="tab"/);
     expect(markup).toContain('placeholder="Search rounds"');
-    expect(markup).toContain('href="/create"');
+    expect(markup).toContain('href="/create?product=round"');
     expect(markup).toContain("Create Round");
     expect(markup).toContain('href="/library/folders?type=rounds"');
     expect(markup).toContain('aria-label="Filter by status"');
@@ -304,7 +304,7 @@ describe("Library workspace", () => {
     expect(markup).toContain("Rounds");
     expect(markup).toContain('placeholder="Search rounds"');
     expect(markup).not.toContain("Create Round");
-    expect(markup).not.toContain('href="/create"');
+    expect(markup).not.toContain('href="/create?product=round"');
     expect(markup).toContain('href="/library/folders?type=rounds"');
   });
 

@@ -60,7 +60,8 @@
   text-transform: uppercase;
 }
 
-.blankStart > button {
+.blankStart > button,
+.blankStart > a {
   flex-shrink: 0;
   min-block-size: 44px;
   margin: 0;
@@ -273,7 +274,8 @@
     flex-basis: calc(100% - 6rem);
   }
 
-  .blankStart > button {
+  .blankStart > button,
+  .blankStart > a {
     inline-size: 100%;
   }
 

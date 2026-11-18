@@ -44,6 +44,10 @@ import {
   writeRoundLibraryView,
 } from "../../lib/round-library-view";
 import styles from "./library.module.css";
+import {
+  templateCatalogHref,
+  workspaceCreationOptions,
+} from "../../components/workspace/workspace-creation-model";
 
 interface RoundRecord {
   id: string;
@@ -144,6 +148,11 @@ function LibraryContent() {
       : requestedType === "presentations" && presentationsEnabled
         ? "presentations"
         : "rounds",
+  );
+  const creation = workspaceCreationOptions({ canEdit, productFeatures }).find(
+    (option) =>
+      option.kind ===
+      (type === "rounds" ? "round" : type === "surveys" ? "survey" : "presentation"),
   );
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
   const [presentations, setPresentations] = useState<PresentationRecord[]>([]);
@@ -717,19 +726,8 @@ function LibraryContent() {
   return (
     <WorkspaceShell
       actions={
-        canEdit && (type !== "surveys" || productFeatures?.surveys) ? (
-          <Link
-            className="button"
-            href={
-              type === "surveys"
-                ? "/surveys/new"
-                : type === "presentations"
-                  ? "/create/presentation"
-                  : productFeatures?.builderV2
-                    ? "/create"
-                    : "/dashboard"
-            }
-          >
+        creation ? (
+          <Link className="button" href={creation.href}>
             {t(
               type === "surveys"
                 ? "pages.library.createSurvey"
@@ -1516,6 +1514,12 @@ function EmptyLibrary({
   onClear: () => void;
 }) {
   const { t } = useLocale();
+  const { productFeatures } = useWorkspace();
+  const creation = workspaceCreationOptions({ canEdit, productFeatures }).find(
+    (option) =>
+      option.kind ===
+      (type === "rounds" ? "round" : type === "surveys" ? "survey" : "presentation"),
+  );
   return (
     <section className={styles.empty}>
       <span aria-hidden="true">{type === "rounds" ? "R" : type === "surveys" ? "S" : "P"}</span>
@@ -1551,18 +1555,9 @@ function EmptyLibrary({
         <button className="button-quiet" onClick={onClear} type="button">
           {t("pages.results.clearFilters")}
         </button>
-      ) : canEdit ? (
+      ) : creation ? (
         <div className={styles.emptyActions}>
-          <Link
-            className="button"
-            href={
-              type === "surveys"
-                ? "/surveys/new"
-                : type === "rounds"
-                  ? "/create"
-                  : "/create/presentation"
-            }
-          >
+          <Link className="button" href={creation.href}>
             {t(
               type === "surveys"
                 ? "pages.library.createSurvey"
@@ -1571,7 +1566,7 @@ function EmptyLibrary({
                   : "pages.library.createPresentation",
             )}
           </Link>
-          <Link className="button-quiet" href={`/templates?type=${type}`}>
+          <Link className="button-quiet" href={templateCatalogHref(type)}>
             {t("workspace.nav.templates")}
           </Link>
         </div>

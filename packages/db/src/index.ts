@@ -12,6 +12,7 @@ export * from "./organization-groups.js";
 export * from "./board-invitations.js";
 export * from "./media-references.js";
 export * from "./library-metadata.js";
+export * from "./library-discovery.js";
 export * from "./artifact-schemas.js";
 export * from "./presentation-review-feedback-types.js";
 export { createPresentationReviewFeedbackRepository } from "./presentation-review-feedback.js";

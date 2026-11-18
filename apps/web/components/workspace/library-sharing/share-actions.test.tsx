@@ -109,14 +109,16 @@ function content(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(content).join("");
   return isValidElement<{ children?: ReactNode }>(node) ? content(node.props.children) : "";
 }
-function mount(value = share) {
+function mount(value = share, onAccessChanged?: () => void) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   function render() {
     hooks.cursor = 0;
     mocked.hooks = hooks;
     let result;
     try {
-      result = elements(Actions({ share: value, onChange: vi.fn(), onRevoked: vi.fn() }));
+      result = elements(
+        Actions({ share: value, onChange: vi.fn(), onRevoked: vi.fn(), onAccessChanged }),
+      );
     } finally {
       mocked.hooks = null;
     }
@@ -166,6 +168,52 @@ afterEach(() => {
 });
 
 describe("independent-copy request recovery", () => {
+  it.each([401, 403, 404])(
+    "revalidates a current share after authority failure %i without settling a copy intent",
+    async (status) => {
+      const accessChanged = vi.fn();
+      mocked.copy.mockRejectedValue(new ApiClientError("Access changed", "FORBIDDEN", status));
+      const actions = mount(share, accessChanged);
+      actions.click();
+      await vi.waitFor(() => expect(accessChanged).toHaveBeenCalledOnce());
+      expect(actions.failed()).toBe(true);
+      expect(mocked.push).not.toHaveBeenCalled();
+      const firstRequest = mocked.copy.mock.calls[0]![1];
+      mocked.copy.mockResolvedValue(copied);
+      mount().click();
+      await vi.waitFor(() => expect(mocked.push).toHaveBeenCalledOnce());
+      expect(mocked.copy.mock.calls[1]![1]).toBe(firstRequest);
+    },
+  );
+
+  it.each([500, 503])(
+    "keeps uncertain %i errors local without invalidating collection authority",
+    async (status) => {
+      const accessChanged = vi.fn();
+      mocked.copy.mockRejectedValue(new ApiClientError("Unavailable", "UNAVAILABLE", status));
+      const actions = mount(share, accessChanged);
+      actions.click();
+      await vi.waitFor(() => expect(actions.failed()).toBe(true));
+      expect(accessChanged).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not invalidate the new context when an old action fails after workspace changes", async () => {
+    let reject!: (error: unknown) => void;
+    mocked.copy.mockReturnValue(
+      new Promise((_resolve, no) => {
+        reject = no;
+      }),
+    );
+    const accessChanged = vi.fn();
+    const actions = mount(share, accessChanged);
+    actions.click();
+    mocked.creator = { userId: "actor-a", workspaceId: "workspace-b" };
+    actions.render();
+    reject(new ApiClientError("Forbidden", "FORBIDDEN", 403));
+    await Promise.resolve();
+    expect(accessChanged).not.toHaveBeenCalled();
+  });
   it("replays a committed copy after its response is lost and focus remounts the actions", async () => {
     const committed = new Set<string>();
     mocked.copy.mockImplementation(async (_id: string, requestId: string) => {

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
+import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationContentSchema,
@@ -7,6 +8,7 @@ import {
   preparePresentationPublication,
   QuizContentSchema,
   type LibraryShareCreate,
+  LibraryShareSummarySchema,
 } from "@openround/contracts";
 import { SurveyContentSchema } from "@openround/contracts/surveys";
 import {
@@ -382,6 +384,173 @@ describe("organization Library sharing APIs", () => {
     ).toHaveLength(0);
   });
 
+  it("discovers complete metadata matches with facets, filters and bound cursors through the API", async () => {
+    const f = await fixture();
+    const entries = [];
+    for (const source of f.sources)
+      entries.push(
+        await f.publish(source, {
+          message: "needle%_\\ literal",
+          permission: source.artifactType === "round" ? "view" : "use",
+        }),
+      );
+    const base = Date.now();
+    for (let index = 0; index < 52; index++)
+      await f.shares.create({
+        actorId: f.owner.userId,
+        workspaceId: f.owner.workspaceId,
+        input: {
+          ...f.sources[0]!,
+          requestId: randomUUID(),
+          audience: "people",
+          recipientIds: [f.recipient.userId],
+          permission: "view",
+          message: "newer filler",
+          dueAt: null,
+        },
+        now: new Date(base + index + 1),
+      });
+    f.setActor(f.recipient);
+    expect(
+      (
+        await f.app.inject({
+          method: "PUT",
+          url: `/v1/library/shares/${entries[0]!.id}/progress`,
+          payload: { status: "done" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await f.app.inject({
+          method: "PUT",
+          url: `/v1/library/shares/${entries[1]!.id}/progress`,
+          payload: { status: "in_progress" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const first = await f.app.inject({
+      url: "/v1/library/shares?scope=shared&q=%20NEEDLE%20&limit=1&includeFacets=true",
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().shares).toHaveLength(1);
+    expect(first.json().facets).toEqual({
+      kinds: { round: 1, presentation: 1, survey: 1 },
+      progress: { new: 1, in_progress: 1, done: 1 },
+      permissions: { view: 1, use: 2 },
+      total: 3,
+    });
+    expect(first.body).not.toMatch(/PRIVATE_|snapshot|recipientIds|intentHash|createdBy|requestId/);
+    expect(f.storage.readImage).not.toHaveBeenCalled();
+    const filtered = await f.app.inject({
+      url: "/v1/library/shares?scope=shared&q=needle&kind=survey&progress=new&permission=use&sort=title_asc&limit=1&includeFacets=true",
+    });
+    expect(filtered.statusCode, filtered.body).toBe(200);
+    expect(filtered.json().shares.map((row: { id: string }) => row.id)).toEqual([entries[2]!.id]);
+    expect(filtered.json().facets).toEqual({ ...first.json().facets, total: 1 });
+    const literal = await f.app.inject({
+      url: `/v1/library/shares?scope=shared&q=${encodeURIComponent("%_\\")}&includeFacets=true`,
+    });
+    expect(literal.json().facets.total).toBe(3);
+    const cursor = encodeURIComponent(first.json().nextCursor);
+    expect(
+      (await f.app.inject({ url: `/v1/library/shares?scope=shared&q=changed&cursor=${cursor}` }))
+        .statusCode,
+    ).toBe(422);
+    expect(
+      (
+        await f.app.inject({
+          url: `/v1/library/shares?scope=organization&q=needle&cursor=${cursor}`,
+        })
+      ).statusCode,
+    ).toBe(422);
+    const next = await f.app.inject({
+      url: `/v1/library/shares?scope=shared&q=needle&limit=1&cursor=${cursor}`,
+    });
+    expect(next.statusCode, next.body).toBe(200);
+    expect(next.json()).not.toHaveProperty("facets");
+    expect(next.json().shares[0].id).not.toBe(first.json().shares[0].id);
+    await f.shares.revoke({
+      actorId: f.owner.userId,
+      id: first.json().shares[0].id,
+      now: new Date(),
+    });
+    expect(
+      (
+        await f.app.inject({
+          url: `/v1/library/shares?scope=shared&q=needle&cursor=${cursor}&includeFacets=true`,
+        })
+      ).json().facets.total,
+    ).toBe(2);
+    // Format creation policy changes copy capability, while authorized metadata remains discoverable.
+    f.featureEnabled.mockResolvedValue(false);
+    const disabled = await f.app.inject({
+      url: "/v1/library/shares?scope=shared&q=needle&permission=use&includeFacets=true",
+    });
+    expect(
+      disabled
+        .json()
+        .shares.every((row: { capabilities: { copy: boolean } }) => !row.capabilities.copy),
+    ).toBe(true);
+    expect(disabled.json().facets.total).toBeGreaterThan(0);
+    f.setActor(f.foreign);
+    expect(
+      (
+        await f.app.inject({ url: "/v1/library/shares?scope=shared&q=needle&includeFacets=true" })
+      ).json().facets.total,
+    ).toBe(0);
+    expect(
+      (
+        await f.app.inject({
+          url: `/v1/library/shares?scope=shared&q=needle&cursor=${cursor}&includeFacets=true`,
+        })
+      ).statusCode,
+    ).toBe(422);
+  });
+  it("preserves the baseline strict list response unless facets are explicitly requested", async () => {
+    const baselineListSchema = z
+      .object({ shares: z.array(LibraryShareSummarySchema), nextCursor: z.string().nullable() })
+      .strict();
+    const f = await fixture();
+    const entry = await f.publish(f.sources[0]!, { audience: "organization", recipientIds: [] });
+    const list = vi.spyOn(f.shares, "list");
+    for (const url of [
+      "/v1/library/shares",
+      "/v1/library/shares?includeFacets=false",
+      "/v1/library/shares?q=Shared&kind=round&sort=title_asc",
+    ]) {
+      const response = await f.app.inject({ url });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(baselineListSchema.safeParse(response.json()).success).toBe(true);
+      expect(Object.keys(response.json()).sort()).toEqual(["nextCursor", "shares"]);
+      expect(response.json().shares.map((share: { id: string }) => share.id)).toEqual([entry.id]);
+    }
+    const optedIn = await f.app.inject({ url: "/v1/library/shares?includeFacets=true" });
+    expect(optedIn.statusCode, optedIn.body).toBe(200);
+    expect(optedIn.json().facets).toMatchObject({ kinds: { round: 1 }, total: 1 });
+    expect(list.mock.calls.every(([input]) => !("includeFacets" in input))).toBe(true);
+  });
+  it("validates every discovery query field without weakening legacy defaults", async () => {
+    const f = await fixture();
+    for (const query of [
+      `q=${"x".repeat(161)}`,
+      "kind=board",
+      "sort=oldest",
+      "permission=edit",
+      "progress=started",
+      "limit=0",
+      "unexpected=value",
+      "includeFacets=1",
+      "includeFacets=TRUE",
+      "includeFacets=",
+      "includeFacets=true&includeFacets=false",
+    ])
+      expect((await f.app.inject({ url: `/v1/library/shares?${query}` })).statusCode).toBe(422);
+    expect((await f.app.inject({ url: "/v1/library/shares" })).json()).toEqual({
+      shares: [],
+      nextCursor: null,
+    });
+  });
   it("creates independent drafts and images for all types and replays copies without duplicating drafts", async () => {
     const f = await fixture();
     const entries = [];

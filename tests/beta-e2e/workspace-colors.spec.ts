@@ -147,7 +147,7 @@ for (const suffix of ["desktop", "phone @mobile"]) {
     try {
       for (const mode of ["light", "dark"] as const) {
         await page.emulateMedia({ colorScheme: mode });
-        await page.goto("/library");
+        await page.goto("/library?type=rounds");
         await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
         for (const [type, kind, label] of [
           ["rounds", "round", "Rounds"],
@@ -297,7 +297,7 @@ for (const suffix of ["desktop", "phone @mobile"]) {
       }
       // Hover must not replace the keyboard focus ring in forced-color mode.
       await page.emulateMedia({ forcedColors: "active" });
-      await page.goto("/library");
+      await page.goto("/library?type=rounds");
       const edit = cardWithTitle(page, fixture.rounds[0]!.title).locator('a[data-action="edit"]');
       await tabTo(page, edit);
       await edit.hover();
@@ -306,7 +306,7 @@ for (const suffix of ["desktop", "phone @mobile"]) {
       await densityAxe(page);
       await page.emulateMedia({ forcedColors: "none" });
       await specialistLocale(page, "de-DE");
-      await page.goto("/library");
+      await page.goto("/library?type=rounds");
       await expect(page.locator("html")).toHaveAttribute("lang", "de-DE");
       await expect(collection(page).locator('span[data-status="draft"]')).toHaveText("Entwurf");
       await expectDocumentReflow(page);

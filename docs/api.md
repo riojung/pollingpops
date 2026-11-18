@@ -110,6 +110,18 @@ Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Read
 existing schema-7/8/9 sessions even after the writer flag is disabled. Legacy scoring and deadlines
 are preserved; opinion formats remain outside learning accuracy and recovery denominators.
 
+## Library metadata discovery
+
+Creator-cookie `GET /v1/library/items` returns a bounded mixed workspace metadata page and exact
+authorized facets, without drafts or participant data. It accepts `q`, `kind`, `status`, `sort`,
+`favorites`, `folder`, `limit` and a query/context-bound `cursor`. The existing authenticated
+`GET /v1/library/shares` adds optional `q`, `kind`, `sort`, `progress`, `permission` and opt-in facets
+(`includeFacets=true`; omitted keeps the strict legacy response shape),
+preserving its organization, direct-recipient and managed-sharing authorization.
+
+See [Library discovery](library-discovery.md) for allowed values, cursor/count semantics, metadata
+projections and compatibility. These read-only queries do not grant source editing or copying.
+
 ## Audience-scope foundation (partial M1)
 
 ### Survey Library metadata and product feedback

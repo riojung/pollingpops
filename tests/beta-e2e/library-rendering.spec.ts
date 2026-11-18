@@ -101,7 +101,7 @@ for (const mobile of [false, true]) {
 
     for (const mode of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: mode });
-      await page.goto("/library");
+      await page.goto("/library?type=rounds");
       await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
       await expect(cards).toHaveCount(23);

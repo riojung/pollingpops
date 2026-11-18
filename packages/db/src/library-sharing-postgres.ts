@@ -223,28 +223,87 @@ export function createPostgresLibrarySharingRun(
           return result.rows[0] ? map(result.rows[0]) : null;
         },
         list: async (input) => {
-          // RLS verifies the principal; bounded metadata discovery never selects snapshot bodies.
-          // Source existence joins need system RLS, so scope it to the exact principal predicate.
+          // The authorized metadata set drives both the page and all counts. No snapshot,
+          // source draft, content, or media column is read by discovery.
           return system(client, async () => {
+            const normalizedTitle = `normalize(lower(normalize(share.title,NFC) COLLATE "und-x-icu"),NFC) COLLATE "C"`;
+            const ordering =
+              input.sort === "recent"
+                ? "share.shared_at DESC,share.id DESC"
+                : `${normalizedTitle} ${input.sort === "title_asc" ? "ASC" : "DESC"},share.id DESC`;
+            const boundary =
+              input.sort === "recent"
+                ? "(share.shared_at,share.id)<($9::timestamptz,$10::uuid)"
+                : `(${normalizedTitle} ${input.sort === "title_asc" ? ">" : "<"} $11::text COLLATE "C" OR (${normalizedTitle}=$11::text COLLATE "C" AND share.id<$10::uuid))`;
+            const search = input.q
+              .normalize("NFC")
+              .toLowerCase()
+              .normalize("NFC")
+              .replace(/[\\%_]/g, (character) => `\\${character}`);
             const result = await client.query(
-              `SELECT ${columns} FROM library_shares share WHERE share.revoked_at IS NULL
-               AND openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'read',share.shared_at)
-               AND ($1::uuid IS NULL OR share.organization_id=$1)
-               AND CASE $2 WHEN 'organization' THEN share.audience='organization'
-                 WHEN 'shared' THEN share.audience='people' AND $3::uuid=ANY(share.recipient_ids)
-                 ELSE openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'manage') END
-               AND ($4::timestamptz IS NULL OR (share.shared_at,share.id)<($4::timestamptz,$5::uuid))
-               AND ${sourceExists} ORDER BY share.shared_at DESC,share.id DESC LIMIT $6`,
+              `WITH authorized AS MATERIALIZED (
+                SELECT ${columns},organization.name AS organization_name,workspace.name AS workspace_name,
+                  coalesce(progress.status,'new') AS progress_status,
+                  openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'manage') AS can_manage
+                FROM library_shares share
+                JOIN organizations organization ON organization.id=share.organization_id
+                JOIN workspaces workspace ON workspace.id=share.workspace_id AND workspace.organization_id=share.organization_id
+                LEFT JOIN library_share_progress progress ON progress.share_id=share.id AND progress.user_id=$3::uuid
+                WHERE share.revoked_at IS NULL
+                  AND openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'read',share.shared_at)
+                  AND ($1::uuid IS NULL OR share.organization_id=$1)
+                  AND CASE $2 WHEN 'organization' THEN share.audience='organization'
+                    WHEN 'shared' THEN share.audience='people' AND $3::uuid=ANY(share.recipient_ids)
+                    ELSE openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'manage') END
+                  AND ${sourceExists}
+                  AND ($4='' OR normalize(lower(normalize(share.title,NFC) COLLATE "und-x-icu"),NFC) LIKE $4 ESCAPE E'\\\\' OR normalize(lower(normalize(share.description,NFC) COLLATE "und-x-icu"),NFC) LIKE $4 ESCAPE E'\\\\'
+                    OR normalize(lower(normalize(share.message,NFC) COLLATE "und-x-icu"),NFC) LIKE $4 ESCAPE E'\\\\' OR normalize(lower(normalize(organization.name,NFC) COLLATE "und-x-icu"),NFC) LIKE $4 ESCAPE E'\\\\'
+                    OR normalize(lower(normalize(workspace.name,NFC) COLLATE "und-x-icu"),NFC) LIKE $4 ESCAPE E'\\\\')
+              ), filtered AS MATERIALIZED (
+                SELECT * FROM authorized WHERE ($5='all' OR artifact_type=$5)
+                  AND ($6='all' OR progress_status=$6) AND ($7='all' OR permission=$7)
+              ), page AS (
+                SELECT share.* FROM filtered share WHERE ($9::timestamptz IS NULL OR ${boundary})
+                ORDER BY ${ordering} LIMIT $8
+              )
+              SELECT coalesce((SELECT jsonb_agg(to_jsonb(page) ORDER BY ${ordering.replaceAll("share.", "page.")}) FROM page),'[]'::jsonb) AS shares,
+                jsonb_build_object(
+                  'kinds',jsonb_build_object('round',count(*) FILTER(WHERE artifact_type='round'),'presentation',count(*) FILTER(WHERE artifact_type='presentation'),'survey',count(*) FILTER(WHERE artifact_type='survey')),
+                  'progress',jsonb_build_object('new',count(*) FILTER(WHERE progress_status='new'),'in_progress',count(*) FILTER(WHERE progress_status='in_progress'),'done',count(*) FILTER(WHERE progress_status='done')),
+                  'permissions',jsonb_build_object('view',count(*) FILTER(WHERE permission='view'),'use',count(*) FILTER(WHERE permission='use')),
+                  'total',(SELECT count(*) FROM filtered)) AS facets
+              FROM authorized`,
               [
                 input.organizationId ?? null,
                 input.scope,
                 actorId,
-                input.cursor?.sharedAt ?? null,
-                input.cursor?.id ?? null,
+                input.q ? `%${search}%` : "",
+                input.kind,
+                input.progress,
+                input.permission,
                 input.limit,
+                input.after?.sharedAt ?? null,
+                input.after?.id ?? null,
+                ...(input.sort === "recent" ? [] : [input.after?.title ?? null]),
               ],
             );
-            return result.rows.map(map);
+            const found = result.rows[0]!;
+            return {
+              rows: found.shares.map((row: QueryResultRow) => ({
+                ...map(row),
+                progress: row.progress_status,
+                context: {
+                  organizationId: row.organization_id,
+                  organizationName: row.organization_name,
+                  workspaceName: row.workspace_name,
+                  eligible: true,
+                  create: false,
+                  manage: row.can_manage,
+                  joinedAt: null,
+                },
+              })),
+              facets: found.facets,
+            };
           });
         },
         insert: async (row) => {

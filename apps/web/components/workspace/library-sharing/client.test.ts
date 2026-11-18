@@ -46,7 +46,8 @@ describe("authenticated library sharing client", () => {
     expect(libraryScopeHref("organization", "presentations")).toBe(
       "/library?scope=organization&type=presentations",
     );
-    expect(libraryScopeHref("workspace", "rounds")).toBe("/library");
+    expect(libraryScopeHref("workspace", "rounds")).toBe("/library?type=rounds");
+    expect(libraryScopeHref("shared", "all")).toBe("/library?scope=shared");
   });
 
   it("lists strict metadata without accepting source snapshots in summaries", async () => {
@@ -73,6 +74,29 @@ describe("authenticated library sharing client", () => {
     expect(url.searchParams.get("organizationId")).toBe(id);
     expect(url.searchParams.get("cursor")).toBe("page-one");
     expect(mocked.fetch.mock.calls[0]![1]).toEqual({ signal: active.signal, cache: "no-store" });
+  });
+
+  it("adds bounded search, facets and sorting without changing positional callers", async () => {
+    mocked.fetch.mockResolvedValue({ shares: [], nextCursor: null });
+    await listLibraryShares("shared", undefined, "page-one", undefined, {
+      q: `  ${"x".repeat(180)}  `,
+      kind: "survey",
+      sort: "title_desc",
+      progress: "done",
+      permission: "view",
+      limit: 30,
+    });
+    const params = new URL(mocked.fetch.mock.calls[0]![0], "https://example.test").searchParams;
+    expect(params.get("q")).toHaveLength(160);
+    expect(Object.fromEntries([...params].filter(([key]) => key !== "q"))).toEqual({
+      scope: "shared",
+      kind: "survey",
+      sort: "title_desc",
+      progress: "done",
+      permission: "view",
+      limit: "30",
+      cursor: "page-one",
+    });
   });
 
   it("pins publication and preserves an identical create request across transport retries", async () => {

@@ -25,11 +25,13 @@ export function LibraryShareActions({
   onChange,
   onRevoked,
   showOpen = true,
+  onAccessChanged,
 }: {
   share: LibraryShareSummary;
   onChange: (share: LibraryShareSummary) => void;
   onRevoked: () => void;
   showOpen?: boolean;
+  onAccessChanged?: () => void;
 }) {
   const { locale } = useLocale();
   const copy = librarySharingMessages(locale);
@@ -97,7 +99,11 @@ export function LibraryShareActions({
         settleLibraryCopyIntent(copyKey, requestId);
       // Authorization, availability, and validation can fail before receipt lookup;
       // they cannot settle an earlier request whose acknowledgement was lost.
-      if (!active.signal.aborted && currentContext.current === contextKey) setError(true);
+      if (!active.signal.aborted && currentContext.current === contextKey) {
+        setError(true);
+        if (caught instanceof ApiClientError && [401, 403, 404].includes(caught.status))
+          onAccessChanged?.();
+      }
     } finally {
       if (inFlight.current === active) inFlight.current = null;
       if (!active.signal.aborted && currentContext.current === contextKey) setBusy("");

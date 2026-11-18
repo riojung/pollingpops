@@ -4,6 +4,8 @@ import {
   libraryBulkActionIds,
   roundBulkActionIds,
   librarySearchHref,
+  readLibraryDiscoveryQuery,
+  libraryDiscoveryHref,
 } from "./library-controls";
 
 const items = [
@@ -36,6 +38,45 @@ const items = [
 ];
 
 describe("Library controls", () => {
+  it("keeps All discovery and explicit Round management header searches distinct", () => {
+    expect(
+      librarySearchHref("readiness", "/library", "?kind=survey&status=draft&cursor=private"),
+    ).toBe("/library?q=readiness");
+    expect(librarySearchHref("readiness", "/library", "?type=rounds")).toBe(
+      "/library?type=rounds&q=readiness",
+    );
+  });
+  it("roundtrips authoritative discovery filters without carrying cursors or access tokens", () => {
+    const params = new URLSearchParams(
+      "q=%20north%20&kind=survey&status=published&sort=title_desc&favorites=true&folder=unfiled&cursor=private&token=secret",
+    );
+    const query = readLibraryDiscoveryQuery(params);
+    const href = libraryDiscoveryHref(query);
+    expect(href).toBe(
+      "/library?q=north&kind=survey&sort=title_desc&status=published&favorites=true&folder=unfiled",
+    );
+    expect(readLibraryDiscoveryQuery(new URLSearchParams(href.split("?")[1]))).toEqual(query);
+    expect(libraryDiscoveryHref(query, "shared", "rounds")).toBe(
+      "/library?q=north&sort=title_desc&scope=shared&type=rounds",
+    );
+  });
+  it("bounds search and canonicalizes invalid discovery controls", () => {
+    const query = readLibraryDiscoveryQuery(
+      new URLSearchParams(
+        `q=${"x".repeat(200)}&kind=boards&status=secret&sort=random&folder=private&permission=admin&progress=bad&organizationId=bad`,
+      ),
+    );
+    expect(query.q).toHaveLength(160);
+    expect(query).toMatchObject({
+      kind: "all",
+      status: "active",
+      sort: "recent",
+      folder: "all",
+      permission: "all",
+      progress: "all",
+      organizationId: "",
+    });
+  });
   it("keeps board searches on their own library without forwarding creation or access context", () => {
     expect(librarySearchHref("  project & retro  ", "/boards", "?create=1&token=private")).toBe(
       "/boards?q=project+%26+retro",

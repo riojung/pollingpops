@@ -5,7 +5,9 @@ Research: [Wayground and Mentimeter benchmark](workspace-experience-benchmark-20
 
 The product owner selected a simpler, more polished workspace and compatible feature expansion.
 This plan breaks that request into reviewable increments. **WX-01 and WX-02 are the selected first
-delivery**, implemented on `codex/workspace-experience-foundation`. Later items are scoped backlog,
+delivery**, merged through [PR #271](https://github.com/riojung/pollingpops/pull/271) at `7c537d5`.
+The next delivery, **WX-03**, is implemented on `codex/library-all-content` with qualification in
+[Library discovery](library-discovery.md). Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -23,9 +25,9 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 
 | ID    | Priority | Size                               | Outcome                                                             | State / dependency                             | Responsible role                |
 | ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Implemented; local acceptance below            | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Implemented; local acceptance below            | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Ready for selection after WX-01/02             | Library API + frontend          |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below      | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Implemented; All content discovery checkpoint  | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Ready; reuse existing catalog                  | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Ready; retain existing factories               | Authoring + frontend            |
 | WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
@@ -120,6 +122,14 @@ cross-tenant access and 320px keyboard use.
 
 **Dependencies:** bounded indexed queries and an agreed cross-kind cursor contract. Keep schema
 or index changes separate from the UI when needed. Owner: Library API + frontend.
+
+**Delivered:** All content is the default across workspace, organization and direct-sharing scopes.
+Search, facets, recency/title sort and deterministic cursors operate on complete authorized server
+metadata; explicit typed management views remain available. Retained readable content stays visible
+when new creation pauses. Shared facets require opt-in to preserve strict older clients. Migration113
+adds indexes; forward migration114 corrects their Unicode title keys. See the
+[implementation and verification record](library-discovery.md), including
+restricted PostgreSQL conformance, six browser cases and the full repository check.
 
 ### WX-04 Templates: curate by customer job
 
@@ -354,8 +364,8 @@ assistive-technology, native-language or physical-device review. Run the reposit
 `pnpm check` before opening a pull request, as required by the contribution guide.
 
 The next work session should select **one ID/checkpoint**, confirm its current baseline and scope,
-assign an owner and define a testable completion target. Recommended next choices are WX-03
-(mixed Library discovery) or one WX-04 collection, depending on observed customer friction.
+assign an owner and define a testable completion target. The next P1 delivery is one **WX-04**
+editorial collection, followed by a bounded WX-05 creation/source-intake checkpoint.
 Do not mark all later items implemented because the first UI slice is complete.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),

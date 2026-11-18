@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   LibraryShareCreateSchema,
   LibraryShareCopySchema,
+  LibraryShareListQuerySchema,
+  type LibraryShareListQuery,
+  type LibraryShareListFacets,
   PresentationDraftSchema,
   QuizDraftSchema,
   type LibraryArtifactKind,
@@ -32,7 +35,10 @@ import {
   workspaceLicenseTerms,
   selectWorkspaceLicenseAssignment,
 } from "./platform-service.js";
-import { createPresentationRepository } from "./presentations.js";
+import {
+  createPresentationRepository,
+  type MemoryPresentationRepository,
+} from "./presentations.js";
 import { createSurveyRepository, type SurveyRecord, type SurveyVersion } from "./surveys.js";
 import { presentationMediaIds, quizMediaIds } from "./media-references.js";
 import { roundArtifactSchemaVersion } from "./artifact-schemas.js";
@@ -66,13 +72,11 @@ export interface LibrarySharingRepository {
     input: LibraryShareCreate;
     now: Date;
   }): Promise<{ share: LibraryShareRecord; replayed: boolean }>;
-  list(input: {
-    actorId: string;
-    scope: "organization" | "shared" | "managed";
-    organizationId?: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{ shares: LibraryShareSummary[]; nextCursor: string | null }>;
+  list(input: { actorId: string } & Partial<LibraryShareListQuery>): Promise<{
+    shares: LibraryShareSummary[];
+    nextCursor: string | null;
+    facets?: LibraryShareListFacets;
+  }>;
   read(input: { actorId: string; id: string; now?: Date }): Promise<LibraryShareRecord | null>;
   revoke(input: { actorId: string; id: string; now: Date }): Promise<boolean>;
   progress(input: {
@@ -148,12 +152,10 @@ export interface LibrarySharingTransaction {
   sourceExists(row: StoredLibraryShare): Promise<boolean>;
   get(id: string, lock?: boolean): Promise<StoredLibraryShare | null>;
   request(workspaceId: string, requestId: string): Promise<StoredLibraryShare | null>;
-  list(input: {
-    scope: "organization" | "shared" | "managed";
-    organizationId?: string;
-    limit: number;
-    cursor?: { sharedAt: string; id: string };
-  }): Promise<StoredLibraryShare[]>;
+  list(input: LibraryShareListQuery & { after?: LibraryShareCursorPosition }): Promise<{
+    rows: LibrarySharingListRow[];
+    facets: LibraryShareListFacets;
+  }>;
   insert(row: StoredLibraryShare): Promise<void>;
   revoke(id: string, now: Date): Promise<void>;
   status(id: string): Promise<LibraryShareProgress>;
@@ -226,25 +228,84 @@ const intentHash = (input: LibraryShareCreate) =>
       }),
     )
     .digest("hex");
-function cursor(value?: string) {
+export interface LibraryShareCursorPosition {
+  sharedAt: string;
+  id: string;
+  title?: string;
+}
+export interface LibrarySharingListRow extends Omit<
+  LibraryShareSummary,
+  "organizationName" | "sourceWorkspaceName" | "capabilities" | "copyUnavailableReason"
+> {
+  context: LibrarySharingContext;
+}
+// Default Unicode lowercasing matches PostgreSQL root ICU; byte ordering matches C collation.
+export function normalizeLibraryShareText(value: string) {
+  return value.normalize("NFC").toLowerCase().normalize("NFC");
+}
+const compareText = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
+function cursorContext(actorId: string, query: LibraryShareListQuery) {
+  const context = {
+    scope: query.scope,
+    organizationId: query.organizationId,
+    q: query.q,
+    kind: query.kind,
+    sort: query.sort,
+    progress: query.progress,
+    permission: query.permission,
+  };
+  return createHash("sha256")
+    .update(stablePlatformJson({ actorId, ...context, q: normalizeLibraryShareText(context.q) }))
+    .digest("hex");
+}
+function cursor(value: string | undefined, context: string, query: LibraryShareListQuery) {
   if (!value) return undefined;
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return fail("VALIDATION_ERROR", "Invalid Library cursor");
   try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString()) as {
-      sharedAt: string;
-      id: string;
-    };
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString());
+    const position = parsed.v === 2 ? parsed.position : parsed;
     if (
-      !Number.isFinite(Date.parse(parsed.sharedAt)) ||
-      !LibraryShareCopySchema.safeParse({ requestId: parsed.id }).success
+      !position ||
+      typeof position.sharedAt !== "string" ||
+      !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(position.sharedAt) ||
+      !Number.isFinite(Date.parse(position.sharedAt)) ||
+      new Date(position.sharedAt).toISOString() !== position.sharedAt ||
+      !LibraryShareCopySchema.safeParse({ requestId: position.id }).success
     )
       return fail("VALIDATION_ERROR", "Invalid Library cursor");
-    return parsed;
+    if (parsed.v === 2) {
+      if (
+        Object.keys(parsed).sort().join(",") !== "context,position,v" ||
+        Object.keys(position).sort().join(",") !== "id,sharedAt,title" ||
+        parsed.context !== context ||
+        typeof position.title !== "string" ||
+        position.title.length > 1000 ||
+        position.title.includes("\0") ||
+        position.title !== normalizeLibraryShareText(position.title)
+      )
+        return fail("VALIDATION_ERROR", "Invalid Library cursor");
+    } else if (
+      Object.keys(parsed).sort().join(",") !== "id,sharedAt" ||
+      query.q ||
+      query.kind !== "all" ||
+      query.sort !== "recent" ||
+      query.progress !== "all" ||
+      query.permission !== "all"
+    ) {
+      return fail("VALIDATION_ERROR", "Invalid Library cursor");
+    }
+    return { ...position, id: position.id.toLowerCase() } as LibraryShareCursorPosition;
   } catch {
     return fail("VALIDATION_ERROR", "Invalid Library cursor");
   }
 }
-function nextCursor(row: StoredLibraryShare) {
-  return Buffer.from(JSON.stringify({ sharedAt: row.sharedAt, id: row.id })).toString("base64url");
+function nextCursor(row: Pick<StoredLibraryShare, "id" | "sharedAt" | "title">, context: string) {
+  const payload = {
+    v: 2,
+    context,
+    position: { sharedAt: row.sharedAt, id: row.id, title: normalizeLibraryShareText(row.title) },
+  };
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }
 function visible(row: StoredLibraryShare, actorId: string, context: LibrarySharingContext | null) {
   return (
@@ -396,26 +457,39 @@ export class LibrarySharingService implements LibrarySharingRepository {
     });
   }
   list(input: Parameters<LibrarySharingRepository["list"]>[0]) {
-    const limit = input.limit ?? 50;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
-      return Promise.reject(
-        new LibrarySharingError("VALIDATION_ERROR", "Choose a Library page size from 1 to 100"),
-      );
-    const after = cursor(input.cursor);
-    return this.run(input.actorId, async (tx) => {
-      const rows = await tx.list({ ...input, limit: limit + 1, cursor: after });
-      const shares: LibraryShareSummary[] = [];
-      const eligible: StoredLibraryShare[] = [];
-      for (const row of rows) {
-        const context = await tx.context(row.sourceWorkspaceId);
-        if (!visible(row, input.actorId, context) || !(await tx.sourceExists(row))) continue;
-        if (input.scope === "managed" && !context!.manage) continue;
-        eligible.push(row);
-        if (shares.length < limit) shares.push(await this.summary(tx, row, context!));
-      }
+    const { actorId, ...raw } = input;
+    const parsed = LibraryShareListQuerySchema.safeParse(raw);
+    if (!parsed.success)
+      return Promise.reject(new LibrarySharingError("VALIDATION_ERROR", "Check the Library query"));
+    const query = { ...parsed.data, organizationId: parsed.data.organizationId?.toLowerCase() };
+    return this.run(actorId, async (tx) => {
+      const context = cursorContext(actorId, query);
+      const after = cursor(query.cursor, context, query);
+      const { rows, facets } = await tx.list({ ...query, limit: query.limit + 1, after });
+      const shares = rows.slice(0, query.limit).map((row) => ({
+        id: row.id,
+        organizationId: row.organizationId,
+        organizationName: row.context.organizationName,
+        sourceWorkspaceId: row.sourceWorkspaceId,
+        sourceWorkspaceName: row.context.workspaceName,
+        artifactType: row.artifactType,
+        artifactId: row.artifactId,
+        versionId: row.versionId,
+        title: row.title,
+        description: row.description,
+        sharedAt: row.sharedAt,
+        permission: row.permission,
+        audience: row.audience,
+        message: row.message,
+        dueAt: row.dueAt,
+        progress: row.progress,
+        capabilities: { view: true, copy: row.permission === "use", manage: row.context.manage },
+        copyUnavailableReason: row.permission === "use" ? null : "This item was shared for viewing",
+      }));
       return {
         shares,
-        nextCursor: eligible.length > limit ? nextCursor(eligible[limit - 1]!) : null,
+        facets,
+        nextCursor: rows.length > query.limit ? nextCursor(rows[query.limit - 1]!, context) : null,
       };
     });
   }
@@ -569,26 +643,32 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
     private readonly communityMode = false,
   ) {}
   private async sourceExists(row: StoredLibraryShare) {
+    // Inspect only the parent identity/status metadata; discovery never clones a draft.
+    createPresentationRepository(this.repository);
     const parent =
       row.artifactType === "round"
-        ? await this.repository.getQuiz(row.sourceWorkspaceId, row.artifactId)
+        ? this.repository.quizzes.get(row.artifactId)
         : row.artifactType === "presentation"
-          ? await createPresentationRepository(this.repository).getPresentation(
-              row.sourceWorkspaceId,
-              row.artifactId,
-            )
-          : await createSurveyRepository(this.repository).get(
-              row.sourceWorkspaceId,
-              row.artifactId,
-            );
-    return !!parent && parent.status !== "archived";
+          ? this.repository
+              .getOrCreateLifecycleExtension<MemoryPresentationRepository>("presentations", () => {
+                throw new Error("Presentation store was not initialized");
+              })
+              .presentations.get(row.artifactId)
+          : memorySurveys(this.repository).surveys.get(row.artifactId);
+    return !!parent && parent.workspaceId === row.sourceWorkspaceId && parent.status !== "archived";
   }
+
   run: LibrarySharingRun = (actorId, work) =>
     getMemoryPlatformRepository(this.repository).withTransaction(async () => {
       const platform = getMemoryPlatformRepository(this.repository).memoryStore;
-      const sharesBefore = structuredClone(this.shares),
-        statusesBefore = structuredClone(this.statuses),
-        copiesBefore = structuredClone(this.copies);
+      let sharesBefore: Map<string, StoredLibraryShare> | undefined;
+      let statusesBefore: Map<string, LibraryShareProgress> | undefined;
+      let copiesBefore: typeof this.copies | undefined;
+      const checkpoint = () => {
+        sharesBefore ??= structuredClone(this.shares);
+        statusesBefore ??= structuredClone(this.statuses);
+        copiesBefore ??= structuredClone(this.copies);
+      };
       const context = async (workspaceId: string): Promise<LibrarySharingContext | null> => {
         const workspace = platform.getSync<OrganizationWorkspaceRecord>("workspace", workspaceId);
         if (!workspace) return null;
@@ -693,9 +773,18 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
             ) ?? null,
           ),
         list: async (input) => {
-          const rows = [];
+          const rows: LibrarySharingListRow[] = [];
+          const facets: LibraryShareListFacets = {
+            kinds: { round: 0, presentation: 0, survey: 0 },
+            progress: { new: 0, in_progress: 0, done: 0 },
+            permissions: { view: 0, use: 0 },
+            total: 0,
+          };
+          const contexts = new Map<string, LibrarySharingContext | null>();
           for (const row of this.shares.values()) {
-            const access = await context(row.sourceWorkspaceId);
+            if (!contexts.has(row.sourceWorkspaceId))
+              contexts.set(row.sourceWorkspaceId, await context(row.sourceWorkspaceId));
+            const access = contexts.get(row.sourceWorkspaceId)!;
             if (
               !visible(row, actorId, access) ||
               !(await this.sourceExists(row)) ||
@@ -710,20 +799,66 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
               continue;
             if (input.scope === "managed" && !access?.manage) continue;
             if (
-              input.cursor &&
-              (row.sharedAt > input.cursor.sharedAt ||
-                (row.sharedAt === input.cursor.sharedAt && row.id >= input.cursor.id))
+              ![
+                row.title,
+                row.description,
+                row.message,
+                access!.organizationName,
+                access!.workspaceName,
+              ].some((value) =>
+                normalizeLibraryShareText(value).includes(normalizeLibraryShareText(input.q)),
+              )
             )
               continue;
-            const metadata = { ...row };
-            delete metadata.snapshot;
-            rows.push(metadata);
+            const progress = this.statuses.get(`${row.id}:${actorId}`) ?? "new";
+            facets.kinds[row.artifactType]++;
+            facets.progress[progress]++;
+            facets.permissions[row.permission]++;
+            if (
+              (input.kind !== "all" && row.artifactType !== input.kind) ||
+              (input.progress !== "all" && progress !== input.progress) ||
+              (input.permission !== "all" && row.permission !== input.permission)
+            )
+              continue;
+            facets.total++;
+            rows.push({
+              id: row.id,
+              organizationId: row.organizationId,
+              sourceWorkspaceId: row.sourceWorkspaceId,
+              artifactType: row.artifactType,
+              artifactId: row.artifactId,
+              versionId: row.versionId,
+              title: row.title,
+              description: row.description,
+              sharedAt: row.sharedAt,
+              permission: row.permission,
+              audience: row.audience,
+              message: row.message,
+              dueAt: row.dueAt,
+              context: access!,
+              progress,
+            });
           }
-          return rows
-            .sort((a, b) => b.sharedAt.localeCompare(a.sharedAt) || b.id.localeCompare(a.id))
-            .slice(0, input.limit);
+          const order = (
+            a: LibraryShareCursorPosition & { title?: string },
+            b: LibraryShareCursorPosition & { title?: string },
+          ) =>
+            (input.sort === "recent"
+              ? compareText(b.sharedAt, a.sharedAt)
+              : compareText(
+                  normalizeLibraryShareText(a.title ?? ""),
+                  normalizeLibraryShareText(b.title ?? ""),
+                ) * (input.sort === "title_asc" ? 1 : -1)) || compareText(b.id, a.id);
+          return {
+            rows: rows
+              .sort(order)
+              .filter((row) => !input.after || order(row, input.after) > 0)
+              .slice(0, input.limit),
+            facets,
+          };
         },
         insert: async (row) => {
+          checkpoint();
           const active = [...this.shares.values()].filter((share) => !share.revokedAt);
           if (
             active.filter((share) => share.organizationId === row.organizationId).length >= 1000 ||
@@ -738,11 +873,13 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
           this.shares.set(row.id, structuredClone(row));
         },
         revoke: async (id, now) => {
+          checkpoint();
           const row = this.shares.get(id);
           if (row) row.revokedAt ??= now.toISOString();
         },
         status: async (id) => this.statuses.get(`${id}:${actorId}`) ?? "new",
         setStatus: async (id, status) => {
+          checkpoint();
           this.statuses.set(`${id}:${actorId}`, status);
         },
         copyReceipt: async (requestId) =>
@@ -761,6 +898,7 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
             );
           }),
         copy: async (row, workspaceId, requestId, value, now) => {
+          checkpoint();
           const artifactId = randomUUID();
           for (const asset of value.mediaAssets) await this.repository.createMediaAsset(asset);
           try {
@@ -830,6 +968,7 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
           [this.statuses, statusesBefore],
           [this.copies, copiesBefore],
         ] as const) {
+          if (!before) continue;
           target.clear();
           for (const [key, value] of before) (target as Map<string, unknown>).set(key, value);
         }

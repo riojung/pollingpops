@@ -14,6 +14,7 @@ interface LibraryHooks {
 const fixtures = vi.hoisted(() => ({
   canEdit: true,
   presentationsEnabled: true,
+  surveysEnabled: true,
   workspaceId: "",
   query: "",
   push: vi.fn(),
@@ -128,12 +129,12 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
   WorkspaceProvider: ({ children }: { children: ReactNode }) => children,
   useWorkspace: () => ({
     canEdit: fixtures.canEdit,
-    creator: { role: "owner", workspaceId: fixtures.workspaceId },
+    creator: { userId: "actor", role: "owner", workspaceId: fixtures.workspaceId },
     productFeatures: {
       builderV2: true,
       presentations: fixtures.presentationsEnabled,
       presentationRealtime: true,
-      surveys: true,
+      surveys: fixtures.surveysEnabled,
     },
   }),
 }));
@@ -168,8 +169,9 @@ describe("Library workspace", () => {
   beforeEach(() => {
     fixtures.canEdit = true;
     fixtures.presentationsEnabled = true;
+    fixtures.surveysEnabled = true;
     fixtures.workspaceId = "";
-    fixtures.query = "";
+    fixtures.query = "type=rounds";
     fixtures.hooks = null;
     fixtures.tree = null;
     fixtures.apiFetch.mockReset();
@@ -182,7 +184,19 @@ describe("Library workspace", () => {
     });
   });
 
-  it("defaults to the Round library with search, management, and creation actions", () => {
+  it("defaults to metadata All content with explicit specialized management links", () => {
+    fixtures.query = "";
+    const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(markup).toContain('data-library-discovery=""');
+    expect(markup).toContain('placeholder="Search all content"');
+    expect(markup).toContain('href="/library?type=rounds"');
+    expect(markup).toContain('href="/library?type=presentations"');
+    expect(markup).toContain('href="/library?type=surveys"');
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain("Select all");
+  });
+
+  it("preserves the explicit Round management route with search and creation actions", () => {
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
 
     expect(markup).toContain("Library");
@@ -242,13 +256,22 @@ describe("Library workspace", () => {
   });
 
   it("hydrates deep-linked status and ownership filters", () => {
-    fixtures.query = "status=archived&owner=workspace&folder=unfiled&favorites=true";
+    fixtures.query = "type=rounds&status=archived&owner=workspace&folder=unfiled&favorites=true";
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
 
     expect(markup).toMatch(/<option value="archived" selected="">Archived<\/option>/);
     expect(markup).toMatch(/<option value="workspace" selected="">Workspace-owned<\/option>/);
     expect(markup).toMatch(/<option value="unfiled" selected="">Unfiled<\/option>/);
     expect(markup).toContain('aria-pressed="true"');
+  });
+
+  it("retains Survey management while pausing new Survey creation", () => {
+    fixtures.query = "type=surveys";
+    fixtures.surveysEnabled = false;
+    const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(markup).toMatch(/aria-selected="true"[^>]*id="surveys-tab"[^>]*role="tab"/);
+    expect(markup).toContain('href="/library/folders?type=surveys"');
+    expect(markup).not.toContain('href="/surveys/new"');
   });
 
   it.each(["rounds", "presentations", "surveys"])(
@@ -268,7 +291,7 @@ describe("Library workspace", () => {
     let markup = await libraryHarness().settle();
     expect(markup).not.toContain('href="/templates?type=rounds"');
     fixtures.canEdit = true;
-    fixtures.query = "q=missing";
+    fixtures.query = "type=rounds&q=missing";
     markup = await libraryHarness().settle();
     expect(markup).toContain("Clear filters");
     expect(markup).not.toContain('href="/templates?type=rounds"');
@@ -455,7 +478,8 @@ describe("Library workspace", () => {
   );
 
   it("clears folder, destination, and item selection when switching types, while retaining other filters", async () => {
-    fixtures.query = "folder=rounds-child&q=filed&status=draft&owner=workspace&favorites=true";
+    fixtures.query =
+      "type=rounds&folder=rounds-child&q=filed&status=draft&owner=workspace&favorites=true";
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path === "/v1/library/favorites"
         ? {

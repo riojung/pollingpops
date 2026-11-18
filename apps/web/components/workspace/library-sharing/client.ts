@@ -8,6 +8,7 @@ import {
   type LibraryShareCreate,
   type LibraryShareSummary,
   type PresentationReview,
+  type LibraryShareListQuery,
 } from "@openround/contracts";
 import { apiFetch } from "../../../lib/api";
 
@@ -50,7 +51,7 @@ export function libraryScope(value: string | null): LibraryScope {
 export function libraryScopeHref(scope: LibraryScope, type: string) {
   const query = new URLSearchParams();
   if (scope !== "workspace") query.set("scope", scope);
-  if (type === "surveys" || type === "presentations") query.set("type", type);
+  if (type === "rounds" || type === "surveys" || type === "presentations") query.set("type", type);
   return `/library${query.size ? `?${query}` : ""}`;
 }
 
@@ -65,8 +66,18 @@ export async function listLibraryShares(
   signal?: AbortSignal,
   cursor?: string | null,
   organizationId?: string,
+  options?: Partial<
+    Pick<
+      LibraryShareListQuery,
+      "q" | "kind" | "sort" | "progress" | "permission" | "limit" | "includeFacets"
+    >
+  >,
 ) {
   const query = new URLSearchParams({ scope });
+  for (const [name, value] of Object.entries(options ?? {})) {
+    if (value !== undefined)
+      query.set(name, name === "q" ? String(value).trim().slice(0, 160) : String(value));
+  }
   if (organizationId) query.set("organizationId", organizationId);
   if (cursor) query.set("cursor", cursor);
   return LibraryShareListSchema.parse(

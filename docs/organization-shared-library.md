@@ -20,7 +20,12 @@ A management view lets authorized sharers inspect and revoke their publications.
 
 Each shared item identifies its organization, source workspace, content type, permission, sharing time, optional message and due date. Personal follow-up state is **New**, **In progress** or **Done**. These states describe the recipient's acknowledgement, not learning mastery or verified assessment completion.
 
-The first version searches the metadata pages already loaded; **Load more** expands the searched set. Review dates display an overdue indicator for unfinished items when the view renders or refreshes. They do not send reminders or expire access.
+The All content discovery view searches authorized metadata on the server before pagination and
+supports kind, permission, review-progress and sorting controls. It distinguishes the complete
+matching total from loaded rows. See [Library discovery](library-discovery.md) for facet and cursor
+semantics. Specialized management views keep their existing workflows and clearly describe any
+loaded-content filtering. Review dates display an overdue indicator for unfinished items when
+the view renders or refreshes. They do not send reminders or expire access.
 
 The scope label is **My workspace**, not **My private files**: existing workspace access remains in force.
 

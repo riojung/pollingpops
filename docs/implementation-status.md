@@ -8,6 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-03 All content Library discovery
+
+WX-01 and WX-02 merged in PR #271. The next focused increment on `codex/library-all-content`
+adds All content across Rounds, Presentations and Surveys for workspace, organization and direct
+sharing scopes. Search/filter/sort work on authorized server metadata before pagination; exact
+result totals remain distinct from loaded rows. Existing explicit content-type management links
+keep their grid/list, folder, favorite and bulk-action workflows.
+
+The workspace query uses a metadata UNION and stable keysets under current workspace/user authority
+and forced PostgreSQL RLS. Shared queries reuse current membership, source and publication grants;
+optional facets are explicitly requested so strict older clients retain their original response.
+Migration113 adds indexes; forward migration114 makes their lowercase title keys canonical.
+No publication format, response format, sharing grant or participant
+identity model changes. Cursor boundaries do not grant access or imply a retained collection snapshot.
+
+The [Library discovery reference](library-discovery.md) records filtering/count semantics,
+compatibility, deployment prerequisites and qualification. WX-04 editorial collections and WX-05
+creation/source-intake consolidation remain subsequent increments in the
+[workspace backlog](workspace-experience-backlog-2026-11.md).
+
 ### Workspace start and template reuse November 17, 2026
 
 The `codex/workspace-experience-foundation` slice follows the product owner's Wayground/Mentimeter

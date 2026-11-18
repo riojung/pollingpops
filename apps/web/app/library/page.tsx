@@ -12,6 +12,8 @@ import { SurveyLibraryCards } from "../../components/workspace/survey-library-ca
 import { LibraryScopeNavigation } from "../../components/workspace/library-sharing/scope-navigation";
 import { ShareLibraryButton } from "../../components/workspace/library-sharing/share-dialog";
 import { SharedLibrary } from "../../components/workspace/library-sharing/shared-library";
+import { LibraryDiscovery } from "../../components/workspace/library-discovery/library-discovery";
+import { libraryDiscoveryCopy } from "../../lib/i18n/library-discovery-copy";
 import { libraryScope } from "../../components/workspace/library-sharing/client";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
@@ -29,6 +31,8 @@ import { pluralCategory } from "../../lib/i18n/format";
 import {
   filterLibraryItems,
   libraryBulkActionIds,
+  libraryDiscoveryHref,
+  readLibraryDiscoveryQuery,
   type LibraryItemStatus,
   type LibraryOwnershipFilter,
   type LibraryStatusFilter,
@@ -115,6 +119,7 @@ function dateLabel(locale: string, value: string) {
 function LibraryContent() {
   const { locale, t } = useLocale();
   const flowCopy = workspaceFlowMessages(locale);
+  const discoveryCopy = libraryDiscoveryCopy(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canEdit, creator, workspace, management, productFeatures } = useWorkspace();
@@ -452,8 +457,7 @@ function LibraryContent() {
     setTargetFolderId("unfiled");
     setAnnouncement("");
     const params = new URLSearchParams(searchParams.toString());
-    if (next !== "rounds") params.set("type", next);
-    else params.delete("type");
+    params.set("type", next);
     if (search.trim()) params.set("q", search.trim());
     else params.delete("q");
     if (status === "active") params.delete("status");
@@ -480,7 +484,7 @@ function LibraryContent() {
     setFolderId("all");
     setFavoritesOnly(false);
     const params = new URLSearchParams();
-    if (type !== "rounds") params.set("type", type);
+    params.set("type", type);
     router.replace(`/library${params.size ? `?${params}` : ""}`);
   }
 
@@ -699,7 +703,6 @@ function LibraryContent() {
     return (
       <SharedLibrary
         scope={scope}
-        query={searchParams.get("q") ?? ""}
         type={
           requestedType === "surveys"
             ? "surveys"
@@ -748,6 +751,21 @@ function LibraryContent() {
         organization={hasOrganizationLibrary}
         canManage={canManageShares}
       />
+      <p>
+        <Link
+          href={libraryDiscoveryHref({
+            ...readLibraryDiscoveryQuery(searchParams),
+            q: search.trim().slice(0, 160),
+            kind: "all",
+            status,
+            favorites: favoritesOnly,
+            folder: folderId,
+          })}
+        >
+          {discoveryCopy.allContent}
+        </Link>
+      </p>
+      <p>{discoveryCopy.loadedSearch}</p>
       <div className={styles.toolbar}>
         <div
           className={styles.tabs}
@@ -1565,7 +1583,19 @@ function EmptyLibrary({
 export default function LibraryPage() {
   return (
     <WorkspaceProvider>
-      <LibraryContent />
+      <LibraryRoute />
     </WorkspaceProvider>
   );
+}
+
+function LibraryRoute() {
+  const params = useSearchParams();
+  const scope = libraryScope(params.get("scope"));
+  const requested = params.get("type");
+  const type =
+    requested === "rounds" || requested === "presentations" || requested === "surveys"
+      ? requested
+      : "all";
+  if (scope !== "workspace") return <SharedLibrary scope={scope} type={type} />;
+  return type === "all" ? <LibraryDiscovery /> : <LibraryContent />;
 }

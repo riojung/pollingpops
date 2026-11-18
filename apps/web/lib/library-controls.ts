@@ -19,7 +19,9 @@ export function librarySearchHref(query: string, pathname: string, search: strin
     pathname === "/surveys" || pathname.startsWith("/surveys/")
       ? "surveys"
       : (pathname === "/library" || sessions) &&
-          (requested === "surveys" || requested === "presentations")
+          (requested === "surveys" ||
+            requested === "presentations" ||
+            (pathname === "/library" && requested === "rounds"))
         ? requested
         : null;
   const params = new URLSearchParams();
@@ -30,7 +32,7 @@ export function librarySearchHref(query: string, pathname: string, search: strin
     (scope === "organization" || scope === "shared" || scope === "managed")
   )
     params.set("scope", scope);
-  if (query.trim()) params.set("q", query.trim());
+  if (query.trim()) params.set("q", query.trim().slice(0, 160));
   return `${sessions ? "/sessions" : "/library"}${params.size ? `?${params}` : ""}`;
 }
 
@@ -112,3 +114,84 @@ export function roundBulkActionIds<T extends { id: string; status: LibraryItemSt
 }
 
 export const libraryBulkActionIds = roundBulkActionIds;
+
+export type LibraryDiscoveryKind = "all" | "round" | "presentation" | "survey";
+export type LibraryDiscoverySort = "recent" | "title_asc" | "title_desc";
+export interface LibraryDiscoveryQuery {
+  q: string;
+  kind: LibraryDiscoveryKind;
+  status: LibraryStatusFilter;
+  sort: LibraryDiscoverySort;
+  favorites: boolean;
+  folder: string;
+  progress: "all" | "new" | "in_progress" | "done";
+  permission: "all" | "view" | "use";
+  organizationId: string;
+}
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function option<T extends string>(value: string | null, choices: readonly T[], fallback: T): T {
+  return choices.includes(value as T) ? (value as T) : fallback;
+}
+
+/** URL state is authoritative; cursors belong to one loaded query, never browser history. */
+export function readLibraryDiscoveryQuery(
+  params: Pick<URLSearchParams, "get">,
+): LibraryDiscoveryQuery {
+  const type = params.get("type");
+  const folder = params.get("folder");
+  const organization = params.get("organizationId");
+  return {
+    q: (params.get("q") ?? "").trim().slice(0, 160),
+    kind:
+      type === "rounds"
+        ? "round"
+        : type === "presentations"
+          ? "presentation"
+          : type === "surveys"
+            ? "survey"
+            : option(params.get("kind"), ["all", "round", "presentation", "survey"], "all"),
+    status: option(
+      params.get("status"),
+      ["active", "draft", "published", "archived", "all"],
+      "active",
+    ),
+    sort: option(params.get("sort"), ["recent", "title_asc", "title_desc"], "recent"),
+    favorites: params.get("favorites") === "true",
+    folder: folder === "unfiled" || (folder && uuid.test(folder)) ? folder : "all",
+    progress: option(params.get("progress"), ["all", "new", "in_progress", "done"], "all"),
+    permission: option(params.get("permission"), ["all", "view", "use"], "all"),
+    organizationId: organization && uuid.test(organization) ? organization : "",
+  };
+}
+
+export function libraryDiscoveryParams(query: LibraryDiscoveryQuery, shared = false) {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.kind !== "all") params.set("kind", query.kind);
+  if (query.sort !== "recent") params.set("sort", query.sort);
+  if (shared) {
+    if (query.progress !== "all") params.set("progress", query.progress);
+    if (query.permission !== "all") params.set("permission", query.permission);
+    if (query.organizationId) params.set("organizationId", query.organizationId);
+  } else {
+    if (query.status !== "active") params.set("status", query.status);
+    if (query.favorites) params.set("favorites", "true");
+    if (query.folder !== "all") params.set("folder", query.folder);
+  }
+  return params;
+}
+
+export function libraryDiscoveryHref(
+  query: LibraryDiscoveryQuery,
+  scope = "workspace",
+  type = "all",
+) {
+  const params = libraryDiscoveryParams(query, scope !== "workspace");
+  if (scope !== "workspace") params.set("scope", scope);
+  if (["rounds", "presentations", "surveys"].includes(type)) {
+    params.set("type", type);
+    params.delete("kind");
+  }
+  return `/library${params.size ? `?${params}` : ""}`;
+}

@@ -22,6 +22,7 @@ import {
   createBoardInvitationRepository,
   createSessionSummaryRepository,
   createLibraryMetadataRepository,
+  createLibraryDiscoveryRepository,
   createLibrarySharingRepository,
   createPresentationRepository,
   createPresentationShareRepository,
@@ -105,6 +106,7 @@ import { PresentationSessionService } from "./presentation-session-service.js";
 import { registerGroupRoutes } from "./group-routes.js";
 import { registerHomeRoutes } from "./home-routes.js";
 import { registerLibraryRoutes } from "./library-routes.js";
+import { registerLibraryDiscoveryRoutes } from "./library-discovery-routes.js";
 import { registerLibrarySharingRoutes } from "./library-sharing-routes.js";
 import { registerLiveRoomRoutes } from "./live-room-routes.js";
 import { registerSurveyRoutes } from "./survey-routes.js";
@@ -887,6 +889,16 @@ export async function buildApp(
     auth,
     workspaceEnabled: workspaceShellEnabled,
     presentationsEnabled,
+  });
+  await registerLibraryDiscoveryRoutes(app, {
+    discovery: createLibraryDiscoveryRepository({
+      repository,
+      presentations,
+      surveys: createSurveyRepository(repository),
+      libraryMetadata,
+    }),
+    auth,
+    workspaceEnabled: workspaceShellEnabled,
   });
 
   app.addHook("onClose", async () => {

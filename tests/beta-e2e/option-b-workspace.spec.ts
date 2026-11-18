@@ -123,7 +123,7 @@ for (const suffix of ["", " @mobile"]) {
       "aria-selected",
       "true",
     );
-    await expect(page).toHaveURL(/\/library$/);
+    await expect(page).toHaveURL(/\/library\?type=rounds$/);
     await page.goto("/create");
     const writes: string[] = [];
     page.on("request", (request) => {

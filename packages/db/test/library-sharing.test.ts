@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { QuizContentSchema, type LibraryShareCreate } from "@openround/contracts";
 import {
   MemoryRepository,
@@ -351,6 +351,359 @@ for (const backend of ["memory", "postgres"] as const)
             now: new Date(),
           }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      });
+      it("searches all authorized metadata before limiting and reports exact actor-specific facets", async () => {
+        const f = await fixture(repository);
+        const targets = [];
+        for (let index = 0; index < 4; index++)
+          targets.push(
+            (
+              await f.shares.create({
+                actorId: f.owner.userId,
+                workspaceId: f.source.id,
+                input: f.input({
+                  recipientIds: [f.recipient.userId, f.other.userId],
+                  permission: index === 0 ? "view" : "use",
+                  message: index < 2 ? "needle%_\\ literal" : "needle-other",
+                }),
+                now: f.now,
+              })
+            ).share,
+          );
+        // A newer page full of nonmatches must not hide the older search results.
+        for (let index = 0; index < 52; index++)
+          await f.shares.create({
+            actorId: f.owner.userId,
+            workspaceId: f.source.id,
+            input: f.input({ message: "filler" }),
+            now: new Date(f.now.getTime() + index + 1),
+          });
+        await f.shares.progress({
+          actorId: f.recipient.userId,
+          id: targets[0]!.id,
+          status: "done",
+          now: f.now,
+        });
+        await f.shares.progress({
+          actorId: f.recipient.userId,
+          id: targets[1]!.id,
+          status: "in_progress",
+          now: f.now,
+        });
+        await f.shares.progress({
+          actorId: f.other.userId,
+          id: targets[2]!.id,
+          status: "done",
+          now: f.now,
+        });
+        const foreign = await fixture(repository);
+        await foreign.shares.create({
+          actorId: foreign.owner.userId,
+          workspaceId: foreign.source.id,
+          input: foreign.input({ message: "needle%_\\ literal" }),
+          now: foreign.now,
+        });
+        const input = {
+          actorId: f.recipient.userId,
+          organizationId: f.organization.id,
+          scope: "shared" as const,
+          q: "  NEEDLE  ",
+          limit: 2,
+        };
+        const first = await f.shares.list(input);
+        expect(first.shares).toHaveLength(2);
+        expect(
+          (await f.shares.list({ ...input, organizationId: f.organization.id.toUpperCase() }))
+            .facets?.total,
+        ).toBe(4);
+        expect(first.facets).toEqual({
+          kinds: { round: 4, presentation: 0, survey: 0 },
+          progress: { new: 2, in_progress: 1, done: 1 },
+          permissions: { view: 1, use: 3 },
+          total: 4,
+        });
+        expect(first.nextCursor).toBeTruthy();
+        const second = await f.shares.list({ ...input, cursor: first.nextCursor! });
+        expect(new Set([...first.shares, ...second.shares].map((row) => row.id))).toEqual(
+          new Set(targets.map((row) => row.id)),
+        );
+        expect(second.nextCursor).toBeNull();
+        expect(second.facets).toEqual(first.facets);
+        const filtered = await f.shares.list({ ...input, progress: "new", permission: "use" });
+        expect(filtered.facets).toEqual({ ...first.facets, total: 2 });
+        expect(
+          filtered.shares.every((row) => row.progress === "new" && row.permission === "use"),
+        ).toBe(true);
+        expect((await f.shares.list({ ...input, q: "%_\\" })).facets?.total).toBe(2);
+        for (const q of ["Pinned Round", "Published description", "Source team", "Shared company"])
+          expect((await f.shares.list({ ...input, q })).facets?.total).toBe(56);
+        const other = await f.shares.list({ ...input, actorId: f.other.userId });
+        expect(other.facets?.progress).toEqual({ new: 3, in_progress: 0, done: 1 });
+        expect((await f.shares.list({ ...input, actorId: f.outsider.userId })).facets?.total).toBe(
+          0,
+        );
+        expect(
+          (await f.shares.list({ ...input, organizationId: randomUUID() })).facets?.total,
+        ).toBe(0);
+        expect((await f.shares.list({ ...input, scope: "managed" })).facets?.total).toBe(0);
+        expect((await f.shares.list({ ...input, scope: "organization" })).facets?.total).toBe(0);
+        if (repository instanceof MemoryRepository) {
+          const read = vi
+            .spyOn(repository, "getQuiz")
+            .mockRejectedValue(new Error("Draft read forbidden"));
+          try {
+            expect((await f.shares.list(input)).facets?.total).toBe(4);
+          } finally {
+            read.mockRestore();
+          }
+        }
+      });
+      it("binds strict cursors to actor/query/scope, accepts default legacy cursors and rechecks access between pages", async () => {
+        const f = await fixture(repository);
+        const targets = [];
+        for (let index = 0; index < 4; index++)
+          targets.push(
+            (
+              await f.shares.create({
+                actorId: f.owner.userId,
+                workspaceId: f.source.id,
+                input: f.input({ recipientIds: [f.recipient.userId, f.other.userId] }),
+                now: f.now,
+              })
+            ).share,
+          );
+        const input = {
+          actorId: f.recipient.userId,
+          organizationId: f.organization.id,
+          scope: "shared" as const,
+          limit: 1,
+        };
+        const first = await f.shares.list(input);
+        for (const change of [
+          { actorId: f.other.userId },
+          { organizationId: randomUUID() },
+          { scope: "organization" as const },
+          { q: "Pinned" },
+          { kind: "round" as const },
+          { progress: "new" as const },
+          { permission: "use" as const },
+          { sort: "title_asc" as const },
+        ])
+          await expect(
+            f.shares.list({ ...input, ...change, cursor: first.nextCursor! }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        const decoded = JSON.parse(Buffer.from(first.nextCursor!, "base64url").toString());
+        for (const malformed of [
+          "!bad",
+          Buffer.from("null").toString("base64url"),
+          { ...decoded, extra: true },
+          { ...decoded, position: { ...decoded.position, sharedAt: "nonsense" } },
+          { ...decoded, position: { ...decoded.position, sharedAt: 1 } },
+          { ...decoded, position: { ...decoded.position, sharedAt: "0000-01-01T00:00:00.000Z" } },
+          { ...decoded, position: { ...decoded.position, title: "invalid\0text" } },
+          { ...decoded, position: { ...decoded.position, title: 2 } },
+        ]) {
+          const cursor =
+            typeof malformed === "string"
+              ? malformed
+              : Buffer.from(JSON.stringify(malformed)).toString("base64url");
+          await expect(f.shares.list({ ...input, cursor })).rejects.toMatchObject({
+            code: "VALIDATION_ERROR",
+          });
+        }
+        const legacy = Buffer.from(
+          JSON.stringify({ id: first.shares[0]!.id, sharedAt: first.shares[0]!.sharedAt }),
+        ).toString("base64url");
+        expect((await f.shares.list({ ...input, cursor: legacy })).shares).toHaveLength(1);
+        await expect(
+          f.shares.list({ ...input, q: "Pinned", cursor: legacy }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await f.shares.revoke({ actorId: f.owner.userId, id: first.shares[0]!.id, now: f.now });
+        expect((await f.shares.list({ ...input, cursor: first.nextCursor! })).facets?.total).toBe(
+          3,
+        );
+        await f.platform.removeOrganizationMember(
+          f.organization.id,
+          f.owner.userId,
+          f.recipient.userId,
+        );
+        const denied = await f.shares.list({ ...input, cursor: first.nextCursor! });
+        expect(denied.shares).toEqual([]);
+        expect(denied.facets).toEqual({
+          kinds: { round: 0, presentation: 0, survey: 0 },
+          progress: { new: 0, in_progress: 0, done: 0 },
+          permissions: { view: 0, use: 0 },
+          total: 0,
+        });
+        const otherInput = { ...input, actorId: f.other.userId };
+        const otherFirst = await f.shares.list(otherInput);
+        // A removed source must disappear from every count even with an earlier page cursor.
+        await repository.archiveQuiz(f.source.id, f.round.id, true);
+        expect((await f.shares.list({ ...input, actorId: f.other.userId })).facets?.total).toBe(0);
+        await repository.deleteQuiz(f.source.id, f.round.id);
+        expect(
+          (await f.shares.list({ ...otherInput, cursor: otherFirst.nextCursor! })).facets?.total,
+        ).toBe(0);
+      });
+      it("rechecks source workspace management membership and uses metadata discovery with one connection", async () => {
+        const f = await fixture(repository);
+        for (let index = 0; index < 3; index++)
+          await f.shares.create({
+            actorId: f.owner.userId,
+            workspaceId: f.source.id,
+            input: f.input(),
+            now: f.now,
+          });
+        if (repository instanceof MemoryRepository)
+          repository.workspaceMembers.set(`${f.source.id}:${f.other.userId}`, {
+            workspaceId: f.source.id,
+            userId: f.other.userId,
+            role: "editor",
+            joinedAt: f.now,
+          });
+        else
+          await administrator!.pool.query(
+            "INSERT INTO workspace_members(workspace_id,user_id,role) VALUES($1,$2,'editor')",
+            [f.source.id, f.other.userId],
+          );
+        const input = {
+          actorId: f.other.userId,
+          scope: "managed" as const,
+          organizationId: f.organization.id,
+          limit: 1,
+        };
+        let first;
+        if (repository instanceof PostgresRepository) {
+          // A nested repository/pool lookup would deadlock with this connection bound.
+          const isolatedRuntime = new URL(runtimeUrl!);
+          isolatedRuntime.pathname = `/${database}`;
+          const runtime = new PostgresRepository(isolatedRuntime.toString());
+          runtime.pool.options.max = 1;
+          const discovery = createLibrarySharingRepository(runtime);
+          const client = await runtime.pool.connect();
+          const query = vi.spyOn(client, "query");
+          client.release();
+          try {
+            first = await discovery.list(input);
+            const statements = query.mock.calls
+              .map(([statement]) => (typeof statement === "string" ? statement : ""))
+              .join("\n");
+            expect(statements).toContain("WITH authorized AS MATERIALIZED");
+            expect(statements).not.toMatch(
+              /share\.snapshot|version\.content|parent\.draft|media_assets/,
+            );
+            expect(statements).not.toContain("SELECT status FROM library_share_progress");
+          } finally {
+            query.mockRestore();
+            await runtime.close();
+          }
+        } else first = await f.shares.list(input);
+        expect(first.facets?.total).toBe(3);
+        expect(first.shares[0]?.capabilities.manage).toBe(true);
+        await repository.removeWorkspaceMember(f.source.id, f.other.userId);
+        const removed = await f.shares.list({ ...input, cursor: first.nextCursor! });
+        expect(removed.shares).toEqual([]);
+        expect(removed.facets?.total).toBe(0);
+      });
+      it("normalizes Unicode titles and search canonically across every pagination order", async () => {
+        const f = await fixture(repository);
+        const titles = [
+          { title: "ÉCOLE", key: "école" },
+          { title: "école", key: "école" },
+          { title: "ÉCOLE", key: "école" },
+          // Lowercasing can create a decomposed sequence even after initial NFC.
+          { title: "J\u030c workshop", key: "ǰ workshop" },
+          { title: "ǰ workshop", key: "ǰ workshop" },
+          { title: "İstanbul", key: "i̇stanbul" },
+          { title: "i̇stanbul", key: "i̇stanbul" },
+          { title: "ΟΣ", key: "ος" },
+          { title: "ος", key: "ος" },
+          { title: "alpha", key: "alpha" },
+          { title: "Zulu", key: "zulu" },
+        ];
+        const entries = [];
+        for (const { title, key } of titles) {
+          const content = { ...f.content, title };
+          const round = await repository.createQuiz({
+            id: randomUUID(),
+            workspaceId: f.source.id,
+            title,
+            description: content.description,
+            status: "draft",
+            draft: content,
+            currentVersionId: null,
+            createdAt: f.now,
+            updatedAt: f.now,
+          });
+          const version = await repository.publishQuiz({
+            id: randomUUID(),
+            workspaceId: f.source.id,
+            quizId: round.id,
+            version: 1,
+            content,
+            contentHash: randomUUID(),
+            publishedAt: f.now,
+          });
+          entries.push({
+            ...(
+              await f.shares.create({
+                actorId: f.owner.userId,
+                workspaceId: f.source.id,
+                input: f.input({ artifactId: round.id, versionId: version.id }),
+                now: new Date(f.now.getTime() + entries.length),
+              })
+            ).share,
+            key,
+          });
+        }
+        const input = {
+          actorId: f.recipient.userId,
+          scope: "shared" as const,
+          organizationId: f.organization.id,
+          limit: 1,
+        };
+        for (const sort of ["recent", "title_asc", "title_desc"] as const) {
+          const ids: string[] = [];
+          let cursor: string | undefined;
+          do {
+            const page = await f.shares.list({ ...input, sort, cursor });
+            expect(page.shares).toHaveLength(1);
+            ids.push(...page.shares.map((row) => row.id));
+            expect(ids.length).toBeLessThanOrEqual(entries.length);
+            cursor = page.nextCursor ?? undefined;
+          } while (cursor);
+          const expected = [...entries].sort(
+            (a, b) =>
+              (sort === "recent"
+                ? Date.parse(b.sharedAt) - Date.parse(a.sharedAt)
+                : Buffer.compare(Buffer.from(a.key), Buffer.from(b.key)) *
+                  (sort === "title_asc" ? 1 : -1)) || b.id.localeCompare(a.id),
+          );
+          expect(ids).toEqual(expected.map((row) => row.id));
+          expect(new Set(ids).size).toBe(entries.length);
+        }
+        expect((await f.shares.list({ ...input, q: "ÉCOLE" })).facets?.total).toBe(3);
+        expect((await f.shares.list({ ...input, q: "ÉCOLE" })).facets?.total).toBe(3);
+        expect((await f.shares.list({ ...input, q: "İstanbul" })).facets?.total).toBe(2);
+        expect((await f.shares.list({ ...input, q: "ΟΣ" })).facets?.total).toBe(2);
+        const workshopIds = entries
+          .filter((row) => row.key === "ǰ workshop")
+          .sort((a, b) => b.id.localeCompare(a.id))
+          .map((row) => row.id);
+        for (const q of ["J\u030c workshop", "ǰ workshop"]) {
+          const page = await f.shares.list({ ...input, q, sort: "title_asc", limit: 100 });
+          expect(page.shares.map((row) => row.id)).toEqual(workshopIds);
+          expect(page.facets?.total).toBe(2);
+        }
+        const first = await f.shares.list({ ...input, q: "J\u030c workshop", sort: "title_asc" });
+        const second = await f.shares.list({
+          ...input,
+          q: "ǰ workshop",
+          sort: "title_asc",
+          cursor: first.nextCursor!,
+        });
+        expect([...first.shares, ...second.shares].map((row) => row.id)).toEqual(workshopIds);
+        expect(second.nextCursor).toBeNull();
       });
       it("copies independent media, draft and history in one authorized receipt transaction", async () => {
         const f = await fixture(repository, true);
@@ -801,6 +1154,24 @@ for (const backend of ["memory", "postgres"] as const)
           (await f.shares.read({ actorId: f.recipient.userId, id: poll.id }))?.snapshot
             .artifactType,
         ).toBe("survey");
+        const query = {
+          actorId: f.recipient.userId,
+          scope: "shared" as const,
+          organizationId: f.organization.id,
+        };
+        expect((await f.shares.list(query)).facets?.kinds).toEqual({
+          round: 0,
+          presentation: 1,
+          survey: 1,
+        });
+        expect(
+          (await f.shares.list({ ...query, kind: "presentation", limit: 1 })).shares.map(
+            (row) => row.id,
+          ),
+        ).toEqual([deck.id]);
+        expect(
+          (await f.shares.list({ ...query, kind: "survey", limit: 1 })).shares.map((row) => row.id),
+        ).toEqual([poll.id]);
         for (const share of [deck, poll]) {
           const copied = await f.shares.copy(
             {

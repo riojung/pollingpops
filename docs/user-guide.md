@@ -1454,6 +1454,23 @@ matrix, lifecycle and compatibility details.
 
 ## Organize and manage the Library
 
+### Search all content
+
+**Library** opens **All content**, a combined list of accessible Rounds, Presentations and Surveys.
+Search, then press Enter or choose **Search** to query the complete eligible collection. Use content
+type, status and sorting to narrow the result; the URL preserves your choices for reload and browser
+history. The result total covers all matches, while the loaded count grows with **Load more**.
+Retrying a failed next page preserves the results already shown.
+
+Choose a content-kind management view for its existing cards, folders, favorites, grid/list and
+bulk actions. Those views keep their specialized tools and describe their loaded-content search
+coverage. Boards have their own library. Your role continues to control what you can do with an item.
+
+Organization and Shared with me also offer All content. Filter by permission and review progress
+to find material you can reuse or need to review. Recent sharing sorts by the date the publication
+was shared, rather than the source's latest draft edit. Opening or copying follows the permissions
+described below. See the [Library discovery reference](library-discovery.md) for query/count details.
+
 ### Share published content with your company
 
 The Library separates **My workspace**, **Organization library**, and **Shared with me**.

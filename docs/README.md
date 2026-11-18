@@ -40,6 +40,8 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 The [Organization Library and Shared with me design](organization-shared-library.md) defines
 published company content, direct distribution, access levels, independent copies and recipient
 follow-up without widening private workspace access.
+The [All content discovery reference](library-discovery.md) covers complete metadata search,
+sort/filter counts, pagination and the boundary with specialized Library management views.
 
 ## Build and operate
 

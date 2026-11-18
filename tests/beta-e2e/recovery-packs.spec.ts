@@ -99,7 +99,7 @@ async function recoveryPackWorkflow(page: Page) {
   expect(targetResponse.status()).toBe(201);
   const target = (await targetResponse.json()).quiz as { id: string };
 
-  await page.goto("/library");
+  await page.goto("/library?type=rounds");
   await openLibraryFilters(page);
   await page.getByRole("link", { name: "Recovery Packs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recovery Packs", exact: true })).toBeVisible();

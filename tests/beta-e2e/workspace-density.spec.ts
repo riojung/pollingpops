@@ -100,7 +100,7 @@ for (const suffix of ["desktop", "phone @mobile"]) {
     try {
       for (const mode of ["light", "dark"] as const) {
         await page.emulateMedia({ colorScheme: mode });
-        await page.goto("/library");
+        await page.goto("/library?type=rounds");
         await expect(
           page.getByRole("heading", { name: "Library", level: 1, exact: true }),
         ).toBeVisible();

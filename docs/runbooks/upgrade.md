@@ -18,6 +18,30 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Library discovery compatibility
+
+WX-03 adds the metadata-only `GET /v1/library/items` reader and additive shared-list query filters
+and facets. Apply migrations through `114_library_discovery_canonical_titles.sql` with the owner
+migration connection before deploying the matching API and web. Migration113 adds discovery
+indexes; migration114 replaces its three title indexes to normalize again after lowercasing.
+Preserve migrations 001–113 byte-for-byte and all
+content, immutable publications, grants, favorites and sharing receipts.
+
+The title/search projection requires PostgreSQL UTF-8 and the ICU root collation `und-x-icu`.
+Verify this on the deployment database before migrating; the supported PostgreSQL17 Alpine image
+provides it. A missing collation requires a compatible database image or a reviewed forward change,
+not silently falling back to different cursor ordering on one server.
+
+Verify complete mixed-kind search, stable title/time pagination, exact authorized counts, folder
+and favorite filters, source revocation and membership loss with the restricted runtime role.
+Upgrade all serving API replicas before exposing the new web: an older API lacks the All content
+reader and rejects the new opt-in shared-query flag. Older web clients continue to receive the
+legacy shared response from the upgraded API. Roll the web back before rolling back the API.
+Existing explicit
+`/library?type=rounds|presentations|surveys` management routes remain available. Rollback retains
+the additive indexes and old sharing/client contracts; it does not rewrite publications or expand
+any account's access. See the [Library discovery reference](../library-discovery.md).
+
 ## Presentation review feedback compatibility
 
 Apply `099_presentation_review_feedback.sql` before deploying E11 feedback readers/writers. It

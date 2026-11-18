@@ -4,6 +4,7 @@ import {
   LibraryShareCopySchema,
   LibraryShareCreateSchema,
   LibraryShareProgressSchema,
+  LibraryShareListQuerySchema,
   type LibraryShareSummary,
 } from "@openround/contracts";
 import { LibrarySharingError, type LibrarySharingRepository, type Repository } from "@openround/db";
@@ -17,14 +18,6 @@ import {
 } from "./library-sharing-service.js";
 
 const Id = z.object({ id: z.string().uuid() });
-const Query = z
-  .object({
-    scope: z.enum(["organization", "shared", "managed"]).default("organization"),
-    organizationId: z.string().uuid().optional(),
-    cursor: z.string().max(200).optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
-  })
-  .strict();
 
 export async function registerLibrarySharingRoutes(
   app: FastifyInstance,
@@ -114,12 +107,13 @@ export async function registerLibrarySharingRoutes(
     scoped.get("/v1/library/shares", async (request, reply) => {
       const actor = await deps.auth.requireUser(request, reply);
       if (!actor) return;
-      const query = Query.parse(request.query);
+      const { includeFacets, ...query } = LibraryShareListQuerySchema.parse(request.query);
       const result = await deps.shares.list({ actorId: actor.userId, ...query });
       const creator = await deps.auth.creatorFromRequest(request);
       return {
-        ...result,
         shares: await Promise.all(result.shares.map((share) => service.summary(share, creator))),
+        nextCursor: result.nextCursor,
+        ...(includeFacets ? { facets: result.facets } : {}),
       };
     });
     scoped.post("/v1/library/shares", async (request, reply) => {

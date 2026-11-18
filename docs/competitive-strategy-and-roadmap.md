@@ -2,6 +2,11 @@
 
 Research date: 2026-09-17
 
+> **Workspace follow-up (2026-11-17):** the [Wayground/Mentimeter benchmark](workspace-experience-benchmark-2026-11.md)
+> reconciles current products with implemented Polling Pops capabilities. The product owner selected
+> Home/template workflow improvements; the [delivery backlog](workspace-experience-backlog-2026-11.md)
+> separates those first slices from larger candidates. This does not close research or release gates.
+
 > **Latest research (2026-10-27):** the [competitor refresh](competitor-research-2026-10-27.md) and
 > [detailed backlog](competitor-backlog-2026-10-27.md) reconcile current capabilities and customer-need
 > signals. Older feature-absence statements below are historical. New increments remain deferred

@@ -17,7 +17,11 @@ for (const mobile of [false, true]) {
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("article")).toHaveCount(36);
+    if (mobile) {
+      await expect(
+        page.getByLabel("Choose a template", { exact: true }).locator("option:not([disabled])"),
+      ).toHaveCount(36);
+    } else await expect(page.getByRole("article")).toHaveCount(36);
     for (const mode of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: mode });
       for (const name of ["Rounds", "Presentations", "Surveys"]) {
@@ -48,8 +52,12 @@ for (const mobile of [false, true]) {
     const round = page.getByRole("article").filter({
       has: page.getByRole("heading", { name: "Evidence worth trusting", exact: true }),
     });
-    await expect(round).toBeVisible();
-    await round.getByRole("button", { name: "Preview questions", exact: true }).click();
+    if (mobile)
+      await page.getByLabel("Choose a template", { exact: true }).selectOption("source-evaluation");
+    else {
+      await expect(round).toBeVisible();
+      await round.getByRole("button", { name: "Preview questions", exact: true }).click();
+    }
     const roundPreview = page.locator("#starter-preview-source-evaluation");
     const sourceResponse = await page.request.get(
       `${api}/v1/starters/source-evaluation?locale=en-CA`,
@@ -62,12 +70,8 @@ for (const mobile of [false, true]) {
     await expect(roundPreview.locator("input")).toHaveCount(0);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     // Preview does not create a draft or submit answers.
-    await expect(page).toHaveURL(/\/templates$/);
-    await roundPreview.getByRole("button", { name: "Close preview", exact: true }).click();
-    await expect(
-      round.getByRole("button", { name: "Preview questions", exact: true }),
-    ).toBeFocused();
-    await round.getByRole("button", { name: "Use this starter", exact: true }).click();
+    await expect(page).toHaveURL(/\/templates\?type=rounds$/);
+    await roundPreview.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/quiz\/[0-9a-f-]+$/);
     const roundId = new URL(page.url()).pathname.split("/").at(-1);
     const roundResponse = await page.request.get(`${api}/v1/quizzes/${roundId}`);
@@ -96,7 +100,9 @@ for (const mobile of [false, true]) {
     const survey = page.getByRole("article").filter({
       has: page.getByRole("heading", { name: "Event experience", exact: true }),
     });
-    await survey.getByRole("button", { name: "Preview questionnaire", exact: true }).click();
+    if (mobile)
+      await page.getByLabel("Choose a template", { exact: true }).selectOption("event-feedback");
+    else await survey.getByRole("button", { name: "Preview questionnaire", exact: true }).click();
     const surveyPreview = page.locator("#starter-preview-event-feedback");
     const questionnaireResponse = await page.request.get(
       `${api}/v1/surveys/templates/event-feedback?locale=en-CA`,
@@ -106,8 +112,7 @@ for (const mobile of [false, true]) {
     await expect(surveyPreview).toContainText(questionnaire.description);
     await expect(surveyPreview).toContainText("Optional");
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await surveyPreview.getByRole("button", { name: "Close preview", exact: true }).click();
-    await survey.getByRole("button", { name: "Use this starter", exact: true }).click();
+    await surveyPreview.getByRole("button", { name: "Use this starter", exact: true }).click();
     await expect(page).toHaveURL(/\/surveys\/[0-9a-f-]+$/);
     const surveyId = new URL(page.url()).pathname.split("/").at(-1);
     const surveyResponse = await page.request.get(`${api}/v1/surveys/${surveyId}`);

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuizDraft, StarterSummary, SupportedLocale } from "@openround/contracts";
 import { StarterGallery } from "./starter-gallery";
+import { StarterTemplatePreview } from "./starter-template-preview";
 
 interface Hooks {
   cursor: number;
@@ -16,6 +17,9 @@ const mocked = vi.hoisted(() => ({
   push: vi.fn(),
   locale: "ko-KR" as SupportedLocale,
   canEdit: true,
+  userId: "creator-one",
+  workspaceId: "workspace-one",
+  surveys: true,
 }));
 const equalDeps = (first: readonly unknown[] | undefined, second: readonly unknown[] | undefined) =>
   Boolean(
@@ -82,15 +86,26 @@ vi.mock("../../lib/api", () => ({
   apiFetch: mocked.fetch,
   humanError: (error: Error) => error.message,
   ApiClientError: class extends Error {},
+  AUTH_CHANGE_EVENT: "pollingpops:auth-change",
 }));
 vi.mock("../locale-provider", () => ({
-  useLocale: () => ({ locale: mocked.locale, t: (key: string) => key }),
+  useLocale: () => ({
+    locale: mocked.locale,
+    t: (key: string, values?: { count?: string }) =>
+      values?.count === undefined ? key : `${key}:${values.count}`,
+  }),
 }));
 vi.mock("./workspace-provider", () => ({
   useWorkspace: () => ({
-    creator: { segment: "all" },
+    creator: {
+      userId: mocked.userId,
+      workspaceId: mocked.workspaceId,
+      segment: "all",
+      role: mocked.canEdit ? "owner" : "viewer",
+    },
     canEdit: mocked.canEdit,
-    productFeatures: { surveys: true },
+    productFeatures: { surveys: mocked.surveys },
+    loading: false,
   }),
 }));
 vi.mock("./product-events", () => ({
@@ -103,7 +118,7 @@ function elements(node: ReactNode): Array<ReactElement<Record<string, unknown>>>
   if (!isValidElement<Record<string, unknown>>(node)) return [];
   return [node, ...elements(node.props.children as ReactNode)];
 }
-function harness(survey = false) {
+function harness(survey = false, compact = true) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
   return {
@@ -111,13 +126,29 @@ function harness(survey = false) {
       hooks.cursor = 0;
       mocked.hooks = hooks;
       try {
-        tree = StarterGallery({ survey });
+        tree = StarterGallery({ survey, compact });
       } finally {
         mocked.hooks = null;
       }
       for (const effect of hooks.effects.splice(0)) effect();
     },
     markup: () => renderToStaticMarkup(tree),
+    preview() {
+      const found = elements(tree).find((element) => element.type === StarterTemplatePreview);
+      if (!found) throw new Error("Missing preview");
+      return found.props as unknown as ReactModule.ComponentProps<typeof StarterTemplatePreview>;
+    },
+    changeSearch(value: string) {
+      const found = elements(tree).find(
+        (element) => element.type === "input" && element.props.type === "search",
+      );
+      (found?.props.onChange as (event: { target: { value: string } }) => void)({
+        target: { value },
+      });
+    },
+    unmount() {
+      for (const slot of hooks.slots) (slot as { cleanup?: () => void } | undefined)?.cleanup?.();
+    },
     button(label: string) {
       const found = elements(tree).find(
         (element) => element.type === "button" && element.props.children === label,
@@ -198,10 +229,371 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocked.locale = "ko-KR";
   mocked.canEdit = true;
+  mocked.userId = "creator-one";
+  mocked.workspaceId = "workspace-one";
+  mocked.surveys = true;
   mocked.hooks = null;
+  vi.stubGlobal("window", new EventTarget());
 });
 
 describe("creation-locale starter gallery", () => {
+  async function ready(view: ReturnType<typeof harness>) {
+    for (let index = 0; index < 4; index++) {
+      view.render();
+      await settle();
+    }
+    view.render();
+  }
+
+  it("browses summaries beside the full selected preview without writes, then creates one independent Round copy", async () => {
+    const pending = deferred<{ quiz: { id: string } }>();
+    const source = draft("ko-KR");
+    const before = JSON.stringify(source);
+    mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+      if (options?.method === "POST") return pending.promise;
+      return url.startsWith("/v1/starters?") ? { starters: [summary("ko-KR")] } : { draft: source };
+    });
+    const view = harness(false, false);
+    await ready(view);
+    expect(view.markup()).toContain('<section id="starter-preview-training-feedback"');
+    expect(view.markup()).not.toContain("<dialog");
+    expect(view.markup()).toContain('aria-pressed="true"');
+    expect(view.markup()).toContain("Author text");
+    expect(view.preview().content).toEqual({ kind: "round", draft: source });
+    expect(mocked.fetch.mock.calls.every((call) => !call[1]?.method)).toBe(true);
+    view.preview().onUse!();
+    view.preview().onUse!();
+    expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
+    expect(mocked.fetch).toHaveBeenLastCalledWith("/v1/starters/training-feedback/use", {
+      method: "POST",
+      body: JSON.stringify({ locale: "ko-KR" }),
+    });
+    pending.resolve({ quiz: { id: "independent-copy" } });
+    await settle();
+    expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/quiz/independent-copy");
+    expect(JSON.stringify(source)).toBe(before);
+  });
+
+  it("shows preview loading and retry states, and offers the Survey copy action only after its exact content loads", async () => {
+    const pending = deferred<{ draft: unknown }>();
+    let retry = false;
+    const source = draft("ko-KR");
+    const survey = {
+      schemaVersion: 2,
+      title: source.title,
+      description: "Optional feedback stays optional.",
+      category: source.category,
+      experiencePreset: source.experiencePreset,
+      items: [{ required: false, question: source.questions[0] }],
+    };
+    mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+      if (options?.method === "POST") return { survey: { id: "survey-copy" } };
+      if (url.startsWith("/v1/surveys/templates?")) return { templates: [summary("ko-KR")] };
+      return retry ? { draft: survey } : pending.promise;
+    });
+    const view = harness(true, false);
+    await ready(view);
+    expect(view.preview().loading).toBe(true);
+    expect(view.preview().content).toBeUndefined();
+    view.preview().onUse!();
+    expect(mocked.fetch.mock.calls.some((call) => call[1]?.method === "POST")).toBe(false);
+    pending.reject(new Error("Preview unavailable"));
+    await settle();
+    view.render();
+    expect(view.markup()).toContain("Preview unavailable");
+    expect(view.preview().error).toBe("Preview unavailable");
+    retry = true;
+    view.preview().onRetry!();
+    await settle();
+    view.render();
+    expect(view.markup()).toContain(survey.description);
+    expect(view.markup()).toContain("선택");
+    view.preview().onUse!();
+    await settle();
+    expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/surveys/survey-copy");
+  });
+
+  describe.each(["Round", "Survey"] as const)("pending %s copy", (kind) => {
+    const survey = kind === "Survey";
+    it.each([false, true])(
+      "preserves the submitted copy's navigation after changing or closing the preview (compact=%s)",
+      async (compact) => {
+        const pending = deferred<unknown>();
+        const source = draft("ko-KR");
+        const second = { ...summary("ko-KR"), id: "second", title: "Second template" };
+        mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+          if (options?.method === "POST") return pending.promise;
+          if (url.includes("templates?") || url.startsWith("/v1/starters?"))
+            return survey
+              ? { templates: [summary("ko-KR"), second] }
+              : { starters: [summary("ko-KR"), second] };
+          return {
+            draft: survey
+              ? {
+                  ...source,
+                  schemaVersion: 2,
+                  items: [{ required: false, question: source.questions[0] }],
+                }
+              : source,
+          };
+        });
+        const view = harness(survey, compact);
+        await ready(view);
+        if (compact) {
+          await view.button(survey ? "설문지 미리 보기" : "starter.preview")();
+          view.render();
+        }
+        const originalUse = view.preview().onUse!;
+        originalUse();
+        view.render();
+        if (compact) view.preview().onClose();
+        else view.changeSearch("Second");
+        await ready(view);
+        if (compact) expect(view.markup()).not.toContain("<dialog");
+        else {
+          expect(view.preview().id).toBe("second");
+          view.preview().onUse!();
+        }
+        originalUse();
+        expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(
+          1,
+        );
+        pending.resolve(
+          survey ? { survey: { id: "submitted-copy" } } : { quiz: { id: "submitted-copy" } },
+        );
+        await settle();
+        expect(mocked.push).toHaveBeenCalledExactlyOnceWith(
+          survey ? "/surveys/submitted-copy" : "/quiz/submitted-copy",
+        );
+      },
+    );
+
+    it.each([false, true])(
+      "shows a delayed copy failure after filtering away or closing the preview (compact=%s)",
+      async (compact) => {
+        const pending = deferred<unknown>();
+        const retry = deferred<unknown>();
+        let attempts = 0;
+        const source = draft("ko-KR");
+        mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+          if (options?.method === "POST") return ++attempts === 1 ? pending.promise : retry.promise;
+          if (url.includes("templates?") || url.startsWith("/v1/starters?"))
+            return survey ? { templates: [summary("ko-KR")] } : { starters: [summary("ko-KR")] };
+          return {
+            draft: survey
+              ? {
+                  ...source,
+                  schemaVersion: 2,
+                  items: [{ required: false, question: source.questions[0] }],
+                }
+              : source,
+          };
+        });
+        const view = harness(survey, compact);
+        await ready(view);
+        if (compact) {
+          await view.button(survey ? "설문지 미리 보기" : "starter.preview")();
+          view.render();
+        }
+        view.preview().onUse!();
+        view.render();
+        if (compact) view.preview().onClose();
+        else view.changeSearch("No matching template");
+        await ready(view);
+        pending.reject(new Error("Delayed copy failure"));
+        await settle();
+        view.render();
+        expect(mocked.push).not.toHaveBeenCalled();
+        expect(view.markup()).toContain('role="alert"');
+        expect(view.markup()).toContain("Delayed copy failure");
+        if (compact) expect(view.disabled("starter.use")).toBe(false);
+        if (compact) await view.button(survey ? "설문지 미리 보기" : "starter.preview")();
+        else view.changeSearch("");
+        await ready(view);
+        expect(view.preview().actionError).toBe("Delayed copy failure");
+        view.preview().onUse!();
+        view.render();
+        expect(view.preview().actionError).toBe("");
+        const requests = mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST");
+        expect(requests).toHaveLength(2);
+        if (survey) expect(requests[1]![1].body).toBe(requests[0]![1].body);
+        retry.resolve(
+          survey ? { survey: { id: "retried-copy" } } : { quiz: { id: "retried-copy" } },
+        );
+        await settle();
+        expect(mocked.push).toHaveBeenCalledExactlyOnceWith(
+          survey ? "/surveys/retried-copy" : "/quiz/retried-copy",
+        );
+      },
+    );
+  });
+
+  it("fences late selections and stale preview actions when search changes the visible result", async () => {
+    const first = deferred<{ draft: QuizDraft }>();
+    const second = { ...summary("ko-KR"), id: "second", title: "Second template" };
+    mocked.fetch.mockImplementation(async (url: string) => {
+      if (url.startsWith("/v1/starters?")) return { starters: [summary("ko-KR"), second] };
+      return url.includes("/second?")
+        ? { draft: { ...draft("ko-KR"), title: second.title } }
+        : first.promise;
+    });
+    const view = harness(false, false);
+    await ready(view);
+    const oldAction = view.preview().onUse!;
+    view.changeSearch("Second");
+    await ready(view);
+    expect(view.preview().id).toBe("second");
+    oldAction();
+    first.resolve({ draft: draft("ko-KR") });
+    await settle();
+    view.render();
+    expect(view.preview().id).toBe("second");
+    expect(view.preview().content?.draft.title).toBe("Second template");
+    expect(mocked.fetch.mock.calls.every((call) => !call[1]?.method)).toBe(true);
+  });
+
+  it.each(["locale", "workspace", "user", "role", "feature", "auth", "unmount"] as const)(
+    "fences captured Survey actions and late navigation after a %s change",
+    async (change) => {
+      const pending = deferred<{ survey: { id: string } }>();
+      const source = draft("ko-KR");
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") return pending.promise;
+        if (url.startsWith("/v1/surveys/templates?")) return { templates: [summary("ko-KR")] };
+        return {
+          draft: {
+            schemaVersion: 2,
+            title: source.title,
+            description: source.description,
+            category: source.category,
+            experiencePreset: source.experiencePreset,
+            items: [{ required: false, question: source.questions[0] }],
+          },
+        };
+      });
+      const view = harness(true, false);
+      await ready(view);
+      const use = view.preview().onUse!;
+      use();
+      if (change === "locale") mocked.locale = "fr-FR";
+      if (change === "workspace") mocked.workspaceId = "workspace-two";
+      if (change === "user") mocked.userId = "creator-two";
+      if (change === "role") mocked.canEdit = false;
+      if (change === "feature") mocked.surveys = false;
+      if (change === "auth") window.dispatchEvent(new Event("pollingpops:auth-change"));
+      if (change === "unmount") view.unmount();
+      else view.render();
+      use();
+      pending.resolve({ survey: { id: "old-copy" } });
+      await settle();
+      expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
+      expect(mocked.push).not.toHaveBeenCalled();
+      if (change === "workspace" || change === "user")
+        expect(view.markup()).not.toContain("Author text");
+      if (change === "auth") expect(view.markup()).toContain("로그인 상태가 변경");
+    },
+  );
+
+  it("does not reuse a Survey retry intent in another workspace or language", async () => {
+    mocked.fetch.mockImplementation(async (_url: string, options?: { method?: string }) => {
+      if (options?.method === "POST") throw new Error("Lost response");
+      return { templates: [summary("ko-KR")] };
+    });
+    const view = harness(true);
+    await ready(view);
+    await view.button("starter.use")();
+    await settle();
+    view.render();
+    mocked.locale = "fr-FR";
+    await ready(view);
+    await view.button("starter.use")();
+    await settle();
+    view.render();
+    mocked.workspaceId = "workspace-two";
+    await ready(view);
+    await view.button("starter.use")();
+    const bodies = mocked.fetch.mock.calls
+      .filter((call) => call[1]?.method === "POST")
+      .map((call) => JSON.parse(call[1].body));
+    expect(bodies).toHaveLength(3);
+    expect(bodies.map((body) => body.locale)).toEqual(["ko-KR", "fr-FR", "fr-FR"]);
+    expect(new Set(bodies.map((body) => body.idempotencyKey)).size).toBe(3);
+  });
+
+  it.each(["role", "feature", "workspace", "auth"] as const)(
+    "blocks a captured preview CTA before submission after a %s change",
+    async (change) => {
+      const source = draft("ko-KR");
+      mocked.fetch.mockImplementation(async (url: string) =>
+        url.startsWith("/v1/surveys/templates?")
+          ? { templates: [summary("ko-KR")] }
+          : {
+              draft: {
+                schemaVersion: 2,
+                title: source.title,
+                description: source.description,
+                category: source.category,
+                experiencePreset: source.experiencePreset,
+                items: [{ required: false, question: source.questions[0] }],
+              },
+            },
+      );
+      const view = harness(true, false);
+      await ready(view);
+      const captured = view.preview().onUse!;
+      if (change === "role") mocked.canEdit = false;
+      if (change === "feature") mocked.surveys = false;
+      if (change === "workspace") mocked.workspaceId = "workspace-two";
+      if (change === "auth") window.dispatchEvent(new Event("pollingpops:auth-change"));
+      view.render();
+      captured();
+      expect(mocked.fetch.mock.calls.every((call) => !call[1]?.method)).toBe(true);
+      if (change === "role" || change === "feature") expect(view.preview().onUse).toBeUndefined();
+      if (change === "role") expect(view.markup()).toContain("starter.readOnly");
+    },
+  );
+
+  it("shows metadata for the exact loaded questions rather than overstating the catalog summary", async () => {
+    mocked.locale = "en-CA";
+    const item = { ...summary("ko-KR"), questionCount: 99, responseTypes: ["poll", "rating"] };
+    mocked.fetch.mockImplementation(async (url: string) =>
+      url.startsWith("/v1/starters?") ? { starters: [item] } : { draft: draft("ko-KR") },
+    );
+    const view = harness(false, false);
+    await ready(view);
+    const markup = renderToStaticMarkup(view.preview().metadata);
+    expect(markup).toContain("starter.questionCount.one:1");
+    expect(markup).toContain("questionType.poll.label");
+    expect(markup).not.toContain("questionType.rating.label");
+    expect(view.markup()).toContain("starter.questionCount.other:99");
+  });
+
+  it.each(["workspace", "auth"] as const)(
+    "ignores late preview content after a %s change",
+    async (change) => {
+      const pending = deferred<{ draft: QuizDraft }>();
+      let previews = 0;
+      mocked.fetch.mockImplementation(async (url: string) => {
+        if (url.startsWith("/v1/starters?")) return { starters: [summary("ko-KR")] };
+        if (++previews === 1) return pending.promise;
+        return { draft: { ...draft("ko-KR"), title: "Current workspace content" } };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      expect(view.preview().loading).toBe(true);
+      if (change === "workspace") mocked.workspaceId = "workspace-two";
+      else window.dispatchEvent(new Event("pollingpops:auth-change"));
+      await ready(view);
+      pending.resolve({ draft: { ...draft("ko-KR"), title: "Stale workspace content" } });
+      await settle();
+      view.render();
+      expect(view.markup()).not.toContain("Stale workspace content");
+      if (change === "workspace")
+        expect(view.preview().content?.draft.title).toBe("Current workspace content");
+      expect(mocked.fetch.mock.calls.every((call) => !call[1]?.method)).toBe(true);
+    },
+  );
+
   it("retains old-language cards but blocks new preview and creation until a delayed or failed reload is recovered", async () => {
     const french = deferred<{ starters: StarterSummary[] }>();
     let recovery = false;
@@ -282,7 +674,7 @@ describe("creation-locale starter gallery", () => {
     expect(mocked.fetch.mock.calls.every((call) => !call[1]?.method)).toBe(true);
   });
 
-  it("retains reviewed preview text and its language while later creation uses the current locale", async () => {
+  it("closes the previous-language preview and blocks its captured action while a new locale loads", async () => {
     mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
       if (options?.method === "POST") return { quiz: { id: "new-round" } };
       const locale = url.endsWith("ko-KR") ? "ko-KR" : "fr-FR";
@@ -297,15 +689,17 @@ describe("creation-locale starter gallery", () => {
     await view.button("starter.preview")();
     view.render();
     expect(view.markup()).toContain("Author text");
+    const previousUse = view.preview().onUse!;
     mocked.locale = "fr-FR";
     view.render();
-    expect(view.disabled("starter.closePreview")).toBe(false);
     expect(view.disabled("starter.use")).toBe(true);
+    previousUse();
+    expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(0);
     await settle();
     view.render();
     expect(view.markup()).toContain("Retours sur la formation");
-    expect(view.markup()).toContain('lang="ko-KR"');
-    expect(view.markup()).toContain("무엇이 필요하나요?");
+    expect(view.markup()).not.toContain('lang="ko-KR"');
+    expect(view.markup()).not.toContain("무엇이 필요하나요?");
     expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(0);
     await view.button("starter.use")();
     expect(mocked.fetch).toHaveBeenLastCalledWith("/v1/starters/training-feedback/use", {
@@ -352,7 +746,7 @@ describe("creation-locale starter gallery", () => {
     ).toBe(true);
   });
 
-  it("retries a lost Survey creation with the original exact body and locale", async () => {
+  it("retries a lost Survey creation with the exact body within the same scope and locale", async () => {
     let attempts = 0;
     mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
       if (options?.method === "POST") {
@@ -372,7 +766,6 @@ describe("creation-locale starter gallery", () => {
       templateId: "training-feedback",
       locale: "ko-KR",
     });
-    mocked.locale = "fr-FR";
     view.render();
     await settle();
     view.render();

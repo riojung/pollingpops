@@ -73,6 +73,7 @@ export const englishMessages = {
   "workspace.nav.assignments": "Assignments",
   "workspace.nav.results": "Results",
   "workspace.nav.discover": "Discover",
+  "workspace.nav.templates": "Templates",
   "workspace.nav.groups": "Groups",
   "workspace.nav.boards": "Idea boards",
   "workspace.nav.workspace": "Workspace",

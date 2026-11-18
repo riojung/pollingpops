@@ -2,17 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  QuestionType,
-  RoundCategory,
-  QuizDraft,
-  StarterGuide,
-  SupportedLocale,
-} from "@openround/contracts";
+import type { QuestionType, RoundCategory, QuizDraft, StarterGuide } from "@openround/contracts";
 import type { SurveyDraft } from "@openround/contracts/surveys";
 import { templateGuideCopy } from "../../lib/i18n/template-guide-copy";
 import { StarterTemplatePreview, type StarterPreviewContent } from "./starter-template-preview";
-import { apiFetch, humanError, ApiClientError } from "../../lib/api";
+import { apiFetch, humanError, ApiClientError, AUTH_CHANGE_EVENT } from "../../lib/api";
+import { SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT } from "../../lib/idle-session";
+import { starterPreviewCopy } from "../../lib/i18n/starter-preview-copy";
+import previewStyles from "./starter-template-preview.module.css";
 import { useLocale } from "../locale-provider";
 import { formatNumber, pluralCategory } from "../../lib/i18n/format";
 import type { MessageKey } from "../../lib/i18n/catalog";
@@ -51,6 +48,16 @@ const questionTypeLabelKeys: Record<QuestionType, MessageKey> = {
   word_cloud: "questionType.word_cloud.label",
 };
 
+type PreviewState = {
+  starter: StarterSummary;
+  scope: string;
+  content?: StarterPreviewContent;
+  guide?: StarterGuide;
+  loading: boolean;
+  error: string;
+  reveal?: boolean;
+};
+
 export function StarterGallery({
   compact = false,
   roundType = "all",
@@ -63,7 +70,17 @@ export function StarterGallery({
   const router = useRouter();
   const { locale, t } = useLocale();
   const guideCopy = templateGuideCopy(locale);
-  const { creator, canEdit, productFeatures } = useWorkspace();
+  const copy = starterPreviewCopy(locale);
+  const { creator, canEdit, productFeatures, loading: workspaceLoading } = useWorkspace();
+  const actor = JSON.stringify([creator?.userId, creator?.workspaceId]);
+  const scope = JSON.stringify([actor, locale, survey]);
+  const authority = JSON.stringify([
+    scope,
+    canEdit,
+    creator?.role,
+    productFeatures,
+    workspaceLoading,
+  ]);
   const [starters, setStarters] = useState<StarterSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -72,22 +89,46 @@ export function StarterGallery({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<RoundCategory | "all">("all");
   const [type, setType] = useState(roundType);
-  const [preview, setPreview] = useState<{
-    id: string;
-    content: StarterPreviewContent;
-    guide?: StarterGuide;
-    contentLocale: SupportedLocale;
-  } | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const [contentLocale, setContentLocale] = useState(locale);
+  const [catalogScope, setCatalogScope] = useState("");
+  const [invalidActor, setInvalidActor] = useState<string | null>(null);
   const surveyRequests = useRef(new Map<string, string>());
   const creating = useRef(false);
+  const mounted = useRef(true);
   const listRequest = useRef(0);
   const previewRequest = useRef(0);
-  const latestLocale = useRef(locale);
-  latestLocale.current = locale;
-  const catalogCurrent = !loading && contentLocale === locale;
+  const actionRequest = useRef(0);
+  const selection = useRef(0);
+  const access = useRef({ authority, version: 0 });
+  if (access.current.authority !== authority)
+    access.current = { authority, version: access.current.version + 1 };
+  const accessVersion = access.current.version;
+  const renderedSelection = selection.current;
+  const latest = useRef({ scope, authority, actor, allowed: false, invalid: false });
+  const authInvalid = invalidActor === actor;
+  const allowed = Boolean(
+    creator?.userId && creator.workspaceId && canEdit && !workspaceLoading && !authInvalid,
+  );
+  latest.current = { scope, authority, actor, allowed, invalid: authInvalid };
+  const catalogCurrent = !loading && catalogScope === scope && !authInvalid;
+  // Old-language summaries may remain during a locale reload, but never another actor's content.
+  const sameCatalogActor =
+    catalogScope !== "" &&
+    JSON.parse(catalogScope)[0] === actor &&
+    JSON.parse(catalogScope)[2] === survey;
+  const visibleStarters = sameCatalogActor && !authInvalid ? starters : [];
+  const currentPreview = preview?.scope === scope && !authInvalid ? preview : null;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
+    if (!mounted.current || latest.current.scope !== scope || latest.current.invalid) return;
     const request = ++listRequest.current;
     setLoadError("");
     setLoading(true);
@@ -100,86 +141,353 @@ export function StarterGallery({
           ).templates
         : (await apiFetch<{ starters: StarterSummary[] }>(`/v1/starters?locale=${locale}`))
             .starters;
-      if (request !== listRequest.current || latestLocale.current !== locale) return;
+      if (
+        request !== listRequest.current ||
+        latest.current.scope !== scope ||
+        latest.current.invalid
+      )
+        return;
       setStarters(items);
+      setCatalogScope(scope);
       setContentLocale(locale);
     } catch (caught) {
-      if (request !== listRequest.current || latestLocale.current !== locale) return;
+      if (
+        request !== listRequest.current ||
+        latest.current.scope !== scope ||
+        latest.current.invalid
+      )
+        return;
       setLoadError(humanError(caught));
     } finally {
-      if (request === listRequest.current && latestLocale.current === locale) setLoading(false);
+      if (
+        request === listRequest.current &&
+        latest.current.scope === scope &&
+        !latest.current.invalid
+      )
+        setLoading(false);
     }
-  }, [locale, survey]);
+  }, [locale, survey, scope]);
 
   useEffect(() => {
+    setBusyId("");
+    setActionError("");
     void refresh();
     return () => {
       listRequest.current++;
       previewRequest.current++;
+      actionRequest.current++;
+      selection.current++;
+      creating.current = false;
     };
   }, [refresh]);
 
-  async function useStarter(starter: StarterSummary) {
-    if (creating.current || !canEdit || !catalogCurrent || latestLocale.current !== locale) return;
+  useEffect(() => {
+    // Retry intents belong to the actor and workspace that submitted them.
+    surveyRequests.current.clear();
+    setBusyId("");
+    setActionError("");
+    if (typeof window === "undefined") return;
+    const invalidate = () => {
+      latest.current.invalid = true;
+      latest.current.allowed = false;
+      listRequest.current++;
+      previewRequest.current++;
+      actionRequest.current++;
+      selection.current++;
+      creating.current = false;
+      surveyRequests.current.clear();
+      setInvalidActor(actor);
+      setPreview(null);
+      setBusyId("");
+      setActionError("");
+    };
+    const events = [AUTH_CHANGE_EVENT, SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT];
+    events.forEach((name) => window.addEventListener(name, invalidate));
+    return () => events.forEach((name) => window.removeEventListener(name, invalidate));
+  }, [actor]);
+
+  function eligible(starter: StarterSummary) {
+    const inspected =
+      currentPreview?.starter.id === starter.id ? currentPreview.content : undefined;
+    if (
+      inspected?.kind === "round" &&
+      inspected.draft.questions.some(
+        (question) => question.type === "poll" && (question.maxSelections ?? 1) > 1,
+      ) &&
+      productFeatures?.multiSelectPolls !== true
+    )
+      return false;
+    return survey
+      ? productFeatures?.surveys === true
+      : starter.responseTypes.every((responseType) =>
+          responseType === "ranking"
+            ? productFeatures?.rankingPolls === true
+            : responseType === "open_text"
+              ? productFeatures?.openTextPolls === true
+              : responseType === "word_cloud"
+                ? productFeatures?.wordCloudPolls === true
+                : true,
+        );
+  }
+
+  const loadPreview = useCallback(
+    async (starter: StarterSummary, reveal = false) => {
+      if (
+        !mounted.current ||
+        latest.current.scope !== scope ||
+        latest.current.invalid ||
+        catalogScope !== scope ||
+        loading
+      )
+        return;
+      const request = ++previewRequest.current;
+      selection.current++;
+      setPreview({ starter, scope, loading: true, error: "", reveal });
+      try {
+        let content: StarterPreviewContent;
+        let guide: StarterGuide | undefined;
+        if (survey) {
+          const result = await apiFetch<{ draft: SurveyDraft; guide?: StarterGuide }>(
+            `/v1/surveys/templates/${starter.id}?locale=${locale}`,
+          );
+          content = { kind: "survey", draft: result.draft };
+          guide = result.guide;
+        } else {
+          const result = await apiFetch<{ draft: QuizDraft; guide?: StarterGuide }>(
+            `/v1/starters/${starter.id}?locale=${locale}`,
+          );
+          content = { kind: "round", draft: result.draft };
+          guide = result.guide;
+        }
+        if (
+          request !== previewRequest.current ||
+          latest.current.scope !== scope ||
+          latest.current.invalid
+        )
+          return;
+        setPreview({
+          starter,
+          scope,
+          content,
+          guide: guide ?? starter.guide,
+          loading: false,
+          error: "",
+          reveal,
+        });
+      } catch (caught) {
+        if (
+          request !== previewRequest.current ||
+          latest.current.scope !== scope ||
+          latest.current.invalid
+        )
+          return;
+        setPreview({ starter, scope, loading: false, error: humanError(caught), reveal });
+      }
+    },
+    [catalogScope, loading, locale, scope, survey],
+  );
+
+  function closePreview() {
+    previewRequest.current++;
+    selection.current++;
+    setPreview(null);
+  }
+
+  async function useStarter(starter: StarterSummary, fromPreview = false) {
+    if (
+      creating.current ||
+      !mounted.current ||
+      access.current.version !== accessVersion ||
+      renderedSelection !== selection.current ||
+      !allowed ||
+      !eligible(starter) ||
+      !catalogCurrent ||
+      latest.current.authority !== authority ||
+      !latest.current.allowed ||
+      latest.current.invalid
+    )
+      return;
+    if (
+      fromPreview &&
+      (!currentPreview?.content ||
+        currentPreview.loading ||
+        currentPreview.error ||
+        currentPreview.starter.id !== starter.id)
+    )
+      return;
     creating.current = true;
+    const request = ++actionRequest.current;
+    // Preview-only changes do not cancel a submitted copy or hide its outcome.
+    // Authority/context changes still fence late responses below.
+    const current = () =>
+      mounted.current &&
+      access.current.version === accessVersion &&
+      request === actionRequest.current &&
+      latest.current.authority === authority &&
+      latest.current.allowed &&
+      !latest.current.invalid;
     setBusyId(starter.id);
     setActionError("");
+    let navigated = false;
     if (!survey) recordCreationEvent("creation_started", "starter", "round");
     try {
       if (survey) {
-        // A lost response is retried with exactly the originally submitted content language.
+        // A retry in this actor, workspace and language reuses the exact mutation body.
+        const intentKey = JSON.stringify([actor, locale, starter.id]);
         const body =
-          surveyRequests.current.get(starter.id) ??
+          surveyRequests.current.get(intentKey) ??
           JSON.stringify({ idempotencyKey: surveyMutationKey(), templateId: starter.id, locale });
-        surveyRequests.current.set(starter.id, body);
+        surveyRequests.current.set(intentKey, body);
         const response = await apiFetch<{ survey: { id: string } }>("/v1/surveys", {
           method: "POST",
           body,
         });
-        router.push(`/surveys/${response.survey.id}`);
+        if (current()) {
+          navigated = true;
+          router.push(`/surveys/${encodeURIComponent(response.survey.id)}`);
+        }
         return;
       }
       const response = await apiFetch<{ quiz: { id: string } }>(`/v1/starters/${starter.id}/use`, {
         method: "POST",
         body: JSON.stringify({ locale }),
       });
+      if (!current()) return;
       recordCreationEvent("creation_completed", "starter", "round");
       if (starter.questionCount > 0) recordAuthoringEvent("first_block_created", "round");
-      router.push(`/quiz/${response.quiz.id}`);
+      navigated = true;
+      router.push(`/quiz/${encodeURIComponent(response.quiz.id)}`);
     } catch (caught) {
+      if (!current()) return;
       if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
-        surveyRequests.current.delete(starter.id);
+        surveyRequests.current.delete(JSON.stringify([actor, locale, starter.id]));
       setActionError(humanError(caught));
-      setBusyId("");
-      creating.current = false;
+    } finally {
+      if (!navigated && request === actionRequest.current) {
+        setBusyId("");
+        creating.current = false;
+      }
     }
   }
 
-  if (loading && starters.length === 0)
-    return (
-      <p className={styles.muted} lang={locale} role="status">
-        {t("starter.loading")}
-      </p>
-    );
-
   const effectiveType = survey ? "poll" : roundType !== "all" ? roundType : type;
-  const orderedStarters = [...prioritizeStartersForSegment(starters, creator?.segment)]
+  const orderedStarters = [...prioritizeStartersForSegment(visibleStarters, creator?.segment)]
     .sort((first, second) => Number(Boolean(second.guide)) - Number(Boolean(first.guide)))
     .filter(
       (starter) =>
-        (!survey || starter.responseTypes.every((type) => type === "poll" || type === "rating")) &&
+        (!survey ||
+          starter.responseTypes.every(
+            (responseType) => responseType === "poll" || responseType === "rating",
+          )) &&
         (effectiveType === "all" || starter.roundType === effectiveType) &&
         (category === "all" || starter.category === category) &&
         `${starter.title} ${starter.description} ${starter.guide?.audience ?? ""}`
           .toLocaleLowerCase(locale)
           .includes(search.trim().toLocaleLowerCase(locale)),
     );
+  const selectedId = currentPreview?.starter.id;
+  const firstStarter = orderedStarters[0];
+  const selectionVisible = orderedStarters.some((starter) => starter.id === selectedId);
+  // Noncompact browsing always shows a preview of a visible result. Compact callers retain cards.
+  useEffect(() => {
+    if (compact || !catalogCurrent) return;
+    if (!selectionVisible) {
+      if (firstStarter) void loadPreview(firstStarter);
+      else if (selectedId) {
+        previewRequest.current++;
+        selection.current++;
+        setPreview(null);
+      }
+    }
+  }, [compact, catalogCurrent, selectionVisible, selectedId, firstStarter, loadPreview]);
+
+  function metadata(
+    starter: StarterSummary,
+    content?: StarterPreviewContent,
+    guide = starter.guide,
+  ) {
+    const questions =
+      content?.kind === "round"
+        ? content.draft.questions
+        : content?.draft.items.map((item) => item.question);
+    const questionCount = questions?.length ?? starter.questionCount;
+    const responseTypes = questions
+      ? [...new Set(questions.map((question) => question.type))]
+      : starter.responseTypes;
+    return (
+      <div className={galleryStyles.metaLine}>
+        {guide ? (
+          <span>
+            {guideCopy("About {minutes} min", {
+              minutes: formatNumber(locale, guide.minutes),
+            })}
+          </span>
+        ) : null}
+        <span>{t(`create.kind.${survey ? "survey" : starter.roundType}`)}</span>
+        <span>
+          {t(
+            pluralCategory(locale, questionCount) === "one"
+              ? "starter.questionCount.one"
+              : "starter.questionCount.other",
+            { count: formatNumber(locale, questionCount) },
+          )}
+        </span>
+        <span>
+          {responseTypes.map((responseType) => t(questionTypeLabelKeys[responseType])).join(" · ")}
+        </span>
+      </div>
+    );
+  }
+
+  const previewPanel =
+    currentPreview && (compact || selectionVisible) ? (
+      <StarterTemplatePreview
+        key={`${scope}:${currentPreview.starter.id}`}
+        id={currentPreview.starter.id}
+        content={currentPreview.content}
+        title={currentPreview.starter.title}
+        description={currentPreview.starter.description}
+        guide={currentPreview.guide}
+        contentLocale={locale}
+        uiLocale={locale}
+        closeLabel={t("starter.closePreview")}
+        onClose={closePreview}
+        mode={compact ? "dialog" : "panel"}
+        loading={currentPreview.loading}
+        reveal={currentPreview.reveal}
+        error={currentPreview.error}
+        onRetry={() => void loadPreview(currentPreview.starter)}
+        metadata={metadata(currentPreview.starter, currentPreview.content, currentPreview.guide)}
+        useLabel={busyId === currentPreview.starter.id ? t("starter.creating") : t("starter.use")}
+        onUse={
+          canEdit && eligible(currentPreview.starter)
+            ? () => void useStarter(currentPreview.starter, true)
+            : undefined
+        }
+        useDisabled={Boolean(busyId) || !catalogCurrent || !allowed}
+        readOnlyLabel={!canEdit ? t("starter.readOnly") : undefined}
+        actionError={actionError}
+      />
+    ) : null;
+
+  if (authInvalid)
+    return (
+      <p role="alert" lang={locale}>
+        {copy.authChanged}
+      </p>
+    );
+  if (loading && visibleStarters.length === 0)
+    return (
+      <p className={styles.muted} lang={locale} role="status">
+        {t("starter.loading")}
+      </p>
+    );
 
   return (
     <div lang={locale} aria-busy={loading}>
       <div className={galleryStyles.gallerySummary}>
-        <strong>
-          {t("templateLibrary.count", { count: formatNumber(locale, orderedStarters.length) })}
+        <strong role="status">
+          {copy.matching.replace("{count}", formatNumber(locale, orderedStarters.length))}
         </strong>
         <span>{t("templateLibrary.englishContent")}</span>
       </div>
@@ -227,10 +535,12 @@ export function StarterGallery({
         ) : null}
       </div>
       {loadError ? (
-        <div>
-          <p className="error" lang="en-CA" role="alert">
-            {loadError}
-          </p>
+        <div className={previewStyles.error}>
+          <p role="alert">{copy.catalogError}</p>
+          <details>
+            <summary>{copy.details}</summary>
+            <p lang="en-CA">{loadError}</p>
+          </details>
           <button
             className="button-quiet small-button"
             onClick={() => void refresh()}
@@ -240,150 +550,122 @@ export function StarterGallery({
           </button>
         </div>
       ) : null}
-      {actionError ? (
-        <p className="error" lang="en-CA" role="alert">
-          {actionError}
-        </p>
+      {actionError && !previewPanel ? (
+        <div className={previewStyles.error} role="alert">
+          <p>{copy.actionError}</p>
+          <details>
+            <summary>{copy.details}</summary>
+            <p lang="en-CA">{actionError}</p>
+          </details>
+        </div>
       ) : null}
-      <div className={galleryStyles.starterGrid} data-compact={compact || undefined}>
-        {orderedStarters.map((starter) => {
-          const recommended = starter.segment === "all" || starter.segment === creator?.segment;
-          return (
-            <article
-              className={galleryStyles.templateCard}
-              data-category={starter.category}
-              key={starter.id}
-              data-template-id={starter.id}
+      <div className={!compact ? previewStyles.browser : undefined}>
+        {!compact && orderedStarters.length > 0 ? (
+          <label className={`field ${previewStyles.mobileSelect}`}>
+            <span>{copy.choose}</span>
+            <select
+              className="input"
+              value={selectionVisible ? selectedId : ""}
+              disabled={!catalogCurrent}
+              onChange={(event) => {
+                const starter = orderedStarters.find((item) => item.id === event.target.value);
+                if (starter) void loadPreview(starter);
+              }}
             >
-              <div className={galleryStyles.cardTopline}>
-                <span className={galleryStyles.category}>{t(categoryKeys[starter.category])}</span>
-                {recommended ? (
-                  <span className={galleryStyles.recommended}>{t("starter.recommended")}</span>
-                ) : null}
-              </div>
-              <h3 lang={contentLocale}>{starter.title}</h3>
-              <p lang={contentLocale}>{starter.description}</p>
-              {starter.guide ? (
-                <p className={galleryStyles.audience} lang={contentLocale}>
-                  {starter.guide.audience}
-                </p>
-              ) : null}
-              {starter.previewPrompt && preview?.id !== starter.id ? (
-                <div className={galleryStyles.questionSample}>
-                  <small>{t("templateLibrary.questionPreview")}</small>
-                  <p lang={contentLocale}>{starter.previewPrompt}</p>
-                </div>
-              ) : null}
-              <div className={galleryStyles.metaLine}>
-                {starter.guide ? (
-                  <span>
-                    {guideCopy("About {minutes} min", {
-                      minutes: formatNumber(locale, starter.guide.minutes),
-                    })}
+              <option value="" disabled>
+                {copy.choose}
+              </option>
+              {orderedStarters.map((starter) => (
+                <option key={starter.id} value={starter.id}>
+                  {starter.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div
+          className={compact ? galleryStyles.starterGrid : previewStyles.summaryList}
+          data-compact={compact || undefined}
+          aria-label={copy.templates}
+        >
+          {orderedStarters.map((starter) => {
+            const recommended = starter.segment === "all" || starter.segment === creator?.segment;
+            const selected = selectedId === starter.id;
+            return (
+              <article
+                className={`${galleryStyles.templateCard} ${!compact ? previewStyles.summaryCard : ""}`}
+                data-selected={(!compact && selected) || undefined}
+                data-category={starter.category}
+                key={starter.id}
+                data-template-id={starter.id}
+              >
+                <div className={galleryStyles.cardTopline}>
+                  <span className={galleryStyles.category}>
+                    {t(categoryKeys[starter.category])}
                   </span>
+                  {recommended ? (
+                    <span className={galleryStyles.recommended}>{t("starter.recommended")}</span>
+                  ) : null}
+                </div>
+                <h3 lang={contentLocale}>{starter.title}</h3>
+                <p lang={contentLocale}>{starter.description}</p>
+                {compact && starter.guide ? (
+                  <p className={galleryStyles.audience} lang={contentLocale}>
+                    {starter.guide.audience}
+                  </p>
                 ) : null}
-                <span>{t(`create.kind.${survey ? "survey" : starter.roundType}`)}</span>
-                <span>
-                  {t(
-                    pluralCategory(locale, starter.questionCount) === "one"
-                      ? "starter.questionCount.one"
-                      : "starter.questionCount.other",
-                    { count: formatNumber(locale, starter.questionCount) },
-                  )}
-                </span>
-                <span>
-                  {starter.responseTypes.map((type) => t(questionTypeLabelKeys[type])).join(" · ")}
-                </span>
-              </div>
-              <div className={galleryStyles.cardActions}>
-                <button
-                  className="button-quiet small-button"
-                  type="button"
-                  disabled={preview?.id !== starter.id && !catalogCurrent}
-                  aria-expanded={preview?.id === starter.id}
-                  aria-haspopup="dialog"
-                  aria-controls={
-                    preview?.id === starter.id ? `starter-preview-${starter.id}` : undefined
-                  }
-                  onClick={async (event) => {
-                    event.currentTarget.focus();
-                    const request = ++previewRequest.current;
-                    if (preview?.id === starter.id) {
-                      setPreview(null);
-                      return;
-                    }
-                    if (!catalogCurrent || latestLocale.current !== locale) return;
-                    setActionError("");
-                    try {
-                      let content: StarterPreviewContent;
-                      let guide: StarterGuide | undefined;
-                      if (survey) {
-                        const result = await apiFetch<{ draft: SurveyDraft; guide?: StarterGuide }>(
-                          `/v1/surveys/templates/${starter.id}?locale=${locale}`,
-                        );
-                        content = { kind: "survey", draft: result.draft };
-                        guide = result.guide;
-                      } else {
-                        const result = await apiFetch<{ draft: QuizDraft; guide?: StarterGuide }>(
-                          `/v1/starters/${starter.id}?locale=${locale}`,
-                        );
-                        content = { kind: "round", draft: result.draft };
-                        guide = result.guide;
-                      }
-                      if (request !== previewRequest.current || latestLocale.current !== locale)
-                        return;
-                      setPreview({
-                        id: starter.id,
-                        content,
-                        guide: guide ?? starter.guide,
-                        contentLocale: locale,
-                      });
-                    } catch (caught) {
-                      if (request !== previewRequest.current || latestLocale.current !== locale)
-                        return;
-                      setActionError(humanError(caught));
-                    }
-                  }}
-                >
-                  {preview?.id === starter.id
-                    ? t("starter.closePreview")
-                    : survey
-                      ? guideCopy("Preview questionnaire")
-                      : t("starter.preview")}
-                </button>
-                {canEdit && (!survey || productFeatures?.surveys) ? (
+                {compact && starter.previewPrompt && !selected ? (
+                  <div className={galleryStyles.questionSample}>
+                    <small>{t("templateLibrary.questionPreview")}</small>
+                    <p lang={contentLocale}>{starter.previewPrompt}</p>
+                  </div>
+                ) : null}
+                {metadata(starter)}
+                <div className={galleryStyles.cardActions}>
                   <button
-                    className="button small-button"
-                    disabled={Boolean(busyId) || !catalogCurrent}
-                    onClick={() => void useStarter(starter)}
+                    className="button-quiet small-button"
                     type="button"
+                    disabled={!(compact && selected) && !catalogCurrent}
+                    aria-expanded={compact ? selected : undefined}
+                    aria-pressed={!compact ? selected : undefined}
+                    aria-haspopup={compact ? "dialog" : undefined}
+                    aria-controls={selected ? `starter-preview-${starter.id}` : undefined}
+                    onClick={(event) => {
+                      event.currentTarget.focus();
+                      if (compact && selected) closePreview();
+                      else if (!selected) void loadPreview(starter, !compact);
+                    }}
                   >
-                    {busyId === starter.id ? t("starter.creating") : t("starter.use")}
+                    {compact && selected
+                      ? t("starter.closePreview")
+                      : survey
+                        ? guideCopy("Preview questionnaire")
+                        : t("starter.preview")}
                   </button>
-                ) : !canEdit ? (
-                  <p className={galleryStyles.readOnlyNote}>{t("starter.readOnly")}</p>
-                ) : null}
-              </div>
-            </article>
-          );
-        })}
+                  {compact && canEdit && eligible(starter) ? (
+                    <button
+                      className="button small-button"
+                      disabled={Boolean(busyId) || !catalogCurrent || !allowed}
+                      onClick={() => void useStarter(starter)}
+                      type="button"
+                    >
+                      {busyId === starter.id ? t("starter.creating") : t("starter.use")}
+                    </button>
+                  ) : compact && !canEdit ? (
+                    <p className={galleryStyles.readOnlyNote}>{t("starter.readOnly")}</p>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        {!compact ? previewPanel : null}
       </div>
-      {preview ? (
-        <StarterTemplatePreview
-          key={preview.id}
-          id={preview.id}
-          content={preview.content}
-          guide={preview.guide}
-          contentLocale={preview.contentLocale}
-          uiLocale={locale}
-          closeLabel={t("starter.closePreview")}
-          onClose={() => setPreview(null)}
-        />
-      ) : null}
-      {starters.length > 0 && orderedStarters.length === 0 ? (
+      {compact ? previewPanel : null}
+      {visibleStarters.length > 0 && orderedStarters.length === 0 ? (
         <p role="status">{t("starter.noMatches")}</p>
       ) : null}
-      {!starters.length && !loadError ? (
+      {!visibleStarters.length && !loadError ? (
         <div className={styles.emptyState}>
           <h3>{t("starter.emptyTitle")}</h3>
           <p>{t("starter.emptyDescription")}</p>

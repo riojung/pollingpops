@@ -106,4 +106,38 @@ describe("starter template preview", () => {
     expect(markup).not.toContain("Correct answer");
     expect(JSON.stringify(survey)).toBe(before);
   });
+
+  it("places a clear independent-copy CTA inside the preview and disables it until content is available", () => {
+    const common = {
+      id: "source-evaluation",
+      contentLocale: "en-CA" as const,
+      uiLocale: "en-CA" as const,
+      closeLabel: "Close preview",
+      onClose: () => {},
+      onUse: () => {},
+      useLabel: "Use template",
+    };
+    const ready = renderToStaticMarkup(
+      <StarterTemplatePreview {...common} content={{ kind: "round", draft }} mode="panel" />,
+    );
+    expect(ready).toContain("Creates an independent draft in your library");
+    expect(ready).toContain('type="button">Use template</button>');
+    expect(ready).not.toContain("<dialog");
+    const loading = renderToStaticMarkup(
+      <StarterTemplatePreview {...common} title={draft.title} loading />,
+    );
+    expect(loading).toContain('disabled="">Use template</button>');
+    expect(loading).toContain('role="status"');
+    const failure = renderToStaticMarkup(
+      <StarterTemplatePreview
+        {...common}
+        title={draft.title}
+        error="Unavailable"
+        onRetry={() => {}}
+      />,
+    );
+    expect(failure).toContain('disabled="">Use template</button>');
+    expect(failure).toContain("Try again");
+    expect(failure).toContain("Error details");
+  });
 });

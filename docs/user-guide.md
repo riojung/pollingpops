@@ -24,9 +24,15 @@ unscored host-paced opinions, **Survey** for independent responses over time, or
 mixed live questions. Older starting links still work as custom workflows. Formats can be changed
 later in the Round editor. A live poll is not a self-paced Survey.
 
-Open **Templates** and choose **Rounds**, **Presentations**, or **Surveys**. Search original
-Round and Survey templates and filter by category/type. **Preview questions** shows prompts
-and options without creating content. **Use this starter** makes an independent draft with fresh IDs.
+Open **Templates** from the workspace navigation and choose **Designs**, **Rounds**,
+**Presentations**, or **Surveys**. Home offers format-specific template shortcuts, and an empty
+Library links to the matching section. Template format links survive reload and browser history.
+Search original Round and Survey templates and filter by category/type. On a wide screen, browse
+summaries beside the selected preview; on a phone, choose a template above the preview. Prompts,
+options, answer explanations and facilitator guidance can be inspected without creating content.
+**Use this starter** is available beside the preview for eligible editors and makes an independent
+draft with fresh IDs. Compact template galleries retain their preview dialog, Escape and focus
+return behavior. Viewers can browse without creating drafts.
 The 21-template Presentation catalogue contains 12 native scenario decks and the nine retained facilitated
 templates. Each native scenario has eight editable slides and works without an audience activity:
 startup pitch, client proposal, project update, quarterly strategy, portfolio case study, event talk,
@@ -40,7 +46,8 @@ creates an independent draft with fresh IDs; viewing the preview creates no cont
 facilitated templates retain their slides, questions and linked rechecks. Survey templates contain
 opinion polls and ratings for self-paced feedback.
 Review every answer, explanation and recheck for your audience before publishing. Original template
-content is English; chooser/filter controls are localized.
+content is available in the ten supported creation languages; chooser/filter controls are localized.
+Changing the interface language does not rewrite an existing draft.
 
 ## Idea Boards and shared canvases
 
@@ -344,6 +351,12 @@ whole-room flex timing, Question Health, and decision replay have additional
 workspace rollout gates. A feature described here may therefore be absent from your deployment;
 see [optional beta configuration](quick-start.md#optional-beta-workflows). These controls do not
 mean that public production or institutional readiness gates have passed.
+
+Home keeps active rooms first. Start an enabled creation goal or open its template catalog, then
+use **Continue working** to return to existing content. Overview metrics and recent follow-up
+remain below the primary work area. The first-session checklist can be expanded or dismissed;
+missing evidence is not shown as a measured zero. Templates remains available independently of
+the optional Discover page; enabled formats and editing rights still control creation actions.
 
 ## Roles and screens
 

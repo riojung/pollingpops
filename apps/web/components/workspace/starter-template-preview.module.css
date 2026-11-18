@@ -1,0 +1,160 @@
+.browser {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.75fr) minmax(0, 1.6fr);
+  align-items: start;
+  gap: 1.25rem;
+  min-inline-size: 0;
+}
+
+.summaryList {
+  display: grid;
+  gap: 0.625rem;
+  min-inline-size: 0;
+}
+
+.summaryCard {
+  border-top-width: 1px;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.summaryCard[data-selected="true"] {
+  border-color: var(--ui-accent-ink);
+  background: var(--ui-accent-soft);
+  box-shadow: inset 3px 0 var(--ui-accent-ink);
+}
+
+.panel {
+  min-inline-size: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  background: var(--ui-surface-raised);
+  padding: clamp(0.875rem, 2vw, 1.5rem);
+  overflow-wrap: anywhere;
+}
+
+.panel [data-panel="true"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel [data-panel="true"] > details {
+  order: 2;
+}
+
+.eyebrow {
+  display: block;
+  margin-block-end: 0.75rem;
+  color: var(--ui-accent-ink);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.useBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 1rem 1.25rem;
+  border-block: 1px solid var(--ui-border);
+  padding-block: 0.875rem;
+}
+
+.useBar p {
+  flex: 1 1 12rem;
+  margin: 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.useBar button {
+  min-block-size: 44px;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.loading,
+.error {
+  margin-block: 1rem;
+  color: var(--ui-text-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  border-inline-start: 3px solid var(--ui-danger, var(--ui-text-strong));
+  padding-inline-start: 0.75rem;
+}
+
+.error summary {
+  cursor: pointer;
+}
+
+.error button {
+  margin-block-start: 0.75rem;
+}
+
+.browser button:focus-visible,
+.browser select:focus-visible,
+.panel h2:focus-visible,
+.error summary:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
+.mobileSelect {
+  display: none;
+}
+
+.mobileSelect > span {
+  color: var(--ui-text);
+}
+
+@media (max-width: 800px) {
+  .browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summaryList {
+    display: none;
+  }
+
+  .mobileSelect {
+    display: grid;
+    min-inline-size: 0;
+  }
+
+  .mobileSelect select {
+    min-inline-size: 0;
+    inline-size: 100%;
+    min-block-size: 44px;
+  }
+
+  .useBar button {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summaryCard {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .summaryCard[data-selected="true"] {
+    border: 2px solid Highlight;
+    box-shadow: none;
+  }
+
+  .panel,
+  .useBar,
+  .error {
+    border-color: CanvasText;
+  }
+}

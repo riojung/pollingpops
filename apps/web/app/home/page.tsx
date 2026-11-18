@@ -7,14 +7,13 @@ import { WorkspaceProvider, useWorkspace } from "../../components/workspace/work
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import { HomeGuidance } from "./home-guidance";
 import { HomeFirstRunActions } from "./home-first-run-actions";
+import { HomeStart } from "./home-start";
+import { homeStartCopy } from "../../lib/i18n/home-start-copy";
 import { professionalRoundBuilderAvailable } from "../../lib/help-guide-availability";
 import { pluralCategory } from "../../lib/i18n/format";
 import { workspaceDiscoveryCopy } from "../../lib/i18n/workspace-discovery-messages";
 import { canvasMessages } from "../../lib/i18n/canvas-messages";
-import {
-  workspaceCreationGoals,
-  workspaceCreationOptions,
-} from "../../components/workspace/workspace-creation-model";
+import { workspaceCreationOptions } from "../../components/workspace/workspace-creation-model";
 import { hasHomeWork, homeWorkAction, recentHomeWork, type HomeWork } from "./home-model";
 import { useHomeSummary } from "./home-summary";
 import { deriveHomeInsights } from "../../lib/home-insights";
@@ -53,6 +52,7 @@ function HomeWorkspace() {
   const copy = workspaceDiscoveryCopy(locale);
   const canvasCopy = canvasMessages(locale);
   const overviewCopy = homeOverviewCopy(locale);
+  const startCopy = homeStartCopy(locale);
   const contextKey =
     !accountLoading && creator && productFeatures?.workspaceShell === true
       ? JSON.stringify([
@@ -181,13 +181,6 @@ function HomeWorkspace() {
 
   return (
     <WorkspaceShell
-      actions={
-        canCreate ? (
-          <Link className={`button ${styles.homeCreateAction}`} href={createHref} lang={locale}>
-            {t("common.create")}
-          </Link>
-        ) : null
-      }
       headerDensity="compact"
       description={t("home.welcome", { name: firstName })}
       eyebrow={t("home.eyebrow")}
@@ -224,6 +217,8 @@ function HomeWorkspace() {
         </section>
       ) : null}
 
+      <HomeStart />
+
       {error ? (
         <section className={styles.errorState} role="alert">
           <div>
@@ -244,35 +239,6 @@ function HomeWorkspace() {
         </section>
       ) : null}
 
-      {summary && insights ? (
-        <HomeOverview
-          summary={summary}
-          insights={insights}
-          boardsAvailable={
-            productFeatures?.ideaBoards === true ||
-            productFeatures?.canvasBoards === true ||
-            summary.totals.boards === undefined ||
-            summary.totals.boards > 0 ||
-            (summary.recentBoards?.length ?? 0) > 0
-          }
-        />
-      ) : null}
-
-      {summary && canCreate && creator ? (
-        <HomeGuidance
-          summary={summary}
-          contextKey={`${creator.userId}:${creator.workspaceId}`}
-          guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
-          creationGoals={workspaceCreationGoals({ canEdit, productFeatures })}
-        />
-      ) : null}
-      {summary && !canCreate && !hasHomeWork(summary) ? (
-        <HomeFirstRunActions
-          canCreate={false}
-          guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
-        />
-      ) : null}
-
       {summary ? (
         <div className={styles.dashboardGrid}>
           <div className={styles.mainColumn}>
@@ -280,7 +246,11 @@ function HomeWorkspace() {
               <div className={styles.sectionHeading}>
                 <div>
                   <p className={styles.eyebrow}>{t("pages.home.authoring.eyebrow")}</p>
-                  <h2>{t("pages.home.authoring.title")}</h2>
+                  <h2>
+                    {canEdit && recentWork.length
+                      ? startCopy.continueWorking
+                      : t("pages.home.authoring.title")}
+                  </h2>
                   <p>{overviewCopy.recentWorkDescription}</p>
                 </div>
                 <Link href="/library">{t("pages.common.viewLibrary")}</Link>
@@ -355,6 +325,33 @@ function HomeWorkspace() {
                 </div>
               )}
             </section>
+
+            {canCreate && creator ? (
+              <HomeGuidance
+                summary={summary}
+                contextKey={`${creator.userId}:${creator.workspaceId}`}
+                guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
+              />
+            ) : !hasHomeWork(summary) ? (
+              <HomeFirstRunActions
+                canCreate={false}
+                guideAvailable={professionalRoundBuilderAvailable(productFeatures)}
+              />
+            ) : null}
+
+            {insights ? (
+              <HomeOverview
+                summary={summary}
+                insights={insights}
+                boardsAvailable={
+                  productFeatures?.ideaBoards === true ||
+                  productFeatures?.canvasBoards === true ||
+                  summary.totals.boards === undefined ||
+                  summary.totals.boards > 0 ||
+                  (summary.recentBoards?.length ?? 0) > 0
+                }
+              />
+            ) : null}
 
             <section className={styles.section}>
               <div className={styles.sectionHeading}>

@@ -53,6 +53,7 @@ const messages = {
   "workspace.nav.assignments": "Attività",
   "workspace.nav.results": "Risultati",
   "workspace.nav.discover": "Scopri",
+  "workspace.nav.templates": "Modelli",
   "workspace.nav.groups": "Gruppi",
   "workspace.nav.boards": "Bacheche delle idee",
   "workspace.nav.workspace": "Area di lavoro",

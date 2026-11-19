@@ -3,7 +3,7 @@
 WX-06B1 follows the product owner's 2026-11-19 selection: **show or hide a page based on one
 earlier single-choice answer**. It implements an isolated proposed v4 contract and pure eligibility,
 cleanup and validation helpers. B1 merged in [PR #286](https://github.com/riojung/pollingpops/pull/286)
-at `f08ccbd`. WX-06B2 adds compatible stored-content and participant readers while keeping every
+at `f08ccbd`. WX-06B2 merged through PR #287 at `ed011d0` and adds compatible stored-content and participant readers while keeping every
 new conditional-Survey authoring, publication, launch, Library sharing and copy path disabled.
 
 The module is exported separately as `@openround/contracts/survey-branching`. Its readable schemas
@@ -115,11 +115,11 @@ uses the separate `SurveyReadableDraftSchema` / `SurveyReadableContentSchema` an
 
 The remaining work is split into reviewable checkpoints:
 
-| Checkpoint          | Required work before completion                                                                                                                                                                                                                                                           |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B2: runtime/readers | Implemented locally on `codex/survey-branching-readers`: versioned storage/read paths, v4 negotiation, eligibility and replacement maps, revision/idempotency/reconnect safeguards, lifecycle compatibility and accessible visible-page/retained previews. New writers remain disabled.   |
-| C: results/privacy  | Define versioned branch-aware question denominators, unanswered versus skipped semantics, minimum samples and suppression; keep hidden answers out of reports, summaries and exports; preserve historical aggregate-v2 behavior. Qualify reconstruction risks before enabling collection. |
-| B3: authoring/grant | Add explicit conversion and rule editing, safe reorder/delete/copy behavior with remapped condition IDs, previews and explanations; enable a separate effective writer grant only after B2 and C readers/privacy paths are qualified.                                                     |
+| Checkpoint          | Required work before completion                                                                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| B2: runtime/readers | Merged through PR #287: versioned storage/read paths, v4 negotiation, eligibility and replacement maps, revision/idempotency/reconnect safeguards, lifecycle compatibility and accessible visible-page/retained previews. New writers remain disabled.                               |
+| C: results/privacy  | C1 implemented locally: isolated internal counting and a proposed aggregate-v3 withheld-only contract. C2 disclosure-policy qualification, C3 runtime result readers and C4 summaries/exports/lifecycle remain pending. See [conditional result scope](survey-branching-results.md). |
+| B3: authoring/grant | Add explicit conversion and rule editing, safe reorder/delete/copy behavior with remapped condition IDs, previews and explanations; enable a separate effective writer grant only after B2 and C readers/privacy paths are qualified.                                                |
 
 Runtime mutation design must prevent a late acknowledgement or an exact retry from resurrecting
 answers cleared by a newer branch change. Reconciliation results replace the current answer map;

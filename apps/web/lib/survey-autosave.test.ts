@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
 import { ApiClientError } from "./api";
-import { SurveyAutosave, type SurveyAutosaveSnapshot } from "./survey-autosave";
+import {
+  SurveyAutosave,
+  SurveySavePausedError,
+  type SurveyAutosaveSnapshot,
+} from "./survey-autosave";
+import { addSurveyPage, convertSurveyToPages, updateSurveyPage } from "./survey-page-authoring";
 import type { SurveyRecordView } from "./survey-client";
 
 function deferred<T>() {
@@ -251,21 +256,24 @@ describe("Survey autosave", () => {
     }));
     expect(await controller.retry()).toMatchObject({ revision: 2, draft: { title: "Original" } });
   });
-  it("pauses on revision conflicts and never overwrites local edits or automatically retries", async () => {
-    const { controller, edit, save } = fixture();
-    save.mockRejectedValue(new ApiClientError("Reload before editing", "STALE_DRAFT", 409));
-    edit("Local edits");
-    await expect(controller.flush()).rejects.toMatchObject({ code: "STALE_DRAFT" });
-    edit("Keep these edits");
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(controller.snapshot()).toMatchObject({
-      phase: "conflict",
-      draft: { title: "Keep these edits" },
-      record: { revision: 0 },
-    });
-    await expect(controller.retry()).rejects.toMatchObject({ code: "STALE_DRAFT" });
-    expect(save).toHaveBeenCalledTimes(1);
-  });
+  it.each(["STALE_DRAFT", "IDEMPOTENCY_CONFLICT"])(
+    "keeps %s as a conflict and never overwrites local edits or automatically retries",
+    async (code) => {
+      const { controller, edit, save } = fixture();
+      save.mockRejectedValue(new ApiClientError("Reload before editing", code, 409));
+      edit("Local edits");
+      await expect(controller.flush()).rejects.toMatchObject({ code });
+      edit("Keep these edits");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(controller.snapshot()).toMatchObject({
+        phase: "conflict",
+        draft: { title: "Keep these edits" },
+        record: { revision: 0 },
+      });
+      await expect(controller.retry()).rejects.toMatchObject({ code });
+      expect(save).toHaveBeenCalledTimes(1);
+    },
+  );
   it("does not bypass a conflict when local edits are reverted to the stale baseline", async () => {
     const { controller, edit, save } = fixture();
     save.mockRejectedValue(new ApiClientError("Changed elsewhere", "STALE_DRAFT", 409));
@@ -324,6 +332,104 @@ describe("Survey autosave", () => {
     const saved = await controller.flush();
     controller.acceptRecord({ ...saved, status: "published", publishedRevision: saved.revision });
     expect(controller.snapshot().record.publishedRevision).toBe(1);
+  });
+  it("retains the exact v3 intent when authority is paused during network backoff, then drains newer layout edits", async () => {
+    const { controller, save } = fixture();
+    const first = convertSurveyToPages(
+      controller.snapshot().draft,
+      "00000000-0000-4000-8000-000000000010",
+    );
+    save.mockRejectedValue(new TypeError("Acknowledgement lost"));
+    controller.edit(first);
+    const failure = expect(controller.flush()).rejects.toBeInstanceOf(SurveySavePausedError);
+    await vi.advanceTimersByTimeAsync(0);
+    const exactBody = save.mock.calls[0]![0];
+    let newer = addSurveyPage(first, "00000000-0000-4000-8000-000000000011");
+    newer = updateSurveyPage(newer, newer.pages[1]!.id, {
+      title: "New page ",
+      description: "Line 1\nLine 2 ",
+    });
+    controller.edit(newer);
+    controller.setEnabled(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    await failure;
+    expect(save).toHaveBeenCalledOnce();
+    expect(controller.snapshot()).toMatchObject({
+      phase: "retry",
+      unsettled: true,
+      draft: { schemaVersion: 3, pages: newer.pages },
+    });
+    save.mockImplementation(async (body) => ({
+      ...controller.snapshot().record,
+      revision: JSON.parse(body).expectedRevision + 1,
+      draft: JSON.parse(body).draft,
+    }));
+    controller.setEnabled(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).toHaveBeenCalledOnce();
+    const saved = await controller.retry();
+    expect(save.mock.calls[1]![0]).toBe(exactBody);
+    expect(JSON.parse(save.mock.calls[2]![0])).toMatchObject({
+      expectedRevision: 1,
+      draft: {
+        schemaVersion: 3,
+        pages: [{ id: first.pages[0]!.id }, { title: "New page", description: "Line 1\nLine 2" }],
+      },
+    });
+    expect(saved.revision).toBe(2);
+    expect(controller.snapshot().draft).toEqual(newer);
+    expect(controller.snapshot().unsettled).toBe(false);
+  });
+  it("does not automatically retry a synchronous authority fence or discard its pending identity", async () => {
+    const { controller, edit, save } = fixture();
+    save.mockRejectedValueOnce(new SurveySavePausedError());
+    edit("Local draft");
+    await expect(controller.flush()).rejects.toBeInstanceOf(SurveySavePausedError);
+    const body = save.mock.calls[0]![0];
+    expect(save).toHaveBeenCalledOnce();
+    expect(controller.snapshot().unsettled).toBe(true);
+    await controller.retry();
+    expect(save.mock.calls[1]![0]).toBe(body);
+  });
+  it("retains a server-rejected page save as a resumable capability pause with the same body and key", async () => {
+    const { controller, save } = fixture();
+    const draft = convertSurveyToPages(
+      controller.snapshot().draft,
+      "00000000-0000-4000-8000-000000000010",
+    );
+    save.mockRejectedValueOnce(
+      new ApiClientError("Survey page authoring is paused", "SURVEY_PAGES_NOT_ENABLED", 409),
+    );
+    controller.edit(draft);
+    await expect(controller.flush()).rejects.toMatchObject({ code: "SURVEY_PAGES_NOT_ENABLED" });
+    const original = save.mock.calls[0]![0];
+    expect(controller.snapshot()).toMatchObject({
+      phase: "retry",
+      pauseReason: "survey-pages",
+      dirty: true,
+      unsettled: true,
+      draft,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(save).toHaveBeenCalledOnce();
+    const acknowledged = deferred<SurveyRecordView>();
+    save.mockImplementationOnce(() => acknowledged.promise);
+    const recovery = controller.retry();
+    expect(save.mock.calls[1]![0]).toBe(original);
+    expect(controller.snapshot()).toMatchObject({ phase: "saving", pauseReason: "survey-pages" });
+    acknowledged.resolve({
+      ...controller.snapshot().record,
+      revision: 1,
+      draft: JSON.parse(original).draft,
+    });
+    await recovery;
+    expect(controller.snapshot()).toMatchObject({
+      phase: "saved",
+      pauseReason: null,
+      dirty: false,
+      unsettled: false,
+      draft,
+    });
   });
   it("cancels debounce and fences late acknowledgements after editor disposal", async () => {
     const queued = fixture();

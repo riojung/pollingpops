@@ -12,7 +12,8 @@ with qualification in [Library discovery](library-discovery.md). **WX-04** merge
 **WX-05A** merged through [PR #281](https://github.com/riojung/pollingpops/pull/281) at `a68df09`.
 **WX-05B** merged through [PR #282](https://github.com/riojung/pollingpops/pull/282) at `bcac69e`.
 **WX-05C** merged through [PR #283](https://github.com/riojung/pollingpops/pull/283) at `e8cc4ce`.
-**WX-06A1** is the current Survey pages contract/reader foundation on `codex/survey-pages-foundation`. Later items are scoped backlog,
+**WX-06A1** merged through [PR #284](https://github.com/riojung/pollingpops/pull/284) at `5782220`.
+**WX-06A2** is the current Survey page-authoring increment on `codex/survey-page-authoring`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -35,7 +36,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                         | Authoring + frontend            |
-| WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | A1 foundation implemented locally for review   | Surveys + contracts + reporting |
+| WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | A1 merged; A2 implemented locally for review   | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                        | Realtime + security + frontend  |
@@ -334,7 +335,7 @@ because layout does not change response eligibility, denominators or suppression
 visit telemetry. See the [contract and compatibility decisions](survey-pages.md).
 
 This checkpoint selects ordered pages only. Page-authoring controls and their effective writer
-grant are the next A increment; answer-based conditions remain B. Do not describe this reader
+grant are the next A increment below; answer-based conditions remain B. Do not describe this reader
 foundation as shipped page authoring or branching.
 
 **WX-06A1 local verification — 2026-11-18:** `VITEST_MAX_WORKERS=1 pnpm check` passes formatting,
@@ -369,6 +370,76 @@ PostgreSQL17 fixture and credentials were removed; application data was not used
 read-only review has no unresolved actionable finding. All ten source-bound editorial packets
 contain 752 pending entries, including 23 new page-reader phrases; automated checks do not grant
 human/native-language acceptance. Migration117 is required before deploying the matching readers.
+
+**Selected WX-06A2 page authoring:** add explicit conversion in the existing Survey editor, with
+page titles/instructions, page selection and keyboard reorder controls, question movement between
+pages, confirmed removal and read-only draft preview. Page removal merges its questions into an
+adjacent page; only the removed page's title/instructions are discarded. Stable IDs and the exact
+flat-item partition remain authoritative. Empty pages are allowed while drafting and rejected at
+publication. The existing 20-page/100-question limits stay in force.
+
+The separate `surveyPages` product capability defaults false, depends on `surveys`, and requires
+an explicit operator plan-policy grant plus existing edit access. There is no new environment
+flag, paid plan, content version or migration. Ordinary blank/template factories remain v2; only
+an explicit conversion or page-preserving source copy writes v3. Current destination grants
+govern independent Library copies, using bounded metadata for discovery. Pausing the capability
+blocks fresh v3 saves/publications/launches/copies while retaining accepted receipts, guest runs,
+readers and aggregate privacy. Editor authority changes stop new writes and preserve local work;
+actor/workspace changes fence stale content. Parent Survey creation policy remains separate.
+
+This increment does not select answer-based conditions, hidden responses, page analytics or a new
+identity model. WX-06B still needs its own contract/privacy decision; WX-06C covers any later
+branch-aware result/export changes. See [Survey pages](survey-pages.md) for rollout and rollback.
+
+**WX-06A2 local verification — 2026-11-19:** repository check stages pass formatting, Docker
+dependency checks, lint, strict types, package/support tests, production builds and compiled-server
+startup. The initial `VITEST_MAX_WORKERS=1 pnpm check` stopped on two existing five-second
+browser-runner diagnostic timeouts. All six diagnostic tests passed immediately in isolation;
+`pnpm test:smoke-support --maxWorkers=1` then passed all 528 support tests, followed by successful
+`pnpm build` and `pnpm check:server-startup`. Final web verification after the whitespace-title
+fallback correction passes all 6,272 tests and a fresh web typecheck; 1,662 server, 1,017 contract
+and 657 default database tests passed. Default optional integration skips remain. All changed
+files pass formatting and diff checks. Independent read-only frontend review found no actionable
+issue; backend grant paths have focused API, contract and repository coverage.
+
+All 15 isolated-fixture browser scenarios pass across desktop Chromium and mobile
+Chromium/WebKit, retaining the eleven reader/Library scenarios. New cases cover explicit public
+HTTP conversion, stable IDs/order, page/question editing, confirmed merges, empty-page publishing
+validation, read-only preview, save/reload, publishing/launch and participant submission. Real
+viewer/default-off/paused states deny writes. English/Korean 320px keyboard, light/dark, fit and
+axe checks pass. Both affected mobile cases pass again after the authoring title-density polish:
+three-line summaries preserve full DOM/accessibility names and inputs, while participant preview
+keeps the full title. WebKit waits for actual legend/label colors before dark-mode axe, without
+exclusions. Blank/whitespace-only titles retain localized accessible fallbacks without changing
+the raw authoring input.
+
+The Survey pages and Library conformance suites pass 33 memory/restricted PostgreSQL17 tests,
+with one expected PostgreSQL-only case skipped in the memory branch. They cover the internal
+discriminator, page-preserving granted copies and exact replay after page capability removal.
+The temporary isolated Colima/tmpfs fixture and credentials were removed; application data was
+not used. All ten fresh source-bound editorial packets contain 786 pending entries each, including
+34 page-authoring phrases. The packet checker returns its expected pending-only exit 2; automated
+checks grant no human/native-language acceptance. No additional migration is required beyond117.
+
+**WX-06A2 review follow-up:** account-load failures keep the workspace loading/error/retry
+screen visible. A transient refresh masks the confirmed editor without disposing its local draft;
+same-scope recovery resumes it, while changed identity/workspace and authentication revocation
+fence the old controller. In-flight owned loads/saves can reconcile masked state; accepted action
+responses cannot navigate until fresh authority is confirmed. Server-side
+`SURVEY_PAGES_NOT_ENABLED` responses retain the exact save identity as a resumable pause rather
+than a stale-draft conflict. Genuine revision/idempotency conflicts keep their existing behavior.
+Both reported findings and the late-navigation guard were independently verified resolved.
+
+Follow-up verification passes all 6,281 web tests, 36 focused editor/autosave regressions, whole-web
+types/lint, changed-file formatting/diff checks and the production web build. All 17 browser
+scenarios pass, retaining the original fifteen and adding initial account failure plus masked
+unsaved-refresh recovery, and real server-side policy-pause/exact-save recovery. Only account
+503 responses are mocked; successful account retries and all saves use real HTTP. The policy
+test changes the actual fixture policy, observes `409 SURVEY_PAGES_NOT_ENABLED`, restores the
+grant and verifies byte-identical body/key replay with one revision and no Survey reload. The
+final paused-save case also passes separately against the latest guard. Fixtures are stopped.
+No shared provider, public contract, storage or localization inventory changes are needed for
+these fixes.
 
 ### WX-07 Recurring check-ins
 

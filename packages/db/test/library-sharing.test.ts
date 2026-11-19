@@ -590,9 +590,11 @@ for (const backend of ["memory", "postgres"] as const)
               .map(([statement]) => (typeof statement === "string" ? statement : ""))
               .join("\n");
             expect(statements).toContain("WITH authorized AS MATERIALIZED");
-            expect(statements).not.toMatch(
-              /share\.snapshot|version\.content|parent\.draft|media_assets/,
-            );
+            // Only the version discriminator may be extracted; never discover snapshot bodies.
+            expect(statements).toContain("share.snapshot->'content'->>'schemaVersion'");
+            expect(
+              statements.replaceAll("share.snapshot->'content'->>'schemaVersion'", ""),
+            ).not.toMatch(/share\.snapshot|version\.content|parent\.draft|media_assets/);
             expect(statements).not.toContain("SELECT status FROM library_share_progress");
           } finally {
             query.mockRestore();
@@ -846,6 +848,7 @@ for (const backend of ["memory", "postgres"] as const)
           scope: "shared",
         });
         expect(listed.shares.find((entry) => entry.id === share.id)).toMatchObject({
+          surveySchemaVersion: 3,
           capabilities: { copy: false },
           copyUnavailableReason: "Creating paged Survey copies is not enabled yet",
         });

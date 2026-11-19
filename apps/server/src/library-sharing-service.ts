@@ -5,6 +5,7 @@ import {
   LibrarySharingError,
   type CreatorContext,
   type LibraryShareRecord,
+  type LibraryShareSummaryRecord,
   type LibrarySharingRepository,
   type MediaAssetCreateInput,
   type MediaAssetRecord,
@@ -67,7 +68,7 @@ export class LibrarySharingService {
     );
   }
 
-  async summary(share: LibraryShareSummary, creator: CreatorContext | null, forCopy = false) {
+  async summary(share: LibraryShareSummaryRecord, creator: CreatorContext | null, forCopy = false) {
     // The internal record also holds the private pinned snapshot; whitelist summary fields.
     const summary = LibraryShareSummarySchema.parse(
       Object.fromEntries(
@@ -77,9 +78,11 @@ export class LibrarySharingService {
         ]),
       ),
     );
-    // Fresh v3 copies are hidden in summaries, while retained accepted receipts may still replay.
-    // Authorization below and the repository receipt check remain mandatory for that path.
-    const canAttemptCopy = forCopy ? summary.permission === "use" : summary.capabilities.copy;
+    // Discovery uses only the internal schema discriminator, never the snapshot body.
+    // Actual copies defer the page grant to the repository's accepted-receipt check.
+    const paged = share.surveySchemaVersion === 3;
+    const canAttemptCopy =
+      forCopy || paged ? summary.permission === "use" : summary.capabilities.copy;
     let copyUnavailableReason: string | null = canAttemptCopy
       ? null
       : (summary.copyUnavailableReason ?? null);
@@ -96,6 +99,17 @@ export class LibrarySharingService {
         else if (!(await this.creationEnabled(creator.workspaceId, summary.artifactType)))
           copyUnavailableReason =
             "Creating this content type is not enabled in your active workspace.";
+        else if (
+          !forCopy &&
+          paged &&
+          !(await workspaceFeatureEnabled(
+            this.deps.repository,
+            this.deps.config,
+            creator.workspaceId,
+            "surveyPages",
+          ))
+        )
+          copyUnavailableReason = "Creating paged Survey copies is not enabled yet";
       }
     }
     return {
@@ -225,6 +239,14 @@ export class LibrarySharingService {
           destinationWorkspaceId: creator.workspaceId,
           requestId,
           expectedVersionId: visible.versionId,
+          maximumSurveySchemaVersion: (await workspaceFeatureEnabled(
+            this.deps.repository,
+            this.deps.config,
+            creator.workspaceId,
+            "surveyPages",
+          ))
+            ? 3
+            : 2,
           now: new Date(),
         },
         async (share: LibraryShareRecord) => {

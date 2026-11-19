@@ -31,6 +31,7 @@ const enabled: WorkspaceProductFeatures = {
   questionHealth: true,
   recoveryPacks: true,
   surveys: true,
+  surveyPages: true,
   groups: true,
   discover: true,
 };

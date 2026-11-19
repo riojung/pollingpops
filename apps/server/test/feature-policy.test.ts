@@ -29,6 +29,42 @@ function fixture(community = false) {
 }
 
 describe("operator product feature policy", () => {
+  it("requires an explicit Survey pages rule, its Survey dependency and the current assigned plan", async () => {
+    const f = fixture();
+    const parents = {
+      audienceScopes: { enabled: true, plans: ["free", "pro", "team"] as const },
+      feedbackRooms: { enabled: true, plans: ["free", "pro", "team"] as const },
+      surveys: { enabled: true, plans: ["free", "pro", "team"] as const },
+    };
+    const rules = () =>
+      Object.fromEntries(
+        Object.entries(parents).map(([key, value]) => [key, { ...value, plans: [...value.plans] }]),
+      );
+    await f.platform.saveFeaturePolicy({ expectedRevision: 0, features: rules() });
+    for (const plan of ["free", "pro", "team"] as const)
+      expect(
+        (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, plan)).surveyPages,
+      ).toBe(false);
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: { ...rules(), surveyPages: { enabled: true, plans: ["free", "team"] } },
+    });
+    for (const plan of ["free", "pro", "team"] as const)
+      expect(
+        (await workspaceProductFeatures(f.repository, f.config, f.workspaceId, plan)).surveyPages,
+      ).toBe(plan !== "pro");
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 2,
+      features: {
+        ...rules(),
+        surveys: { enabled: false, plans: [] },
+        surveyPages: { enabled: true, plans: ["free", "team"] },
+      },
+    });
+    expect(
+      (await workspaceProductFeatures(f.repository, f.config, f.workspaceId)).surveyPages,
+    ).toBe(false);
+  });
   it("provides core navigation without beta rollout while honoring explicit plan restrictions", async () => {
     const f = fixture();
     for (const plan of ["free", "pro", "team"] as const) {

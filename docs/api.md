@@ -194,7 +194,7 @@ submitter opted in; user IDs and retry keys are omitted. Feedback follows a 90-d
 is included only in the submitting creator's account export and is deleted with that account or
 workspace. Keep administrator credentials out of URLs, browser storage, and issue attachments.
 
-### Ordered Survey pages: reader foundation
+### Ordered Survey pages
 
 Survey document v3 adds `pages:[{id,title,description,questionIds}]` to the existing flat `items`.
 There must be 1–20 uniquely identified pages. Their question references form an exact ordered
@@ -207,11 +207,16 @@ admission or content/receipt delivery; missing or unsupported readers get 409
 `SURVEY_CLIENT_UPDATE_REQUIRED`. Existing v1/v2 rooms remain compatible without the header.
 The normal guest token/password and admission policies continue to apply.
 
-Fresh v3 authoring, publishing, independent copying and launches return 409
-`SURVEY_PAGES_NOT_ENABLED` through this foundation's HTTP writers. An implicit v3→v2 save is
-rejected. Repository maximum-schema policy defaults to 2 and is checked after exact accepted
-receipt recovery. Blank/template and legacy source-copy generation retain their existing v2
-behavior and retry hashes. Version3 creator views are read-only until the authoring checkpoint.
+Fresh v3 saves, publishing, independent copying and launches require the current workspace's
+`surveyPages` product capability and the existing edit role. This separate capability defaults off,
+depends on `surveys` and is enabled only through the existing operator product policy for eligible
+plans. `/v1/auth/me.productFeatures.surveyPages` exposes the effective boolean. Missing grants
+return 409 `SURVEY_PAGES_NOT_ENABLED`; Library copying applies the destination workspace's grant.
+An implicit v3→v2 save is rejected. Repository maximum-schema policy defaults to 2 and is checked
+after exact accepted-receipt recovery, including when `surveyPages` is later paused. Existing parent
+Survey creation gates and authorization still apply. Blank/template and legacy source-copy
+generation retain their existing v2 behavior and retry hashes. Version3 creator views become
+read-only when page editing is unavailable; retained guest readers do not depend on this grant.
 
 Guest mutation bodies, response maps and final required-field validation are unchanged. The
 client validates the current page before Next and waits for the full-map progress acknowledgement

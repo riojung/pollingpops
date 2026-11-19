@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   ProductFeatureRulesSchema,
+  WorkspaceProductFeaturesSchema,
   productFeatureCatalog,
   productFeatureKeys,
 } from "../src/index.js";
 
 describe("operator product feature policy", () => {
+  it("declares Survey page authoring separately and defaults absent account capability to false", () => {
+    expect(productFeatureCatalog.find((feature) => feature.key === "surveyPages")).toMatchObject({
+      dependencies: ["surveys"],
+      defaultPlans: ["free", "pro", "team"],
+    });
+    expect(WorkspaceProductFeaturesSchema.shape.surveyPages.parse(undefined)).toBe(false);
+    expect(
+      ProductFeatureRulesSchema.parse({ surveyPages: { enabled: true, plans: ["free"] } }),
+    ).toEqual({ surveyPages: { enabled: true, plans: ["free"] } });
+  });
   it("preserves inherited entries and explicit plan assignments independently", () => {
     expect(ProductFeatureRulesSchema.parse({})).toEqual({});
     expect(

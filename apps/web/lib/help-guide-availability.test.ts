@@ -25,6 +25,7 @@ const enabledFeatures: WorkspaceProductFeatures = {
   questionHealth: false,
   recoveryPacks: false,
   surveys: false,
+  surveyPages: false,
   groups: true,
   discover: true,
 };

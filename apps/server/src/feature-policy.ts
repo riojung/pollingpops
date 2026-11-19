@@ -182,6 +182,7 @@ export async function workspaceProductFeatures(
     questionHealth: features.enabled("questionHealth"),
     recoveryPacks: features.enabled("recoveryPacks"),
     surveys: features.enabled("surveys"),
+    surveyPages: features.enabled("surveyPages"),
     groups: features.enabled("groups"),
     discover: features.enabled("discover"),
   };

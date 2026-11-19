@@ -181,7 +181,7 @@ function authorized(guest: Guest | undefined, tokenHash: string): Guest {
 }
 
 export interface SurveyWritePolicy {
-  /** Trusted server-side grant. HTTP authoring remains at version 2 until paged writers ship. */
+  /** Trusted server-side grant. Unspecified policies keep ordinary writers at version 2. */
   maximumSchemaVersion?: 2 | 3;
 }
 function requireSurveyWriter(content: SurveyDraft, policy: SurveyWritePolicy) {

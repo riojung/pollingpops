@@ -18,19 +18,22 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
-## Ordered Survey pages: reader foundation
+## Ordered Survey pages
 
 Apply migration `117_survey_pages_readers.sql` with the owner migration connection before
 deploying the WX-06A1 readers. It expands the four Survey document-version checks to 1/2/3;
 it adds no table, row backfill or rewrite of immutable versions/room snapshots. Keep applied
 migrations and checksums intact. Deploy compatible API, web, worker/export and lifecycle
-readers before any later page-authoring writer is enabled.
+readers before enabling page-authoring writers.
 
-Ordinary blank/template writers remain v2. This checkpoint blocks fresh v3 authoring,
-publication, copying and launches through HTTP. Repository writer policy defaults to schema2;
-page authoring and its effective grant are a separate checkpoint. Existing v3 records render
-read-only in the creator editor without autosave or downgrade. Archive, organization, retained
-readers, accepted-receipt recovery and erasure keep their existing meaning.
+Ordinary blank/template writers remain v2. WX-06A2 permits explicit page conversion, v3 saves,
+publication, copying and launches only with the separate `surveyPages` capability plus existing
+edit authority. It defaults off, has no legacy environment mapping and depends on `surveys`.
+After the compatible fleet (including control) is deployed, an operator can explicitly enable
+the key for selected plans through the existing product policy. No new migration or paid plan is
+introduced. Repository writer policy still defaults to schema2. Without the grant, retained v3
+records render read-only without new autosave writes or downgrade. Archive, organization,
+retained readers, accepted-receipt recovery and erasure keep their existing meaning.
 
 Verify legacy request/receipt hashes and v1/v2 frozen runs remain unchanged. Use isolated v3
 fixtures to verify exact page partition validation, snapshot immutability, required-field Next
@@ -40,7 +43,10 @@ server-derived resume and final-only aggregate privacy. The page-aware client de
 Old readers receive `SURVEY_CLIENT_UPDATE_REQUIRED` before v3 admission/content delivery.
 Verify authorized Library readers also preserve the pinned page headings/instructions through
 the additive `surveyPages` projection, exclude later draft edits and private question metadata,
-and retain legacy flat payloads and the v3 fresh-copy restriction.
+and retain legacy flat payloads. Verify Library copying uses the destination workspace's effective
+page grant, public discovery omits the internal schema discriminator, and disabling page writing
+blocks fresh operations while preserving exact accepted retries. Parent Survey creation gates
+and current membership/role checks remain in force.
 
 Retain v3-compatible readers once v3 records exist. Turning off authoring does not make an
 older flat-only binary compatible. Never strip page metadata or the reader declaration,

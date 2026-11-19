@@ -69,6 +69,7 @@ export function SurveyPagedReader({
         ?.focus();
   }, [validationRevision]);
   if (!page) return null;
+  const pageTitle = page.title.trim();
   const fill = (text: string, values: Record<string, string>) =>
     text.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match);
   const numbered = {
@@ -85,8 +86,8 @@ export function SurveyPagedReader({
       <p role="status" aria-live="polite" data-survey-page-progress>
         {fill(copy.pageProgress, numbered)}
       </p>
-      <h2 ref={heading} tabIndex={-1} data-survey-page-heading lang={page.title ? "" : locale}>
-        {page.title || fill(copy.untitledPage, numbered)}
+      <h2 ref={heading} tabIndex={-1} data-survey-page-heading lang={pageTitle ? "" : locale}>
+        {pageTitle || fill(copy.untitledPage, numbered)}
       </h2>
       {page.description ? (
         <p className={styles.description} lang="">

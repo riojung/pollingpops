@@ -5,6 +5,7 @@ import type { LibraryShareSummary } from "@openround/contracts";
 import { SURVEY_READER_HEADER, type SurveyDraft } from "../../packages/contracts/src/surveys";
 import type { SurveyAttempt } from "../../apps/web/lib/survey-client";
 import { surveyPagesCopy } from "../../apps/web/lib/i18n/survey-pages-copy";
+import { surveyPageAuthoringCopy } from "../../apps/web/lib/i18n/survey-page-authoring-copy";
 import { librarySharingMessages } from "../../apps/web/lib/i18n/library-sharing-messages";
 import { api, fits, organization, teammate } from "./support";
 
@@ -211,9 +212,11 @@ test("WX06A1 creators inspect retained Survey pages without writes and old guest
   await page.goto(`/surveys/${fixture.surveyId}`);
   const reader = page.locator("[data-survey-pages-readonly]");
   await expect(
-    reader.getByRole("heading", { name: surveyPagesCopy().readOnlyTitle, exact: true }),
+    reader.getByRole("heading", { name: surveyPageAuthoringCopy().pausedTitle, exact: true }),
   ).toBeVisible();
-  await expect(reader.getByText(surveyPagesCopy().readOnlyNotice, { exact: true })).toBeVisible();
+  await expect(
+    reader.getByText(surveyPageAuthoringCopy().pausedNotice, { exact: true }),
+  ).toBeVisible();
   await atPage(page, fixture, 0);
   await expect(reader.getByRole("radio").first()).toBeDisabled();
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveCount(0);

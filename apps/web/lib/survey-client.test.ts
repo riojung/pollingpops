@@ -9,6 +9,7 @@ import {
   initialSurveyParticipantSnapshot,
   type SurveyAttempt,
 } from "./survey-client";
+import { surveyBranchingFixture } from "../../../packages/contracts/test/support/survey-branching-fixture";
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const content = () =>
@@ -132,6 +133,42 @@ const posts = (view: ReturnType<typeof harness>) =>
   view.request.mock.calls.filter(([, init]) => init?.method === "POST");
 
 describe("Survey participant room session", () => {
+  it.each(["resume", "admission"])(
+    "rejects a valid proposed v4 %s response without flattening pages or enabling answers",
+    async (mode) => {
+      const future = surveyBranchingFixture();
+      expect(future.pages.some((page) => page.visibleWhen)).toBe(true);
+      const initial = { ...attempt(), content: future as unknown as SurveyAttempt["content"] };
+      const view = harness(initial, mode === "resume");
+      if (mode === "resume") await view.session.load();
+      else await view.session.join();
+      expect(view.state()).toMatchObject({
+        attempt: null,
+        responses: {},
+        pageIndex: 0,
+        pending: false,
+        error: { code: "SURVEY_CLIENT_UPDATE_REQUIRED" },
+      });
+      view.session.change(id(1), answer());
+      await view.session.next();
+      await view.session.save(false);
+      await view.session.save(true);
+      expect(view.state().attempt).toBeNull();
+      expect(view.state().responses).toEqual({});
+      expect(
+        view.request.mock.calls.some(
+          ([path]) => path.endsWith("/draft") || path.endsWith("/submit"),
+        ),
+      ).toBe(false);
+      for (const [, init] of view.request.mock.calls)
+        expect(init).toMatchObject({
+          credentials: "omit",
+          headers: { [SURVEY_READER_HEADER]: "3" },
+        });
+      expect(JSON.stringify([...view.entries])).not.toContain(future.title);
+      expect(JSON.stringify([...view.entries])).not.toContain("visibleWhen");
+    },
+  );
   it("advertises reader3 without cookies on public admission, authenticated resume and writes", async () => {
     const view = harness(attempt(), false);
     await view.session.load();
@@ -252,7 +289,7 @@ describe("Survey participant room session", () => {
     expect(view.state().attempt).toBeNull();
     expect([...view.entries.values()]).not.toContain("exact password");
   });
-  it.each(["wrong-room", "wrong-revision", "invalid-content"])(
+  it.each(["wrong-room", "wrong-revision", "invalid-content", "future-branching"])(
     "retains pending intent after an unverifiable %s acknowledgement",
     async (kind) => {
       const view = harness();
@@ -266,6 +303,8 @@ describe("Survey participant room session", () => {
           ...content(),
           schemaVersion: 99,
         } as unknown as SurveyAttempt["content"];
+      if (kind === "future-branching")
+        bad.attempt.content = surveyBranchingFixture() as unknown as SurveyAttempt["content"];
       view.request.mockResolvedValueOnce(bad);
       await view.session.next();
       expect(view.state()).toMatchObject({ pageIndex: 0, pending: true });

@@ -54,6 +54,13 @@ rewrite published snapshots, downgrade drafts or change accepted mutation bodies
 rollback. Keep the schema expansion and repair forward. Conditional paths, hidden-response
 handling and page-visit analytics are not introduced. See [Survey pages](../survey-pages.md).
 
+WX-06B1 adds an isolated proposed v4 contract and pure visibility/cleanup helpers only. It does
+not expand stored-version constraints, current HTTP schemas, reader negotiation or writer grants.
+No migration or feature-policy change is needed for this checkpoint; `surveyPages` remains a v3
+authoring grant. The proposed module must not be imported by runtime publication/response/report
+paths before the separate reader and reporting/privacy checkpoints are qualified. See
+[conditional-page compatibility and release gates](../survey-branching.md).
+
 ## Round starter-copy retry intents
 
 WX-05C adds durable retries to the existing Round starter-copy API. Apply migration

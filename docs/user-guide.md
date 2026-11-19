@@ -39,6 +39,23 @@ options, answer explanations and facilitator guidance can be inspected without c
 **Use this starter** is available beside the preview for eligible editors and makes an independent
 draft with fresh IDs. Compact template galleries retain their preview dialog, Escape and focus
 return behavior. Viewers can browse without creating drafts.
+
+If a Round template copy loses its confirmation, choose **Retry same copy**. The chooser retains
+that request in this tab, so reloading and selecting the same template and language can reopen
+the original copy, including edits already made to it. Browsing or previewing alone never creates
+a copy. Recovery stores request metadata without template questions or answers; if tab storage is
+blocked or unreadable, fix that and choose **Retry copy recovery** before creating anything.
+Keep the tab until the copy is confirmed. Recovery belongs to the account and workspace that
+started it; changing the interface language does not translate an existing copy.
+
+A new copy request can start for 24 hours; an already-created copy remains recoverable afterward.
+If the request expired before creation or the template content changed, review the current preview
+and choose **Create another copy** explicitly. This renews the same request identity so a late
+response cannot create a duplicate. An archived or deleted original is never recreated by a retry;
+the same explicit action can start a separate new copy. A conflicting request stays saved: check
+your Library for the existing copy. Once a copy is confirmed, returning to Templates can create
+another independent draft normally. Survey and Presentation templates keep their own copy flows.
+
 The 21-template Presentation catalogue contains 12 native scenario decks and the nine retained facilitated
 templates. Each native scenario has eight editable slides and works without an audience activity:
 startup pitch, client proposal, project update, quarterly strategy, portfolio case study, event talk,

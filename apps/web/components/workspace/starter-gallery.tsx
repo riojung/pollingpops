@@ -9,6 +9,15 @@ import { StarterTemplatePreview, type StarterPreviewContent } from "./starter-te
 import { apiFetch, humanError, ApiClientError, AUTH_CHANGE_EVENT } from "../../lib/api";
 import { SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT } from "../../lib/idle-session";
 import { starterPreviewCopy } from "../../lib/i18n/starter-preview-copy";
+import { starterCopyCopy } from "../../lib/i18n/starter-copy-copy";
+import {
+  createStarterCopyIntentStore,
+  starterCopyFailure,
+  starterCopyRequest,
+  StarterCopyStorageError,
+  type StarterCopyFailure,
+  type StarterCopyIntent,
+} from "../../lib/starter-copy-intent";
 import previewStyles from "./starter-template-preview.module.css";
 import { useLocale } from "../locale-provider";
 import { formatNumber, pluralCategory } from "../../lib/i18n/format";
@@ -54,6 +63,7 @@ type PreviewState = {
   scope: string;
   content?: StarterPreviewContent;
   guide?: StarterGuide;
+  contentVersion?: string;
   loading: boolean;
   error: string;
   reveal?: boolean;
@@ -65,6 +75,25 @@ type StarterFilters = {
   category: RoundCategory | "all";
   type: "all" | "quiz" | "poll" | "custom";
 };
+type RoundCopyRecovery = {
+  actor: string;
+  ready: boolean;
+  storageError: boolean;
+  intents: StarterCopyIntent[];
+  failures: Record<string, StarterCopyFailure>;
+  known: Record<
+    string,
+    { intent: StarterCopyIntent; quizId: string; feedback: "cleanup" | "opening" }
+  >;
+};
+const emptyRoundRecovery = (actor: string): RoundCopyRecovery => ({
+  actor,
+  ready: false,
+  storageError: false,
+  intents: [],
+  failures: {},
+  known: {},
+});
 
 export function StarterGallery({
   compact = false,
@@ -81,6 +110,7 @@ export function StarterGallery({
   const { locale, t } = useLocale();
   const guideCopy = templateGuideCopy(locale);
   const copy = starterPreviewCopy(locale);
+  const copyIntent = starterCopyCopy(locale);
   const { creator, canEdit, productFeatures, loading: workspaceLoading } = useWorkspace();
   const actor = JSON.stringify([creator?.userId, creator?.workspaceId]);
   const scope = JSON.stringify([actor, locale, survey]);
@@ -96,6 +126,7 @@ export function StarterGallery({
   const [busyId, setBusyId] = useState("");
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [lastRoundAction, setLastRoundAction] = useState("");
   const defaults: StarterFilters = { collection, search: "", category: "all", type: roundType };
   const [filters, setFilters] = useState<StarterFilters>(defaults);
   const currentFilters = filters.collection === collection ? filters : defaults;
@@ -108,6 +139,17 @@ export function StarterGallery({
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [contentLocale, setContentLocale] = useState(locale);
   const [catalogScope, setCatalogScope] = useState("");
+  const [contentVersion, setContentVersion] = useState<{ scope: string; value: string } | null>(
+    null,
+  );
+  const [roundRecovery, setRoundRecovery] = useState(() => emptyRoundRecovery(actor));
+  const recovery = roundRecovery.actor === actor ? roundRecovery : emptyRoundRecovery(actor);
+  const recoveryRef = useRef(recovery);
+  recoveryRef.current = recovery;
+  const roundStore = useRef<{
+    actor: string;
+    value: ReturnType<typeof createStarterCopyIntentStore>;
+  } | null>(null);
   const [invalidActor, setInvalidActor] = useState<string | null>(null);
   const surveyRequests = useRef(new Map<string, string>());
   const creating = useRef(false);
@@ -149,14 +191,12 @@ export function StarterGallery({
     setLoadError("");
     setLoading(true);
     try {
-      const items = survey
-        ? (
-            await apiFetch<{ templates: StarterSummary[] }>(
-              `/v1/surveys/templates?locale=${locale}`,
-            )
-          ).templates
-        : (await apiFetch<{ starters: StarterSummary[] }>(`/v1/starters?locale=${locale}`))
-            .starters;
+      const result = survey
+        ? await apiFetch<{ templates: StarterSummary[] }>(`/v1/surveys/templates?locale=${locale}`)
+        : await apiFetch<{ starters: StarterSummary[]; contentVersion: string }>(
+            `/v1/starters?locale=${locale}`,
+          );
+      const items = "templates" in result ? result.templates : result.starters;
       if (
         request !== listRequest.current ||
         latest.current.scope !== scope ||
@@ -164,6 +204,7 @@ export function StarterGallery({
       )
         return;
       setStarters(items);
+      if ("contentVersion" in result) setContentVersion({ scope, value: result.contentVersion });
       setCatalogScope(scope);
       setContentLocale(locale);
     } catch (caught) {
@@ -197,6 +238,52 @@ export function StarterGallery({
     };
   }, [refresh]);
 
+  function publishRecovery(next: RoundCopyRecovery) {
+    recoveryRef.current = next;
+    setRoundRecovery(next);
+  }
+  function restoreRoundCopies() {
+    if (
+      survey ||
+      !mounted.current ||
+      latest.current.actor !== actor ||
+      latest.current.invalid ||
+      roundStore.current?.actor !== actor
+    )
+      return;
+    try {
+      const intents = roundStore.current.value.read();
+      publishRecovery({ ...recoveryRef.current, actor, ready: true, storageError: false, intents });
+    } catch {
+      publishRecovery({ ...recoveryRef.current, actor, ready: false, storageError: true });
+    }
+  }
+  useEffect(() => {
+    if (survey || !creator?.userId || !creator.workspaceId) return;
+    const value = createStarterCopyIntentStore({
+      actor: { actorId: creator.userId, workspaceId: creator.workspaceId },
+      storage: {
+        getItem: (key) => window.sessionStorage.getItem(key),
+        setItem: (key, value) => window.sessionStorage.setItem(key, value),
+        removeItem: (key) => window.sessionStorage.removeItem(key),
+      },
+    });
+    roundStore.current = { actor, value };
+    try {
+      const intents = value.read();
+      const next = { ...emptyRoundRecovery(actor), ready: true, intents };
+      recoveryRef.current = next;
+      setRoundRecovery(next);
+    } catch {
+      const next = { ...emptyRoundRecovery(actor), storageError: true };
+      recoveryRef.current = next;
+      setRoundRecovery(next);
+    }
+    return () => {
+      if (roundStore.current?.value === value) roundStore.current = null;
+    };
+  }, [actor, creator?.userId, creator?.workspaceId, survey]);
+
   useEffect(() => {
     // Retry intents belong to the actor and workspace that submitted them.
     surveyRequests.current.clear();
@@ -212,6 +299,8 @@ export function StarterGallery({
       selection.current++;
       creating.current = false;
       surveyRequests.current.clear();
+      roundStore.current = null;
+      publishRecovery(emptyRoundRecovery(actor));
       setInvalidActor(actor);
       setPreview(null);
       setBusyId("");
@@ -221,6 +310,25 @@ export function StarterGallery({
     events.forEach((name) => window.addEventListener(name, invalidate));
     return () => events.forEach((name) => window.removeEventListener(name, invalidate));
   }, [actor]);
+
+  const copyKey = (starterId: string) => JSON.stringify([starterId, locale]);
+  function pendingRound(starterId: string) {
+    return !survey
+      ? recovery.intents.find(
+          (intent) =>
+            intent.starterId === starterId && starterCopyRequest(intent).locale === locale,
+        )
+      : undefined;
+  }
+  function roundFailure(starterId: string) {
+    return recovery.failures[copyKey(starterId)];
+  }
+  function roundKnown(starterId: string) {
+    return recovery.known[copyKey(starterId)];
+  }
+  function hasRoundRecovery(starterId: string) {
+    return Boolean(pendingRound(starterId) || roundKnown(starterId));
+  }
 
   function eligible(starter: StarterSummary) {
     const inspected =
@@ -262,6 +370,7 @@ export function StarterGallery({
       try {
         let content: StarterPreviewContent;
         let guide: StarterGuide | undefined;
+        let previewVersion: string | undefined;
         if (survey) {
           const result = await apiFetch<{ draft: SurveyDraft; guide?: StarterGuide }>(
             `/v1/surveys/templates/${starter.id}?locale=${locale}`,
@@ -269,11 +378,14 @@ export function StarterGallery({
           content = { kind: "survey", draft: result.draft };
           guide = result.guide;
         } else {
-          const result = await apiFetch<{ draft: QuizDraft; guide?: StarterGuide }>(
-            `/v1/starters/${starter.id}?locale=${locale}`,
-          );
+          const result = await apiFetch<{
+            draft: QuizDraft;
+            guide?: StarterGuide;
+            contentVersion: string;
+          }>(`/v1/starters/${starter.id}?locale=${locale}`);
           content = { kind: "round", draft: result.draft };
           guide = result.guide;
+          previewVersion = result.contentVersion;
         }
         if (
           request !== previewRequest.current ||
@@ -286,6 +398,7 @@ export function StarterGallery({
           scope,
           content,
           guide: guide ?? starter.guide,
+          contentVersion: previewVersion,
           loading: false,
           error: "",
           reveal,
@@ -309,15 +422,34 @@ export function StarterGallery({
     setPreview(null);
   }
 
-  async function useStarter(starter: StarterSummary, fromPreview = false) {
+  async function useStarter(starter: StarterSummary, fromPreview = false, renew = false) {
+    const requestVersion = fromPreview
+      ? currentPreview?.contentVersion
+      : contentVersion?.scope === scope
+        ? contentVersion.value
+        : undefined;
+    const expectedIntent = !survey
+      ? recoveryRef.current.intents.find(
+          (intent) =>
+            intent.starterId === starter.id && starterCopyRequest(intent).locale === locale,
+        )
+      : undefined;
+    const recovering =
+      !survey &&
+      Boolean(expectedIntent || recoveryRef.current.known[copyKey(starter.id)]) &&
+      !renew;
+    const failure = recoveryRef.current.failures[copyKey(starter.id)];
     if (
       creating.current ||
       !mounted.current ||
       access.current.version !== accessVersion ||
       renderedSelection !== selection.current ||
       !allowed ||
-      !eligible(starter) ||
-      !catalogCurrent ||
+      (!recovering && (!eligible(starter) || !catalogCurrent)) ||
+      (!survey &&
+        (!recoveryRef.current.ready ||
+          (!recovering && !requestVersion) ||
+          (!renew && (failure === "renew" || failure === "replace" || failure === "conflict")))) ||
       latest.current.authority !== authority ||
       !latest.current.allowed ||
       latest.current.invalid
@@ -325,6 +457,7 @@ export function StarterGallery({
       return;
     if (
       fromPreview &&
+      !recovering &&
       (!currentPreview?.content ||
         currentPreview.loading ||
         currentPreview.error ||
@@ -343,8 +476,10 @@ export function StarterGallery({
       latest.current.allowed &&
       !latest.current.invalid;
     setBusyId(starter.id);
+    if (!survey) setLastRoundAction(starter.id);
     setActionError("");
     let navigated = false;
+    let roundIntent: StarterCopyIntent | undefined;
     if (!survey) recordCreationEvent("creation_started", "starter", "round");
     try {
       if (survey) {
@@ -364,19 +499,113 @@ export function StarterGallery({
         }
         return;
       }
-      const response = await apiFetch<{ quiz: { id: string } }>(`/v1/starters/${starter.id}/use`, {
-        method: "POST",
-        body: JSON.stringify({ locale }),
+      const store = roundStore.current?.actor === actor ? roundStore.current.value : null;
+      if (!store) throw new StarterCopyStorageError();
+      const identity = copyKey(starter.id);
+      const known = recoveryRef.current.known[identity];
+      if (known) {
+        if (known.feedback === "cleanup") store.retire(known.intent);
+        publishRecovery({
+          ...recoveryRef.current,
+          ready: true,
+          storageError: false,
+          intents: store.read(),
+          known: { ...recoveryRef.current.known, [identity]: { ...known, feedback: "opening" } },
+        });
+        router.push(`/quiz/${encodeURIComponent(known.quizId)}`);
+        navigated = true;
+        return;
+      }
+      if (renew) {
+        if (!expectedIntent || (failure !== "renew" && failure !== "replace") || !requestVersion)
+          return;
+        roundIntent = store.renew(expectedIntent, requestVersion, failure);
+      } else if (expectedIntent) {
+        const saved = store.find(starter.id, locale);
+        if (
+          !saved ||
+          saved.body !== expectedIntent.body ||
+          JSON.stringify(saved.previousBodies) !== JSON.stringify(expectedIntent.previousBodies)
+        )
+          throw new StarterCopyStorageError();
+        roundIntent = saved;
+      } else roundIntent = store.prepare(starter.id, locale, requestVersion ?? "");
+      publishRecovery({
+        ...recoveryRef.current,
+        intents: store.read(),
+        failures: { ...recoveryRef.current.failures, [identity]: "unknown" },
       });
+      const response = await apiFetch<{ quiz: { id: string }; replayed?: boolean }>(
+        `/v1/starters/${encodeURIComponent(starter.id)}/use`,
+        {
+          method: "POST",
+          body: roundIntent.body,
+        },
+      );
       if (!current()) return;
+      publishRecovery({
+        ...recoveryRef.current,
+        known: {
+          ...recoveryRef.current.known,
+          [identity]: { intent: roundIntent, quizId: response.quiz.id, feedback: "cleanup" },
+        },
+      });
+      store.retire(roundIntent);
+      publishRecovery({
+        ...recoveryRef.current,
+        intents: store.read(),
+        known: {
+          ...recoveryRef.current.known,
+          [identity]: { intent: roundIntent, quizId: response.quiz.id, feedback: "opening" },
+        },
+      });
       recordCreationEvent("creation_completed", "starter", "round");
       if (starter.questionCount > 0) recordAuthoringEvent("first_block_created", "round");
-      navigated = true;
       router.push(`/quiz/${encodeURIComponent(response.quiz.id)}`);
+      navigated = true;
     } catch (caught) {
       if (!current()) return;
-      if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
-        surveyRequests.current.delete(JSON.stringify([actor, locale, starter.id]));
+      if (survey) {
+        if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
+          surveyRequests.current.delete(JSON.stringify([actor, locale, starter.id]));
+      } else if (caught instanceof StarterCopyStorageError) {
+        publishRecovery({ ...recoveryRef.current, ready: false, storageError: true });
+      } else {
+        let reason = starterCopyFailure(caught);
+        try {
+          if (
+            reason === "conflict" &&
+            roundIntent?.previousBodies.length &&
+            roundStore.current?.actor === actor
+          ) {
+            roundStore.current.value.recoverPrevious(roundIntent);
+            reason = "unknown";
+          }
+          publishRecovery({
+            ...recoveryRef.current,
+            intents:
+              roundStore.current?.actor === actor
+                ? roundStore.current.value.read()
+                : recoveryRef.current.intents,
+            failures: { ...recoveryRef.current.failures, [copyKey(starter.id)]: reason },
+          });
+          if ((caught as { code?: unknown })?.code === "STARTER_CONTENT_CHANGED") {
+            previewRequest.current++;
+            selection.current++;
+            setCatalogScope(JSON.stringify([actor, locale, survey, "refreshing"]));
+            setPreview({
+              starter,
+              scope,
+              loading: true,
+              error: "",
+              reveal: currentPreview?.reveal,
+            });
+            void refresh().then(() => loadPreview(starter));
+          }
+        } catch {
+          publishRecovery({ ...recoveryRef.current, ready: false, storageError: true });
+        }
+      }
       setActionError(humanError(caught));
     } finally {
       if (!navigated && request === actionRequest.current) {
@@ -457,6 +686,92 @@ export function StarterGallery({
     );
   }
 
+  function roundUseLabel(starterId: string) {
+    return busyId === starterId
+      ? copyIntent.creatingCopy
+      : roundKnown(starterId)
+        ? copyIntent.openCreated
+        : pendingRound(starterId)
+          ? copyIntent.retryCopy
+          : t("starter.use");
+  }
+  function roundErrorMessage(starterId: string) {
+    const known = roundKnown(starterId);
+    return known?.feedback === "cleanup"
+      ? copyIntent.cleanupError
+      : known
+        ? copyIntent.openError
+        : copyIntent.requestError;
+  }
+  function roundUseAvailable(starter: StarterSummary) {
+    const failure = roundFailure(starter.id);
+    return (
+      canEdit &&
+      (eligible(starter) || hasRoundRecovery(starter.id)) &&
+      (Boolean(roundKnown(starter.id)) || !failure || failure === "unknown")
+    );
+  }
+  function storageNotice() {
+    return !survey && !recovery.ready ? (
+      <div className={previewStyles.error} data-starter-copy-storage>
+        <p role={recovery.storageError ? "alert" : "status"}>
+          {recovery.storageError ? copyIntent.recoveryError : copyIntent.checkingRecovery}
+        </p>
+        {recovery.storageError ? (
+          <button className="button-quiet" type="button" onClick={restoreRoundCopies}>
+            {copyIntent.retryRecovery}
+          </button>
+        ) : null}
+      </div>
+    ) : null;
+  }
+  function roundNotice(starter: StarterSummary) {
+    if (survey) return null;
+    const known = roundKnown(starter.id);
+    const failure = roundFailure(starter.id);
+    if (!known && !failure && !pendingRound(starter.id)) return null;
+    return (
+      <div className={previewStyles.copyNotice} data-starter-copy-recovery={starter.id}>
+        {known ? (
+          <p role="status">
+            {known.feedback === "cleanup" ? copyIntent.cleanupError : copyIntent.openError}
+          </p>
+        ) : failure === "conflict" ? (
+          <p role="alert">
+            {copyIntent.conflict} <a href="/library">{t("workspace.nav.library")}</a>
+          </p>
+        ) : failure === "renew" || failure === "replace" ? (
+          <div role="alert">
+            <p>{copyIntent.restartNotice}</p>
+            <button
+              className="button-quiet"
+              type="button"
+              disabled={
+                !allowed ||
+                !recovery.ready ||
+                !catalogCurrent ||
+                !eligible(starter) ||
+                (currentPreview?.starter.id === starter.id &&
+                  (currentPreview.loading ||
+                    Boolean(currentPreview.error) ||
+                    !currentPreview.content ||
+                    !currentPreview.contentVersion)) ||
+                Boolean(busyId)
+              }
+              onClick={() =>
+                void useStarter(starter, currentPreview?.starter.id === starter.id, true)
+              }
+            >
+              {copyIntent.createAnother}
+            </button>
+          </div>
+        ) : pendingRound(starter.id) ? (
+          <p role="status">{copyIntent.pendingCopy}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   const previewPanel =
     currentPreview && (compact || selectionVisible) ? (
       <StarterTemplatePreview
@@ -476,15 +791,50 @@ export function StarterGallery({
         error={currentPreview.error}
         onRetry={() => void loadPreview(currentPreview.starter)}
         metadata={metadata(currentPreview.starter, currentPreview.content, currentPreview.guide)}
-        useLabel={busyId === currentPreview.starter.id ? t("starter.creating") : t("starter.use")}
+        useLabel={
+          survey
+            ? busyId === currentPreview.starter.id
+              ? t("starter.creating")
+              : t("starter.use")
+            : roundUseLabel(currentPreview.starter.id)
+        }
         onUse={
-          canEdit && eligible(currentPreview.starter)
+          (
+            survey
+              ? canEdit && eligible(currentPreview.starter)
+              : roundUseAvailable(currentPreview.starter)
+          )
             ? () => void useStarter(currentPreview.starter, true)
             : undefined
         }
-        useDisabled={Boolean(busyId) || !catalogCurrent || !allowed}
+        useDisabled={
+          Boolean(busyId) ||
+          !allowed ||
+          (survey
+            ? !catalogCurrent
+            : !recovery.ready ||
+              (!hasRoundRecovery(currentPreview.starter.id) &&
+                (!catalogCurrent || !currentPreview.contentVersion)))
+        }
+        recoveryWithoutPreview={!survey && hasRoundRecovery(currentPreview.starter.id)}
+        useNote={
+          !survey && hasRoundRecovery(currentPreview.starter.id)
+            ? roundKnown(currentPreview.starter.id)
+              ? roundErrorMessage(currentPreview.starter.id)
+              : copyIntent.pendingCopy
+            : undefined
+        }
+        actionNotice={
+          !survey ? (
+            <>
+              {storageNotice()}
+              {roundNotice(currentPreview.starter)}
+            </>
+          ) : undefined
+        }
         readOnlyLabel={!canEdit ? t("starter.readOnly") : undefined}
         actionError={actionError}
+        actionErrorMessage={!survey ? roundErrorMessage(lastRoundAction) : undefined}
       />
     ) : null;
 
@@ -572,13 +922,59 @@ export function StarterGallery({
       ) : null}
       {actionError && !previewPanel ? (
         <div className={previewStyles.error} role="alert">
-          <p>{copy.actionError}</p>
+          <p>{survey ? copy.actionError : roundErrorMessage(lastRoundAction)}</p>
           <details>
             <summary>{copy.details}</summary>
             <p lang="en-CA">{actionError}</p>
           </details>
         </div>
       ) : null}
+      {!previewPanel ? storageNotice() : null}
+      {!survey
+        ? recovery.intents
+            .filter(
+              (intent) =>
+                starterCopyRequest(intent).locale === locale &&
+                intent.starterId !== currentPreview?.starter.id &&
+                !(compact && orderedStarters.some((starter) => starter.id === intent.starterId)),
+            )
+            .map((intent) => {
+              const starter =
+                visibleStarters.find((starter) => starter.id === intent.starterId) ??
+                ({
+                  id: intent.starterId,
+                  title: intent.starterId,
+                  description: "",
+                  questionCount: 0,
+                  responseTypes: [],
+                  category: "general",
+                  segment: "all",
+                  experiencePreset: { id: "focus", version: 1 },
+                  version: 1,
+                  roundType: "custom",
+                } as StarterSummary);
+              return (
+                <div
+                  className="notice"
+                  data-starter-copy-recovery={intent.starterId}
+                  key={intent.starterId}
+                >
+                  <p lang={locale}>{starter.title}</p>
+                  {roundNotice(starter)}
+                  {roundUseAvailable(starter) ? (
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={!allowed || !recovery.ready || Boolean(busyId)}
+                      onClick={() => void useStarter(starter)}
+                    >
+                      {roundUseLabel(starter.id)}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })
+        : null}
       <div className={!compact ? previewStyles.browser : undefined}>
         {!compact && orderedStarters.length > 0 ? (
           <label className={`field ${previewStyles.mobileSelect}`}>
@@ -662,19 +1058,35 @@ export function StarterGallery({
                         ? guideCopy("Preview questionnaire")
                         : t("starter.preview")}
                   </button>
-                  {compact && canEdit && eligible(starter) ? (
+                  {compact &&
+                  (survey ? canEdit && eligible(starter) : roundUseAvailable(starter)) ? (
                     <button
                       className="button small-button"
-                      disabled={Boolean(busyId) || !catalogCurrent || !allowed}
+                      disabled={
+                        Boolean(busyId) ||
+                        !allowed ||
+                        (survey
+                          ? !catalogCurrent
+                          : !recovery.ready ||
+                            (!hasRoundRecovery(starter.id) &&
+                              (!catalogCurrent ||
+                                contentVersion?.scope !== scope ||
+                                !contentVersion.value)))
+                      }
                       onClick={() => void useStarter(starter)}
                       type="button"
                     >
-                      {busyId === starter.id ? t("starter.creating") : t("starter.use")}
+                      {survey
+                        ? busyId === starter.id
+                          ? t("starter.creating")
+                          : t("starter.use")
+                        : roundUseLabel(starter.id)}
                     </button>
                   ) : compact && !canEdit ? (
                     <p className={galleryStyles.readOnlyNote}>{t("starter.readOnly")}</p>
                   ) : null}
                 </div>
+                {compact && !selected ? roundNotice(starter) : null}
               </article>
             );
           })}

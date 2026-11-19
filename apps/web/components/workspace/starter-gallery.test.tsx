@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuizDraft, StarterSummary, SupportedLocale } from "@openround/contracts";
 import { StarterGallery } from "./starter-gallery";
 import { StarterTemplatePreview } from "./starter-template-preview";
+import { starterCopyCopy } from "../../lib/i18n/starter-copy-copy";
+import { starterCopyStorageKey } from "../../lib/starter-copy-intent";
 
 interface Hooks {
   cursor: number;
@@ -17,9 +19,10 @@ const mocked = vi.hoisted(() => ({
   push: vi.fn(),
   locale: "ko-KR" as SupportedLocale,
   canEdit: true,
-  userId: "creator-one",
-  workspaceId: "workspace-one",
+  userId: "00000000-0000-4000-8000-000000000001",
+  workspaceId: "00000000-0000-4000-8000-000000000002",
   surveys: true,
+  rankingPolls: true,
 }));
 const equalDeps = (first: readonly unknown[] | undefined, second: readonly unknown[] | undefined) =>
   Boolean(
@@ -83,7 +86,12 @@ vi.mock("react", async (original) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocked.push }) }));
 vi.mock("../../lib/api", () => ({
-  apiFetch: mocked.fetch,
+  apiFetch: (url: string, options?: RequestInit) => {
+    const result = mocked.fetch(url, ...(options ? [options] : []));
+    return url.startsWith("/v1/starters") && !options?.method
+      ? Promise.resolve(result).then((value) => ({ contentVersion: "test-v1", ...value }))
+      : result;
+  },
   humanError: (error: Error) => error.message,
   ApiClientError: class extends Error {},
   AUTH_CHANGE_EVENT: "pollingpops:auth-change",
@@ -104,7 +112,7 @@ vi.mock("./workspace-provider", () => ({
       role: mocked.canEdit ? "owner" : "viewer",
     },
     canEdit: mocked.canEdit,
-    productFeatures: { surveys: mocked.surveys },
+    productFeatures: { surveys: mocked.surveys, rankingPolls: mocked.rankingPolls },
     loading: false,
   }),
 }));
@@ -121,6 +129,12 @@ function elements(node: ReactNode): Array<ReactElement<Record<string, unknown>>>
 function harness(survey = false, compact = true, collection: "team-meetings" | null = null) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
+  const controls = () => [
+    ...elements(tree),
+    ...elements(tree)
+      .filter((element) => element.type === StarterTemplatePreview)
+      .flatMap((element) => elements(element.props.actionNotice as ReactNode)),
+  ];
   return {
     render() {
       hooks.cursor = 0;
@@ -152,24 +166,36 @@ function harness(survey = false, compact = true, collection: "team-meetings" | n
         target: { value },
       });
     },
+    selectStarter(id: string) {
+      const found = elements(tree).find(
+        (element) =>
+          element.type === "select" &&
+          elements(element.props.children as ReactNode).some(
+            (option) => option.type === "option" && option.props.value === id,
+          ),
+      );
+      (found?.props.onChange as (event: unknown) => void)({ target: { value: id } });
+    },
     unmount() {
       for (const slot of hooks.slots) (slot as { cleanup?: () => void } | undefined)?.cleanup?.();
     },
     button(label: string) {
-      const found = elements(tree).find(
+      const found = controls().find(
         (element) => element.type === "button" && element.props.children === label,
       );
       if (!found) throw new Error(`Missing button ${label}`);
       const handler = found.props.onClick as (event: {
         currentTarget: { focus: () => void };
       }) => Promise<void>;
-      return () => handler({ currentTarget: { focus: () => undefined } });
+      return async () => {
+        await handler({ currentTarget: { focus: () => undefined } });
+        await settle();
+      };
     },
     disabled(label: string) {
       return (
-        elements(tree).find(
-          (element) => element.type === "button" && element.props.children === label,
-        )?.props.disabled === true
+        controls().find((element) => element.type === "button" && element.props.children === label)
+          ?.props.disabled === true
       );
     },
   };
@@ -235,11 +261,25 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocked.locale = "ko-KR";
   mocked.canEdit = true;
-  mocked.userId = "creator-one";
-  mocked.workspaceId = "workspace-one";
+  mocked.userId = "00000000-0000-4000-8000-000000000001";
+  mocked.workspaceId = "00000000-0000-4000-8000-000000000002";
   mocked.surveys = true;
+  mocked.rankingPolls = true;
   mocked.hooks = null;
-  vi.stubGlobal("window", new EventTarget());
+  const values = new Map<string, string>();
+  const target = new EventTarget();
+  Object.assign(target, {
+    sessionStorage: {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        values.set(key, value);
+      }),
+      removeItem: vi.fn((key: string) => {
+        values.delete(key);
+      }),
+    },
+  });
+  vi.stubGlobal("window", target);
 });
 
 describe("creation-locale starter gallery", () => {
@@ -403,7 +443,14 @@ describe("creation-locale starter gallery", () => {
     expect(mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
     expect(mocked.fetch).toHaveBeenLastCalledWith("/v1/starters/training-feedback/use", {
       method: "POST",
-      body: JSON.stringify({ locale: "ko-KR" }),
+      body: expect.any(String),
+    });
+    expect(JSON.parse(mocked.fetch.mock.calls.at(-1)![1].body)).toMatchObject({
+      locale: "ko-KR",
+      contentVersion: "test-v1",
+      creationContext: { actorId: mocked.userId, workspaceId: mocked.workspaceId },
+      idempotencyKey: expect.any(String),
+      expiresAt: expect.any(String),
     });
     pending.resolve({ quiz: { id: "independent-copy" } });
     await settle();
@@ -841,8 +888,9 @@ describe("creation-locale starter gallery", () => {
     await view.button("starter.use")();
     expect(mocked.fetch).toHaveBeenLastCalledWith("/v1/starters/training-feedback/use", {
       method: "POST",
-      body: JSON.stringify({ locale: "fr-FR" }),
+      body: expect.any(String),
     });
+    expect(JSON.parse(mocked.fetch.mock.calls.at(-1)![1].body).locale).toBe("fr-FR");
     expect(mocked.push).toHaveBeenCalledWith("/quiz/new-round");
   });
 
@@ -912,5 +960,428 @@ describe("creation-locale starter gallery", () => {
       initial,
     );
     expect(mocked.push).toHaveBeenCalledWith("/surveys/accepted-survey");
+  });
+
+  describe("durable Round copy recovery", () => {
+    const copy = starterCopyCopy("en-CA");
+    const posts = () => mocked.fetch.mock.calls.filter((call) => call[1]?.method === "POST");
+    const storageKey = () =>
+      starterCopyStorageKey({ actorId: mocked.userId, workspaceId: mocked.workspaceId });
+    const rejected = (status: number, code: string) =>
+      Object.assign(new Error(code), { status, code });
+    beforeEach(() => {
+      mocked.locale = "en-CA";
+    });
+    async function pendingCopy(
+      failure: Error = new TypeError("Acknowledgement lost"),
+      ranking = false,
+    ) {
+      let attempts = 0;
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") {
+          if (++attempts === 1) throw failure;
+          return { quiz: { id: "original-copy" }, replayed: true };
+        }
+        return url.startsWith("/v1/starters?")
+          ? {
+              starters: [
+                { ...summary("en-CA"), ...(ranking ? { responseTypes: ["ranking"] } : {}) },
+              ],
+            }
+          : { draft: draft("en-CA") };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      view.preview().onUse!();
+      await settle();
+      view.render();
+      return { view, body: posts()[0]![1].body };
+    }
+    it("replays the exact saved body across reload and stores metadata without authored questions or answers", async () => {
+      const first = await pendingCopy();
+      const raw = window.sessionStorage.getItem(storageKey())!;
+      expect(JSON.parse(raw).intents[0]).toEqual({
+        starterId: "training-feedback",
+        body: first.body,
+        previousBodies: [],
+      });
+      expect(raw).not.toMatch(/Author text|Other text|questions|choices|title|description/);
+      first.view.unmount();
+      const reloaded = harness(false, false);
+      await ready(reloaded);
+      expect(reloaded.preview().useLabel).toBe(copy.retryCopy);
+      expect(reloaded.markup()).not.toContain("No draft has been created");
+      expect(posts()).toHaveLength(1);
+      reloaded.preview().onUse!();
+      await settle();
+      expect(posts()[1]![1].body).toBe(first.body);
+      expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/quiz/original-copy");
+      expect(window.sessionStorage.getItem(storageKey())).toBeNull();
+    });
+    it("recovers despite a feature rollback and failed current preview without allowing a fresh copy", async () => {
+      const first = await pendingCopy(undefined, true);
+      first.view.unmount();
+      mocked.rankingPolls = false;
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") return { quiz: { id: "original-copy" }, replayed: true };
+        if (url.startsWith("/v1/starters?"))
+          return { starters: [{ ...summary("en-CA"), responseTypes: ["ranking"] }] };
+        throw new Error("Current feature unavailable");
+      });
+      const recovered = harness(false, false);
+      await ready(recovered);
+      expect(recovered.preview().error).toContain("Current feature unavailable");
+      expect(recovered.preview().recoveryWithoutPreview).toBe(true);
+      expect(recovered.preview().useDisabled).toBe(false);
+      expect(recovered.preview().useLabel).toBe(copy.retryCopy);
+      expect(recovered.markup()).not.toContain("No draft has been created");
+      recovered.preview().onUse!();
+      await settle();
+      expect(posts()[1]![1].body).toBe(first.body);
+      recovered.unmount();
+      const fresh = harness(false, false);
+      await ready(fresh);
+      expect(fresh.preview().onUse).toBeUndefined();
+      expect(posts()).toHaveLength(2);
+    });
+    it.each(["missing", "replaced"])(
+      "fails closed if a pending receipt is %s between rendering and retry",
+      async (change) => {
+        const { view } = await pendingCopy();
+        const retry = view.preview().onUse!;
+        if (change === "missing") window.sessionStorage.removeItem(storageKey());
+        else {
+          const value = JSON.parse(window.sessionStorage.getItem(storageKey())!);
+          const body = JSON.parse(value.intents[0].body);
+          body.idempotencyKey = "00000000-0000-4000-8000-000000000099";
+          value.intents[0].body = JSON.stringify(body);
+          window.sessionStorage.setItem(storageKey(), JSON.stringify(value));
+        }
+        retry();
+        await settle();
+        view.render();
+        expect(posts()).toHaveLength(1);
+        expect(view.markup()).toContain(copy.recoveryError);
+        expect(view.preview().useDisabled).toBe(true);
+      },
+    );
+    it.each(["read", "write", "corrupt"])(
+      "blocks writes when recovery storage has a %s failure",
+      async (kind) => {
+        mocked.fetch.mockImplementation(async (url: string) =>
+          url.startsWith("/v1/starters?")
+            ? { starters: [summary("en-CA")] }
+            : { draft: draft("en-CA") },
+        );
+        if (kind === "corrupt") window.sessionStorage.setItem(storageKey(), "broken");
+        if (kind === "read")
+          vi.mocked(window.sessionStorage.getItem).mockImplementationOnce(() => {
+            throw new Error("Denied");
+          });
+        const view = harness(false, false);
+        await ready(view);
+        if (kind === "write")
+          vi.mocked(window.sessionStorage.setItem).mockImplementationOnce(() => {
+            throw new Error("Denied");
+          });
+        view.preview().onUse!();
+        await settle();
+        view.render();
+        expect(posts()).toHaveLength(0);
+        expect(view.markup()).toContain(copy.recoveryError);
+        expect(view.preview().useDisabled).toBe(true);
+      },
+    );
+    it("retains known success through failed receipt cleanup and opens it without another POST", async () => {
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) =>
+        options?.method === "POST"
+          ? { quiz: { id: "created-copy" } }
+          : url.startsWith("/v1/starters?")
+            ? { starters: [summary("en-CA")] }
+            : { draft: draft("en-CA") },
+      );
+      const view = harness(false, false);
+      await ready(view);
+      vi.mocked(window.sessionStorage.removeItem).mockImplementationOnce(() => {
+        throw new Error("Denied");
+      });
+      view.preview().onUse!();
+      await settle();
+      view.render();
+      expect(mocked.push).not.toHaveBeenCalled();
+      expect(posts()).toHaveLength(1);
+      expect(view.markup()).toContain(copy.cleanupError);
+      expect(view.markup()).not.toContain(copy.pendingCopy);
+      expect(view.markup()).not.toContain("Draft creation wasn’t confirmed");
+      expect(view.preview().useLabel).toBe(copy.openCreated);
+      await view.button(copy.retryRecovery)();
+      view.render();
+      view.preview().onUse!();
+      await settle();
+      expect(posts()).toHaveLength(1);
+      expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/quiz/created-copy");
+    });
+    it("retries opening a known created copy after navigation failure without copying again", async () => {
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) =>
+        options?.method === "POST"
+          ? { quiz: { id: "created-copy" } }
+          : url.startsWith("/v1/starters?")
+            ? { starters: [summary("en-CA")] }
+            : { draft: draft("en-CA") },
+      );
+      mocked.push.mockImplementationOnce(() => {
+        throw new Error("Navigation failed");
+      });
+      const view = harness(false, false);
+      await ready(view);
+      view.preview().onUse!();
+      await settle();
+      view.render();
+      expect(view.preview().useLabel).toBe(copy.openCreated);
+      expect(view.markup()).toContain(copy.openError);
+      expect(view.markup()).not.toContain(copy.pendingCopy);
+      expect(view.markup()).not.toContain("Draft creation wasn’t confirmed");
+      view.preview().onUse!();
+      await settle();
+      expect(posts()).toHaveLength(1);
+      expect(mocked.push).toHaveBeenCalledTimes(2);
+    });
+    it("keeps known-success error wording bound to the submitted copy after another preview is selected", async () => {
+      const pending = deferred<{ quiz: { id: string } }>();
+      const first = { ...summary("en-CA"), id: "meeting-priorities" as const };
+      const second = { ...summary("en-CA"), id: "team-retrospective" as const };
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) =>
+        options?.method === "POST"
+          ? pending.promise
+          : url.startsWith("/v1/starters?")
+            ? { starters: [first, second] }
+            : { draft: draft("en-CA") },
+      );
+      const view = harness(false, false);
+      await ready(view);
+      view.preview().onUse!();
+      view.selectStarter(second.id);
+      await ready(view);
+      mocked.push.mockImplementationOnce(() => {
+        throw new Error("Navigation failed");
+      });
+      pending.resolve({ quiz: { id: "submitted-copy" } });
+      await settle();
+      view.render();
+      expect(view.preview().id).toBe(second.id);
+      expect(view.preview().actionErrorMessage).toBe(copy.openError);
+      expect(view.markup()).not.toContain(copy.requestError);
+      view.selectStarter(first.id);
+      await ready(view);
+      expect(view.preview().useLabel).toBe(copy.openCreated);
+      view.preview().onUse!();
+      await settle();
+      expect(posts()).toHaveLength(1);
+      expect(mocked.push).toHaveBeenLastCalledWith("/quiz/submitted-copy");
+    });
+    it("refreshes changed content before explicit renewal, keeps the UUID and can recover a late committed original", async () => {
+      let version = "v1";
+      let attempts = 0;
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") {
+          if (++attempts === 1) {
+            version = "v2";
+            throw rejected(409, "STARTER_CONTENT_CHANGED");
+          }
+          if (attempts === 2) throw rejected(409, "IDEMPOTENCY_CONFLICT");
+          return { quiz: { id: "late-original" }, replayed: true };
+        }
+        return url.startsWith("/v1/starters?")
+          ? { starters: [summary("en-CA")], contentVersion: version }
+          : { draft: { ...draft("en-CA"), title: `Content ${version}` }, contentVersion: version };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      const captured = view.preview().onUse!;
+      captured();
+      await settle();
+      captured();
+      expect(posts()).toHaveLength(1);
+      await ready(view);
+      expect(view.preview().content?.draft.title).toBe("Content v2");
+      expect(view.markup()).toContain(copy.createAnother);
+      expect(view.preview().onUse).toBeUndefined();
+      await view.button(copy.createAnother)();
+      await settle();
+      view.render();
+      const original = JSON.parse(posts()[0]![1].body);
+      const renewed = JSON.parse(posts()[1]![1].body);
+      expect(renewed.contentVersion).toBe("v2");
+      expect(renewed.idempotencyKey).toBe(original.idempotencyKey);
+      expect(view.preview().useLabel).toBe(copy.retryCopy);
+      view.preview().onUse!();
+      await settle();
+      expect(posts()[2]![1].body).toBe(posts()[0]![1].body);
+      expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/quiz/late-original");
+    });
+    it.each([
+      [400, "INVALID_INTENT", false],
+      [410, "STARTER_COPY_EXPIRED", false],
+      [410, "STARTER_COPY_TARGET_UNAVAILABLE", true],
+    ] as const)(
+      "requires explicit renewal after %s %s and changes key only for a tombstoned target",
+      async (status, code, changesKey) => {
+        const { view, body } = await pendingCopy(rejected(status, code));
+        expect(posts()).toHaveLength(1);
+        expect(view.preview().onUse).toBeUndefined();
+        expect(view.markup()).toContain(copy.createAnother);
+        await view.button(copy.createAnother)();
+        await settle();
+        expect(posts()).toHaveLength(2);
+        expect(
+          JSON.parse(posts()[1]![1].body).idempotencyKey === JSON.parse(body).idempotencyKey,
+        ).toBe(!changesKey);
+      },
+    );
+    it("blocks a generic conflict without rotating identity and guides the Library", async () => {
+      const { view, body } = await pendingCopy(rejected(409, "IDEMPOTENCY_CONFLICT"));
+      expect(view.preview().onUse).toBeUndefined();
+      expect(view.markup()).toContain(copy.conflict);
+      expect(view.markup()).toContain('href="/library"');
+      expect(view.markup()).not.toContain(copy.createAnother);
+      expect(JSON.parse(window.sessionStorage.getItem(storageKey())!).intents[0].body).toBe(body);
+      expect(posts()).toHaveLength(1);
+    });
+    it("pins a new copy to the exact inspected preview version during a mixed-version rollout", async () => {
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") throw rejected(409, "STARTER_CONTENT_CHANGED");
+        return url.startsWith("/v1/starters?")
+          ? { starters: [summary("en-CA")], contentVersion: "catalog-v2" }
+          : { draft: draft("en-CA"), contentVersion: "preview-v1" };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      view.preview().onUse!();
+      await settle();
+      expect(JSON.parse(posts()[0]![1].body).contentVersion).toBe("preview-v1");
+      expect(posts()).toHaveLength(1);
+    });
+    it("pins explicit renewal inside a preview to its inspected version rather than the catalog version", async () => {
+      let attempts = 0;
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") {
+          if (++attempts === 1) throw rejected(410, "STARTER_COPY_EXPIRED");
+          return { quiz: { id: "renewed-copy" } };
+        }
+        return url.startsWith("/v1/starters?")
+          ? { starters: [summary("en-CA")], contentVersion: "catalog-v3" }
+          : { draft: draft("en-CA"), contentVersion: "preview-v2" };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      view.preview().onUse!();
+      await settle();
+      view.render();
+      await view.button(copy.createAnother)();
+      await settle();
+      expect(posts()).toHaveLength(2);
+      const original = JSON.parse(posts()[0]![1].body);
+      const renewed = JSON.parse(posts()[1]![1].body);
+      expect(renewed.contentVersion).toBe("preview-v2");
+      expect(renewed.idempotencyKey).toBe(original.idempotencyKey);
+    });
+    it("keeps the selected second template while loading changed content before explicit renewal", async () => {
+      let version = "v1";
+      const second = {
+        ...summary("en-CA"),
+        id: "team-retrospective" as const,
+        title: "Second template",
+      };
+      const freshCatalog = deferred<{ starters: StarterSummary[]; contentVersion: string }>();
+      mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) => {
+        if (options?.method === "POST") {
+          version = "v2";
+          throw rejected(409, "STARTER_CONTENT_CHANGED");
+        }
+        if (url.startsWith("/v1/starters?"))
+          return version === "v1"
+            ? { starters: [summary("en-CA"), second], contentVersion: version }
+            : freshCatalog.promise;
+        return {
+          draft: {
+            ...draft("en-CA"),
+            title: `${url.includes("team-retrospective") ? "Second" : "First"} ${version}`,
+          },
+          contentVersion: version,
+        };
+      });
+      const view = harness(false, false);
+      await ready(view);
+      view.selectStarter(second.id);
+      await ready(view);
+      expect(view.preview().id).toBe(second.id);
+      view.preview().onUse!();
+      await settle();
+      view.render();
+      expect(view.preview().id).toBe(second.id);
+      expect(view.preview().loading).toBe(true);
+      expect(view.disabled(copy.createAnother)).toBe(true);
+      freshCatalog.resolve({ starters: [summary("en-CA"), second], contentVersion: "v2" });
+      await ready(view);
+      expect(view.preview().id).toBe(second.id);
+      expect(view.preview().content?.draft.title).toBe("Second v2");
+      expect(view.disabled(copy.createAnother)).toBe(false);
+      expect(posts()).toHaveLength(1);
+    });
+    it.each([429, 500])("retains the exact body after an HTTP %s failure", async (status) => {
+      const { view, body } = await pendingCopy(rejected(status, "RETRY_LATER"));
+      view.preview().onUse!();
+      await settle();
+      expect(posts()[1]![1].body).toBe(body);
+      expect(mocked.push).toHaveBeenCalledExactlyOnceWith("/quiz/original-copy");
+    });
+    it.each(["locale", "workspace", "actor", "role", "feature", "auth", "unmount"])(
+      "ignores a late Round copy response after a %s change and retains its recovery intent",
+      async (change) => {
+        const pending = deferred<{ quiz: { id: string } }>();
+        mocked.fetch.mockImplementation(async (url: string, options?: { method?: string }) =>
+          options?.method === "POST"
+            ? pending.promise
+            : url.startsWith("/v1/starters?")
+              ? { starters: [summary("en-CA")] }
+              : { draft: draft("en-CA") },
+        );
+        const view = harness(false, false);
+        await ready(view);
+        view.preview().onUse!();
+        const key = storageKey();
+        const raw = window.sessionStorage.getItem(key);
+        if (change === "locale") mocked.locale = "fr-FR";
+        if (change === "workspace") mocked.workspaceId = "00000000-0000-4000-8000-000000000077";
+        if (change === "actor") mocked.userId = "00000000-0000-4000-8000-000000000088";
+        if (change === "role") mocked.canEdit = false;
+        if (change === "feature") mocked.rankingPolls = false;
+        if (change === "auth") window.dispatchEvent(new Event("pollingpops:auth-change"));
+        if (change === "unmount") view.unmount();
+        else view.render();
+        pending.resolve({ quiz: { id: "stale-copy" } });
+        await settle();
+        expect(mocked.push).not.toHaveBeenCalled();
+        expect(window.sessionStorage.getItem(key)).toBe(raw);
+        expect(posts()).toHaveLength(1);
+      },
+    );
+    it.each(["locale", "workspace", "actor", "role", "auth"])(
+      "fences a captured durable retry after %s changes",
+      async (change) => {
+        const { view } = await pendingCopy();
+        const retry = view.preview().onUse!;
+        if (change === "locale") mocked.locale = "fr-FR";
+        if (change === "workspace") mocked.workspaceId = "00000000-0000-4000-8000-000000000077";
+        if (change === "actor") mocked.userId = "00000000-0000-4000-8000-000000000088";
+        if (change === "role") mocked.canEdit = false;
+        if (change === "auth") window.dispatchEvent(new Event("pollingpops:auth-change"));
+        view.render();
+        retry();
+        await settle();
+        expect(posts()).toHaveLength(1);
+        expect(mocked.push).not.toHaveBeenCalled();
+      },
+    );
   });
 });

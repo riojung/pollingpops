@@ -140,4 +140,26 @@ describe("starter template preview", () => {
     expect(failure).toContain("Try again");
     expect(failure).toContain("Error details");
   });
+  it("keeps exact-request recovery available without current preview content and overrides the no-draft claim", () => {
+    const markup = renderToStaticMarkup(
+      <StarterTemplatePreview
+        id="source-evaluation"
+        contentLocale="en-CA"
+        uiLocale="en-CA"
+        closeLabel="Close preview"
+        onClose={() => {}}
+        error="Current content is unavailable"
+        onUse={() => {}}
+        useLabel="Retry same copy"
+        useNote="A previous copy may already exist."
+        recoveryWithoutPreview
+        actionNotice={<p>Saved request retained</p>}
+      />,
+    );
+    expect(markup).toContain('type="button">Retry same copy</button>');
+    expect(markup).toContain("A previous copy may already exist.");
+    expect(markup).toContain("Saved request retained");
+    expect(markup).not.toContain("No draft has been created");
+    expect(markup).not.toContain('disabled="">Retry same copy');
+  });
 });

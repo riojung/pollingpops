@@ -99,6 +99,12 @@
   margin-block-start: 0.75rem;
 }
 
+.copyNotice,
+.copyNotice p {
+  color: var(--ui-text-subtle);
+  overflow-wrap: anywhere;
+}
+
 .browser button:focus-visible,
 .browser select:focus-visible,
 .panel h2:focus-visible,

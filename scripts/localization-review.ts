@@ -28,6 +28,7 @@ import { creationGoalMessages } from "../apps/web/lib/i18n/creation-goal-message
 import { creationMessages } from "../apps/web/lib/i18n/creation-messages";
 import { creationMethodCopyEntries } from "../apps/web/lib/i18n/creation-method-copy";
 import { importPreviewCopyEntries } from "../apps/web/lib/i18n/import-preview-copy";
+import { starterCopyCopyEntries } from "../apps/web/lib/i18n/starter-copy-copy";
 import { templateMessages } from "../apps/web/lib/i18n/template-messages";
 import {
   practiceManagementCopy,
@@ -117,7 +118,7 @@ export interface ReviewDecisions {
 export const reviewExampleSource =
   "Synthetic authored source: 12345678-1234-4123-8123-123456789abc $& $` $' {title} <img src=x onerror=alert(1)>";
 const scope =
-  "Creation, method explanations, structured-import preview and confirmation recovery, practice, Presentation report, Session insights, template-guide and collection copy; the five-entry team-meetings selection and its two Presentation guides; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
+  "Creation, method explanations, structured-import preview and confirmation recovery, durable Round starter-copy recovery, practice, Presentation report, Session insights, template-guide and collection copy; the five-entry team-meetings selection and its two Presentation guides; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
 const shaPattern = /^[a-f0-9]{40}$/;
 const hashPattern = /^sha256:[a-f0-9]{64}$/;
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -521,6 +522,14 @@ export async function buildReviewBundle(
     "importPreviewCopy",
     importPreviewCopyEntries("en-CA"),
     importPreviewCopyEntries(locale),
+  );
+
+  ui(
+    "starter-copy",
+    "apps/web/lib/i18n/starter-copy-copy.ts",
+    "starterCopyCopy",
+    starterCopyCopyEntries("en-CA"),
+    starterCopyCopyEntries(locale),
   );
 
   ui(

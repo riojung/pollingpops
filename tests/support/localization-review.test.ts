@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { supportedLocales, type StarterId } from "../../packages/contracts/src/index";
 import { creationMethodCopyEntries } from "../../apps/web/lib/i18n/creation-method-copy";
 import { importPreviewCopyEntries } from "../../apps/web/lib/i18n/import-preview-copy";
+import { starterCopyCopyEntries } from "../../apps/web/lib/i18n/starter-copy-copy";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -99,6 +100,7 @@ describe("native-language review preparation", () => {
         "creation",
         "creation-method",
         "import-preview",
+        "starter-copy",
         "template",
         "template-guide",
         "presentation-workspace",
@@ -212,6 +214,42 @@ describe("native-language review preparation", () => {
         source: {
           file: "apps/web/lib/i18n/import-preview-copy.ts",
           helper: "importPreviewCopy",
+          contentVersion: "repository-source",
+        },
+        english: { template: english[key] },
+        target: { template: target[key] },
+      });
+      expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+        decision: "pending",
+        reviewerReference: null,
+        reviewedAt: null,
+        issue: null,
+        evidenceReference: null,
+      });
+    }
+  });
+
+  it("exports each durable Round starter-copy recovery phrase as source-bound pending material", () => {
+    const english = starterCopyCopyEntries("en-CA");
+    const target = starterCopyCopyEntries("ko-KR");
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/starter-copy/"));
+    expect(items).toHaveLength(13);
+    expect(items.map((item) => item.id).sort()).toEqual(
+      Object.keys(english)
+        .map((key) => `ui/starter-copy/${encodeURIComponent(key)}`)
+        .sort(),
+    );
+    expect(bundle.sourceBinding.files).toContainEqual({
+      path: "apps/web/lib/i18n/starter-copy-copy.ts",
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    const decisions = createReviewDecisions(bundle);
+    for (const key of Object.keys(english)) {
+      const id = `ui/starter-copy/${encodeURIComponent(key)}`;
+      expect(items.find((item) => item.id === id)).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/starter-copy-copy.ts",
+          helper: "starterCopyCopy",
           contentVersion: "repository-source",
         },
         english: { template: english[key] },

@@ -3321,6 +3321,33 @@ export const StarterIdSchema = z.enum([
 ]);
 export type StarterId = z.infer<typeof StarterIdSchema>;
 
+export const STARTER_COPY_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+export const STARTER_COPY_INTENT_CLOCK_SKEW_MS = 5 * 60 * 1000;
+export const StarterCopyCreationContextSchema = z
+  .object({
+    actorId: z.string().uuid().toLowerCase(),
+    workspaceId: z.string().uuid().toLowerCase(),
+  })
+  .strict();
+export const StarterCopyRequestSchema = z
+  .object({
+    locale: SupportedLocaleSchema,
+    idempotencyKey: z.string().uuid().toLowerCase(),
+    creationContext: StarterCopyCreationContextSchema,
+    contentVersion: z.string().min(1).max(160),
+    expiresAt: z
+      .string()
+      .datetime()
+      .transform((value) => new Date(value).toISOString()),
+  })
+  .strict();
+export type StarterCopyRequest = z.infer<typeof StarterCopyRequestSchema>;
+/** Existing callers may still intentionally create an independent copy with every request. */
+export const StarterUseRequestSchema = z.union([
+  StarterCopyRequestSchema,
+  z.object({ locale: SupportedLocaleSchema.default("en-CA") }).strict(),
+]);
+
 export const StarterGuideSchema = z.object({
   audience: z.string().trim().min(1).max(300),
   minutes: z.number().int().positive().max(180),

@@ -8,6 +8,7 @@ import {
   SurveyMutationSchema,
   SurveyRoomCreateSchema,
   SurveyAttemptMutationSchema,
+  SURVEY_READER_HEADER,
 } from "@openround/contracts/surveys";
 import {
   PublishedQuizLimitError,
@@ -161,6 +162,8 @@ export async function registerSurveyRoutes(
       }
       return actor;
     };
+    const readerVersion = (request: Parameters<AuthService["requireCreator"]>[0]): 2 | 3 =>
+      request.headers[SURVEY_READER_HEADER] === "3" ? 3 : 2;
     const guestHash = async (request: Parameters<AuthService["requireCreator"]>[0]) => {
       if (!(await deps.consumeAdmission(`survey-ip:${request.ip}`, 600, 60000)))
         throw new SurveyError("RATE_LIMITED", "Too many requests. Wait a minute and retry");
@@ -205,9 +208,15 @@ export async function registerSurveyRoutes(
         const source = await deps.surveys.get(actor.workspaceId, input.sourceId);
         if (!source) throw new SurveyError("NOT_FOUND", "Survey not found");
         draft = structuredClone(source.draft);
-        draft.schemaVersion = 2;
+        if (draft.schemaVersion !== 3) draft.schemaVersion = 2;
         draft.title = `${draft.title.slice(0, 150)} ${copy.copy}`;
       }
+      const questionIds = new Map(
+        draft.items.map((item, index) => [
+          item.question.id,
+          stableId(`${input.idempotencyKey}:question:${index}`),
+        ]),
+      );
       // Stable IDs make a lost creation response retryable without exposing credentials.
       for (const [index, item] of draft.items.entries()) {
         item.question.id = stableId(`${input.idempotencyKey}:question:${index}`);
@@ -216,6 +225,12 @@ export async function registerSurveyRoutes(
             choice.id = stableId(`${input.idempotencyKey}:choice:${index}:${offset}`);
           });
       }
+      if (draft.schemaVersion === 3)
+        draft.pages = draft.pages.map((page, index) => ({
+          ...page,
+          id: stableId(`${input.idempotencyKey}:page:${index}`),
+          questionIds: page.questionIds.map((id) => questionIds.get(id)!),
+        }));
       const survey = await deps.surveys.create(
         actor.workspaceId,
         input.idempotencyKey,
@@ -436,7 +451,12 @@ export async function registerSurveyRoutes(
       if (!room) throw new SurveyError("NOT_FOUND", "Survey room not found or expired");
       // A bearer credential that has already been admitted keeps its access on reconnect.
       try {
-        const existing = await deps.surveys.attempt(roomId, tokenHash, new Date());
+        const existing = await deps.surveys.attempt(
+          roomId,
+          tokenHash,
+          new Date(),
+          readerVersion(request),
+        );
         return { attempt: existing };
       } catch (error) {
         if (!(error instanceof SurveyError) || error.code !== "UNAUTHORIZED") throw error;
@@ -445,7 +465,14 @@ export async function registerSurveyRoutes(
         throw new SurveyError("PASSWORD_REQUIRED", "Enter the room password to join");
       if (!(await verifyRoomPassword(password, room.joinPasswordHash)))
         throw new SurveyError("INVALID_PASSWORD", "The room password is incorrect");
-      return { attempt: await deps.surveys.admit(roomId, tokenHash, () => new Date()) };
+      return {
+        attempt: await deps.surveys.admit(
+          roomId,
+          tokenHash,
+          () => new Date(),
+          readerVersion(request),
+        ),
+      };
     };
     scoped.post("/v1/survey-rooms/join", async (request) => {
       const { code, password } = Join.parse(request.body);
@@ -479,6 +506,7 @@ export async function registerSurveyRoutes(
         Id.parse(request.params).id,
         await guestHash(request),
         new Date(),
+        readerVersion(request),
       ),
     }));
     for (const final of [false, true])
@@ -493,6 +521,7 @@ export async function registerSurveyRoutes(
             input.idempotencyKey,
             final,
             () => new Date(),
+            readerVersion(request),
           ),
         };
       });

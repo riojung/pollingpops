@@ -1,3 +1,4 @@
+import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
 import { registerPresentationInsightsRoutes } from "./presentation-insights-routes.js";
 import type { Plan } from "@openround/contracts";
 import type { Socket } from "node:net";
@@ -306,6 +307,7 @@ export async function buildApp(
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
+      SURVEY_READER_HEADER,
       "content-type",
       "authorization",
       "x-request-id",

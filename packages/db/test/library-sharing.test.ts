@@ -13,6 +13,7 @@ import {
   type CreatorContext,
 } from "../src/index.js";
 import { surveyFixture } from "./support/survey-conformance.js";
+import { surveyPagesFixture } from "./support/survey-pages-conformance.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
 
 async function principal(repository: Repository): Promise<CreatorContext> {
@@ -803,6 +804,68 @@ for (const backend of ["memory", "postgres"] as const)
           f.shares.copy({ ...input, requestId: randomUUID() }, async () => prepared),
         ).rejects.toMatchObject({ code: "NOT_FOUND" });
         expect(await repository.getQuiz(f.destination.id, copied.artifactId)).not.toBeNull();
+      });
+      it("reads pinned Survey pages but gates new copies after exact receipt recovery", async () => {
+        const f = await fixture(repository);
+        const surveys = createSurveyRepository(repository),
+          draft = surveyPagesFixture(),
+          policy = { maximumSchemaVersion: 3 as const };
+        const source = await surveys.create(f.source.id, randomUUID(), draft, randomUUID(), policy);
+        const published = await surveys.publish(
+          f.source.id,
+          source.id,
+          0,
+          randomUUID(),
+          null,
+          policy,
+        );
+        const { share } = await f.shares.create({
+          actorId: f.owner.userId,
+          workspaceId: f.source.id,
+          input: f.input({
+            artifactType: "survey",
+            artifactId: source.id,
+            versionId: published.versionId!,
+          }),
+          now: new Date(),
+        });
+        const input = {
+          actorId: f.recipient.userId,
+          id: share.id,
+          destinationWorkspaceId: f.destination.id,
+          requestId: randomUUID(),
+          now: new Date(),
+        };
+        const materialize = vi.fn(async () => ({ snapshot: share.snapshot, mediaAssets: [] }));
+        expect(
+          (await f.shares.read({ actorId: f.recipient.userId, id: share.id }))?.capabilities.copy,
+        ).toBe(false);
+        const listed = await f.shares.list({
+          actorId: f.recipient.userId,
+          organizationId: f.organization.id,
+          scope: "shared",
+        });
+        expect(listed.shares.find((entry) => entry.id === share.id)).toMatchObject({
+          capabilities: { copy: false },
+          copyUnavailableReason: "Creating paged Survey copies is not enabled yet",
+        });
+        await expect(f.shares.copy(input, materialize)).rejects.toMatchObject({
+          code: "SURVEY_PAGES_NOT_ENABLED",
+        });
+        expect(materialize).not.toHaveBeenCalled();
+        const copied = await f.shares.copy(
+          { ...input, maximumSurveySchemaVersion: 3 },
+          materialize,
+        );
+        expect((await surveys.get(f.destination.id, copied.artifactId))?.draft).toEqual(draft);
+        expect(
+          await f.shares.copy(input, async () => {
+            throw new Error("Replay must not materialize");
+          }),
+        ).toEqual({ ...copied, replayed: true });
+        await expect(
+          f.shares.copy({ ...input, requestId: randomUUID() }, materialize),
+        ).rejects.toMatchObject({ code: "SURVEY_PAGES_NOT_ENABLED" });
       });
       it("does not restore direct assignments when a removed member rejoins, while org posts remain discoverable", async () => {
         const f = await fixture(repository);

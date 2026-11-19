@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import type { AvatarId, JoinPreflightResponse, JoinResponse } from "@openround/contracts";
 import { currentRoundClientCapabilities } from "@openround/contracts";
+import {
+  MAX_SUPPORTED_SURVEY_SCHEMA_VERSION,
+  SURVEY_READER_HEADER,
+} from "@openround/contracts/surveys";
 import { Brand } from "../../components/brand";
 import { AvatarPicker, ParticipantAvatar } from "../../components/participant-avatar";
 import { RoomPasswordInput } from "../../components/room-password";
@@ -142,7 +146,10 @@ export function JoinForm() {
         const joined = await apiFetch<{ attempt: SurveyAttempt }>("/v1/survey-rooms/join", {
           method: "POST",
           credentials: "omit",
-          headers: { authorization: `Bearer ${token}` },
+          headers: {
+            authorization: `Bearer ${token}`,
+            [SURVEY_READER_HEADER]: String(MAX_SUPPORTED_SURVEY_SCHEMA_VERSION),
+          },
           body: JSON.stringify({ code: submittedCode, ...passwordBody }),
         });
         router.push(`/survey/${joined.attempt.roomId}`);

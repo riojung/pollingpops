@@ -73,7 +73,7 @@ export async function registerLibrarySharingRoutes(
             ? 404
             : error.code === "FORBIDDEN"
               ? 403
-              : error.code === "IDEMPOTENCY_CONFLICT"
+              : error.code === "IDEMPOTENCY_CONFLICT" || error.code === "SURVEY_PAGES_NOT_ENABLED"
                 ? 409
                 : 422;
         return reply

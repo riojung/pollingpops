@@ -24,6 +24,8 @@ import {
 export class SurveyError extends Error {
   constructor(
     public readonly code:
+      | "SURVEY_CLIENT_UPDATE_REQUIRED"
+      | "SURVEY_PAGES_NOT_ENABLED"
       | "NOT_FOUND"
       | "UNAUTHORIZED"
       | "STALE_DRAFT"
@@ -42,7 +44,7 @@ export class SurveyError extends Error {
   }
 }
 export interface SurveyRecord {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   workspaceId: string;
   draft: SurveyDraft;
@@ -54,7 +56,7 @@ export interface SurveyRecord {
   updatedAt?: string;
 }
 export interface SurveyVersion {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   workspaceId: string;
   surveyId: string;
@@ -62,7 +64,7 @@ export interface SurveyVersion {
   revision: number;
 }
 export interface SurveyRoom {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   workspaceId: string;
   surveyId: string;
@@ -80,7 +82,7 @@ export interface SurveyRoom {
   identityPolicy: "organizer_blind";
 }
 interface Guest {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   id: string;
   workspaceId: string;
   roomId: string;
@@ -99,7 +101,7 @@ type Documents = {
 type Table = keyof Documents;
 function compatibleDocument<T extends Table>(table: T, value: unknown): Documents[T] {
   const row = value as Documents[T];
-  if (!row || (row.schemaVersion !== 1 && row.schemaVersion !== 2))
+  if (!row || (row.schemaVersion !== 1 && row.schemaVersion !== 2 && row.schemaVersion !== 3))
     throw new Error(`Unsupported stored ${table} schema; keep compatible readers deployed`);
   if ("draft" in row) SurveyDraftSchema.parse(row.draft);
   if ("content" in row) SurveyContentSchema.parse(row.content);
@@ -178,6 +180,25 @@ function authorized(guest: Guest | undefined, tokenHash: string): Guest {
   return guest;
 }
 
+export interface SurveyWritePolicy {
+  /** Trusted server-side grant. HTTP authoring remains at version 2 until paged writers ship. */
+  maximumSchemaVersion?: 2 | 3;
+}
+function requireSurveyWriter(content: SurveyDraft, policy: SurveyWritePolicy) {
+  if (content.schemaVersion === 3 && policy.maximumSchemaVersion !== 3)
+    throw new SurveyError(
+      "SURVEY_PAGES_NOT_ENABLED",
+      "Creating or changing paged Surveys is not enabled yet",
+    );
+}
+function requireSurveyReader(room: SurveyRoom, maximumSchemaVersion: 2 | 3) {
+  if (room.schemaVersion === 3 && maximumSchemaVersion !== 3)
+    throw new SurveyError(
+      "SURVEY_CLIENT_UPDATE_REQUIRED",
+      "Update this Survey page before continuing",
+    );
+}
+
 /** Shared business rules; PostgreSQL and memory differ only in transaction/storage mechanics. */
 export class SurveyRepository {
   constructor(private readonly run: Run) {}
@@ -206,7 +227,13 @@ export class SurveyRepository {
     await tx.remember({ ...owner, roomId: owner.roomId ?? null, key, requestHash, receipt });
     return receipt;
   }
-  create(workspaceId: string, id: string, draft: SurveyDraft, key: string) {
+  create(
+    workspaceId: string,
+    id: string,
+    draft: SurveyDraft,
+    key: string,
+    policy: SurveyWritePolicy = {},
+  ) {
     const legacyDraft = { ...draft, schemaVersion: 1 as const };
     // Creation requests generate their draft on the server. A version-only writer upgrade
     // must still replay an accepted v1 receipt, without rewriting it or relaxing content checks.
@@ -221,6 +248,7 @@ export class SurveyRepository {
         key,
         { action: "create", draft },
         async () => {
+          requireSurveyWriter(draft, policy);
           const record: SurveyRecord = {
             schemaVersion: draft.schemaVersion,
             id,
@@ -272,7 +300,14 @@ export class SurveyRepository {
       );
     });
   }
-  save(workspaceId: string, id: string, draft: SurveyDraft, expected: number, key: string) {
+  save(
+    workspaceId: string,
+    id: string,
+    draft: SurveyDraft,
+    expected: number,
+    key: string,
+    policy: SurveyWritePolicy = {},
+  ) {
     return this.run(workspaceId, async (tx) => {
       const record = requireRecord(await tx.get("surveys", id));
       return this.mutate(
@@ -287,6 +322,12 @@ export class SurveyRepository {
               "VALIDATION_ERROR",
               "Duplicate an archived survey before editing it",
             );
+          requireSurveyWriter(draft, policy);
+          if (record.draft.schemaVersion === 3 && draft.schemaVersion !== 3)
+            throw new SurveyError(
+              "VALIDATION_ERROR",
+              "Paged Surveys cannot be downgraded to a flat schema",
+            );
           record.draft = SurveyDraftSchema.parse(draft);
           record.schemaVersion = record.draft.schemaVersion;
           record.revision++;
@@ -296,7 +337,14 @@ export class SurveyRepository {
       );
     });
   }
-  publish(workspaceId: string, id: string, expected: number, key: string, limit: number | null) {
+  publish(
+    workspaceId: string,
+    id: string,
+    expected: number,
+    key: string,
+    limit: number | null,
+    policy: SurveyWritePolicy = {},
+  ) {
     return this.run(
       workspaceId,
       async (tx) => {
@@ -313,6 +361,7 @@ export class SurveyRepository {
                 "VALIDATION_ERROR",
                 "Duplicate an archived survey before publishing",
               );
+            requireSurveyWriter(record.draft, policy);
             const content = SurveyContentSchema.parse(record.draft);
             if (
               record.status !== "published" &&
@@ -406,6 +455,7 @@ export class SurveyRepository {
       joinPasswordHash?: string | null;
       /** A previously accepted retry must never create a replacement after deletion. */
       replayOnly?: boolean;
+      maximumSchemaVersion?: 2 | 3;
     },
   ) {
     return this.run(workspaceId, async (tx) => {
@@ -435,6 +485,7 @@ export class SurveyRepository {
               "Save and publish your latest changes before sharing this survey",
             );
           const version = requireRecord(await tx.get("survey_versions", survey.versionId));
+          requireSurveyWriter(version.content, settings);
           const closesAt = Date.parse(settings.closesAt);
           const expiresAt = Date.parse(settings.expiresAt);
           if (!Number.isFinite(closesAt) || !Number.isFinite(expiresAt) || expiresAt <= closesAt)
@@ -469,11 +520,17 @@ export class SurveyRepository {
   listRooms(workspaceId: string) {
     return this.run(workspaceId, (tx) => tx.list("survey_feedback_rooms"));
   }
-  admit(id: string, tokenHash: string, clock: Date | (() => Date)) {
+  admit(
+    id: string,
+    tokenHash: string,
+    clock: Date | (() => Date),
+    maximumSchemaVersion: 2 | 3 = 2,
+  ) {
     return this.run(
       null,
       async (tx) => {
         const room = requireRecord(await tx.get("survey_feedback_rooms", id));
+        requireSurveyReader(room, maximumSchemaVersion);
         const now = typeof clock === "function" ? clock() : clock;
         open(room, now);
         const guests = await tx.list("survey_guests", id);
@@ -523,9 +580,10 @@ export class SurveyRepository {
       receipt: guest.receipt,
     };
   }
-  attempt(id: string, tokenHash: string, now: Date) {
+  attempt(id: string, tokenHash: string, now: Date, maximumSchemaVersion: 2 | 3 = 2) {
     return this.run(null, async (tx) => {
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
+      requireSurveyReader(room, maximumSchemaVersion);
       if (new Date(room.expiresAt) <= now)
         throw new SurveyError("NOT_FOUND", "This survey has expired");
       const guest = authorized(
@@ -543,10 +601,12 @@ export class SurveyRepository {
     key: string,
     final: boolean,
     clock: Date | (() => Date),
+    maximumSchemaVersion: 2 | 3 = 2,
   ) {
     return this.run(null, async (tx) => {
       const normalizedResponses = SurveyResponsesSchema.parse(responses);
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
+      requireSurveyReader(room, maximumSchemaVersion);
       const now = typeof clock === "function" ? clock() : clock;
       if (new Date(room.expiresAt) <= now)
         throw new SurveyError("NOT_FOUND", "This survey has expired");

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { CanvasBoardCreateSchema } from "@openround/contracts";
+import type { SurveyDraft } from "@openround/contracts/surveys";
 import {
   createPlatformRepository,
+  createSurveyRepository,
   MemoryPlatformRepository,
   MemoryRepository,
 } from "@openround/db";
@@ -83,6 +85,173 @@ if (process.env.CANVAS_BROWSER_FIXTURE === "true" && process.env.CANVAS_BROWSER_
   installCanvasBrowserImages(built.app, built.storage, config.PUBLIC_API_URL);
 const platform = createPlatformRepository(repository);
 if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
+  const surveyPages = createSurveyRepository(repository);
+  let surveyPagesCode = 7_800_000;
+  // Trusted reader fixture only: public authoring and room creation continue to cap at v2.
+  built.app.post("/__test/surveys/pages", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+      return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
+    const token = request.cookies[config.COOKIE_NAME];
+    const actor = token ? await repository.getCreatorBySession(hashToken(token), new Date()) : null;
+    if (!actor || !["owner", "editor"].includes(actor.role))
+      return reply.code(403).send({ error: { message: "An editor fixture session is required" } });
+    const input = z
+      .object({ libraryReader: z.boolean().optional() })
+      .strict()
+      .parse(request.body ?? {});
+    const surveyId = randomUUID();
+    const questionIds = Array.from({ length: 4 }, () => randomUUID());
+    const pageIds = Array.from({ length: 3 }, () => randomUUID());
+    const choices = (labels: string[]) =>
+      labels.map((label) => ({ id: randomUUID(), label, isCorrect: false }));
+    const firstChoices = choices(["The complete process", "The next decision"]);
+    const nextChoices = choices(["Confirm the next action", "Review the open question"]);
+    const common = {
+      purpose: "opinion" as const,
+      confidence: "off" as const,
+      delivery: "main" as const,
+      conceptKeys: [],
+      linkedRecheckQuestionId: null,
+      basePoints: 0,
+      timeLimitSeconds: 30,
+      explanation: "",
+      mediaId: null,
+      mediaAlt: null,
+    };
+    const draft: SurveyDraft = {
+      schemaVersion: 3,
+      title: "Ordered Survey fixture",
+      description: "Synthetic three-page reader fixture.",
+      category: "general",
+      experiencePreset: { id: "focus", version: 1 },
+      items: [
+        {
+          required: true,
+          question: {
+            ...common,
+            id: questionIds[0]!,
+            type: "poll",
+            prompt: "What should the group discuss first?",
+            choices: firstChoices,
+          },
+        },
+        {
+          required: false,
+          question: {
+            ...common,
+            id: questionIds[1]!,
+            type: "rating",
+            prompt: "How clear is this example?",
+            min: 1,
+            max: 5,
+            minLabel: "Unclear",
+            maxLabel: "Clear",
+          },
+        },
+        {
+          required: true,
+          question: {
+            ...common,
+            id: questionIds[2]!,
+            type: "poll",
+            prompt: "Which next step should we take?",
+            choices: nextChoices,
+          },
+        },
+        {
+          required: false,
+          question: {
+            ...common,
+            id: questionIds[3]!,
+            type: "rating",
+            prompt: "How useful was this review?",
+            min: 1,
+            max: 5,
+            minLabel: "Not useful",
+            maxLabel: "Very useful",
+          },
+        },
+      ],
+      pages: [
+        {
+          id: pageIds[0]!,
+          title: input.libraryReader ? "W".repeat(160) : "Starting point",
+          description: input.libraryReader
+            ? `Read each instruction in order.\nCompare the listed options before reviewing.\n${"Instruction".repeat(16)}`
+            : "Choose a focus and optionally rate the example.",
+          questionIds: questionIds.slice(0, 2),
+        },
+        {
+          id: pageIds[1]!,
+          title: "Next step",
+          description: "Choose one practical next step.",
+          questionIds: questionIds.slice(2, 3),
+        },
+        {
+          id: pageIds[2]!,
+          title: "",
+          description: "You may add a final rating before submitting.",
+          questionIds: questionIds.slice(3),
+        },
+      ],
+    };
+    await surveyPages.create(actor.workspaceId, surveyId, draft, randomUUID(), {
+      maximumSchemaVersion: 3,
+    });
+    const published = await surveyPages.publish(
+      actor.workspaceId,
+      surveyId,
+      0,
+      randomUUID(),
+      null,
+      {
+        maximumSchemaVersion: 3,
+      },
+    );
+    const now = Date.now();
+    const room = await surveyPages.createRoom(actor.workspaceId, surveyId, 0, randomUUID(), {
+      code: String(surveyPagesCode++),
+      closesAt: new Date(now + 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+      participantLimit: 20,
+      windowDays: 1,
+      maximumSchemaVersion: 3,
+    });
+    if (input.libraryReader)
+      await surveyPages.save(
+        actor.workspaceId,
+        surveyId,
+        {
+          ...draft,
+          title: "UNPUBLISHED_SYNTHETIC_SOURCE",
+          pages: draft.pages.map((page) => ({
+            ...page,
+            title: "UNPUBLISHED_SYNTHETIC_PAGE",
+            description: "UNPUBLISHED_SYNTHETIC_INSTRUCTIONS",
+          })),
+          items: draft.items.map((item) => ({
+            ...item,
+            question: { ...item.question, prompt: "UNPUBLISHED_SYNTHETIC_QUESTION" },
+          })),
+        },
+        0,
+        randomUUID(),
+        { maximumSchemaVersion: 3 },
+      );
+    return reply.code(201).send({
+      surveyId,
+      versionId: published.versionId,
+      pages: draft.pages,
+      room: { id: room.id, code: room.code, closesAt: room.closesAt, expiresAt: room.expiresAt },
+      participantUrl: new URL(`/survey/${room.id}`, config.WEB_ORIGIN).href,
+      questionIds,
+      pageIds,
+      choiceIds: {
+        first: firstChoices.map((choice) => choice.id),
+        next: nextChoices.map((choice) => choice.id),
+      },
+    });
+  });
   // Exercise the normal reconciliation worker deterministically in browser tests.
   built.app.post("/__test/round-reports/process", async (request, reply) => {
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))

@@ -194,6 +194,38 @@ submitter opted in; user IDs and retry keys are omitted. Feedback follows a 90-d
 is included only in the submitting creator's account export and is deleted with that account or
 workspace. Keep administrator credentials out of URLs, browser storage, and issue attachments.
 
+### Ordered Survey pages: reader foundation
+
+Survey document v3 adds `pages:[{id,title,description,questionIds}]` to the existing flat `items`.
+There must be 1–20 uniquely identified pages. Their question references form an exact ordered
+partition of `items`; published pages cannot be empty. V1/v2 reject page fields and retain their
+existing shape. The ordinary writer/legacy upgrade target remains v2; v3 readers preserve pages.
+
+Page-aware guest requests send `x-pollingpops-survey-schema: 3` for join-by-code, direct join,
+attempt recovery and progress/final mutations. A v3 room requires that declaration before
+admission or content/receipt delivery; missing or unsupported readers get 409
+`SURVEY_CLIENT_UPDATE_REQUIRED`. Existing v1/v2 rooms remain compatible without the header.
+The normal guest token/password and admission policies continue to apply.
+
+Fresh v3 authoring, publishing, independent copying and launches return 409
+`SURVEY_PAGES_NOT_ENABLED` through this foundation's HTTP writers. An implicit v3→v2 save is
+rejected. Repository maximum-schema policy defaults to 2 and is checked after exact accepted
+receipt recovery. Blank/template and legacy source-copy generation retain their existing v2
+behavior and retry hashes. Version3 creator views are read-only until the authoring checkpoint.
+
+Guest mutation bodies, response maps and final required-field validation are unchanged. The
+client validates the current page before Next and waits for the full-map progress acknowledgement
+before changing pages; only the final page submits. Resume uses saved responses rather than
+stored page visits. Aggregate schema2 remains flat and preserves closure, minimum samples and
+respondent denominators. See the [contract, lifecycle and rollout decisions](survey-pages.md).
+
+For an authorized v3 Survey, `GET /v1/library/shares/:id` adds
+`surveyPages:[{id,title,description,questionIds}]` alongside the existing whitelisted `questions`.
+These participant-facing instructions come from the pinned published snapshot. The shared
+reader validates the page partition and renders each heading/description before its questions.
+V1/v2 Surveys and Rounds keep their flat response shape; Presentation review stays unchanged.
+No answer keys, explanations, private metadata or unpublished draft edits enter this projection.
+
 ### Self-paced Survey beta
 
 Creator-cookie routes: `GET/POST /v1/surveys`, `GET/PUT /v1/surveys/:id`, `POST /publish`, `/archive`,

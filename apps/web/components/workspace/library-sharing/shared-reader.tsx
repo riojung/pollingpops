@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SurveyPage } from "@openround/contracts/surveys";
 import { useLocale } from "../../locale-provider";
 import { ContentSlideView } from "../../presentation/content-slide-view";
 import { AUTH_CHANGE_EVENT, ApiClientError } from "../../../lib/api";
 import { librarySharingMessages } from "../../../lib/i18n/library-sharing-messages";
+import { surveyPagesCopy } from "../../../lib/i18n/survey-pages-copy";
+import { formatNumber } from "../../../lib/i18n/format";
 import { useWorkspace, WorkspaceProvider } from "../workspace-provider";
 import { WorkspaceShell } from "../workspace-shell";
 import { LibraryShareActions } from "./share-actions";
@@ -75,18 +78,21 @@ export function SharedLibraryImage({
 export function SharedLibraryQuestion({
   question,
   shareId,
+  headingLevel = 2,
 }: {
   question: SharedQuestion;
   shareId: string;
+  headingLevel?: 2 | 3;
 }) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   return (
     <article className={styles.question}>
       {question.mediaId ? (
         <SharedLibraryImage shareId={shareId} mediaId={question.mediaId} alt={question.mediaAlt} />
       ) : null}
-      <h2 lang="" dir="auto">
+      <Heading lang="" dir="auto">
         {question.prompt}
-      </h2>
+      </Heading>
       {question.choices?.length ? (
         <ol>
           {question.choices.map((choice) => (
@@ -108,6 +114,66 @@ export function SharedLibraryQuestion({
         </p>
       ) : null}
     </article>
+  );
+}
+
+export function SharedLibrarySurveyPages({
+  shareId,
+  questions,
+  pages,
+}: {
+  shareId: string;
+  questions: SharedQuestion[];
+  pages: SurveyPage[];
+}) {
+  const { locale } = useLocale();
+  const copy = surveyPagesCopy(locale);
+  const byId = new Map(questions.map((question) => [question.id, question]));
+  const fill = (value: string, fields: Record<string, string>) =>
+    value.replace(/\{(\w+)\}/g, (match, key: string) => fields[key] ?? match);
+  return (
+    <>
+      {pages.map((page, index) => {
+        const fields = {
+          page: formatNumber(locale, index + 1),
+          count: formatNumber(locale, pages.length),
+        };
+        const headingId = `shared-survey-page-${shareId}-${page.id}`;
+        return (
+          <section
+            className={styles.surveyPage}
+            key={page.id}
+            data-shared-survey-page={page.id}
+            aria-labelledby={headingId}
+          >
+            <header className={styles.surveyPageHeader}>
+              <p className={styles.help} data-shared-survey-page-progress lang={locale}>
+                {fill(copy.pageProgress, fields)}
+              </p>
+              <h2 id={headingId} lang={page.title ? "" : locale} dir="auto">
+                {page.title || fill(copy.untitledPage, fields)}
+              </h2>
+              {page.description ? (
+                <p className={styles.surveyInstructions} lang="" dir="auto">
+                  {page.description}
+                </p>
+              ) : null}
+            </header>
+            {page.questionIds.map((id) => {
+              const question = byId.get(id);
+              return question ? (
+                <SharedLibraryQuestion
+                  key={id}
+                  shareId={shareId}
+                  question={question}
+                  headingLevel={3}
+                />
+              ) : null;
+            })}
+          </section>
+        );
+      })}
+    </>
   );
 }
 
@@ -331,6 +397,12 @@ function SharedLibraryReaderContent({ shareId }: { shareId: string }) {
                   />
                 )}
               </>
+            ) : share.artifactType === "survey" && detail.surveyPages ? (
+              <SharedLibrarySurveyPages
+                shareId={shareId}
+                questions={detail.questions!}
+                pages={detail.surveyPages}
+              />
             ) : (
               detail.questions?.map((question) => (
                 <SharedLibraryQuestion key={question.id} shareId={shareId} question={question} />

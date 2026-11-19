@@ -76,10 +76,10 @@ describe("Survey selection controls", () => {
     const pollMarkup = renderToStaticMarkup(<SurveyResponseControl question={poll} disabled />);
     const ratingMarkup = renderToStaticMarkup(<SurveyResponseControl question={rating} />);
     expect(pollMarkup).toMatch(/<fieldset[^>]*disabled=""/);
-    expect(pollMarkup).toContain(`<span>${poll.choices[0]!.label}</span></label>`);
+    expect(pollMarkup).toContain(`<span lang="">${poll.choices[0]!.label}</span></label>`);
     expect(ratingMarkup.match(/type="radio"/g)).toHaveLength(5);
-    expect(ratingMarkup).toContain("<span>1 — Not at all</span>");
-    expect(ratingMarkup).toContain("<span>5 — Very much</span>");
+    expect(ratingMarkup).toContain('<span lang="">1 — Not at all</span>');
+    expect(ratingMarkup).toContain('<span lang="">5 — Very much</span>');
   });
 });
 

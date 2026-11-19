@@ -11,7 +11,8 @@ with qualification in [Library discovery](library-discovery.md). **WX-04** merge
 [PR #273](https://github.com/riojung/pollingpops/pull/273) at `efc0254`.
 **WX-05A** merged through [PR #281](https://github.com/riojung/pollingpops/pull/281) at `a68df09`.
 **WX-05B** merged through [PR #282](https://github.com/riojung/pollingpops/pull/282) at `bcac69e`.
-**WX-05C** is the current Round starter-copy reliability increment on `codex/starter-copy-recovery`. Later items are scoped backlog,
+**WX-05C** merged through [PR #283](https://github.com/riojung/pollingpops/pull/283) at `e8cc4ce`.
+**WX-06A1** is the current Survey pages contract/reader foundation on `codex/survey-pages-foundation`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -33,8 +34,8 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A/B merged; C implemented locally for review   | Authoring + frontend            |
-| WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                         | Authoring + frontend            |
+| WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | A1 foundation implemented locally for review   | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                        | Realtime + security + frontend  |
@@ -322,6 +323,52 @@ receive upgrade/compatibility tests before enabling new writers.
 
 **Dependencies:** product decision on allowed conditions plus contract/privacy design. Owner:
 Surveys + contracts + reporting.
+
+**Selected WX-06A1 contract/reader foundation:** version 3 retains flat `items` and adds 1–20
+ordered pages whose question UUIDs form an exact ordered partition. Legacy drafts and immutable
+runs keep their existing route; ordinary writers remain v2. Expand stored readers with migration117,
+add participant reader negotiation and accessible Back/Next with a safe progress-save barrier,
+and render v3 creator views read-only. Keep fresh v3 authoring, copying, publishing and launches
+blocked through HTTP until the separate page-authoring checkpoint. Reports remain aggregate-v2
+because layout does not change response eligibility, denominators or suppression. Add no page
+visit telemetry. See the [contract and compatibility decisions](survey-pages.md).
+
+This checkpoint selects ordered pages only. Page-authoring controls and their effective writer
+grant are the next A increment; answer-based conditions remain B. Do not describe this reader
+foundation as shipped page authoring or branching.
+
+**WX-06A1 local verification — 2026-11-18:** `VITEST_MAX_WORKERS=1 pnpm check` passes formatting,
+Docker dependency checks, lint, strict types, package/support tests, production builds and compiled
+server startup. This includes 6,234 web, 1,658 server and 527 support tests; default optional
+integration skips remain. All 59 focused client tests, 19 scoped contract tests and 13 shared-join
+tests pass. Comparing the actual base parser/upgrader at `e8cc4ce` with the new reader produces
+identical legacy acceptance and parsed/upgrade JSON for all 340 localized v1/v2 factory samples,
+including legacy template IDs.
+
+All 11 isolated-fixture browser scenarios pass across desktop Chromium and mobile
+Chromium/WebKit. They cover v3 creator read-only behavior and actual HTTP writer denials,
+reader-header negotiation, required validation, native intermediate Enter, save-before-advance,
+Back, server-response-based resume, exact lost-ack retry, one final submission and closed review.
+English/Korean 320px keyboard, light/dark, axe and 160-character unbroken heading fit checks pass.
+The long-heading probe changes DOM text only; reader/save flows use real HTTP. WebKit palette
+checks wait for the actual text colors before axe without exclusions. Browser fixtures use
+trusted repository version policy to seed retained v3 content; production writers stay blocked.
+
+The shared Library reader preserves frozen v3 page headings, multiline instructions and question
+groups through additive, explicitly whitelisted `surveyPages` metadata. The client validates the
+exact ordered question partition; legacy flat payloads stay unchanged and unpublished/private
+fields remain excluded. All 41 focused Library client tests and 18 focused server tests pass.
+Three of the browser scenarios verify actual HTTP shared-reader grouping, published-snapshot
+pinning, view-only access, legacy v2 rendering and English/Korean mobile light/dark accessibility.
+The reviewer independently confirmed the reported page-context issue is resolved.
+
+Four new restricted-role PostgreSQL Survey conformance tests pass, plus the v3 Library copy
+regression in PostgreSQL and memory. They verify legacy paths, exact receipts, immutable pages,
+future-version denial, RLS, aggregate privacy and lifecycle cleanup. The temporary isolated
+PostgreSQL17 fixture and credentials were removed; application data was not used. Independent
+read-only review has no unresolved actionable finding. All ten source-bound editorial packets
+contain 752 pending entries, including 23 new page-reader phrases; automated checks do not grant
+human/native-language acceptance. Migration117 is required before deploying the matching readers.
 
 ### WX-07 Recurring check-ins
 

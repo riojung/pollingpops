@@ -1,7 +1,14 @@
 "use client";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SurveyContentSchema, type SurveyDraft } from "@openround/contracts/surveys";
+import {
+  SurveyContentSchema,
+  SurveyDraftSchema,
+  surveyPageViews,
+  type SurveyDraft,
+} from "@openround/contracts/surveys";
+import { SurveyPagedReader } from "../../../components/survey-paged-reader";
+import { surveyPagesCopy } from "../../../lib/i18n/survey-pages-copy";
 import {
   newSurveyQuestion,
   SurveyQuestionActions,
@@ -21,6 +28,7 @@ import { canProtectRoom, roomPasswordFields, validRoomPassword } from "../../../
 import { apiFetch, humanError, ApiClientError } from "../../../lib/api";
 import {
   surveyMutationKey,
+  surveyReaderHeaders,
   type SurveyRecordView as SurveyRecord,
 } from "../../../lib/survey-client";
 import { SurveyAutosave, type SurveyAutosaveSnapshot } from "../../../lib/survey-autosave";
@@ -28,6 +36,28 @@ import { isRetryableSaveError } from "../../../lib/retry";
 import styles from "../../../components/workspace/workspace-content.module.css";
 
 type Action = "publish" | "duplicate" | "archive" | "share";
+function ReadOnlySurveyPages({ draft }: { draft: SurveyDraft }) {
+  const { locale } = useLocale();
+  const copy = surveyPagesCopy(locale);
+  const [pageIndex, setPageIndex] = useState(0);
+  return (
+    <section className={styles.panel} data-survey-pages-readonly lang={locale}>
+      <h2>{copy.readOnlyTitle}</h2>
+      <p className="notice">{copy.readOnlyNotice}</p>
+      <p lang="">{draft.description}</p>
+      <SurveyPagedReader
+        content={draft}
+        pageIndex={pageIndex}
+        locale={locale}
+        preview
+        onBack={() => setPageIndex((index) => Math.max(0, index - 1))}
+        onNext={() =>
+          setPageIndex((index) => Math.min(surveyPageViews(draft).length - 1, index + 1))
+        }
+      />
+    </section>
+  );
+}
 function Editor({ id }: { id: string }) {
   const router = useRouter();
   const { canEdit, productFeatures, entitlements } = useWorkspace();
@@ -70,9 +100,21 @@ function Editor({ id }: { id: string }) {
     autosave.current = null;
     setModel(null);
     setError("");
-    void apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`)
+    void apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`, { headers: surveyReaderHeaders() })
       .then((response) => {
         if (!active) return;
+        if (response.survey.draft.schemaVersion === 3) {
+          const draft = SurveyDraftSchema.parse(response.survey.draft);
+          setModel({
+            record: response.survey,
+            draft,
+            phase: "idle",
+            dirty: false,
+            unsettled: false,
+            error: "",
+          });
+          return;
+        }
         const controller = new SurveyAutosave(response.survey, {
           enabled: editPermission.current,
           changed: (snapshot) => {
@@ -286,201 +328,209 @@ function Editor({ id }: { id: string }) {
                     : "Loading Survey…")}
       </p>
       {draft && record ? (
-        <>
-          <section className={styles.panel}>
-            <fieldset disabled={blocked}>
-              <legend>Survey details</legend>
-              <label className="field">
-                Title
-                <input
-                  className="input"
-                  maxLength={160}
-                  value={draft.title}
-                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                />
-              </label>
-              <label className="field">
-                Description
-                <textarea
-                  className="input"
-                  maxLength={1000}
-                  value={draft.description}
-                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                />
-              </label>
-            </fieldset>
-            <p>
-              Organizers see aggregate results after five submissions. Responses are not linked to
-              learning identities. Survey question timers are not used.
-            </p>
-            <button className="button-quiet" type="button" onClick={() => setPreview(!preview)}>
-              {preview ? "Edit questions" : "Preview Survey"}
-            </button>
-          </section>
-          {draft.items.map((item, index) => (
-            <section className={styles.panel} key={item.question.id}>
-              <h2>Question {index + 1}</h2>
-              {preview ? (
-                <SurveyResponseControl question={item.question} required={item.required} disabled />
-              ) : (
-                <>
-                  <SurveyQuestionEditor
-                    question={item.question}
-                    disabled={blocked}
-                    onChange={(question) =>
-                      setDraft({
-                        ...draft,
-                        items: draft.items.map((row, offset) =>
-                          offset === index ? { ...row, question } : row,
-                        ),
-                      })
-                    }
+        draft.schemaVersion === 3 ? (
+          <ReadOnlySurveyPages draft={draft} />
+        ) : (
+          <>
+            <section className={styles.panel}>
+              <fieldset disabled={blocked}>
+                <legend>Survey details</legend>
+                <label className="field">
+                  Title
+                  <input
+                    className="input"
+                    maxLength={160}
+                    value={draft.title}
+                    onChange={(event) => setDraft({ ...draft, title: event.target.value })}
                   />
-                  <label className="field">
-                    <input
-                      type="checkbox"
-                      checked={item.required}
+                </label>
+                <label className="field">
+                  Description
+                  <textarea
+                    className="input"
+                    maxLength={1000}
+                    value={draft.description}
+                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  />
+                </label>
+              </fieldset>
+              <p>
+                Organizers see aggregate results after five submissions. Responses are not linked to
+                learning identities. Survey question timers are not used.
+              </p>
+              <button className="button-quiet" type="button" onClick={() => setPreview(!preview)}>
+                {preview ? "Edit questions" : "Preview Survey"}
+              </button>
+            </section>
+            {draft.items.map((item, index) => (
+              <section className={styles.panel} key={item.question.id}>
+                <h2>Question {index + 1}</h2>
+                {preview ? (
+                  <SurveyResponseControl
+                    question={item.question}
+                    required={item.required}
+                    disabled
+                  />
+                ) : (
+                  <>
+                    <SurveyQuestionEditor
+                      question={item.question}
                       disabled={blocked}
-                      onChange={(event) =>
+                      onChange={(question) =>
                         setDraft({
                           ...draft,
                           items: draft.items.map((row, offset) =>
-                            offset === index ? { ...row, required: event.target.checked } : row,
+                            offset === index ? { ...row, question } : row,
                           ),
                         })
                       }
                     />
-                    Required response
-                  </label>
-                  <SurveyQuestionActions
-                    index={index}
-                    count={draft.items.length}
-                    disabled={blocked}
-                    onMove={(direction) => {
-                      const items = [...draft.items];
-                      [items[index], items[index + direction]] = [
-                        items[index + direction]!,
-                        items[index]!,
-                      ];
-                      setDraft({ ...draft, items });
-                    }}
-                    onRemove={() =>
+                    <label className="field">
+                      <input
+                        type="checkbox"
+                        checked={item.required}
+                        disabled={blocked}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            items: draft.items.map((row, offset) =>
+                              offset === index ? { ...row, required: event.target.checked } : row,
+                            ),
+                          })
+                        }
+                      />
+                      Required response
+                    </label>
+                    <SurveyQuestionActions
+                      index={index}
+                      count={draft.items.length}
+                      disabled={blocked}
+                      onMove={(direction) => {
+                        const items = [...draft.items];
+                        [items[index], items[index + direction]] = [
+                          items[index + direction]!,
+                          items[index]!,
+                        ];
+                        setDraft({ ...draft, items });
+                      }}
+                      onRemove={() =>
+                        setDraft({
+                          ...draft,
+                          items: draft.items.filter((_, offset) => offset !== index),
+                        })
+                      }
+                    />
+                  </>
+                )}
+              </section>
+            ))}
+            <section className={styles.panel}>
+              <div className={styles.surveyActions}>
+                {(["poll", "rating"] as const).map((type) => (
+                  <button
+                    className="button-quiet"
+                    key={type}
+                    type="button"
+                    disabled={blocked || draft.items.length >= 100}
+                    onClick={() =>
                       setDraft({
                         ...draft,
-                        items: draft.items.filter((_, offset) => offset !== index),
+                        items: [
+                          ...draft.items,
+                          { required: true, question: newSurveyQuestion(type, locale) },
+                        ],
                       })
                     }
-                  />
-                </>
-              )}
-            </section>
-          ))}
-          <section className={styles.panel}>
-            <div className={styles.surveyActions}>
-              {(["poll", "rating"] as const).map((type) => (
+                  >
+                    Add {type}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.surveyActions}>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={blocked || !dirty || savePaused || model.phase === "saving"}
+                  onClick={() => void saveNow()}
+                >
+                  Save draft
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={
+                    operationBlocked || record.status === "archived" || !productFeatures?.surveys
+                  }
+                  onClick={() => void write("publish")}
+                >
+                  Publish Survey
+                </button>
                 <button
                   className="button-quiet"
-                  key={type}
                   type="button"
-                  disabled={blocked || draft.items.length >= 100}
-                  onClick={() =>
-                    setDraft({
-                      ...draft,
-                      items: [
-                        ...draft.items,
-                        { required: true, question: newSurveyQuestion(type, locale) },
-                      ],
-                    })
-                  }
+                  disabled={operationBlocked || !productFeatures?.surveys}
+                  onClick={() => void write("duplicate")}
                 >
-                  Add {type}
+                  Duplicate
                 </button>
-              ))}
-            </div>
-            <div className={styles.surveyActions}>
-              <button
-                className="button"
-                type="button"
-                disabled={blocked || !dirty || savePaused || model.phase === "saving"}
-                onClick={() => void saveNow()}
-              >
-                Save draft
-              </button>
+                <button
+                  className="button-quiet"
+                  type="button"
+                  disabled={operationBlocked || record.status === "archived"}
+                  onClick={() => void write("archive")}
+                >
+                  Archive
+                </button>
+              </div>
+              <p>
+                Free workspaces share five published items across Rounds and Surveys. Sharing
+                freezes the published version; later edits do not alter a shared survey.
+              </p>
+              <label className="field">
+                Open for (days)
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={days}
+                  disabled={blocked}
+                  onChange={(event) => setDays(Number(event.target.value))}
+                />
+              </label>
+              <RoomPasswordOption
+                available={passwordAvailable}
+                enabled={protectRoom}
+                password={joinPassword}
+                disabled={blocked || Boolean(pending.current)}
+                onEnabledChange={setProtectRoom}
+                onPasswordChange={setJoinPassword}
+              />
+              {passwordError ? (
+                <p className="error" lang={locale} role="alert">
+                  {t(passwordError)}
+                </p>
+              ) : null}
               <button
                 className="button"
                 type="button"
                 disabled={
-                  operationBlocked || record.status === "archived" || !productFeatures?.surveys
+                  operationBlocked ||
+                  model.unsettled ||
+                  record.publishedRevision !== record.revision ||
+                  record.status !== "published" ||
+                  !productFeatures?.surveys ||
+                  !Number.isInteger(days) ||
+                  days < 1 ||
+                  days > 30
                 }
-                onClick={() => void write("publish")}
+                onClick={() => void write("share")}
               >
-                Publish Survey
+                Create sharing link
               </button>
-              <button
-                className="button-quiet"
-                type="button"
-                disabled={operationBlocked || !productFeatures?.surveys}
-                onClick={() => void write("duplicate")}
-              >
-                Duplicate
-              </button>
-              <button
-                className="button-quiet"
-                type="button"
-                disabled={operationBlocked || record.status === "archived"}
-                onClick={() => void write("archive")}
-              >
-                Archive
-              </button>
-            </div>
-            <p>
-              Free workspaces share five published items across Rounds and Surveys. Sharing freezes
-              the published version; later edits do not alter a shared survey.
-            </p>
-            <label className="field">
-              Open for (days)
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={30}
-                value={days}
-                disabled={blocked}
-                onChange={(event) => setDays(Number(event.target.value))}
-              />
-            </label>
-            <RoomPasswordOption
-              available={passwordAvailable}
-              enabled={protectRoom}
-              password={joinPassword}
-              disabled={blocked || Boolean(pending.current)}
-              onEnabledChange={setProtectRoom}
-              onPasswordChange={setJoinPassword}
-            />
-            {passwordError ? (
-              <p className="error" lang={locale} role="alert">
-                {t(passwordError)}
-              </p>
-            ) : null}
-            <button
-              className="button"
-              type="button"
-              disabled={
-                operationBlocked ||
-                model.unsettled ||
-                record.publishedRevision !== record.revision ||
-                record.status !== "published" ||
-                !productFeatures?.surveys ||
-                !Number.isInteger(days) ||
-                days < 1 ||
-                days > 30
-              }
-              onClick={() => void write("share")}
-            >
-              Create sharing link
-            </button>
-          </section>
-        </>
+            </section>
+          </>
+        )
       ) : null}
     </WorkspaceShell>
   );

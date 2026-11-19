@@ -261,6 +261,40 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+.question h3 {
+  color: var(--ui-text-strong);
+  font-size: 19px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.surveyPage {
+  display: grid;
+  gap: 16px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.surveyPageHeader {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text-strong);
+}
+.surveyPageHeader h2 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.surveyInstructions {
+  margin: 0;
+  color: var(--ui-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
 .question li {
   padding: 6px 0;
 }

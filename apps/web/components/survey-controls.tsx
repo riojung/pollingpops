@@ -43,12 +43,14 @@ export function SurveyResponseControl({
   onChange,
   disabled = false,
   required = false,
+  error,
 }: {
   question: SurveyQuestionDraft;
   response?: SurveyResponse;
   onChange?: (value?: SurveyResponse) => void;
   disabled?: boolean;
   required?: boolean;
+  error?: string;
 }) {
   if (question.type !== "poll" && question.type !== "rating") return null;
   const maxSelections = question.type === "poll" ? (question.maxSelections ?? 1) : 1;
@@ -69,12 +71,24 @@ export function SurveyResponseControl({
           }))
         : [];
   return (
-    <fieldset className={styles.fieldset} disabled={disabled}>
+    <fieldset
+      className={styles.fieldset}
+      disabled={disabled}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? `survey-error-${question.id}` : undefined}
+      data-survey-question={question.id}
+    >
       <legend>
-        {question.prompt || "Untitled question"} {required ? "(required)" : "(optional)"}
+        <span lang="">{question.prompt || <span lang="en-CA">Untitled question</span>}</span>{" "}
+        <span lang="en-CA">{required ? "(required)" : "(optional)"}</span>
       </legend>
+      {error ? (
+        <p className="error" id={`survey-error-${question.id}`}>
+          {error}
+        </p>
+      ) : null}
       {multiple ? (
-        <p>
+        <p lang="en-CA">
           Select up to {maxSelections} options. {selectedIds.length} selected.
         </p>
       ) : null}
@@ -85,6 +99,8 @@ export function SurveyResponseControl({
             name={question.id}
             value={option.value}
             checked={option.selected}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `survey-error-${question.id}` : undefined}
             disabled={multiple && !option.selected && selectedIds.length >= maxSelections}
             onChange={() => {
               if (question.type === "rating") {
@@ -99,11 +115,16 @@ export function SurveyResponseControl({
               onChange?.(choiceIds.length ? { kind: "poll", choiceIds } : undefined);
             }}
           />
-          <span>{option.label}</span>
+          <span lang="">{option.label}</span>
         </label>
       ))}
       {!required && response && onChange ? (
-        <button className="button-quiet small-button" type="button" onClick={() => onChange()}>
+        <button
+          className="button-quiet small-button"
+          type="button"
+          onClick={() => onChange()}
+          lang="en-CA"
+        >
           Clear response
         </button>
       ) : null}

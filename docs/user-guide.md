@@ -72,6 +72,25 @@ Review every answer, explanation and recheck for your audience before publishing
 content is available in the ten supported creation languages; chooser/filter controls are localized.
 Changing the interface language does not rewrite an existing draft.
 
+### Ordered Survey pages
+
+A Survey with pages shows one section at a time, with a page title and progress. **Next** checks
+the current page's required questions and saves your answers before moving on. **Back** keeps
+your answers. Enter on an intermediate page acts as Next; **Submit Survey** appears only on
+the final page. If saving is interrupted, retry the same operation before navigating away.
+
+Returning on the same browser restores saved answers and opens the earliest page with an
+unanswered question, including optional questions. It does not restore an exact last-visited
+screen. A closed retained Survey permits read-only review of its pages. Your facilitator still
+receives question-level totals only after collection closes and the existing minimum sample is
+met; page visits are not reported.
+
+This is a reader foundation. Ordinary Survey creation continues to use the existing single-page
+format. Page-based Surveys appear read-only to creators; adding/editing pages, new page-based
+launches and conditional paths are subsequent checkpoints. Use an updated browser client if a
+page-based run asks you to refresh for compatible Survey support.
+The shared Library view also shows each page's heading and instructions above its questions.
+
 ### Choose a creation method
 
 Choosing a goal or starting method opens setup; it does not create a draft. Home, **Create**,

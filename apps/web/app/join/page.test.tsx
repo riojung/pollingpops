@@ -291,6 +291,8 @@ describe("unified password admission", () => {
             : "/v1/survey-rooms/join",
       );
       expect(JSON.parse(init.body)).toMatchObject({ code: "1234567", password: "  room secret  " });
+      if (artifact === "feedback_room")
+        expect(init.headers).toMatchObject({ "x-pollingpops-survey-schema": "3" });
       expect(fixtures.push).toHaveBeenCalledOnce();
       expect(writes).not.toContain("  room secret  ");
       expect(String(fixtures.push.mock.calls[0]![0])).not.toContain("secret");

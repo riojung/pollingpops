@@ -53,6 +53,40 @@ describe("Survey autosave", () => {
     expect(save).not.toHaveBeenCalled();
     expect((await controller.flush()).draft.schemaVersion).toBe(1);
   });
+  it("preserves v3 pages when an existing record is read with saving disabled", async () => {
+    const draft = SurveyDraftSchema.parse({
+      schemaVersion: 3,
+      title: "Ordered feedback",
+      items: [],
+      pages: [
+        {
+          id: "00000000-0000-4000-8000-000000000010",
+          title: "Saved empty page",
+          description: "Saved draft instructions",
+          questionIds: [],
+        },
+      ],
+    });
+    const save = vi.fn();
+    const controller = new SurveyAutosave(
+      {
+        id: "survey",
+        draft,
+        revision: 3,
+        status: "draft",
+        publishedRevision: null,
+        versionId: null,
+      },
+      { enabled: false, save, changed: vi.fn() },
+    );
+    expect(controller.snapshot().draft).toEqual(draft);
+    expect(controller.snapshot().dirty).toBe(false);
+    controller.edit({ ...draft, title: "Must not save" });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(controller.snapshot().draft).toEqual(draft);
+    expect(save).not.toHaveBeenCalled();
+    controller.dispose();
+  });
   it("debounces and coalesces a burst of edits into one latest-draft request", async () => {
     const { controller, edit, save } = fixture();
     edit("First");

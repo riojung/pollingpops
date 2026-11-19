@@ -10,6 +10,7 @@ import {
   type PresentationReview,
   type LibraryShareListQuery,
 } from "@openround/contracts";
+import { MAX_SURVEY_PAGES, SurveyPageSchema, type SurveyPage } from "@openround/contracts/surveys";
 import { apiFetch } from "../../../lib/api";
 
 export type LibraryScope = "workspace" | "organization" | "shared" | "managed";
@@ -40,6 +41,7 @@ export interface SharedLibraryDetail {
   share: LibraryShareSummary;
   review?: PresentationReview;
   questions?: SharedQuestion[];
+  surveyPages?: SurveyPage[];
 }
 
 export function libraryScope(value: string | null): LibraryScope {
@@ -127,6 +129,22 @@ export async function readLibraryShare(
   if (share.artifactType === "presentation")
     return { share, review: PresentationReviewSchema.parse(response.review) };
   if (!Array.isArray(response.questions)) throw new Error("Shared content unavailable");
+  if (share.artifactType === "survey" && response.surveyPages !== undefined) {
+    const surveyPages = SurveyPageSchema.array()
+      .min(1)
+      .max(MAX_SURVEY_PAGES)
+      .parse(response.surveyPages);
+    const questionIds = response.questions.map((question) => question.id);
+    const pageQuestionIds = surveyPages.flatMap((page) => page.questionIds);
+    if (
+      new Set(surveyPages.map((page) => page.id)).size !== surveyPages.length ||
+      new Set(pageQuestionIds).size !== pageQuestionIds.length ||
+      pageQuestionIds.length !== questionIds.length ||
+      pageQuestionIds.some((id, index) => id !== questionIds[index])
+    )
+      throw new Error("Shared content unavailable");
+    return { share, questions: response.questions, surveyPages };
+  }
   return { share, questions: response.questions };
 }
 

@@ -18,6 +18,36 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Ordered Survey pages: reader foundation
+
+Apply migration `117_survey_pages_readers.sql` with the owner migration connection before
+deploying the WX-06A1 readers. It expands the four Survey document-version checks to 1/2/3;
+it adds no table, row backfill or rewrite of immutable versions/room snapshots. Keep applied
+migrations and checksums intact. Deploy compatible API, web, worker/export and lifecycle
+readers before any later page-authoring writer is enabled.
+
+Ordinary blank/template writers remain v2. This checkpoint blocks fresh v3 authoring,
+publication, copying and launches through HTTP. Repository writer policy defaults to schema2;
+page authoring and its effective grant are a separate checkpoint. Existing v3 records render
+read-only in the creator editor without autosave or downgrade. Archive, organization, retained
+readers, accepted-receipt recovery and erasure keep their existing meaning.
+
+Verify legacy request/receipt hashes and v1/v2 frozen runs remain unchanged. Use isolated v3
+fixtures to verify exact page partition validation, snapshot immutability, required-field Next
+validation, full-map progress save before advancing, exact lost-ack retries, Back/Enter/focus,
+server-derived resume and final-only aggregate privacy. The page-aware client declares
+`x-pollingpops-survey-schema: 3` on Survey guest requests, including the shared join form.
+Old readers receive `SURVEY_CLIENT_UPDATE_REQUIRED` before v3 admission/content delivery.
+Verify authorized Library readers also preserve the pinned page headings/instructions through
+the additive `surveyPages` projection, exclude later draft edits and private question metadata,
+and retain legacy flat payloads and the v3 fresh-copy restriction.
+
+Retain v3-compatible readers once v3 records exist. Turning off authoring does not make an
+older flat-only binary compatible. Never strip page metadata or the reader declaration,
+rewrite published snapshots, downgrade drafts or change accepted mutation bodies to fit a
+rollback. Keep the schema expansion and repair forward. Conditional paths, hidden-response
+handling and page-visit analytics are not introduced. See [Survey pages](../survey-pages.md).
+
 ## Round starter-copy retry intents
 
 WX-05C adds durable retries to the existing Round starter-copy API. Apply migration

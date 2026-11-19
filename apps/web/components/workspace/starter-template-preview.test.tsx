@@ -162,4 +162,47 @@ describe("starter template preview", () => {
     expect(markup).not.toContain("No draft has been created");
     expect(markup).not.toContain('disabled="">Retry same copy');
   });
+  it("preserves ordered Survey page headings and instructions in the source preview", () => {
+    const opinion: QuestionDraft = {
+      ...question,
+      type: "poll",
+      purpose: "opinion",
+      basePoints: 0,
+      explanation: "",
+      choices: question.choices.map((choice) => ({ ...choice, isCorrect: false })),
+    };
+    const survey: SurveyDraft = {
+      schemaVersion: 3,
+      title: "Saved page layout",
+      description: "",
+      category: "general",
+      experiencePreset: { id: "focus", version: 1 },
+      items: [{ required: true, question: opinion }],
+      pages: [
+        {
+          id: "00000000-0000-4000-8000-000000000011",
+          title: "Authored page title",
+          description: "Authored page instructions",
+          questionIds: [opinion.id],
+        },
+      ],
+    };
+    const before = JSON.stringify(survey);
+    const markup = renderToStaticMarkup(
+      <StarterTemplatePreview
+        id="paged-survey"
+        content={{ kind: "survey", draft: survey }}
+        contentLocale="en-CA"
+        uiLocale="en-CA"
+        closeLabel="Close"
+        onClose={() => {}}
+        mode="panel"
+      />,
+    );
+    expect(markup).toContain("Authored page title");
+    expect(markup).toContain("Authored page instructions");
+    expect(markup).toContain("Page 1 of 1");
+    expect(markup).toContain("data-survey-page-heading");
+    expect(JSON.stringify(survey)).toBe(before);
+  });
 });

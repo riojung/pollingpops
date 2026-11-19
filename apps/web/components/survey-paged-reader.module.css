@@ -1,0 +1,32 @@
+.reader {
+  min-inline-size: 0;
+  color: var(--ui-text, var(--ink));
+  overflow-wrap: anywhere;
+}
+.reader h2:focus {
+  outline: 3px solid var(--ui-focus, currentColor);
+  outline-offset: 5px;
+}
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.question {
+  margin-block: 1rem;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-block: 1rem;
+}
+.actions button {
+  min-block-size: 44px;
+  white-space: normal;
+}
+@media (max-width: 480px) {
+  .actions button {
+    flex: 1 1 auto;
+  }
+}

@@ -7,6 +7,7 @@ import { supportedLocales, type StarterId } from "../../packages/contracts/src/i
 import { creationMethodCopyEntries } from "../../apps/web/lib/i18n/creation-method-copy";
 import { importPreviewCopyEntries } from "../../apps/web/lib/i18n/import-preview-copy";
 import { starterCopyCopyEntries } from "../../apps/web/lib/i18n/starter-copy-copy";
+import { surveyPagesCopyEntries } from "../../apps/web/lib/i18n/survey-pages-copy";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -101,6 +102,7 @@ describe("native-language review preparation", () => {
         "creation-method",
         "import-preview",
         "starter-copy",
+        "survey-pages",
         "template",
         "template-guide",
         "presentation-workspace",
@@ -250,6 +252,42 @@ describe("native-language review preparation", () => {
         source: {
           file: "apps/web/lib/i18n/starter-copy-copy.ts",
           helper: "starterCopyCopy",
+          contentVersion: "repository-source",
+        },
+        english: { template: english[key] },
+        target: { template: target[key] },
+      });
+      expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+        decision: "pending",
+        reviewerReference: null,
+        reviewedAt: null,
+        issue: null,
+        evidenceReference: null,
+      });
+    }
+  });
+
+  it("exports every ordered Survey page reader phrase with bound sources and pending decisions", () => {
+    const english = surveyPagesCopyEntries("en-CA");
+    const target = surveyPagesCopyEntries("ko-KR");
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/survey-pages/"));
+    expect(items).toHaveLength(23);
+    expect(items.map((item) => item.id).sort()).toEqual(
+      Object.keys(english)
+        .map((key) => `ui/survey-pages/${encodeURIComponent(key)}`)
+        .sort(),
+    );
+    expect(bundle.sourceBinding.files).toContainEqual({
+      path: "apps/web/lib/i18n/survey-pages-copy.ts",
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    const decisions = createReviewDecisions(bundle);
+    for (const key of Object.keys(english)) {
+      const id = `ui/survey-pages/${encodeURIComponent(key)}`;
+      expect(items.find((item) => item.id === id)).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/survey-pages-copy.ts",
+          helper: "surveyPagesCopy",
           contentVersion: "repository-source",
         },
         english: { template: english[key] },

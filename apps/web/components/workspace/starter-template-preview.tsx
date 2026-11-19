@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { surveyPageViews } from "@openround/contracts/surveys";
+import { SurveyPagedReader } from "../survey-paged-reader";
 import {
   questionTypeDefinition,
   type QuizDraft,
@@ -71,6 +73,8 @@ export function StarterTemplatePreview({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const [surveyPage, setSurveyPage] = useState(0);
+  useEffect(() => setSurveyPage(0), [id, content]);
   const copy = templateGuideCopy(uiLocale);
   const previewCopy = starterPreviewCopy(uiLocale);
   const items =
@@ -168,55 +172,70 @@ export function StarterTemplatePreview({
           {guide ? (
             <TemplateGuide guide={guide} uiLocale={uiLocale} contentLocale={contentLocale} />
           ) : null}
-          <ol className={styles.questions} lang={contentLocale}>
-            {items.map(({ question, required }) => {
-              const knowledge =
-                questionTypeDefinition(question.type).scored && question.purpose !== "opinion";
-              const correct =
-                knowledge && "choices" in question
-                  ? question.choices
-                      .filter((choice) => choice.isCorrect)
-                      .map((choice) => choice.label)
-                  : [];
-              return (
-                <li key={question.id}>
-                  <h3>{question.prompt}</h3>
-                  {required !== undefined ? (
-                    <span className={styles.requirement} lang={uiLocale}>
-                      {copy(required ? "Required" : "Optional")}
-                    </span>
-                  ) : null}
-                  {"choices" in question ? (
-                    <ul>
-                      {question.choices.map((choice) => (
-                        <li key={choice.id}>{choice.label}</li>
-                      ))}
-                    </ul>
-                  ) : question.type === "rating" ? (
-                    <p>
-                      {question.min} — {question.minLabel} / {question.max} — {question.maxLabel}
-                    </p>
-                  ) : null}
-                  {content?.kind === "round" && knowledge ? (
-                    <div className={styles.answer}>
+          {content?.kind === "survey" && content.draft.schemaVersion === 3 ? (
+            <SurveyPagedReader
+              content={content.draft}
+              pageIndex={surveyPage}
+              locale={uiLocale}
+              preview
+              onBack={() => setSurveyPage((index) => Math.max(0, index - 1))}
+              onNext={() =>
+                setSurveyPage((index) =>
+                  Math.min(surveyPageViews(content.draft).length - 1, index + 1),
+                )
+              }
+            />
+          ) : (
+            <ol className={styles.questions} lang={contentLocale}>
+              {items.map(({ question, required }) => {
+                const knowledge =
+                  questionTypeDefinition(question.type).scored && question.purpose !== "opinion";
+                const correct =
+                  knowledge && "choices" in question
+                    ? question.choices
+                        .filter((choice) => choice.isCorrect)
+                        .map((choice) => choice.label)
+                    : [];
+                return (
+                  <li key={question.id}>
+                    <h3>{question.prompt}</h3>
+                    {required !== undefined ? (
+                      <span className={styles.requirement} lang={uiLocale}>
+                        {copy(required ? "Required" : "Optional")}
+                      </span>
+                    ) : null}
+                    {"choices" in question ? (
+                      <ul>
+                        {question.choices.map((choice) => (
+                          <li key={choice.id}>{choice.label}</li>
+                        ))}
+                      </ul>
+                    ) : question.type === "rating" ? (
                       <p>
-                        <strong lang={uiLocale}>{copy("Correct answer")}: </strong>
-                        {question.type === "numeric"
-                          ? `${question.correctValue}${question.unit ? ` ${question.unit}` : ""}`
-                          : correct.join(" · ")}
+                        {question.min} — {question.minLabel} / {question.max} — {question.maxLabel}
                       </p>
-                      {question.explanation ? (
+                    ) : null}
+                    {content?.kind === "round" && knowledge ? (
+                      <div className={styles.answer}>
                         <p>
-                          <strong lang={uiLocale}>{copy("Why this answer")}: </strong>
-                          {question.explanation}
+                          <strong lang={uiLocale}>{copy("Correct answer")}: </strong>
+                          {question.type === "numeric"
+                            ? `${question.correctValue}${question.unit ? ` ${question.unit}` : ""}`
+                            : correct.join(" · ")}
                         </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ol>
+                        {question.explanation ? (
+                          <p>
+                            <strong lang={uiLocale}>{copy("Why this answer")}: </strong>
+                            {question.explanation}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </div>
       )}
     </>

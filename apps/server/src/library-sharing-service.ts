@@ -67,7 +67,7 @@ export class LibrarySharingService {
     );
   }
 
-  async summary(share: LibraryShareSummary, creator: CreatorContext | null) {
+  async summary(share: LibraryShareSummary, creator: CreatorContext | null, forCopy = false) {
     // The internal record also holds the private pinned snapshot; whitelist summary fields.
     const summary = LibraryShareSummarySchema.parse(
       Object.fromEntries(
@@ -77,8 +77,13 @@ export class LibrarySharingService {
         ]),
       ),
     );
-    let copyUnavailableReason: string | null = null;
-    if (summary.capabilities.copy) {
+    // Fresh v3 copies are hidden in summaries, while retained accepted receipts may still replay.
+    // Authorization below and the repository receipt check remain mandatory for that path.
+    const canAttemptCopy = forCopy ? summary.permission === "use" : summary.capabilities.copy;
+    let copyUnavailableReason: string | null = canAttemptCopy
+      ? null
+      : (summary.copyUnavailableReason ?? null);
+    if (canAttemptCopy) {
       if (!creator || creator.role === "viewer") {
         copyUnavailableReason =
           "Choose an organization workspace where you can create content to use a copy.";
@@ -97,7 +102,7 @@ export class LibrarySharingService {
       ...summary,
       capabilities: {
         ...summary.capabilities,
-        copy: summary.capabilities.copy && !copyUnavailableReason,
+        copy: canAttemptCopy && !copyUnavailableReason,
       },
       copyUnavailableReason,
     };
@@ -151,7 +156,7 @@ export class LibrarySharingService {
   async copy(creator: CreatorContext, id: string, requestId: string) {
     const visible = await this.deps.shares.read({ actorId: creator.userId, id, now: new Date() });
     if (!visible) throw unavailable();
-    const summary = await this.summary(visible, creator);
+    const summary = await this.summary(visible, creator, true);
     if (!summary.capabilities.copy)
       throw new LibrarySharingError(
         "FORBIDDEN",

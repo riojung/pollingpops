@@ -16,8 +16,10 @@ with qualification in [Library discovery](library-discovery.md). **WX-04** merge
 **WX-06A2** merged through [PR #285](https://github.com/riojung/pollingpops/pull/285) at `4dcefcc`.
 **WX-06B1** merged through [PR #286](https://github.com/riojung/pollingpops/pull/286) at `f08ccbd`.
 **WX-06B2** merged through [PR #287](https://github.com/riojung/pollingpops/pull/287) at `ed011d0`.
-The product owner then selected the [public product website increment](public-product-experience-2026-11.md)
-before the next Survey checkpoint. Later items are scoped backlog,
+The [public product website increment](public-product-experience-2026-11.md) merged through
+[PR #288](https://github.com/riojung/pollingpops/pull/288) at `ce79b19`. Work now returns to
+**WX-06C1**, the isolated branch-aware counting and withheld-results contract on
+`codex/survey-branching-results-contracts`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -33,28 +35,30 @@ follow its smaller checkpoints below; do not combine every checkpoint into one p
 Each delivery needs an assigned owner, tests, documentation and an explicit disposition of its
 remaining work. Candidate priorities indicate evaluation order, not a release promise.
 
-| ID    | Priority | Size                               | Outcome                                                             | State / dependency                             | Responsible role                |
-| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below      | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                         | Authoring + frontend            |
-| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2 merged; C qualification next       | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
-| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                        | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                        | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Ready one surface at a time                    | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11               | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery              | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace | Library + organization access   |
+| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                  | Responsible role                |
+| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------- |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below           | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below           | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery            | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                    | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                              | Authoring + frontend            |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2 merged; C1 implemented locally, C2 next | Surveys + contracts + reporting |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence             | Async delivery + privacy        |
+| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                    | Contracts + live experience     |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                             | Realtime + security + frontend  |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                             | Reporting + learning evidence   |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Ready one surface at a time                         | Design system + frontend        |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                    | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                   | Learning delivery + privacy     |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace      | Library + organization access   |
 
 ## Selected first delivery
 
 As of 2026-11-19, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
 in progress: ordered-page readers and authoring are merged, while conditional pages have not
-been enabled in the product. WX-07–14 remain eight scoped/candidate areas. These are delivery
+been enabled in the product. C1 adds internal counting and a withheld-only result contract;
+privacy-policy qualification, runtime reporting/exports and B3 writers remain pending.
+The public product website is merged in PR #288. WX-07–14 remain eight scoped/candidate areas. These are delivery
 positions, not a percentage of product completeness or release acceptance. Additional customer-job
 collections and human/native-language acceptance remain open even though the selected WX-04
 collection is merged.
@@ -509,11 +513,33 @@ to three pending editorial review items per locale; native-language and human ac
 An independent integration audit found no actionable issues. The B2 increment is prepared for review
 on `codex/survey-branching-readers`.
 
-The next Survey increment is **C branch-aware results/privacy**: eligible-question denominators,
-unanswered versus logic-skipped semantics, suppression/minimum samples and reconstruction-risk
-qualification. **B3** then adds condition editing, safe ID remapping/reordering/deletion, previews,
-and an explicit writer grant after B2 and C are qualified. WX-07–14 and human release acceptance
-remain pending; earlier merged P1 slices do not imply these are shipped.
+**Selected WX-06C1 counting and withheld-result foundation:** the separate
+`@openround/contracts/survey-branching-results` module validates published v4 content and explicit
+finalized submissions, computes internal eligible/answered/unanswered/logic-skipped partitions,
+and retains answered-respondent distribution denominators separately from eligible-submission
+coverage. Invalid finalized rows reject the whole batch; no hidden answers are silently repaired
+into evidence. A strict proposed aggregate-v3 DTO always withholds all counts and distributions,
+including total submissions, regardless of closure or sample size. There is no approval override.
+
+Adversarial fixtures cover direct small groups, complements, nested 15/10/9 cohorts and independent
+controller overlap. Public withheld output cannot expose counts or per-person branch traces.
+Historical aggregate-v2 bytes remain pinned across source v1–3. No runtime results, summaries,
+exports, writer paths or grants are enabled. See the
+[counting semantics, privacy risks and staged follow-up](survey-branching-results.md).
+
+**WX-06C1 local verification — 2026-11-19:** full `VITEST_MAX_WORKERS=1 pnpm check` passed,
+including 1,109 contract tests, 6,406 web tests, 1,672 server tests, 529 support tests, four
+application build tasks and compiled-server startup. The separate contracts build emitted the new
+entry and declarations. Fifty-six added contract cases cover counting, privacy and legacy bytes;
+14 focused API/summary boundary cases passed. Independent read-only review found no actionable
+issue. Existing optional integration skips and human acceptance gates remain.
+
+The owner selected whole-report withholding until privacy checks pass. The remaining C work
+is **C2 disclosure-policy qualification**, **C3 runtime results/readers**,
+and **C4 shared summaries/exports/lifecycle**. **B3** then adds condition editing, safe ID
+remapping/reordering/deletion, previews, and an explicit writer grant after B2 and C qualify.
+WX-07–14 and human release acceptance remain pending; earlier merged P1 slices do not imply
+these are shipped.
 
 At B1, production compatibility used valid proposed v4 content and six server boundary cases,
 including six accepted receipt-hash goldens from main `4dcefcc`. B2 retains those goldens and
@@ -689,9 +715,10 @@ assistive-technology, native-language or physical-device review. Run the reposit
 `pnpm check` before opening a pull request, as required by the contribution guide.
 
 The next work session should select **one ID/checkpoint**, confirm its current baseline and scope,
-assign an owner and define a testable completion target. After B2, the next selected Survey work is
-**C results/privacy** before B3 enables
-writers. **WX-11** is a ready independent surface-polish increment. WX-14 needs a curator policy;
+assign an owner and define a testable completion target. After C1, the next selected Survey work is
+**C2 disclosure policy**, followed by C3/C4 runtime reporting and exports before B3 enables
+writers. **WX-11** remains a ready independent workspace-surface polish increment; the separate
+public-site work merged in PR #288. WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a
 provider choice. Do not mark these later items implemented because earlier slices are merged.
 

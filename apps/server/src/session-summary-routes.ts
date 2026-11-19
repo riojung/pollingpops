@@ -171,6 +171,7 @@ export async function registerSessionSummaryRoutes(
     const room = await deps.surveys.getRoom(source.id, workspaceId);
     if (
       !room ||
+      room.schemaVersion === 4 ||
       Date.parse(room.expiresAt) <= now.getTime() ||
       (!room.closed && Date.parse(room.closesAt) > now.getTime())
     )

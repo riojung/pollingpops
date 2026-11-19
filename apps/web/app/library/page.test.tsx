@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
 import type * as ApiModule from "../../lib/api";
+import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
+import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
+import { surveyBranchingFixture } from "../../../../packages/contracts/test/support/survey-branching-fixture";
 
 interface LibraryHooks {
   cursor: number;
@@ -378,6 +381,72 @@ describe("Library workspace", () => {
       expect(markup).not.toContain('data-action="host"');
     }
     expect(markup).not.toContain('data-action="resume"');
+  });
+
+  it("negotiates conditional Survey reads and retains view and metadata actions without content mutations", async () => {
+    fixtures.query = "type=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      const response = libraryResponseWithStatus(path, "published");
+      if (!("surveys" in response) || !response.surveys) return response;
+      return {
+        ...response,
+        surveys: response.surveys.map((survey) => ({
+          ...survey,
+          draft: { ...surveyBranchingFixture(), title: survey.title },
+        })),
+      };
+    });
+    const harness = libraryHarness();
+    let markup = await harness.settle();
+    expect(fixtures.apiFetch).toHaveBeenCalledWith("/v1/surveys?limit=50", {
+      headers: { [SURVEY_READER_HEADER]: "4" },
+    });
+    expect(markup).toContain('data-action="view"');
+    expect(markup).toContain('href="/surveys/surveys-filed"');
+    expect(markup).not.toContain('data-action="edit"');
+    expect(markup).not.toContain(">Share</a>");
+    expect(markup).not.toContain("Duplicate");
+    expect(markup).toContain("Archive");
+    const cards = elements(fixtures.tree).find((element) => element.type === SurveyLibraryCards);
+    if (!cards) throw new Error("Expected Survey cards");
+    (cards.props as ComponentProps<typeof SurveyLibraryCards>).onAction(
+      "duplicate",
+      "surveys-filed",
+    );
+    await harness.settle();
+    expect(fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST")).toEqual([]);
+    selectAll();
+    markup = harness.render();
+    expect(markup).not.toContain("Duplicate");
+    expect(markup).toContain("Archive (2)");
+    expect(markup).toContain('aria-label="Destination folder"');
+  });
+
+  it("copies only supported Surveys in a mixed bulk selection", async () => {
+    fixtures.query = "type=surveys";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      const response = libraryResponse(path);
+      if (!("surveys" in response) || !response.surveys) return response;
+      return {
+        ...response,
+        surveys: response.surveys.map((survey, index) => ({
+          ...survey,
+          draft: index === 0 ? { ...surveyBranchingFixture(), title: survey.title } : survey.draft,
+        })),
+      };
+    });
+    const harness = libraryHarness();
+    await harness.settle();
+    selectAll();
+    const markup = harness.render();
+    expect(markup).toContain("Duplicate (1)");
+    expect(markup).toContain("Archive (2)");
+    clickButton("Duplicate (1)");
+    await harness.settle();
+    const writes = fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]![0]).toBe("/v1/surveys");
+    expect(JSON.parse(writes[0]![1].body)).toMatchObject({ sourceId: "surveys-unfiled" });
   });
 
   it.each([

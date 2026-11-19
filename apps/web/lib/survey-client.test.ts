@@ -131,10 +131,18 @@ function harness(initial = attempt(), existingCredential = true) {
 const answer = (value = 4) => ({ kind: "rating" as const, value });
 const posts = (view: ReturnType<typeof harness>) =>
   view.request.mock.calls.filter(([, init]) => init?.method === "POST");
+const choice = (question: number, selected = 1) => ({
+  kind: "poll" as const,
+  choiceIds: [id(question * 100 + selected)],
+});
+const branchingAttempt = (responses: SurveyResponses = {}): SurveyAttempt => ({
+  ...attempt(responses),
+  content: surveyBranchingFixture(),
+});
 
 describe("Survey participant room session", () => {
   it.each(["resume", "admission"])(
-    "rejects a valid proposed v4 %s response without flattening pages or enabling answers",
+    "reads a frozen v4 %s response without flattening conditions or storing answers",
     async (mode) => {
       const future = surveyBranchingFixture();
       expect(future.pages.some((page) => page.visibleWhen)).toBe(true);
@@ -143,33 +151,23 @@ describe("Survey participant room session", () => {
       if (mode === "resume") await view.session.load();
       else await view.session.join();
       expect(view.state()).toMatchObject({
-        attempt: null,
+        attempt: { content: future },
         responses: {},
         pageIndex: 0,
         pending: false,
-        error: { code: "SURVEY_CLIENT_UPDATE_REQUIRED" },
+        error: null,
       });
-      view.session.change(id(1), answer());
-      await view.session.next();
-      await view.session.save(false);
-      await view.session.save(true);
-      expect(view.state().attempt).toBeNull();
-      expect(view.state().responses).toEqual({});
-      expect(
-        view.request.mock.calls.some(
-          ([path]) => path.endsWith("/draft") || path.endsWith("/submit"),
-        ),
-      ).toBe(false);
+      expect(view.state().attempt?.content.schemaVersion).toBe(4);
       for (const [, init] of view.request.mock.calls)
         expect(init).toMatchObject({
           credentials: "omit",
-          headers: { [SURVEY_READER_HEADER]: "3" },
+          headers: { [SURVEY_READER_HEADER]: "4" },
         });
       expect(JSON.stringify([...view.entries])).not.toContain(future.title);
       expect(JSON.stringify([...view.entries])).not.toContain("visibleWhen");
     },
   );
-  it("advertises reader3 without cookies on public admission, authenticated resume and writes", async () => {
+  it("advertises reader4 without cookies on public admission, authenticated resume and writes", async () => {
     const view = harness(attempt(), false);
     await view.session.load();
     view.session.change(id(1), answer());
@@ -180,13 +178,13 @@ describe("Survey participant room session", () => {
       "draft",
     ]);
     for (const [, init] of view.request.mock.calls)
-      expect(init).toMatchObject({ credentials: "omit", headers: { [SURVEY_READER_HEADER]: "3" } });
+      expect(init).toMatchObject({ credentials: "omit", headers: { [SURVEY_READER_HEADER]: "4" } });
     expect(view.storage.setItem).toHaveBeenCalledOnce();
     expect([...view.entries.values()]).not.toContain("Ordered feedback");
     const reloaded = harness();
     await reloaded.session.load();
     expect(reloaded.request.mock.calls[0]![1]).toMatchObject({
-      headers: { authorization: "Bearer room-only-credential", [SURVEY_READER_HEADER]: "3" },
+      headers: { authorization: "Bearer room-only-credential", [SURVEY_READER_HEADER]: "4" },
     });
   });
   it("validates only current-page requirements and does not write or advance on failure", async () => {
@@ -289,32 +287,38 @@ describe("Survey participant room session", () => {
     expect(view.state().attempt).toBeNull();
     expect([...view.entries.values()]).not.toContain("exact password");
   });
-  it.each(["wrong-room", "wrong-revision", "invalid-content", "future-branching"])(
-    "retains pending intent after an unverifiable %s acknowledgement",
-    async (kind) => {
-      const view = harness();
-      await view.session.load();
-      view.session.change(id(1), answer());
-      const bad = view.accepted({ [id(1)]: answer() });
-      if (kind === "wrong-room") bad.attempt.roomId = id(101);
-      if (kind === "wrong-revision") bad.attempt.revision = 8;
-      if (kind === "invalid-content")
-        bad.attempt.content = {
-          ...content(),
-          schemaVersion: 99,
-        } as unknown as SurveyAttempt["content"];
-      if (kind === "future-branching")
-        bad.attempt.content = surveyBranchingFixture() as unknown as SurveyAttempt["content"];
-      view.request.mockResolvedValueOnce(bad);
-      await view.session.next();
-      expect(view.state()).toMatchObject({ pageIndex: 0, pending: true });
-      const body = posts(view)[0]![1]!.body;
-      view.request.mockResolvedValueOnce(view.accepted({ [id(1)]: answer() }));
-      await view.session.retry();
-      expect(posts(view)[1]![1]!.body).toBe(body);
-      expect(view.state().pageIndex).toBe(1);
-    },
-  );
+  it.each([
+    "wrong-room",
+    "wrong-revision",
+    "invalid-content",
+    "wrong-version",
+    "wrong-content",
+    "wrong-responses",
+  ])("retains pending intent after an unverifiable %s acknowledgement", async (kind) => {
+    const view = harness();
+    await view.session.load();
+    view.session.change(id(1), answer());
+    const bad = view.accepted({ [id(1)]: answer() });
+    if (kind === "wrong-room") bad.attempt.roomId = id(101);
+    if (kind === "wrong-revision") bad.attempt.revision = 8;
+    if (kind === "invalid-content")
+      bad.attempt.content = {
+        ...content(),
+        schemaVersion: 99,
+      } as unknown as SurveyAttempt["content"];
+    if (kind === "wrong-version") bad.attempt.content = surveyBranchingFixture();
+    if (kind === "wrong-content")
+      bad.attempt.content = { ...content(), title: "Different frozen content" };
+    if (kind === "wrong-responses") bad.attempt.responses = { [id(1)]: answer(2) };
+    view.request.mockResolvedValueOnce(bad);
+    await view.session.next();
+    expect(view.state()).toMatchObject({ pageIndex: 0, pending: true });
+    const body = posts(view)[0]![1]!.body;
+    view.request.mockResolvedValueOnce(view.accepted({ [id(1)]: answer() }));
+    await view.session.retry();
+    expect(posts(view)[1]![1]!.body).toBe(body);
+    expect(view.state().pageIndex).toBe(1);
+  });
   it("preserves all page answers on Back and resumes the earliest unanswered item including optional items", async () => {
     const view = harness(attempt({ [id(1)]: answer(), [id(3)]: answer(2) }));
     await view.session.load();
@@ -382,5 +386,215 @@ describe("Survey participant room session", () => {
       "responses",
     ]);
     expect(view.state().pageIndex).toBe(0);
+  });
+});
+
+describe("conditional Survey participant session", () => {
+  it("validates a required visible final page locally and exposes a focusable question error", async () => {
+    const source = branchingAttempt({ [id(1)]: choice(1, 2) });
+    source.content.items[3]!.required = true;
+    const view = harness(source);
+    await view.session.load();
+    expect(view.state().pageIndex).toBe(1);
+    await view.session.save(true);
+    expect(view.state()).toMatchObject({
+      pageIndex: 1,
+      validation: { [id(4)]: "required" },
+      validationRevision: 1,
+      pending: false,
+    });
+    expect(posts(view)).toHaveLength(0);
+    view.session.change(id(4), answer(2));
+    await view.session.save(true);
+    expect(view.state().attempt?.finalized).toBe(true);
+    expect(view.state().responses).toEqual({ [id(1)]: choice(1, 2), [id(4)]: answer(2) });
+  });
+
+  it("clears cascading hidden answers with a replacement map and never restores them when reopened", async () => {
+    const view = harness(
+      branchingAttempt({
+        [id(1)]: choice(1),
+        [id(2)]: choice(2),
+        [id(3)]: answer(3),
+        [id(4)]: answer(4),
+      }),
+    );
+    await view.session.load();
+    expect(view.state().pageIndex).toBe(3);
+    view.session.back();
+    view.session.back();
+    view.session.back();
+    view.session.change(id(1), choice(1, 2));
+    const cleaned = { [id(1)]: choice(1, 2), [id(4)]: answer(4) };
+    expect(view.state().responses).toEqual(cleaned);
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(1);
+    expect(JSON.parse(posts(view)[0]![1]!.body as string)).toEqual({
+      expectedRevision: 0,
+      idempotencyKey: id(900),
+      responses: cleaned,
+    });
+    view.session.back();
+    view.session.change(id(1), choice(1));
+    expect(view.state().responses).toEqual({ [id(1)]: choice(1), [id(4)]: answer(4) });
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(1);
+    await view.session.next();
+    expect(view.state().validation).toEqual({ [id(2)]: "required" });
+    expect(posts(view)).toHaveLength(2);
+    view.session.change(id(2), choice(2, 2));
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(2);
+    expect(view.state().responses[id(3)]).toBeUndefined();
+    await view.session.save(true);
+    expect(view.state().attempt).toMatchObject({ revision: 4, finalized: true });
+    expect(JSON.parse(posts(view)[3]![1]!.body as string).responses).toEqual({
+      [id(1)]: choice(1),
+      [id(2)]: choice(2, 2),
+      [id(4)]: answer(4),
+    });
+  });
+
+  it("saves and submits only visible required answers while preventing captured hidden-page edits", async () => {
+    const view = harness(branchingAttempt());
+    await view.session.load();
+    await view.session.next();
+    expect(view.state().validation).toEqual({ [id(1)]: "required" });
+    view.session.change(id(2), choice(2));
+    expect(view.state().responses).toEqual({});
+    view.session.change(id(1), choice(1, 2));
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(1);
+    view.session.change(id(3), answer());
+    expect(view.state().responses).toEqual({ [id(1)]: choice(1, 2) });
+    await view.session.save(true);
+    expect(view.state()).toMatchObject({ notice: "submitted", attempt: { finalized: true } });
+    expect(posts(view).map(([path]) => path.split("/").at(-1))).toEqual(["draft", "submit"]);
+  });
+
+  it("restores the authoritative map and resumes the first unanswered visible item without browser answer storage", async () => {
+    const saved = branchingAttempt({ [id(1)]: choice(1, 2) });
+    saved.revision = 6;
+    const view = harness(saved);
+    await view.session.load();
+    expect(view.state()).toMatchObject({
+      responses: { [id(1)]: choice(1, 2) },
+      pageIndex: 1,
+      attempt: { revision: 6 },
+    });
+    view.session.change(id(4), answer());
+    view.session.dispose();
+    const reconnect = harness(saved);
+    await reconnect.session.load();
+    expect(reconnect.state().responses).toEqual({ [id(1)]: choice(1, 2) });
+    expect(reconnect.state().pageIndex).toBe(1);
+    expect(view.storage.setItem).not.toHaveBeenCalled();
+    expect(reconnect.storage.setItem).not.toHaveBeenCalled();
+    expect([...reconnect.entries]).toEqual([
+      [`pollingpops:survey:${saved.roomId}`, "room-only-credential"],
+    ]);
+  });
+
+  it.each(["stale-revision", "stale-answers", "wrong-condition", "wrong-version"])(
+    "keeps a newer branch cleanup pending after a %s acknowledgement and retries the exact operation",
+    async (kind) => {
+      const oldResponses = {
+        [id(1)]: choice(1),
+        [id(2)]: choice(2),
+        [id(3)]: answer(3),
+      };
+      const view = harness(branchingAttempt(oldResponses));
+      await view.session.load();
+      // Save a first authoritative map, then make a later cleanup at its new revision.
+      await view.session.save(false);
+      expect(view.state().attempt?.revision).toBe(1);
+      view.session.back();
+      view.session.back();
+      view.session.back();
+      view.session.change(id(1), choice(1, 2));
+      const cleaned = { [id(1)]: choice(1, 2) };
+      const bad = structuredClone(view.accepted(cleaned, 2));
+      if (kind === "stale-revision") {
+        bad.attempt.revision = 1;
+        bad.attempt.responses = oldResponses;
+      }
+      if (kind === "stale-answers") bad.attempt.responses = { [id(1)]: choice(1) };
+      if (kind === "wrong-condition" && bad.attempt.content.schemaVersion === 4)
+        bad.attempt.content.pages[1]!.visibleWhen!.choiceId = id(102);
+      if (kind === "wrong-version") bad.attempt.content = content();
+      view.request.mockResolvedValueOnce(bad);
+      await view.session.next();
+      expect(view.state()).toMatchObject({
+        pageIndex: 0,
+        pending: true,
+        saving: false,
+        responses: cleaned,
+        attempt: { revision: 1, responses: oldResponses },
+      });
+      const captured = posts(view)[1]!;
+      expect(JSON.parse(captured[1]!.body as string).expectedRevision).toBe(1);
+      view.entries.set(`pollingpops:survey:${id(100)}`, "replacement-credential");
+      view.session.change(id(1), choice(1));
+      view.session.back();
+      await view.session.next();
+      await view.session.save(true);
+      await view.session.load();
+      expect(posts(view)).toHaveLength(2);
+      expect(view.state().responses).toEqual(cleaned);
+      view.request.mockResolvedValueOnce(view.accepted(cleaned, 2));
+      await view.session.retry();
+      expect(posts(view)[2]).toEqual(captured);
+      expect(view.state()).toMatchObject({
+        pageIndex: 1,
+        pending: false,
+        responses: cleaned,
+        attempt: { revision: 2, responses: cleaned },
+      });
+      // A later reconnect cannot replace that cleanup with an older saved revision.
+      view.request.mockResolvedValueOnce(view.accepted(oldResponses, 1));
+      await view.session.load();
+      expect(view.state()).toMatchObject({
+        responses: cleaned,
+        attempt: { revision: 2, responses: cleaned },
+      });
+    },
+  );
+
+  it("reviews only retained visible pages after closure, including a finalized attempt, without new writes", async () => {
+    const view = harness({
+      ...branchingAttempt({ [id(1)]: choice(1, 2) }),
+      closed: true,
+      finalized: true,
+      receipt: "retained-receipt",
+    });
+    await view.session.load();
+    expect(view.state().pageIndex).toBe(1);
+    view.session.back();
+    expect(view.state().pageIndex).toBe(0);
+    view.session.change(id(1), choice(1));
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(1);
+    await view.session.save(false);
+    await view.session.save(true);
+    expect(view.state().responses).toEqual({ [id(1)]: choice(1, 2) });
+    expect(posts(view)).toHaveLength(0);
+  });
+
+  it("reviews the authoritative saved branch if closure follows an unsaved local branch change", async () => {
+    const view = harness(
+      branchingAttempt({ [id(1)]: choice(1), [id(2)]: choice(2), [id(3)]: answer() }),
+    );
+    await view.session.load();
+    view.session.back();
+    view.session.back();
+    view.session.back();
+    view.session.change(id(1), choice(1, 2));
+    expect(view.state().responses).toEqual({ [id(1)]: choice(1, 2) });
+    view.close();
+    await view.session.next();
+    await view.session.next();
+    await view.session.next();
+    expect(view.state().pageIndex).toBe(3);
+    expect(posts(view)).toHaveLength(0);
   });
 });

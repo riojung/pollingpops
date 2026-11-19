@@ -7,6 +7,7 @@ import {
 } from "@openround/contracts";
 import type { LibraryShareRecord, LibraryShareSnapshot } from "@openround/db";
 import { SurveyContentSchema } from "@openround/contracts/surveys";
+import { surveyBranchingFixture } from "../../../packages/contracts/test/support/survey-branching-fixture.js";
 import { surveyPagesFixture } from "../../../packages/db/test/support/survey-pages-conformance.js";
 import {
   projectLibraryReader,
@@ -14,6 +15,17 @@ import {
 } from "../src/library-sharing-projection.js";
 
 describe("Library source-workspace privacy projection", () => {
+  it("refuses conditional Survey projections and materialization instead of dropping visibility rules", () => {
+    const content = surveyBranchingFixture();
+    const snapshot: LibraryShareSnapshot = { artifactType: "survey", content };
+    const before = structuredClone(snapshot);
+    for (const run of [
+      () => projectLibraryReader({ snapshot } as LibraryShareRecord),
+      () => reusableLibrarySnapshot(snapshot),
+    ])
+      expect(run).toThrow("Conditional Survey sharing is not available yet");
+    expect(snapshot).toEqual(before);
+  });
   it("preserves only public v3 Survey page instructions and their ordered question references", () => {
     const content = SurveyContentSchema.parse(surveyPagesFixture());
     if (content.schemaVersion !== 3) throw new Error("Expected paged Survey content");

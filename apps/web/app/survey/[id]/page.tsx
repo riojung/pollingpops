@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { surveyPageViews } from "@openround/contracts/surveys";
+import { surveyReadablePageViews } from "@openround/contracts/survey-branching";
 import { SurveyResponseControl } from "../../../components/survey-controls";
 import { SurveyPagedReader } from "../../../components/survey-paged-reader";
 import { Brand } from "../../../components/brand";
@@ -32,12 +32,13 @@ export default function SurveyPlayer() {
   } | null>(null);
   const state = stored.scope === scope ? stored.value : initialSurveyParticipantSnapshot();
   const attempt = state.attempt;
-  const paged = attempt?.content.schemaVersion === 3;
+  const paged = Boolean(attempt && attempt.content.schemaVersion >= 3);
   const busy = state.loading || state.saving;
   const dirty = Boolean(
     attempt && JSON.stringify(attempt.responses) !== JSON.stringify(state.responses),
   );
   const closed = Boolean(attempt && (attempt.closed || Date.parse(attempt.closesAt) <= now));
+  const visibleResponses = closed && attempt ? attempt.responses : state.responses;
   const errorKey = roomPasswordErrorKey(state.error);
   const updateRequired =
     (state.error as { code?: string } | null)?.code === "SURVEY_CLIENT_UPDATE_REQUIRED";
@@ -81,7 +82,11 @@ export default function SurveyPlayer() {
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (paged && attempt && state.pageIndex < surveyPageViews(attempt.content).length - 1)
+    if (
+      paged &&
+      attempt &&
+      state.pageIndex < surveyReadablePageViews(attempt.content, visibleResponses).length - 1
+    )
       void session()?.next();
     else void session()?.save(true);
   }
@@ -148,7 +153,8 @@ export default function SurveyPlayer() {
             per room credential.
           </p>
         </section>
-      ) : attempt ? (
+      ) : null}
+      {attempt && (!attempt.finalized || (closed && paged)) ? (
         <form onSubmit={submit}>
           <p lang="">{attempt.content.description}</p>
           {closed ? (
@@ -163,7 +169,7 @@ export default function SurveyPlayer() {
               <p className="muted">{copy.resumeHint}</p>
               <SurveyPagedReader
                 content={attempt.content}
-                responses={closed ? attempt.responses : state.responses}
+                responses={visibleResponses}
                 pageIndex={state.pageIndex}
                 locale={locale}
                 locked={busy || state.pending}

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { type SurveyResponses, type SurveyResponse } from "@openround/contracts/surveys";
 import {
-  surveyPageViews,
-  type SurveyDraft,
-  type SurveyResponses,
-  type SurveyResponse,
-} from "@openround/contracts/surveys";
+  surveyReadableAllPageViews,
+  surveyReadablePageViews,
+  type SurveyReadableDraft,
+} from "@openround/contracts/survey-branching";
 import type { SupportedLocale } from "@openround/contracts";
 import { surveyPagesCopy } from "../lib/i18n/survey-pages-copy";
 import { formatNumber } from "../lib/i18n/format";
@@ -21,6 +21,7 @@ export function SurveyPagedReader({
   locked = false,
   closed = false,
   preview = false,
+  inspectAllPages = false,
   validation = {},
   validationRevision = 0,
   dirty = false,
@@ -30,13 +31,15 @@ export function SurveyPagedReader({
   onSave,
   onSubmit,
 }: {
-  content: SurveyDraft;
+  content: SurveyReadableDraft;
   responses?: SurveyResponses;
   pageIndex: number;
   locale: SupportedLocale;
   locked?: boolean;
   closed?: boolean;
   preview?: boolean;
+  /** Retained creator inspection only; participant eligibility always uses saved/local responses. */
+  inspectAllPages?: boolean;
   validation?: Record<string, "required" | "invalid">;
   validationRevision?: number;
   dirty?: boolean;
@@ -46,7 +49,10 @@ export function SurveyPagedReader({
   onSave?: () => void;
   onSubmit?: () => void;
 }) {
-  const pages = surveyPageViews(content);
+  const pages =
+    preview && inspectAllPages
+      ? surveyReadableAllPageViews(content)
+      : surveyReadablePageViews(content, responses);
   const index = Math.min(Math.max(0, pageIndex), pages.length - 1);
   const page = pages[index];
   const copy = surveyPagesCopy(locale);
@@ -76,6 +82,7 @@ export function SurveyPagedReader({
     page: formatNumber(locale, index + 1),
     count: formatNumber(locale, pages.length),
   };
+  const pageValidation = page.items.flatMap((item) => validation[item.question.id] ?? []);
   return (
     <section
       className={styles.reader}
@@ -95,9 +102,9 @@ export function SurveyPagedReader({
         </p>
       ) : null}
       {preview ? <p className="notice">{copy.reviewOnly}</p> : null}
-      {Object.keys(validation).length ? (
+      {pageValidation.length ? (
         <p className="error" role="alert">
-          {Object.values(validation).includes("required") ? copy.requiredError : copy.invalidError}
+          {pageValidation.includes("required") ? copy.requiredError : copy.invalidError}
         </p>
       ) : null}
       {page.items.map((item) => (

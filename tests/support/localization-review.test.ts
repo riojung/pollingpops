@@ -9,6 +9,7 @@ import { importPreviewCopyEntries } from "../../apps/web/lib/i18n/import-preview
 import { starterCopyCopyEntries } from "../../apps/web/lib/i18n/starter-copy-copy";
 import { surveyPagesCopyEntries } from "../../apps/web/lib/i18n/survey-pages-copy";
 import { surveyPageAuthoringCopyEntries } from "../../apps/web/lib/i18n/survey-page-authoring-copy";
+import { surveyBranchingCopy } from "../../apps/web/lib/i18n/survey-branching-copy";
 import {
   presentationReportCopy,
   presentationReportCopyKeys,
@@ -105,6 +106,7 @@ describe("native-language review preparation", () => {
         "starter-copy",
         "survey-pages",
         "survey-page-authoring",
+        "survey-branching",
         "template",
         "template-guide",
         "presentation-workspace",
@@ -322,6 +324,30 @@ describe("native-language review preparation", () => {
           file: "apps/web/lib/i18n/survey-page-authoring-copy.ts",
           helper: "surveyPageAuthoringCopy",
           contentVersion: "repository-source",
+        },
+        english: { template: english[key] },
+        target: { template: target[key] },
+      });
+      expect(decisions.entries.find((entry) => entry.itemId === id)).toMatchObject({
+        decision: "pending",
+        reviewerReference: null,
+        reviewedAt: null,
+      });
+    }
+  });
+
+  it("keeps conditional Survey inspection copy pending native-language review", () => {
+    const english = surveyBranchingCopy("en-CA");
+    const target = surveyBranchingCopy("ko-KR");
+    const items = bundle.items.filter((item) => item.id.startsWith("ui/survey-branching/"));
+    expect(items).toHaveLength(3);
+    const decisions = createReviewDecisions(bundle);
+    for (const key of Object.keys(english) as Array<keyof typeof english>) {
+      const id = `ui/survey-branching/${key}`;
+      expect(items.find((item) => item.id === id)).toMatchObject({
+        source: {
+          file: "apps/web/lib/i18n/survey-branching-copy.ts",
+          helper: "surveyBranchingCopy",
         },
         english: { template: english[key] },
         target: { template: target[key] },

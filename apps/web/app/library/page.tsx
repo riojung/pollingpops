@@ -7,7 +7,7 @@ import { useLocale } from "../../components/locale-provider";
 import type { QuizDraft, PresentationBlockDraft } from "@openround/contracts";
 import { PresentationSlideThumbnail } from "../../components/presentation/presentation-editor-chrome";
 import { workspaceFlowMessages } from "../../lib/i18n/workspace-flow-messages";
-import type { SurveyDraft } from "@openround/contracts/surveys";
+import type { SurveyReadableDraft } from "@openround/contracts/survey-branching";
 import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
 import { LibraryScopeNavigation } from "../../components/workspace/library-sharing/scope-navigation";
 import { ShareLibraryButton } from "../../components/workspace/library-sharing/share-dialog";
@@ -26,6 +26,7 @@ import signals from "../../components/workspace/workspace-signals.module.css";
 import { apiFetch, humanError } from "../../lib/api";
 import { clientUuid } from "../../lib/uuid";
 import { clearBuilderRecovery } from "../../lib/builder-recovery";
+import { surveyReaderHeaders } from "../../lib/survey-client";
 import { folderPathLabel, getFolderOptions, type FolderRecord } from "../../lib/folders";
 import { pluralCategory } from "../../lib/i18n/format";
 import {
@@ -81,7 +82,7 @@ interface SurveyRecord {
   workspaceId: string;
   title: string;
   description: string;
-  draft: SurveyDraft;
+  draft: SurveyReadableDraft;
   status: LibraryItemStatus;
   revision: number;
   versionId: string | null;
@@ -219,6 +220,7 @@ function LibraryContent() {
           do {
             const page: { surveys: SurveyRecord[]; nextCursor: string | null } = await apiFetch(
               `/v1/surveys?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+              { headers: surveyReaderHeaders() },
             );
             rows.push(
               ...page.surveys.map((survey) => ({
@@ -391,15 +393,20 @@ function LibraryContent() {
       ),
     [favoriteIds, filters, foldersByType.presentations, presentations],
   );
-  const bulkTargets = useMemo(
-    () =>
-      type === "rounds"
-        ? libraryBulkActionIds(rounds, selectedIds)
-        : type === "surveys"
-          ? libraryBulkActionIds(surveys, selectedIds)
-          : libraryBulkActionIds(presentations, selectedIds),
-    [presentations, rounds, surveys, selectedIds, type],
-  );
+  const bulkTargets = useMemo(() => {
+    if (type === "surveys") {
+      const targets = libraryBulkActionIds(surveys, selectedIds);
+      return {
+        ...targets,
+        duplicate: surveys
+          .filter((survey) => selectedIds.has(survey.id) && survey.draft.schemaVersion !== 4)
+          .map((survey) => survey.id),
+      };
+    }
+    return type === "rounds"
+      ? libraryBulkActionIds(rounds, selectedIds)
+      : libraryBulkActionIds(presentations, selectedIds);
+  }, [presentations, rounds, surveys, selectedIds, type]);
   const visibleSurveys = useMemo(
     () =>
       filterLibraryItems(
@@ -523,6 +530,14 @@ function LibraryContent() {
     const actionWorkspaceId = workspaceId;
     const sequence = selectionSequence.current;
     if (actionType === "surveys" && (action === "delete" || action === "restore")) return;
+    if (
+      actionType === "surveys" &&
+      action === "duplicate" &&
+      ids.some(
+        (id) => !surveys.some((survey) => survey.id === id && survey.draft.schemaVersion !== 4),
+      )
+    )
+      return;
     if (action === "delete") {
       if (!canDelete) return;
       const items = actionType === "rounds" ? rounds : presentations;
@@ -990,7 +1005,10 @@ function LibraryContent() {
                 <span className="sr-only"> {type}</span>
               </strong>
               <div className={styles.bulkActions}>
-                {type === "rounds" || (type === "surveys" && productFeatures?.surveys) ? (
+                {type === "rounds" ||
+                (type === "surveys" &&
+                  productFeatures?.surveys &&
+                  bulkTargets.duplicate.length > 0) ? (
                   <button
                     disabled={Boolean(busyAction)}
                     onClick={() => void runArtifactAction("duplicate", bulkTargets.duplicate)}
@@ -1472,7 +1490,9 @@ function LibraryContent() {
                     canEdit && workspace?.organization
                       ? (id) => {
                           const survey = visibleSurveys.find((row) => row.id === id);
-                          return survey?.status === "published" && survey.versionId ? (
+                          return survey?.status === "published" &&
+                            survey.versionId &&
+                            survey.draft.schemaVersion !== 4 ? (
                             <ShareLibraryButton
                               source={{
                                 artifactType: "survey",

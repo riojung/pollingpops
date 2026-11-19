@@ -465,7 +465,7 @@ test("WX06A1 required pages save before advancing, Back retains answers, server 
     expect((await attempt(page, fixture)).receipt).toBe(finalized.receipt);
     expect(finalBodies).toHaveLength(1);
     for (const request of await Promise.all(traffic)) {
-      expect(request.schema, request.path).toBe("3");
+      expect(request.schema, request.path).toBe("4");
       expect(request.hasCookie, request.path).toBe(false);
     }
   } finally {

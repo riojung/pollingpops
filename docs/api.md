@@ -231,11 +231,22 @@ reader validates the page partition and renders each heading/description before 
 V1/v2 Surveys and Rounds keep their flat response shape; Presentation review stays unchanged.
 No answer keys, explanations, private metadata or unpublished draft edits enter this projection.
 
-The separate `@openround/contracts/survey-branching` module defines a proposed v4 conditional-page
-contract for the next checkpoint. It is not an accepted HTTP format or a runtime reader/writer
-grant. Existing Survey APIs, `surveyPages`, stored versions and participant negotiation remain
-on v1–3. Do not pass proposed documents into current publication, response, aggregate or export
-paths. See the [selected visibility rules and remaining gates](survey-branching.md).
+The separate `@openround/contracts/survey-branching` readable schemas accept frozen v4 conditional
+pages. Migration 118 expands stored versions to 1–4; mutation schemas and `surveyPages` remain
+v1–3. A browser declares reader maximum4 using the exact `x-pollingpops-survey-schema: 4` header;
+supported declarations 3 and 4 can read older versions, while unknown/malformed headers fall back
+to legacy maximum2. V4 public metadata, creator list/detail, admission, attempt recovery and
+response acknowledgements require reader4; existing authorization/password rules still apply.
+
+V4 guest mutations retain `{idempotencyKey,expectedRevision,responses}`. The complete response map
+replaces saved answers; hidden or unknown question IDs are rejected, and required checks consider
+only eligible questions. Accepted historical receipts never overwrite newer saved answers. No
+page visit history or per-participant branch trace is exposed. Fresh v4 writes, publication,
+launch and copies return `SURVEY_BRANCHING_NOT_ENABLED`; Library share/copy/projection paths also
+remain unavailable. V4 results return `SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE` before aggregation,
+and summary/derived export creation remains unavailable pending branch-aware privacy qualification.
+Account exports preserve authored conditions and continue omitting guest answers/credentials.
+See the [selected visibility rules and remaining gates](survey-branching.md).
 
 ### Self-paced Survey beta
 

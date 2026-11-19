@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient, QueryResultRow } from "pg";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
+import { SurveyReadableDraftSchema } from "@openround/contracts/survey-branching";
 import type { PostgresRepository } from "./postgres.js";
 import {
   upcastRoundContent,
@@ -181,7 +182,7 @@ export function createPostgresLibrarySharingRun(
           return result.rows[0]
             ? {
                 artifactType: "survey",
-                content: SurveyDraftSchema.parse(result.rows[0].data.content),
+                content: SurveyReadableDraftSchema.parse(result.rows[0].data.content),
               }
             : null;
         },
@@ -429,7 +430,7 @@ export function createPostgresLibrarySharingRun(
               [historyId, workspaceId, id, draft, version, actorId, now],
             );
           } else {
-            const content = value.snapshot.content;
+            const content = SurveyDraftSchema.parse(value.snapshot.content);
             const record = {
               schemaVersion: content.schemaVersion,
               id,

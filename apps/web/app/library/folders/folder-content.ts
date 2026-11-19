@@ -1,5 +1,7 @@
 import { apiFetch } from "../../../lib/api";
 import type { LibraryType } from "../../../lib/folders";
+import type { SurveyReadableDraft } from "@openround/contracts/survey-branching";
+import { surveyReaderHeaders } from "../../../lib/survey-client";
 
 export interface ContentRecord {
   id: string;
@@ -12,7 +14,7 @@ export interface ContentRecord {
 }
 
 interface SurveyRecord extends Omit<ContentRecord, "title"> {
-  draft: { title: string };
+  draft: SurveyReadableDraft;
   revision: number;
 }
 
@@ -41,7 +43,7 @@ export async function loadFolderContent(
   do {
     const page: { surveys: SurveyRecord[]; nextCursor: string | null } = await apiFetch(
       `/v1/surveys?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-      { signal },
+      { signal, headers: surveyReaderHeaders() },
     );
     rows.push(...page.surveys.map((survey) => ({ ...survey, title: survey.draft.title })));
     cursor = page.nextCursor;

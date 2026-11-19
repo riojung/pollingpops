@@ -87,6 +87,10 @@ import SurveyPlayer from "./page";
 import { RoomPasswordInput } from "../../../components/room-password";
 import { SurveyPagedReader } from "../../../components/survey-paged-reader";
 import { ApiClientError } from "../../../lib/api";
+import {
+  branchingId,
+  surveyBranchingFixture,
+} from "../../../../../packages/contracts/test/support/survey-branching-fixture";
 
 function find(
   node: ReactNode,
@@ -337,6 +341,73 @@ function pagedAttempt(roomId = "room-a") {
   };
 }
 describe("ordered Survey route", () => {
+  it("uses visible conditional pages for Enter, cleans the save map, and submits from the visible last page", async () => {
+    const source = { ...attempt(), content: surveyBranchingFixture() };
+    storage.set("pollingpops:survey:room-a", "room-credential");
+    let revision = 0;
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method !== "POST") return { attempt: source };
+      const body = JSON.parse(init.body as string);
+      return {
+        attempt: {
+          ...source,
+          responses: body.responses,
+          revision: ++revision,
+          finalized: path.endsWith("/submit"),
+          receipt: path.endsWith("/submit") ? "receipt" : null,
+        },
+      };
+    });
+    const ui = harness();
+    expect(await ui.settle()).toContain("Page 1 of 2");
+    ui.pages().onChange!(branchingId(1), { kind: "poll", choiceIds: [branchingId(102)] });
+    ui.render();
+    expect(await ui.submit()).toContain("Page 2 of 2");
+    expect(ui.pages().responses).toEqual({
+      [branchingId(1)]: { kind: "poll", choiceIds: [branchingId(102)] },
+    });
+    expect(await ui.submit()).toContain("Your responses were submitted.");
+    const posted = fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posted.map(([path]) => path)).toEqual([
+      "/v1/survey-rooms/room-a/draft",
+      "/v1/survey-rooms/room-a/submit",
+    ]);
+    expect(JSON.parse(posted[1]![1].body)).toMatchObject({
+      expectedRevision: 1,
+      responses: { [branchingId(1)]: { kind: "poll", choiceIds: [branchingId(102)] } },
+    });
+    expect(writes).toEqual([]);
+  });
+
+  it("keeps a closed finalized conditional run reviewable with only saved visible pages", async () => {
+    const source = {
+      ...attempt(),
+      content: surveyBranchingFixture(),
+      closed: true,
+      finalized: true,
+      receipt: "retained-receipt",
+      responses: { [branchingId(1)]: { kind: "poll", choiceIds: [branchingId(102)] } },
+    };
+    storage.set("pollingpops:survey:room-a", "room-credential");
+    fixtures.apiFetch.mockResolvedValue({ attempt: source });
+    const ui = harness();
+    const markup = await ui.settle();
+    expect(markup).toContain("Thank you");
+    expect(markup).toContain("Page 2 of 2");
+    expect(markup).toContain("Feedback 4");
+    expect(markup).not.toContain("Show detailed feedback?");
+    expect(ui.pages().closed).toBe(true);
+    expect(ui.pages().responses).toEqual(source.responses);
+    ui.pages().onBack();
+    expect(ui.render()).toContain("Page 1 of 2");
+    ui.pages().onChange!(branchingId(1), { kind: "poll", choiceIds: [branchingId(101)] });
+    ui.pages().onNext();
+    expect(ui.render()).toContain("Page 2 of 2");
+    expect(ui.pages().responses).toEqual(source.responses);
+    expect(fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST")).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
   it("routes Enter on an intermediate page through the draft save barrier and advances only after acknowledgement", async () => {
     const source = pagedAttempt();
     storage.set("pollingpops:survey:room-a", "room-credential");
@@ -354,7 +425,7 @@ describe("ordered Survey route", () => {
     expect(writes[0]![0]).toBe("/v1/survey-rooms/room-a/draft");
     expect(writes[0]![1].headers).toMatchObject({
       authorization: "Bearer room-credential",
-      "x-pollingpops-survey-schema": "3",
+      "x-pollingpops-survey-schema": "4",
     });
     expect(ui.pages().pageIndex).toBe(0);
     expect(ui.pages().locked).toBe(true);

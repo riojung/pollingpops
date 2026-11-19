@@ -3,6 +3,7 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
+import { surveyBranchingFixture } from "../../../../../packages/contracts/test/support/survey-branching-fixture";
 import type { SurveyRecordView } from "../../../lib/survey-client";
 import type * as ApiModule from "../../../lib/api";
 import { ApiClientError } from "../../../lib/api";
@@ -266,6 +267,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Survey editor schema reader boundary", () => {
+  it("inspects retained conditional pages without constructing autosave or exposing writer actions, even with page editing enabled", async () => {
+    const retained = surveyBranchingFixture();
+    mocked.workspace.productFeatures.surveyPages = true;
+    mocked.request.mockResolvedValue({ survey: { ...record(), draft: retained } });
+    const view = harness();
+    view.render();
+    await settle();
+    const markup = view.render();
+    expect(markup).toContain("data-survey-branching-readonly");
+    expect(markup).toContain(
+      "Editing, copying and sharing conditional Surveys are not available yet",
+    );
+    expect(markup).toContain("Page 1 of 4");
+    expect(markup).not.toContain("Publish Survey");
+    expect(markup).not.toContain("Save draft");
+    expect(markup).not.toContain("Duplicate");
+    expect(markup).not.toContain("Create sharing link");
+    expect(markup).not.toContain("Loading Survey");
+    expect(mocked.constructed).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(mocked.request).toHaveBeenCalledOnce();
+    mocked.workspace.error = "Refresh failed";
+    expect(view.render()).not.toContain("data-survey-branching-readonly");
+  });
   it("renders a failed initial workspace load with Retry and loads the editor only after account recovery", async () => {
     mocked.workspace.creator = null;
     mocked.workspace.canEdit = false;
@@ -539,7 +564,7 @@ describe("Survey editor schema reader boundary", () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(mocked.request).toHaveBeenCalledOnce();
     expect(mocked.request.mock.calls[0]![1]).toMatchObject({
-      headers: { "x-pollingpops-survey-schema": "3" },
+      headers: { "x-pollingpops-survey-schema": "4" },
     });
     expect(before.draft.schemaVersion).toBe(3);
   });

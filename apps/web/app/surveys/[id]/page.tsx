@@ -7,7 +7,12 @@ import {
   surveyPageViews,
   type SurveyDraft,
 } from "@openround/contracts/surveys";
+import {
+  SurveyReadableDraftSchema,
+  type SurveyBranchingDraft,
+} from "@openround/contracts/survey-branching";
 import { SurveyPagedReader } from "../../../components/survey-paged-reader";
+import { SurveyBranchingPreview } from "../../../components/survey-branching-preview";
 import { SurveyPageAuthoring } from "../../../components/survey-page-authoring";
 import { surveyPageAuthoringCopy } from "../../../lib/i18n/survey-page-authoring-copy";
 import { convertSurveyToPages } from "../../../lib/survey-page-authoring";
@@ -110,6 +115,7 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
   >(null);
   const passwordAvailable = canProtectRoom(entitlements);
   const [model, setModel] = useState<SurveyAutosaveSnapshot | null>(null);
+  const [retainedBranching, setRetainedBranching] = useState<SurveyBranchingDraft | null>(null);
   const autosave = useRef<SurveyAutosave | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -135,7 +141,7 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
     current.current.canEdit && current.current.pages && !current.current.pageSavePaused;
   const editingAllowed = current.current.canEdit && (draft?.schemaVersion !== 3 || canAuthorPages);
   function allowed(
-    schemaVersion = autosave.current?.snapshot().draft.schemaVersion,
+    schemaVersion: number | undefined = autosave.current?.snapshot().draft.schemaVersion,
     retryPausedSave = false,
   ) {
     const latest = current.current;
@@ -144,6 +150,7 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
       latest.scope === scope &&
       latest.context === context &&
       latest.canEdit &&
+      schemaVersion !== 4 &&
       (schemaVersion !== 3 || (latest.pages && (retryPausedSave || !latest.pageSavePaused)))
     );
   }
@@ -159,6 +166,7 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
       autosave.current = null;
       setAuthRevoked(true);
       setModel(null);
+      setRetainedBranching(null);
       pending.current = null;
     };
     const events = [AUTH_CHANGE_EVENT, SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT];
@@ -170,6 +178,7 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
     autosave.current?.dispose();
     autosave.current = null;
     setModel(null);
+    setRetainedBranching(null);
     setError("");
     void apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`, { headers: surveyReaderHeaders() })
       .then((response) => {
@@ -180,6 +189,11 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
           current.current.context !== context
         )
           return;
+        const readable = SurveyReadableDraftSchema.parse(response.survey.draft);
+        if (readable.schemaVersion === 4) {
+          setRetainedBranching(readable);
+          return;
+        }
         SurveyDraftSchema.parse(response.survey.draft);
         const controller = new SurveyAutosave(response.survey, {
           enabled: allowed(response.survey.draft.schemaVersion),
@@ -382,8 +396,12 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
     return <WorkspaceShell title="Survey editor">{null}</WorkspaceShell>;
   return (
     <WorkspaceShell
-      title={draft?.title || "Survey editor"}
-      description="Self-paced, unscored feedback. Draft changes autosave; preview, publish, then create a sharing link."
+      title={retainedBranching?.title || draft?.title || "Survey editor"}
+      description={
+        retainedBranching
+          ? undefined
+          : "Self-paced, unscored feedback. Draft changes autosave; preview, publish, then create a sharing link."
+      }
       eyebrow="Survey"
       actions={
         <Link className="button-quiet" href="/surveys">
@@ -437,20 +455,24 @@ export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
           ) : null}
         </div>
       ) : null}
-      <p role="status">
-        {notice ||
-          (model?.phase === "saving"
-            ? "Saving…"
-            : model?.phase === "waiting" && canEdit
-              ? "Waiting to save…"
-              : savePaused || dirty
-                ? "Changes not saved — resolve the save error before leaving."
-                : model?.phase === "saved"
-                  ? "Saved."
-                  : record
-                    ? `Draft revision ${record.revision} · ${record.status}`
-                    : "Loading Survey…")}
-      </p>
+      {retainedBranching ? (
+        <SurveyBranchingPreview draft={retainedBranching} locale={locale} />
+      ) : (
+        <p role="status">
+          {notice ||
+            (model?.phase === "saving"
+              ? "Saving…"
+              : model?.phase === "waiting" && canEdit
+                ? "Waiting to save…"
+                : savePaused || dirty
+                  ? "Changes not saved — resolve the save error before leaving."
+                  : model?.phase === "saved"
+                    ? "Saved."
+                    : record
+                      ? `Draft revision ${record.revision} · ${record.status}`
+                      : "Loading Survey…")}
+        </p>
+      )}
       {draft && record ? (
         draft.schemaVersion === 3 && !canAuthorPages ? (
           <>

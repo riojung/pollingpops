@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SurveyContentSchema } from "@openround/contracts/surveys";
 import { SurveyPagedReader } from "./survey-paged-reader";
+import { surveyBranchingFixture } from "../../../packages/contracts/test/support/survey-branching-fixture";
 
 type Hooks = { cursor: number; slots: unknown[]; effects: Array<() => void> };
 const mocked = vi.hoisted(() => ({ hooks: null as Hooks | null }));
@@ -70,6 +71,82 @@ afterEach(() => {
   mocked.hooks = null;
 });
 describe("ordered Survey reader", () => {
+  it("renders only eligible pages with localized visible progress and a final submit control", () => {
+    const conditional = surveyBranchingFixture();
+    const markup = renderToStaticMarkup(
+      <SurveyPagedReader
+        content={conditional}
+        responses={{ [id(1)]: { kind: "poll", choiceIds: [id(102)] } }}
+        pageIndex={1}
+        locale="fr-FR"
+        onBack={() => {}}
+        onNext={() => {}}
+        onSubmit={() => {}}
+        validation={{ [id(2)]: "required" }}
+      />,
+    );
+    expect(markup).toContain("Page 2 sur 2");
+    expect(markup).toContain('data-survey-page="' + id(14) + '"');
+    expect(markup).toContain("Instructions 4");
+    expect(markup).toContain("Feedback 4");
+    expect(markup).not.toContain("Show detailed feedback?");
+    expect(markup).not.toContain("Feedback 3");
+    expect(markup).not.toContain('role="alert"');
+    expect(markup).toContain("Envoyer l’Enquête");
+    expect(markup).not.toContain(">Suivant</button>");
+  });
+
+  it("limits all-page inspection to read-only previews and keeps retained conditional review visible-only", () => {
+    const source = surveyBranchingFixture();
+    const common = {
+      content: source,
+      pageIndex: 1,
+      locale: "en-CA" as const,
+      inspectAllPages: true,
+      onBack() {},
+      onNext() {},
+      onSubmit() {},
+    };
+    const preview = renderToStaticMarkup(<SurveyPagedReader {...common} preview />);
+    expect(preview).toContain("Page 2 of 4");
+    expect(preview).toContain("Show detailed feedback?");
+    expect(preview).toMatch(/<fieldset[^>]*disabled=""/);
+    expect(preview).not.toContain("Submit Survey");
+    const retained = renderToStaticMarkup(<SurveyPagedReader {...common} closed />);
+    expect(retained).toContain("Page 2 of 2");
+    expect(retained).toContain("Feedback 4");
+    expect(retained).not.toContain("Show detailed feedback?");
+    expect(retained).toMatch(/<fieldset[^>]*disabled=""/);
+    expect(retained).not.toContain("Submit Survey");
+  });
+
+  it("focuses the current visible heading when a branch replaces the page at the same visible index", () => {
+    const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
+    const focus = vi.fn();
+    const props = {
+      content: surveyBranchingFixture(),
+      responses: { [id(1)]: { kind: "poll" as const, choiceIds: [id(101)] } },
+      pageIndex: 1,
+      locale: "en-CA" as const,
+      onBack() {},
+      onNext() {},
+    };
+    const render = () => {
+      hooks.cursor = 0;
+      mocked.hooks = hooks;
+      const tree = SurveyPagedReader(props);
+      mocked.hooks = null;
+      for (const node of elements(tree))
+        if (node.type === "h2") (node.props.ref as { current: unknown }).current = { focus };
+      hooks.effects.splice(0).forEach((effect) => effect());
+      return renderToStaticMarkup(tree);
+    };
+    expect(render()).toContain("Page 2 of 3");
+    props.responses = { [id(1)]: { kind: "poll", choiceIds: [id(102)] } };
+    expect(render()).toContain("Page 2 of 2");
+    expect(focus).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["", "  \t  "])(
     "uses the localized heading fallback for an unsaved blank title %j without changing source text",
     (rawTitle) => {

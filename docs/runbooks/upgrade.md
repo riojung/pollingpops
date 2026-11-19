@@ -54,11 +54,21 @@ rewrite published snapshots, downgrade drafts or change accepted mutation bodies
 rollback. Keep the schema expansion and repair forward. Conditional paths, hidden-response
 handling and page-visit analytics are not introduced. See [Survey pages](../survey-pages.md).
 
-WX-06B1 adds an isolated proposed v4 contract and pure visibility/cleanup helpers only. It does
-not expand stored-version constraints, current HTTP schemas, reader negotiation or writer grants.
-No migration or feature-policy change is needed for this checkpoint; `surveyPages` remains a v3
-authoring grant. The proposed module must not be imported by runtime publication/response/report
-paths before the separate reader and reporting/privacy checkpoints are qualified. See
+WX-06B1 added the isolated v4 contract and pure visibility/cleanup helpers. WX-06B2 expands runtime
+readers: apply `118_survey_branching_readers.sql` with the owner migration connection before
+deploying matching API, web, worker and export/lifecycle readers. Four version checks expand to
+1–4 with no backfills or rewrites. Ordinary writers remain v2 and `surveyPages` grants v3 only.
+Conditional authoring/publication/launch/Library sharing/copy stay disabled; v4 aggregate and
+summary/derived export creation fail closed pending C. No feature-policy change enables v4.
+
+Verify v4 frozen snapshots and guest versions, reader4 negotiation before content/admission/receipt
+delivery, visible-only Back/Next/focus, replacement-map saves, cascading hidden-answer removal,
+eligible-only required fields and authoritative resume. Exact old-receipt replay must preserve
+its acknowledgement without restoring answers cleared by newer revisions; stale or mismatched
+client acknowledgements must be rejected. Qualify room/account/retention erasure, forced RLS,
+immutable versions and the six legacy receipt-hash goldens. Keep expanded constraints and matching
+v4 readers once v4 data exists; rollback requires a compatible forward repair, never flattening.
+Results/privacy C then authoring B3 remain separate gates. See
 [conditional-page compatibility and release gates](../survey-branching.md).
 
 ## Round starter-copy retry intents

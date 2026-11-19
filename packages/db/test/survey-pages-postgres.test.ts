@@ -115,7 +115,7 @@ describe.skipIf(!(adminUrl && runtimeUrl))("Survey page readers with restricted 
     ).rejects.toMatchObject({ code: "P0001" });
     await expect(
       administrator.pool.query(
-        "UPDATE surveys SET data=jsonb_set(data,'{schemaVersion}','4') WHERE id=$1",
+        "UPDATE surveys SET data=jsonb_set(data,'{schemaVersion}','5') WHERE id=$1",
         [f.id],
       ),
     ).rejects.toMatchObject({ code: "23514" });

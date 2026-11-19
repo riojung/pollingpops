@@ -163,8 +163,22 @@ export async function registerSurveyRoutes(
       }
       return actor;
     };
-    const readerVersion = (request: Parameters<AuthService["requireCreator"]>[0]): 2 | 3 =>
-      request.headers[SURVEY_READER_HEADER] === "3" ? 3 : 2;
+    const readerVersion = (request: Parameters<AuthService["requireCreator"]>[0]): 2 | 3 | 4 =>
+      request.headers[SURVEY_READER_HEADER] === "4"
+        ? 4
+        : request.headers[SURVEY_READER_HEADER] === "3"
+          ? 3
+          : 2;
+    const requireBranchingReader = (
+      version: number,
+      request: Parameters<AuthService["requireCreator"]>[0],
+    ) => {
+      if (version === 4 && readerVersion(request) < 4)
+        throw new SurveyError(
+          "SURVEY_CLIENT_UPDATE_REQUIRED",
+          "Update this Survey page before continuing",
+        );
+    };
     // Pass the current grant into the repository; exact accepted receipts replay before
     // its writer check, including after page authoring is paused.
     const writerPolicy = async (workspaceId: string): Promise<SurveyWritePolicy> => ({
@@ -192,7 +206,9 @@ export async function registerSurveyRoutes(
       const actor = await creator(request, reply);
       if (!actor) return;
       const input = Page.parse(request.query);
-      const all = (await deps.surveys.list(actor.workspaceId))
+      const records = await deps.surveys.list(actor.workspaceId);
+      for (const record of records) requireBranchingReader(record.schemaVersion, request);
+      const all = records
         .sort((a, b) => a.id.localeCompare(b.id))
         .filter((row) => !input.cursor || row.id > input.cursor);
       const page = all.slice(0, input.limit);
@@ -220,6 +236,11 @@ export async function registerSurveyRoutes(
       if (input.sourceId) {
         const source = await deps.surveys.get(actor.workspaceId, input.sourceId);
         if (!source) throw new SurveyError("NOT_FOUND", "Survey not found");
+        if (source.draft.schemaVersion === 4)
+          throw new SurveyError(
+            "SURVEY_BRANCHING_NOT_ENABLED",
+            "Copying conditional Surveys is not enabled yet",
+          );
         draft = structuredClone(source.draft);
         if (draft.schemaVersion !== 3) draft.schemaVersion = 2;
         draft.title = `${draft.title.slice(0, 150)} ${copy.copy}`;
@@ -297,6 +318,7 @@ export async function registerSurveyRoutes(
       if (!actor) return;
       const survey = await deps.surveys.get(actor.workspaceId, Id.parse(request.params).id);
       if (!survey) throw new SurveyError("NOT_FOUND", "Survey not found");
+      requireBranchingReader(survey.schemaVersion, request);
       return { survey };
     });
     scoped.put("/v1/surveys/:id", async (request, reply) => {
@@ -513,6 +535,7 @@ export async function registerSurveyRoutes(
         new Date(room.expiresAt) <= new Date()
       )
         throw new SurveyError("NOT_FOUND", "Survey room not found or expired");
+      requireBranchingReader(room.schemaVersion, request);
       return { room: publicRoom(room) };
     });
     scoped.post("/v1/survey-rooms/:id/join", async (request) => {

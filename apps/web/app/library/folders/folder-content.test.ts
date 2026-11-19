@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderPaginationError, loadFolderContent } from "./folder-content";
+import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
+import { surveyBranchingFixture } from "../../../../../packages/contracts/test/support/survey-branching-fixture";
 
 const fixtures = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock("../../../lib/api", () => ({ apiFetch: fixtures.apiFetch }));
@@ -42,7 +44,7 @@ describe("folder manager content loading", () => {
       surveys: [
         {
           id: "two",
-          draft: { title: "Second" },
+          draft: { ...surveyBranchingFixture(), title: "Second" },
           folderId: "folder",
           revision: 12,
           status: "archived",
@@ -58,9 +60,15 @@ describe("folder manager content loading", () => {
       { id: "one", title: "First", revision: 7, status: "published" },
       { id: "two", title: "Second", revision: 12, status: "archived" },
     ]);
+    expect(content[1]).toMatchObject({
+      draft: { ...surveyBranchingFixture(), title: "Second" },
+    });
     expect(fixtures.apiFetch.mock.calls).toEqual([
-      ["/v1/surveys?limit=50", { signal }],
-      ["/v1/surveys?limit=50&cursor=next%2Fid", { signal }],
+      ["/v1/surveys?limit=50", { signal, headers: { [SURVEY_READER_HEADER]: "4" } }],
+      [
+        "/v1/surveys?limit=50&cursor=next%2Fid",
+        { signal, headers: { [SURVEY_READER_HEADER]: "4" } },
+      ],
     ]);
   });
 

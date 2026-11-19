@@ -1,14 +1,53 @@
-# Survey conditional pages: contract foundation
+# Survey conditional pages: contracts and readers
 
 WX-06B1 follows the product owner's 2026-11-19 selection: **show or hide a page based on one
 earlier single-choice answer**. It implements an isolated proposed v4 contract and pure eligibility,
-cleanup and validation helpers. It does not enable conditional Surveys in the application.
+cleanup and validation helpers. B1 merged in [PR #286](https://github.com/riojung/pollingpops/pull/286)
+at `f08ccbd`. WX-06B2 adds compatible stored-content and participant readers while keeping every
+new conditional-Survey authoring, publication, launch, Library sharing and copy path disabled.
 
-The module is exported separately as `@openround/contracts/survey-branching`. Ordinary Survey
-contracts, factories, API requests, stored records and participant readers remain on supported
-versions 1–3, with ordinary creation still v2. `surveyPages` continues to authorize v3 page
-organization only. There is no branching feature grant, migration or runtime import in this
-checkpoint. A proposed v4 document must still fail at current production boundaries.
+The module is exported separately as `@openround/contracts/survey-branching`. Its readable schemas
+accept v1–4 without changing the v1–3 mutation schemas or their parsed key order. Ordinary creation
+still writes v2; `surveyPages` authorizes v3 page organization only. No branching feature grant is
+introduced. There is no ordinary path for creating a v4 record in this checkpoint; verification
+uses synthetic frozen records inserted directly by test fixtures.
+
+## B2 reader and storage checkpoint
+
+Migration `118_survey_branching_readers.sql` expands four stored-version checks to 1–4 without
+backfills, new identity fields, or rewriting frozen content. Deploy matching API, web, worker and
+account-export/lifecycle readers together. Keep compatible readers and the expanded constraint
+after any v4 document exists; an older binary cannot safely read or flatten a conditional Survey.
+
+The browser advertises `x-pollingpops-survey-schema: 4`. The API recognizes exact declarations 3
+and 4 as supported maxima; missing, malformed and unknown declarations use the legacy v2 maximum.
+V4 public metadata, creator content, guest admission/resume and mutation acknowledgements require
+a v4 reader. V1–3 guest compatibility stays supported; the header conveys capability, not authority.
+Room credentials, passwords, workspace scope, expiry and admission limits still apply.
+
+Participant navigation renders only visible pages. Changing a controller immediately replaces
+the local answer map with the cascading cleanup result. Next validates the current visible page,
+saves the complete replacement map and advances only after its acknowledgement. Final submission
+checks required fields only on eligible questions, and the server rejects hidden or unknown answers
+rather than silently accepting them. It replaces stored responses atomically under the existing
+revision and idempotency checks. Reopening a path presents unanswered questions.
+
+Unknown save outcomes retain their exact room, credential, key, body and intended transition;
+edits and navigation wait for resolution. Acknowledgements must match the frozen content, normalized
+response map, expected revision and operation type. Historical accepted receipt replay remains
+unchanged and never rewrites a newer attempt. Stale acknowledgements cannot restore an earlier
+answer map. Reconnect resumes from authoritative saved answers; no answers or page history are
+stored in the browser. Closed retained attempts remain navigable read-only.
+
+Authorized creators can inspect every retained page and its condition read-only, including pages
+currently hidden from an unanswered participant. This is explicit all-page inspection, not a
+participant eligibility bypass. No autosave controller, rule editor, copy or launch action is enabled.
+Existing Library projections and new shares/copies refuse v4 instead of flattening conditions.
+
+V4 results return `SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE` before closure capture or aggregation.
+Summary creation and derived PDF/PNG/XLSX exports remain unavailable; aggregate-v2 is never used
+for conditional content. Account exports preserve versioned authored content and continue excluding
+guest answers, credentials and receipts. Room/account deletion, retention and RLS are unchanged.
 
 ## Selected rule model
 
@@ -67,18 +106,20 @@ zero answer, and the internal state must not become a facilitator-visible per-pe
 
 ## Compatibility and release gates
 
-No legacy content, publication, room, receipt hash or aggregate is upgraded by B1. Current
+No legacy content, publication, room, receipt hash or aggregate is upgraded by B1 or B2. Current
 `SurveyDraftSchema`, `SurveyContentSchema`, `CURRENT_SURVEY_SCHEMA_VERSION` and
 `MAX_SUPPORTED_SURVEY_SCHEMA_VERSION` retain their existing meanings. Production APIs and clients
-continue rejecting unsupported v4 data rather than flattening it into v3.
+continue rejecting v4 authoring requests rather than flattening them into v3. Runtime read support
+uses the separate `SurveyReadableDraftSchema` / `SurveyReadableContentSchema` and
+`MAX_SUPPORTED_SURVEY_READER_VERSION = 4`; the existing mutation maximum remains 3.
 
 The remaining work is split into reviewable checkpoints:
 
-| Checkpoint          | Required work before completion                                                                                                                                                                                                                                                                            |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B2: runtime/readers | Expand versioned storage and read paths; negotiate v4 support; enforce server-side eligibility and hidden-answer cleanup; preserve revision/idempotency, reconnect, retention and erasure behavior; deliver accessible visible-page navigation and retained read-only previews. Keep new writers disabled. |
-| C: results/privacy  | Define versioned branch-aware question denominators, unanswered versus skipped semantics, minimum samples and suppression; keep hidden answers out of reports, summaries and exports; preserve historical aggregate-v2 behavior. Qualify reconstruction risks before enabling collection.                  |
-| B3: authoring/grant | Add explicit conversion and rule editing, safe reorder/delete/copy behavior with remapped condition IDs, previews and explanations; enable a separate effective writer grant only after B2 and C readers/privacy paths are qualified.                                                                      |
+| Checkpoint          | Required work before completion                                                                                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B2: runtime/readers | Implemented locally on `codex/survey-branching-readers`: versioned storage/read paths, v4 negotiation, eligibility and replacement maps, revision/idempotency/reconnect safeguards, lifecycle compatibility and accessible visible-page/retained previews. New writers remain disabled.   |
+| C: results/privacy  | Define versioned branch-aware question denominators, unanswered versus skipped semantics, minimum samples and suppression; keep hidden answers out of reports, summaries and exports; preserve historical aggregate-v2 behavior. Qualify reconstruction risks before enabling collection. |
+| B3: authoring/grant | Add explicit conversion and rule editing, safe reorder/delete/copy behavior with remapped condition IDs, previews and explanations; enable a separate effective writer grant only after B2 and C readers/privacy paths are qualified.                                                     |
 
 Runtime mutation design must prevent a late acknowledgement or an exact retry from resurrecting
 answers cleared by a newer branch change. Reconciliation results replace the current answer map;
@@ -88,3 +129,14 @@ and accepted-receipt semantics need paired tests before collection is enabled.
 No new participant identity, enrollment, page analytics, notification or external provider is
 selected here. Existing native-language, hosted-release and human acceptance gates stay separate
 from this contract's automated verification.
+
+## Local qualification
+
+On 2026-11-19, full `VITEST_MAX_WORKERS=1 pnpm check` passed all stages, including builds and compiled
+server startup. Separate restricted PostgreSQL checks passed the new B2 and existing page-reader
+conformance suites (11 tests) and Library memory/PostgreSQL qualification (29 tests). Six browser
+runs passed desktop Chromium, mobile Chromium and mobile WebKit, exercising visible navigation,
+required-field focus, cascading clearing, exact retries, stale acknowledgements, authoritative
+resume, closed/finalized review, axe and overflow checks. Synthetic route-fulfilled browser fixtures
+verify reader behavior; they do not create a production authoring bypass or qualify hosted rollout.
+The backlog records counts and remaining editorial/release acceptance separately.

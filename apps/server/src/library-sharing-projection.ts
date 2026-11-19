@@ -4,7 +4,16 @@ import {
   type QuestionDraft,
 } from "@openround/contracts";
 import type { LibraryShareRecord, LibraryShareSnapshot } from "@openround/db";
+import { LibrarySharingError } from "@openround/db";
 import { projectPresentationReview } from "./presentation-sharing-projection.js";
+
+function requireSupportedSurveySnapshot(snapshot: LibraryShareSnapshot) {
+  if (snapshot.artifactType === "survey" && snapshot.content.schemaVersion === 4)
+    throw new LibrarySharingError(
+      "SURVEY_PAGES_NOT_ENABLED",
+      "Conditional Survey sharing is not available yet",
+    );
+}
 
 function visiblePresentationContent(content: PresentationContent): PresentationContent {
   // Canonical preparation maintains sections and spatial layout alongside visible slides.
@@ -77,6 +86,7 @@ export function libraryReaderQuestion(question: QuestionDraft, required?: boolea
 
 export function projectLibraryReader(share: LibraryShareRecord) {
   const snapshot = share.snapshot;
+  requireSupportedSurveySnapshot(snapshot);
   if (snapshot.artifactType === "round")
     return {
       questions: snapshot.content.questions.map((question) => libraryReaderQuestion(question)),
@@ -128,6 +138,7 @@ function walk(value: unknown, visit: (key: string, value: unknown) => unknown): 
 
 /** Independent drafts retain scoring keys but do not retain private source-workspace material. */
 export function reusableLibrarySnapshot(snapshot: LibraryShareSnapshot): LibraryShareSnapshot {
+  requireSupportedSurveySnapshot(snapshot);
   const privateFields = new Set([
     "sourceCitations",
     "citations",

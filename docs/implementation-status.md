@@ -17,10 +17,15 @@ opt-in page authoring (WX-06A2, PR #285 at `4dcefcc`) are also merged. The defau
 capability preserves existing v2 creation and published links; enabling it remains an explicit
 operator policy decision.
 
-The current WX-06B1 increment follows the owner's earlier single-choice **page visibility**
-decision. It adds only a separate proposed v4 contract and pure eligibility/cleanup/validation
-helpers. Runtime readers/writers remain on v1–3. Conditional authoring/delivery and branch-aware
-report/export privacy remain pending, with no effective branching grant or migration in B1.
+WX-06B1 merged through PR #286 at `f08ccbd`, following the owner's earlier single-choice
+**page visibility** decision. The current B2 increment on `codex/survey-branching-readers` adds
+v1–4 frozen-content/storage readers, reader negotiation, eligible-page navigation, cascading
+answer removal, revision-safe replacement saves/retries/resume, and retained read-only inspection.
+Migration 118 expands four version checks only. Mutation schemas and effective writers remain
+v1–3; conditional publication, launch, Library sharing and copies stay disabled. V4 results,
+summaries and derived exports remain unavailable pending C privacy/denominator qualification,
+then B3 condition authoring and its explicit grant. Existing lifecycle/RLS/privacy guarantees
+and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 

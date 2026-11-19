@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { QuizContentSchema, type LibraryShareCreate } from "@openround/contracts";
+import { SurveyBranchingContentSchema } from "@openround/contracts/survey-branching";
 import {
   MemoryRepository,
   PostgresRepository,
@@ -11,7 +12,11 @@ import {
   assertRestrictedRuntimeDatabasePrincipal,
   type Repository,
   type CreatorContext,
+  type MemoryLibrarySharingStore,
+  type MemoryRepositoryLifecycleExtension,
+  type SurveyVersion,
 } from "../src/index.js";
+import { createPostgresLibrarySharingRun } from "../src/library-sharing-postgres.js";
 import { surveyFixture } from "./support/survey-conformance.js";
 import { surveyPagesFixture } from "./support/survey-pages-conformance.js";
 import { preparePostgresTestRuntime } from "./support/postgres-test-runtime.js";
@@ -869,6 +874,147 @@ for (const backend of ["memory", "postgres"] as const)
         await expect(
           f.shares.copy({ ...input, requestId: randomUUID() }, materialize),
         ).rejects.toMatchObject({ code: "SURVEY_PAGES_NOT_ENABLED" });
+      });
+      it("preserves frozen conditional sources while refusing new shares and copies before materialization", async () => {
+        const f = await fixture(repository);
+        const surveys = createSurveyRepository(repository),
+          draft = surveyPagesFixture(),
+          policy = { maximumSchemaVersion: 3 as const };
+        if (draft.schemaVersion !== 3 || draft.items[0]!.question.type !== "poll")
+          throw new Error("Expected paged Survey with a controlling poll");
+        const controller = draft.items[0]!.question;
+        const future = SurveyBranchingContentSchema.parse({
+          ...draft,
+          schemaVersion: 4,
+          pages: draft.pages.map((page, index) => ({
+            ...page,
+            ...(index === 1
+              ? {
+                  visibleWhen: {
+                    kind: "choice_equals",
+                    questionId: controller.id,
+                    choiceId: controller.choices[0]!.id,
+                  },
+                }
+              : {}),
+          })),
+        });
+        const source = await surveys.create(f.source.id, randomUUID(), draft, randomUUID(), policy);
+        const published = await surveys.publish(
+          f.source.id,
+          source.id,
+          0,
+          randomUUID(),
+          null,
+          policy,
+        );
+        const legacyInput = f.input({
+          artifactType: "survey",
+          artifactId: source.id,
+          versionId: published.versionId!,
+        });
+        const { share: legacyShare } = await f.shares.create({
+          actorId: f.owner.userId,
+          workspaceId: f.source.id,
+          input: legacyInput,
+          now: new Date(),
+        });
+        // Test-only frozen version. Production author/publish writers never accept v4.
+        const version: SurveyVersion = {
+          schemaVersion: 4,
+          id: randomUUID(),
+          workspaceId: f.source.id,
+          surveyId: source.id,
+          content: future,
+          revision: 0,
+        };
+        if (repository instanceof MemoryRepository) {
+          const store = repository.getOrCreateLifecycleExtension<
+            MemoryRepositoryLifecycleExtension & { survey_versions: Map<string, SurveyVersion> }
+          >("surveys", () => {
+            throw new Error("Survey store must already exist");
+          });
+          store.survey_versions.set(version.id, structuredClone(version));
+        } else
+          await administrator!.pool.query(
+            "INSERT INTO survey_versions(id,workspace_id,survey_id,data) VALUES($1,$2,$3,$4)",
+            [version.id, version.workspaceId, version.surveyId, version],
+          );
+        await expect(
+          f.shares.create({
+            actorId: f.owner.userId,
+            workspaceId: f.source.id,
+            input: { ...legacyInput, requestId: randomUUID(), versionId: version.id },
+            now: new Date(),
+          }),
+        ).rejects.toMatchObject({ code: "SURVEY_PAGES_NOT_ENABLED" });
+        expect(
+          await f.shares.create({
+            actorId: f.owner.userId,
+            workspaceId: f.source.id,
+            input: legacyInput,
+            now: new Date(),
+          }),
+        ).toMatchObject({ replayed: true, share: { id: legacyShare.id } });
+        const run =
+          repository instanceof MemoryRepository
+            ? repository.getOrCreateLifecycleExtension<MemoryLibrarySharingStore>(
+                "library-sharing",
+                () => {
+                  throw new Error("Library store must already exist");
+                },
+              ).run
+            : createPostgresLibrarySharingRun(repository as PostgresRepository);
+        const frozenId = randomUUID();
+        await run(f.owner.userId, async (tx) => {
+          const row = await tx.get(legacyShare.id);
+          if (!row) throw new Error("Expected pinned legacy share");
+          // Synthetic retained share exercises defensive readers without enabling a writer.
+          await tx.insert({
+            ...row,
+            id: frozenId,
+            versionId: version.id,
+            requestId: randomUUID(),
+            snapshot: { artifactType: "survey", content: future },
+          });
+        });
+        expect(await f.shares.read({ actorId: f.recipient.userId, id: frozenId })).toMatchObject({
+          snapshot: { artifactType: "survey", content: future },
+          surveySchemaVersion: 4,
+          capabilities: { view: false, copy: false },
+          copyUnavailableReason: "Creating conditional Survey copies is not enabled yet",
+        });
+        const listed = await f.shares.list({ actorId: f.recipient.userId, scope: "shared" });
+        expect(listed.shares.find((entry) => entry.id === frozenId)).toMatchObject({
+          surveySchemaVersion: 4,
+          capabilities: { view: false, copy: false },
+          copyUnavailableReason: "Creating conditional Survey copies is not enabled yet",
+        });
+        const materialize = vi.fn(async () => ({
+          snapshot: legacyShare.snapshot,
+          mediaAssets: [],
+        }));
+        const copyInput = {
+          actorId: f.recipient.userId,
+          id: frozenId,
+          destinationWorkspaceId: f.destination.id,
+          requestId: randomUUID(),
+          maximumSurveySchemaVersion: 3 as const,
+          now: new Date(),
+        };
+        await expect(f.shares.copy(copyInput, materialize)).rejects.toMatchObject({
+          code: "SURVEY_PAGES_NOT_ENABLED",
+        });
+        expect(materialize).not.toHaveBeenCalled();
+        await expect(
+          f.shares.copy({ ...copyInput, id: legacyShare.id }, async () => ({
+            snapshot: { artifactType: "survey", content: future },
+            mediaAssets: [],
+          })),
+        ).rejects.toMatchObject({ code: "SURVEY_PAGES_NOT_ENABLED" });
+        expect(await surveys.list(f.destination.id)).toHaveLength(0);
+        const ownerExport = await repository.exportAccount(f.owner.userId);
+        expect(JSON.stringify(ownerExport.libraryShares)).not.toMatch(/snapshot|visibleWhen/);
       });
       it("does not restore direct assignments when a removed member rejoins, while org posts remain discoverable", async () => {
         const f = await fixture(repository);

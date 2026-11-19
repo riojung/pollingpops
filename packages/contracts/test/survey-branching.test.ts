@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   PROPOSED_SURVEY_BRANCHING_SCHEMA_VERSION,
+  MAX_SUPPORTED_SURVEY_READER_VERSION,
   SurveyBranchingContentSchema,
   SurveyBranchingDraftSchema,
+  SurveyReadableContentSchema,
+  SurveyReadableDraftSchema,
   reconcileSurveyBranchingResponses,
   surveyBranchingEligibility,
   surveyBranchingPageNavigation,
   surveyBranchingQuestionStates,
   surveyBranchingResumePageId,
+  surveyReadableAllPageViews,
+  surveyReadablePageViews,
   validateSurveyBranchingPageResponses,
   validateSurveyBranchingResponses,
 } from "../src/survey-branching";
@@ -25,7 +30,58 @@ const poll = (choice: number) => ({ kind: "poll", choiceIds: [id(choice)] });
 const rating = (value = 4) => ({ kind: "rating", value });
 const openResponses = () => ({ [id(1)]: poll(101), [id(2)]: poll(201) });
 
-describe("isolated proposed Survey branching contract", () => {
+describe("conditional Survey contracts and compatible readers", () => {
+  it("expands only read parsers and preserves every historical parsed representation", () => {
+    const conditional = surveyBranchingFixture();
+    expect(MAX_SUPPORTED_SURVEY_READER_VERSION).toBe(4);
+    expect(SurveyReadableDraftSchema.parse(conditional)).toEqual(conditional);
+    expect(SurveyReadableContentSchema.parse(conditional)).toEqual(conditional);
+    for (const schemaVersion of [1, 2, 3]) {
+      const { pages, ...flat } = conditional;
+      const input = {
+        ...flat,
+        schemaVersion,
+        ...(schemaVersion === 3
+          ? { pages: pages.map(({ visibleWhen: _condition, ...page }) => page) }
+          : {}),
+      };
+      expect(JSON.stringify(SurveyReadableDraftSchema.parse(input))).toBe(
+        JSON.stringify(SurveyDraftSchema.parse(input)),
+      );
+      expect(JSON.stringify(SurveyReadableContentSchema.parse(input))).toBe(
+        JSON.stringify(SurveyContentSchema.parse(input)),
+      );
+      expect(surveyReadablePageViews(SurveyReadableContentSchema.parse(input))).toEqual(
+        surveyReadableAllPageViews(SurveyReadableContentSchema.parse(input)),
+      );
+    }
+    expect(SurveyDraftSchema.safeParse(conditional).success).toBe(false);
+    expect(SurveyContentSchema.safeParse(conditional).success).toBe(false);
+    expect(SurveyReadableDraftSchema.safeParse({ ...conditional, schemaVersion: 5 }).success).toBe(
+      false,
+    );
+    expect(
+      SurveyReadableContentSchema.safeParse({ ...conditional, schemaVersion: 5 }).success,
+    ).toBe(false);
+  });
+
+  it("projects visible participant pages separately from explicit all-page inspection", () => {
+    const content = surveyBranchingFixture();
+    const before = structuredClone(content);
+    const all = surveyReadableAllPageViews(content);
+    expect(all.map((page) => page.id)).toEqual(content.pages.map((page) => page.id));
+    expect(all.flatMap((page) => page.items)).toEqual(content.items);
+    expect(surveyReadablePageViews(content).map((page) => page.id)).toEqual([id(11), id(14)]);
+    expect(surveyReadablePageViews(content, openResponses())).toEqual(all);
+    expect(
+      surveyReadablePageViews(content, {
+        [id(1)]: poll(102),
+        [id(2)]: poll(201),
+        [id(3)]: rating(),
+      }).map((page) => page.id),
+    ).toEqual([id(11), id(14)]);
+    expect(content).toEqual(before);
+  });
   it("normalizes through the established v3 draft parser without mutating or aliasing its input", () => {
     const input = surveyBranchingFixture();
     input.title = "  Feedback  ";

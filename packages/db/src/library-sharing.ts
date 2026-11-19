@@ -15,7 +15,8 @@ import {
   type PresentationContent,
   type QuizDraft,
 } from "@openround/contracts";
-import { SurveyDraftSchema, type SurveyDraft } from "@openround/contracts/surveys";
+import { SurveyDraftSchema } from "@openround/contracts/surveys";
+import type { SurveyReadableDraft } from "@openround/contracts/survey-branching";
 import {
   MemoryRepository,
   type MemoryRepositoryLifecycleContext,
@@ -49,7 +50,7 @@ import { createPostgresLibrarySharingRun } from "./library-sharing-postgres.js";
 export type LibraryShareSnapshot =
   | { artifactType: "round"; content: QuizDraft }
   | { artifactType: "presentation"; content: PresentationContent }
-  | { artifactType: "survey"; content: SurveyDraft };
+  | { artifactType: "survey"; content: SurveyReadableDraft };
 /** Internal policy metadata only; HTTP summaries must whitelist their public fields. */
 export interface LibraryShareSummaryRecord extends LibraryShareSummary {
   surveySchemaVersion?: number;
@@ -331,6 +332,20 @@ function visible(row: StoredLibraryShare, actorId: string, context: LibraryShari
         context.joinedAt <= row.sharedAt))
   );
 }
+function surveyCopyUnavailableReason(schemaVersion: number | undefined) {
+  return schemaVersion !== undefined && schemaVersion >= 4
+    ? "Creating conditional Survey copies is not enabled yet"
+    : schemaVersion === 3
+      ? "Creating paged Survey copies is not enabled yet"
+      : null;
+}
+function storedSurveySchemaVersion(row: StoredLibraryShare) {
+  if (row.artifactType !== "survey") return undefined;
+  return Math.max(
+    row.surveySchemaVersion ?? 0,
+    row.snapshot?.artifactType === "survey" ? row.snapshot.content.schemaVersion : 0,
+  );
+}
 function parseCopy(
   value: LibraryShareCopyMaterialization,
   type: LibraryArtifactKind,
@@ -338,6 +353,8 @@ function parseCopy(
 ) {
   if (value.snapshot.artifactType !== type)
     fail("VALIDATION_ERROR", "The copied content type changed");
+  if (value.snapshot.artifactType === "survey" && value.snapshot.content.schemaVersion >= 4)
+    fail("SURVEY_PAGES_NOT_ENABLED", "Creating conditional Survey copies is not enabled yet");
   const snapshot: LibraryShareSnapshot =
     value.snapshot.artifactType === "round"
       ? { artifactType: "round", content: QuizDraftSchema.parse(value.snapshot.content) }
@@ -376,6 +393,8 @@ export class LibrarySharingService implements LibrarySharingRepository {
     row: StoredLibraryShare,
     context: LibrarySharingContext,
   ): Promise<LibraryShareSummaryRecord> {
+    const surveySchemaVersion = storedSurveySchemaVersion(row);
+    const unavailableReason = surveyCopyUnavailableReason(surveySchemaVersion);
     return {
       id: row.id,
       organizationId: row.organizationId,
@@ -393,26 +412,17 @@ export class LibrarySharingService implements LibrarySharingRepository {
       message: row.message,
       dueAt: row.dueAt,
       progress: await tx.status(row.id),
-      surveySchemaVersion:
-        row.surveySchemaVersion ??
-        (row.snapshot?.artifactType === "survey" ? row.snapshot.content.schemaVersion : undefined),
+      surveySchemaVersion,
       capabilities: {
-        view: true,
-        copy:
-          row.permission === "use" &&
-          !(
-            row.surveySchemaVersion === 3 ||
-            (row.snapshot?.artifactType === "survey" && row.snapshot.content.schemaVersion === 3)
-          ),
+        view: surveySchemaVersion === undefined || surveySchemaVersion < 4,
+        copy: row.permission === "use" && !unavailableReason,
         manage: context.manage,
       },
-      copyUnavailableReason:
-        row.surveySchemaVersion === 3 ||
-        (row.snapshot?.artifactType === "survey" && row.snapshot.content.schemaVersion === 3)
-          ? "Creating paged Survey copies is not enabled yet"
-          : row.permission === "use"
-            ? null
-            : "This item was shared for viewing",
+      copyUnavailableReason: unavailableReason
+        ? unavailableReason
+        : row.permission === "use"
+          ? null
+          : "This item was shared for viewing",
     };
   }
   private async record(
@@ -464,6 +474,8 @@ export class LibrarySharingService implements LibrarySharingRepository {
         input.versionId,
       );
       if (!snapshot) fail();
+      if (snapshot!.artifactType === "survey" && snapshot!.content.schemaVersion >= 4)
+        fail("SURVEY_PAGES_NOT_ENABLED", "Sharing conditional Surveys is not enabled yet");
       if (input.audience === "people") {
         const recipients = await tx.recipients(context.organizationId, "", input.recipientIds);
         if (input.recipientIds.some((id) => !recipients.some((person) => person.userId === id)))
@@ -515,16 +527,15 @@ export class LibrarySharingService implements LibrarySharingRepository {
         progress: row.progress,
         surveySchemaVersion: row.surveySchemaVersion,
         capabilities: {
-          view: true,
-          copy: row.permission === "use" && row.surveySchemaVersion !== 3,
+          view: row.surveySchemaVersion === undefined || row.surveySchemaVersion < 4,
+          copy: row.permission === "use" && !surveyCopyUnavailableReason(row.surveySchemaVersion),
           manage: row.context.manage,
         },
-        copyUnavailableReason:
-          row.surveySchemaVersion === 3
-            ? "Creating paged Survey copies is not enabled yet"
-            : row.permission === "use"
-              ? null
-              : "This item was shared for viewing",
+        copyUnavailableReason: surveyCopyUnavailableReason(row.surveySchemaVersion)
+          ? surveyCopyUnavailableReason(row.surveySchemaVersion)
+          : row.permission === "use"
+            ? null
+            : "This item was shared for viewing",
       }));
       return {
         shares,
@@ -619,12 +630,13 @@ export class LibrarySharingService implements LibrarySharingRepository {
           replayed: true,
         };
       }
+      const surveySchemaVersion = storedSurveySchemaVersion(row!);
+      const unavailableReason = surveyCopyUnavailableReason(surveySchemaVersion);
       if (
-        row!.snapshot?.artifactType === "survey" &&
-        row!.snapshot.content.schemaVersion === 3 &&
-        input.maximumSurveySchemaVersion !== 3
+        unavailableReason &&
+        (surveySchemaVersion !== 3 || input.maximumSurveySchemaVersion !== 3)
       )
-        fail("SURVEY_PAGES_NOT_ENABLED", "Creating paged Survey copies is not enabled yet");
+        fail("SURVEY_PAGES_NOT_ENABLED", unavailableReason);
       const value = parseCopy(
         await materialize(await this.record(tx, row!, context!)),
         row!.artifactType,
@@ -888,10 +900,7 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
               message: row.message,
               dueAt: row.dueAt,
               context: access!,
-              surveySchemaVersion:
-                row.snapshot?.artifactType === "survey"
-                  ? row.snapshot.content.schemaVersion
-                  : undefined,
+              surveySchemaVersion: storedSurveySchemaVersion(row),
               progress,
             });
           }
@@ -999,7 +1008,7 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
               await createSurveyRepository(this.repository).create(
                 workspaceId,
                 artifactId,
-                value.snapshot.content,
+                SurveyDraftSchema.parse(value.snapshot.content),
                 requestId,
                 { maximumSchemaVersion: 3 },
               );

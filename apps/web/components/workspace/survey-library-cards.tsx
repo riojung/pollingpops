@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { SurveyDraft } from "@openround/contracts/surveys";
+import type { SurveyReadableDraft } from "@openround/contracts/survey-branching";
 import { useLocale } from "../locale-provider";
 import type { RoundLibraryView } from "../../lib/round-library-view";
 import { WorkspaceStatus, workspaceStateTone } from "./workspace-signals";
@@ -25,7 +25,7 @@ export function SurveyLibraryCards({
     id: string;
     title: string;
     description: string;
-    draft: SurveyDraft;
+    draft: SurveyReadableDraft;
     status: "draft" | "published" | "archived";
     folderId: string | null;
     updatedAt?: string;
@@ -47,6 +47,8 @@ export function SurveyLibraryCards({
     <section className={styles.collection} data-view={view}>
       {surveys.map((survey) => {
         const archived = survey.status === "archived";
+        const branching = survey.draft.schemaVersion === 4;
+        const editable = canEdit && !archived && !branching;
         const folder = folders.find((row) => row.id === survey.folderId)?.name;
         return (
           <article
@@ -115,12 +117,12 @@ export function SurveyLibraryCards({
               <div className={styles.cardActions}>
                 <Link
                   className={`button-quiet small-button ${signals.action}`}
-                  data-action={canEdit && !archived ? "edit" : "view"}
+                  data-action={editable ? "edit" : "view"}
                   href={`/surveys/${survey.id}`}
                 >
-                  {t(canEdit && !archived ? "pages.library.edit" : "pages.library.view")}
+                  {t(editable ? "pages.library.edit" : "pages.library.view")}
                 </Link>
-                {survey.status === "published" && canEdit && canCreate ? (
+                {survey.status === "published" && canEdit && canCreate && !branching ? (
                   <Link
                     className={`button small-button ${signals.action}`}
                     data-action="edit"
@@ -129,12 +131,12 @@ export function SurveyLibraryCards({
                     {t("pages.library.shareSurvey")}
                   </Link>
                 ) : null}
-                {renderSharingAction?.(survey.id)}
-                {canEdit ? (
+                {!branching ? renderSharingAction?.(survey.id) : null}
+                {canEdit && (!branching || !archived) ? (
                   <details className={styles.moreMenu}>
                     <summary>{t("pages.library.more")}</summary>
                     <div className={styles.moreMenuPanel}>
-                      {canCreate ? (
+                      {canCreate && !branching ? (
                         <button
                           type="button"
                           disabled={busy}

@@ -14,8 +14,9 @@ with qualification in [Library discovery](library-discovery.md). **WX-04** merge
 **WX-05C** merged through [PR #283](https://github.com/riojung/pollingpops/pull/283) at `e8cc4ce`.
 **WX-06A1** merged through [PR #284](https://github.com/riojung/pollingpops/pull/284) at `5782220`.
 **WX-06A2** merged through [PR #285](https://github.com/riojung/pollingpops/pull/285) at `4dcefcc`.
-**WX-06B1** is the current conditional-page contract/eligibility foundation on
-`codex/survey-branching-contracts`. Later items are scoped backlog,
+**WX-06B1** merged through [PR #286](https://github.com/riojung/pollingpops/pull/286) at `f08ccbd`.
+**WX-06B2** is the current conditional-page reader/storage increment on
+`codex/survey-branching-readers`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -31,22 +32,22 @@ follow its smaller checkpoints below; do not combine every checkpoint into one p
 Each delivery needs an assigned owner, tests, documentation and an explicit disposition of its
 remaining work. Candidate priorities indicate evaluation order, not a release promise.
 
-| ID    | Priority | Size                               | Outcome                                                             | State / dependency                              | Responsible role                |
-| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below       | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below       | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery        | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                          | Authoring + frontend            |
-| WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | A1/A2 merged; B1 implemented locally for review | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence         | Async delivery + privacy        |
-| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                         | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                         | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Ready one surface at a time                     | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery               | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace  | Library + organization access   |
+| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                 | Responsible role                |
+| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------- |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below          | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below          | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery           | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                   | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                             | Authoring + frontend            |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1 merged; B2 implemented locally for review | Surveys + contracts + reporting |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence            | Async delivery + privacy        |
+| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                   | Contracts + live experience     |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                            | Realtime + security + frontend  |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                            | Reporting + learning evidence   |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Ready one surface at a time                        | Design system + frontend        |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                   | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                  | Learning delivery + privacy     |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace     | Library + organization access   |
 
 ## Selected first delivery
 
@@ -460,13 +461,13 @@ reveal dependent pages. Cleanup does not approve input: unknown IDs and eligible
 remain validation errors, and validation does not silently prune hidden submissions. Internal
 states distinguish unanswered questions from questions skipped by logic.
 
-This is an isolated contract and pure-helper delivery. Current Survey schemas/readers still accept
+At B1 this was an isolated contract and pure-helper delivery. Survey schemas/readers accepted
 only v1–3, ordinary factories remain v2, and `surveyPages` still grants v3 only. There is no new
 migration, runtime import, branching authoring screen or effective branching writer grant. Existing
 production boundaries must continue rejecting v4 even with the page-authoring capability enabled.
 See the [selected contract and privacy decisions](survey-branching.md).
 
-Remaining Survey checkpoints are **B2 runtime/readers**, **C branch-aware results/privacy**, then
+After B1 the remaining Survey checkpoints were **B2 runtime/readers**, **C branch-aware results/privacy**, then
 **B3 authoring and effective writer enablement** after both reader/privacy prerequisites pass.
 Late retries must not resurrect answers cleared by newer branch changes. Branch-aware denominators,
 minimum samples and filtered exports need explicit qualification before enabling collection.
@@ -480,14 +481,43 @@ cycles, controller validity, cascading cleanup, input independence, required fie
 resume and explicit question states. Independent read-only privacy/eligibility review found no
 actionable defect.
 
-Production compatibility is verified with valid proposed v4 content, not only malformed payloads.
-Six dedicated server boundary cases cover supported-version shapes and six accepted receipt-hash
-goldens from main `4dcefcc`, refusal before production writes, future stored-source copy refusal,
-and fail-closed guest/public paths without guest/receipt mutation. All 19 Survey client tests pass,
-including admission/resume refusal and retention of the exact pending intent after an unsupported
-future acknowledgement. Main runtime parser/route/storage/client files are unchanged from the
-baseline, and no production path imports the proposed module. No user-facing branching or
-branch-aware report/export availability is claimed by this checkpoint.
+**Selected WX-06B2 runtime/readers:** expand frozen storage and read schemas to v4, negotiate
+reader capabilities, show only eligible pages, clear hidden answers on controller changes, and
+save complete replacement response maps under existing revision/idempotency checks. Retried
+historical acknowledgements cannot restore cleared data. Reconnect derives the resume page from
+saved responses. Closed retained attempts remain read-only; creators inspect all pages and rules
+without autosave. Existing v1–3 request hashes and writer schemas remain stable.
+
+Migration 118 expands four stored-version constraints only. No conditional authoring grant or
+new v4 creation path is enabled. Source/Library copies and new Library shares are explicitly
+blocked, and v4 aggregates/summaries/derived exports fail closed pending C. Existing account
+exports retain conditional source documents without participant answers or credentials.
+Restricted PostgreSQL checks cover migration replay, forced RLS, frozen snapshots, receipt
+recovery and room/retention/account erasure. See [reader behavior and gates](survey-branching.md).
+
+**WX-06B2 local verification — 2026-11-19:** full `VITEST_MAX_WORKERS=1 pnpm check` passed:
+formatting, Docker dependency checks, lint/types, 1,053 contract tests, 666 default database tests,
+6,318 web tests, 1,672 server tests, 529 support tests, four production build tasks and compiled
+server startup. Configured optional integration skips remain. Separately, 11 restricted-PostgreSQL
+Survey tests and 29 Library tests across memory/PostgreSQL passed against a task-isolated database;
+the temporary database server was stopped afterwards. Six Playwright runs passed across desktop
+Chromium, mobile Chromium and mobile WebKit, covering cascading cleanup/no resurrection, exact
+unknown-outcome retries, stale acknowledgements, saved-map resume, closed/finalized review,
+heading/error focus, axe, overflow and light/dark screenshots. The new inspection copy is bound
+to three pending editorial review items per locale; native-language and human acceptance stay open.
+An independent integration audit found no actionable issues. The B2 increment is prepared for review
+on `codex/survey-branching-readers`.
+
+The next Survey increment is **C branch-aware results/privacy**: eligible-question denominators,
+unanswered versus logic-skipped semantics, suppression/minimum samples and reconstruction-risk
+qualification. **B3** then adds condition editing, safe ID remapping/reordering/deletion, previews,
+and an explicit writer grant after B2 and C are qualified. WX-07–14 and human release acceptance
+remain pending; earlier merged P1 slices do not imply these are shipped.
+
+At B1, production compatibility used valid proposed v4 content and six server boundary cases,
+including six accepted receipt-hash goldens from main `4dcefcc`. B2 retains those goldens and
+updates the boundary checks for supported v4 reads, rejected v4 author writes and unknown future
+v5 refusal. Branch-aware report/export availability is not claimed by either checkpoint.
 
 ### WX-07 Recurring check-ins
 
@@ -658,8 +688,8 @@ assistive-technology, native-language or physical-device review. Run the reposit
 `pnpm check` before opening a pull request, as required by the contribution guide.
 
 The next work session should select **one ID/checkpoint**, confirm its current baseline and scope,
-assign an owner and define a testable completion target. After B1, the next selected Survey work is
-**B2 runtime/readers**, paired with the separate **C results/privacy** design before B3 enables
+assign an owner and define a testable completion target. After B2, the next selected Survey work is
+**C results/privacy** before B3 enables
 writers. **WX-11** is a ready independent surface-polish increment. WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a
 provider choice. Do not mark these later items implemented because earlier slices are merged.

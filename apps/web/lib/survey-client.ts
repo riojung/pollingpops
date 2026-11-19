@@ -1,9 +1,6 @@
 import {
-  MAX_SUPPORTED_SURVEY_SCHEMA_VERSION,
   SURVEY_READER_HEADER,
-  SurveyContentSchema,
   SurveyResponsesSchema,
-  surveyPageViews,
   surveyResumePageIndex,
   validateSurveyPageResponses,
   validateSurveyResponses,
@@ -11,9 +8,19 @@ import {
   type SurveyResponse,
   type SurveyResponses,
 } from "@openround/contracts/surveys";
+import {
+  MAX_SUPPORTED_SURVEY_READER_VERSION,
+  SurveyReadableContentSchema,
+  reconcileSurveyBranchingResponses,
+  surveyBranchingResumePageId,
+  surveyReadablePageViews,
+  validateSurveyBranchingPageResponses,
+  validateSurveyBranchingResponses,
+  type SurveyReadableDraft,
+} from "@openround/contracts/survey-branching";
 export interface SurveyAttempt {
   roomId: string;
-  content: SurveyDraft;
+  content: SurveyReadableDraft;
   closesAt: string;
   closed: boolean;
   revision: number;
@@ -42,7 +49,7 @@ export function surveyMutationKey() {
 
 export function surveyReaderHeaders(token?: string) {
   return {
-    [SURVEY_READER_HEADER]: String(MAX_SUPPORTED_SURVEY_SCHEMA_VERSION),
+    [SURVEY_READER_HEADER]: String(MAX_SUPPORTED_SURVEY_READER_VERSION),
     ...(token ? { authorization: `Bearer ${token}` } : {}),
   };
 }
@@ -80,9 +87,42 @@ type PendingResponse = {
   body: string;
   final: boolean;
   revision: number;
+  content: string;
+  responses: string;
   afterPage: number;
   admission: number;
 };
+
+// JSONB may reorder object keys. Array order and every frozen content/answer value still matter.
+function fingerprint(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(fingerprint).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) => `${JSON.stringify(key)}:${fingerprint((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
+
+function resumePageIndex(content: SurveyReadableDraft, responses: SurveyResponses) {
+  if (content.schemaVersion === 4) {
+    const pageId = surveyBranchingResumePageId(content, responses);
+    return surveyReadablePageViews(content, responses).findIndex((page) => page.id === pageId);
+  }
+  return content.schemaVersion === 3 ? surveyResumePageIndex(content, responses) : 0;
+}
+
+function responseValidation(
+  content: SurveyReadableDraft,
+  responses: SurveyResponses,
+  final: boolean,
+) {
+  return content.schemaVersion === 4
+    ? validateSurveyBranchingResponses(content, responses, final)
+    : validateSurveyResponses(content, responses, final);
+}
 
 /** Answers stay in memory and on the room-scoped server attempt; only its credential is stored locally. */
 export function createSurveyParticipantSession({
@@ -124,7 +164,7 @@ export function createSurveyParticipantSession({
   function checkedAttempt(value: SurveyAttempt) {
     if (value.roomId !== roomId || !Number.isSafeInteger(value.revision) || value.revision < 0)
       throw new Error("The Survey response could not be verified. Retry the same operation.");
-    const parsed = SurveyContentSchema.safeParse(value.content);
+    const parsed = SurveyReadableContentSchema.safeParse(value.content);
     if (!parsed.success)
       throw Object.assign(
         new Error("This Survey needs an updated reader. Reload this page to continue."),
@@ -132,8 +172,18 @@ export function createSurveyParticipantSession({
       );
     const content = parsed.data;
     const responses = SurveyResponsesSchema.parse(value.responses);
-    if (validateSurveyResponses(content, responses, value.finalized).length)
+    if (responseValidation(content, responses, value.finalized).length)
       throw new Error("The saved Survey answers could not be verified.");
+    if (
+      state.attempt &&
+      (fingerprint(content) !== fingerprint(state.attempt.content) ||
+        value.revision < state.attempt.revision ||
+        (value.revision === state.attempt.revision &&
+          (fingerprint(responses) !== fingerprint(state.attempt.responses) ||
+            value.finalized !== state.attempt.finalized ||
+            value.receipt !== state.attempt.receipt)))
+    )
+      throw new Error("The Survey response could not be verified. Retry the same operation.");
     return { ...value, content, responses };
   }
   function accept(value: SurveyAttempt, resume: boolean, afterPage = state.pageIndex) {
@@ -141,10 +191,12 @@ export function createSurveyParticipantSession({
     publish({
       attempt,
       responses: structuredClone(attempt.responses),
-      pageIndex:
-        resume && attempt.content.schemaVersion === 3
-          ? surveyResumePageIndex(attempt.content, attempt.responses)
-          : afterPage,
+      pageIndex: resume
+        ? resumePageIndex(attempt.content, attempt.responses)
+        : Math.min(
+            afterPage,
+            surveyReadablePageViews(attempt.content, attempt.responses).length - 1,
+          ),
       passwordRequired: false,
       validation: {},
     });
@@ -228,7 +280,12 @@ export function createSurveyParticipantSession({
       });
       if (!valid(operation.admission) || pending !== operation) return;
       const accepted = checkedAttempt(result.attempt);
-      if (accepted.revision !== operation.revision + 1 || accepted.finalized !== operation.final)
+      if (
+        accepted.revision !== operation.revision + 1 ||
+        accepted.finalized !== operation.final ||
+        fingerprint(accepted.content) !== operation.content ||
+        fingerprint(accepted.responses) !== operation.responses
+      )
         throw new Error(
           "The Survey save acknowledgement could not be verified. Retry the same operation.",
         );
@@ -263,20 +320,42 @@ export function createSurveyParticipantSession({
       return;
     if (
       final &&
-      state.attempt.content.schemaVersion === 3 &&
-      state.pageIndex !== surveyPageViews(state.attempt.content).length - 1
+      state.attempt.content.schemaVersion >= 3 &&
+      state.pageIndex !== surveyReadablePageViews(state.attempt.content, state.responses).length - 1
     )
       return;
+    if (final && state.attempt.content.schemaVersion === 4) {
+      const issues = validateSurveyBranchingResponses(state.attempt.content, state.responses, true);
+      if (issues.length) {
+        const validation: SurveyParticipantSnapshot["validation"] = {};
+        for (const issue of issues)
+          if (issue.questionId)
+            validation[issue.questionId] = issue.code === "required" ? "required" : "invalid";
+        const pages = surveyReadablePageViews(state.attempt.content, state.responses);
+        const firstInvalid = pages.findIndex((page) =>
+          page.items.some((item) => validation[item.question.id]),
+        );
+        publish({
+          validation,
+          validationRevision: state.validationRevision + 1,
+          ...(firstInvalid >= 0 ? { pageIndex: firstInvalid } : {}),
+        });
+        return;
+      }
+    }
+    const responses = SurveyResponsesSchema.parse(state.responses);
     pending = {
       path: `/v1/survey-rooms/${roomId}/${final ? "submit" : "draft"}`,
       token,
       body: JSON.stringify({
         expectedRevision: state.attempt.revision,
         idempotencyKey: key(),
-        responses: state.responses,
+        responses,
       }),
       final,
       revision: state.attempt.revision,
+      content: fingerprint(state.attempt.content),
+      responses: fingerprint(responses),
       afterPage,
       admission,
     };
@@ -284,14 +363,19 @@ export function createSurveyParticipantSession({
   }
   async function next() {
     if (!active() || !state.attempt || state.loading || state.saving || pending) return;
-    const pages = surveyPageViews(state.attempt.content);
+    const responses = closed() ? state.attempt.responses : state.responses;
+    const pages = surveyReadablePageViews(state.attempt.content, responses);
     if (state.pageIndex >= pages.length - 1) return;
     if (closed()) {
       publish({ pageIndex: state.pageIndex + 1, validation: {} });
       return;
     }
     const page = pages[state.pageIndex]!;
-    if (validateSurveyPageResponses(state.attempt.content, state.responses, page.id).length) {
+    const issues =
+      state.attempt.content.schemaVersion === 4
+        ? validateSurveyBranchingPageResponses(state.attempt.content, state.responses, page.id!)
+        : validateSurveyPageResponses(state.attempt.content, state.responses, page.id);
+    if (issues.length) {
       const validation: SurveyParticipantSnapshot["validation"] = {};
       for (const item of page.items) {
         const response = state.responses[item.question.id];
@@ -341,10 +425,10 @@ export function createSurveyParticipantSession({
       )
         return;
       if (
-        state.attempt.content.schemaVersion === 3 &&
-        !surveyPageViews(state.attempt.content)[state.pageIndex]?.items.some(
-          (item) => item.question.id === questionId,
-        )
+        state.attempt.content.schemaVersion >= 3 &&
+        !surveyReadablePageViews(state.attempt.content, state.responses)[
+          state.pageIndex
+        ]?.items.some((item) => item.question.id === questionId)
       )
         return;
       const responses = { ...state.responses };
@@ -352,7 +436,19 @@ export function createSurveyParticipantSession({
       else delete responses[questionId];
       const validation = { ...state.validation };
       delete validation[questionId];
-      publish({ responses, validation, notice: "" });
+      const cleaned =
+        state.attempt.content.schemaVersion === 4
+          ? SurveyResponsesSchema.parse(
+              reconcileSurveyBranchingResponses(state.attempt.content, responses).responses,
+            )
+          : responses;
+      const eligible = new Set(
+        surveyReadablePageViews(state.attempt.content, cleaned).flatMap((page) =>
+          page.items.map((item) => item.question.id),
+        ),
+      );
+      for (const id of Object.keys(validation)) if (!eligible.has(id)) delete validation[id];
+      publish({ responses: cleaned, validation, notice: "" });
     },
     dispose() {
       disposed = true;

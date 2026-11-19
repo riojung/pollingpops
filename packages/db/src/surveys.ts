@@ -9,6 +9,12 @@ import {
   type SurveyDraft,
   type SurveyResponses,
 } from "@openround/contracts/surveys";
+import {
+  SurveyReadableContentSchema,
+  SurveyReadableDraftSchema,
+  validateSurveyBranchingResponses,
+  type SurveyReadableDraft,
+} from "@openround/contracts/survey-branching";
 import { MemoryRepository, type MemoryRepositoryLifecycleContext } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
 import { assertAudienceAdmissionInMemory, getMemoryPlatformRepository } from "./platform-memory.js";
@@ -26,6 +32,8 @@ export class SurveyError extends Error {
     public readonly code:
       | "SURVEY_CLIENT_UPDATE_REQUIRED"
       | "SURVEY_PAGES_NOT_ENABLED"
+      | "SURVEY_BRANCHING_NOT_ENABLED"
+      | "SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE"
       | "NOT_FOUND"
       | "UNAUTHORIZED"
       | "STALE_DRAFT"
@@ -44,10 +52,10 @@ export class SurveyError extends Error {
   }
 }
 export interface SurveyRecord {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   workspaceId: string;
-  draft: SurveyDraft;
+  draft: SurveyReadableDraft;
   revision: number;
   status: "draft" | "published" | "archived";
   versionId: string | null;
@@ -56,20 +64,20 @@ export interface SurveyRecord {
   updatedAt?: string;
 }
 export interface SurveyVersion {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   workspaceId: string;
   surveyId: string;
-  content: SurveyDraft;
+  content: SurveyReadableDraft;
   revision: number;
 }
 export interface SurveyRoom {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   workspaceId: string;
   surveyId: string;
   versionId: string;
-  content: SurveyDraft;
+  content: SurveyReadableDraft;
   code: string;
   /** Server-private salted verifier; never part of audience responses or content. */
   joinPasswordHash?: string | null;
@@ -82,7 +90,7 @@ export interface SurveyRoom {
   identityPolicy: "organizer_blind";
 }
 interface Guest {
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   id: string;
   workspaceId: string;
   roomId: string;
@@ -101,10 +109,10 @@ type Documents = {
 type Table = keyof Documents;
 function compatibleDocument<T extends Table>(table: T, value: unknown): Documents[T] {
   const row = value as Documents[T];
-  if (!row || (row.schemaVersion !== 1 && row.schemaVersion !== 2 && row.schemaVersion !== 3))
+  if (!row || ![1, 2, 3, 4].includes(row.schemaVersion))
     throw new Error(`Unsupported stored ${table} schema; keep compatible readers deployed`);
-  if ("draft" in row) SurveyDraftSchema.parse(row.draft);
-  if ("content" in row) SurveyContentSchema.parse(row.content);
+  if ("draft" in row) SurveyReadableDraftSchema.parse(row.draft);
+  if ("content" in row) SurveyReadableContentSchema.parse(row.content);
   if ("responses" in row) {
     SurveyResponsesSchema.parse(row.responses);
     if (
@@ -184,19 +192,36 @@ export interface SurveyWritePolicy {
   /** Trusted server-side grant. Unspecified policies keep ordinary writers at version 2. */
   maximumSchemaVersion?: 2 | 3;
 }
-function requireSurveyWriter(content: SurveyDraft, policy: SurveyWritePolicy) {
+function requireSurveyWriter(
+  content: SurveyReadableDraft,
+  policy: SurveyWritePolicy,
+): asserts content is SurveyDraft {
+  if (content.schemaVersion === 4)
+    throw new SurveyError(
+      "SURVEY_BRANCHING_NOT_ENABLED",
+      "Creating or changing conditional Surveys is not enabled yet",
+    );
   if (content.schemaVersion === 3 && policy.maximumSchemaVersion !== 3)
     throw new SurveyError(
       "SURVEY_PAGES_NOT_ENABLED",
       "Creating or changing paged Surveys is not enabled yet",
     );
 }
-function requireSurveyReader(room: SurveyRoom, maximumSchemaVersion: 2 | 3) {
-  if (room.schemaVersion === 3 && maximumSchemaVersion !== 3)
+function requireSurveyReader(room: SurveyRoom, maximumSchemaVersion: 2 | 3 | 4) {
+  if (room.schemaVersion > maximumSchemaVersion)
     throw new SurveyError(
       "SURVEY_CLIENT_UPDATE_REQUIRED",
       "Update this Survey page before continuing",
     );
+}
+function compatibleGuest(room: SurveyRoom, guest: Guest) {
+  if (
+    guest.schemaVersion !== room.schemaVersion ||
+    guest.workspaceId !== room.workspaceId ||
+    guest.roomId !== room.id
+  )
+    throw new Error("Stored Survey guest and room must have matching scope and schema versions");
+  return guest;
 }
 
 /** Shared business rules; PostgreSQL and memory differ only in transaction/storage mechanics. */
@@ -323,6 +348,7 @@ export class SurveyRepository {
               "Duplicate an archived survey before editing it",
             );
           requireSurveyWriter(draft, policy);
+          if (record.draft.schemaVersion === 4) requireSurveyWriter(record.draft, policy);
           if (record.draft.schemaVersion === 3 && draft.schemaVersion !== 3)
             throw new SurveyError(
               "VALIDATION_ERROR",
@@ -524,7 +550,7 @@ export class SurveyRepository {
     id: string,
     tokenHash: string,
     clock: Date | (() => Date),
-    maximumSchemaVersion: 2 | 3 = 2,
+    maximumSchemaVersion: 2 | 3 | 4 = 2,
   ) {
     return this.run(
       null,
@@ -567,6 +593,7 @@ export class SurveyRepository {
     );
   }
   private attemptView(room: SurveyRoom, guest: Guest) {
+    compatibleGuest(room, guest);
     return {
       schemaVersion: room.schemaVersion,
       responseSchemaVersion: guest.schemaVersion,
@@ -580,7 +607,7 @@ export class SurveyRepository {
       receipt: guest.receipt,
     };
   }
-  attempt(id: string, tokenHash: string, now: Date, maximumSchemaVersion: 2 | 3 = 2) {
+  attempt(id: string, tokenHash: string, now: Date, maximumSchemaVersion: 2 | 3 | 4 = 2) {
     return this.run(null, async (tx) => {
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
       requireSurveyReader(room, maximumSchemaVersion);
@@ -596,15 +623,14 @@ export class SurveyRepository {
   respond(
     id: string,
     tokenHash: string,
-    responses: SurveyResponses,
+    responses: unknown,
     expected: number,
     key: string,
     final: boolean,
     clock: Date | (() => Date),
-    maximumSchemaVersion: 2 | 3 = 2,
+    maximumSchemaVersion: 2 | 3 | 4 = 2,
   ) {
     return this.run(null, async (tx) => {
-      const normalizedResponses = SurveyResponsesSchema.parse(responses);
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
       requireSurveyReader(room, maximumSchemaVersion);
       const now = typeof clock === "function" ? clock() : clock;
@@ -614,6 +640,13 @@ export class SurveyRepository {
         (await tx.list("survey_guests", id)).find((g) => g.tokenHash === tokenHash),
         tokenHash,
       );
+      compatibleGuest(room, guest);
+      if (room.content.schemaVersion === 4) {
+        const issues = validateSurveyBranchingResponses(room.content, responses, final);
+        if (issues.length)
+          throw new SurveyError("VALIDATION_ERROR", "Select valid responses for visible questions");
+      }
+      const normalizedResponses = SurveyResponsesSchema.parse(responses);
       return this.mutate(
         tx,
         { workspaceId: room.workspaceId, surveyId: room.surveyId, roomId: id, ownerId: guest.id },
@@ -624,7 +657,10 @@ export class SurveyRepository {
           revision(guest.revision, expected);
           if (guest.finalized)
             throw new SurveyError("VALIDATION_ERROR", "This survey has already been submitted");
-          const issues = validateSurveyResponses(room.content, normalizedResponses, final);
+          const issues =
+            room.content.schemaVersion === 4
+              ? []
+              : validateSurveyResponses(room.content, normalizedResponses, final);
           if (issues.length) throw new SurveyError("VALIDATION_ERROR", issues.join(". "));
           guest.responses = normalizedResponses;
           guest.revision++;
@@ -641,6 +677,11 @@ export class SurveyRepository {
       const room = requireRecord(await tx.get("survey_feedback_rooms", id));
       if (new Date(room.expiresAt) <= now)
         throw new SurveyError("NOT_FOUND", "This survey has expired");
+      if (room.content.schemaVersion === 4)
+        throw new SurveyError(
+          "SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE",
+          "Conditional Survey results are not available yet",
+        );
       if ((room.closed || new Date(room.closesAt) <= now) && (!room.closed || !room.closedAt)) {
         // Final publication fences queued submissions carrying older request timestamps.
         room.closed = true;

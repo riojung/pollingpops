@@ -3,8 +3,8 @@
 WX-06A1 introduced the versioned layout and compatible stored, participant and creator readers.
 WX-06A2 adds explicit page organization in the Survey editor behind the separate `surveyPages`
 product capability. It starts disabled and depends on `surveys`. Ordinary blank/template creation
-continues to write v2. The selected [conditional-page foundation](survey-branching.md) is a
-separate proposed contract; application writers and readers remain on v1–3.
+continues to write v2. The selected [conditional-page readers](survey-branching.md) separately
+support frozen v4 content; application mutation schemas and authoring grants remain v1–3.
 
 ## Content and compatibility
 
@@ -29,7 +29,8 @@ Unknown versions and condition fields fail validation. Branching needs a separat
 decision about eligible answers, clearing hidden responses and skipped-question results.
 
 `CURRENT_SURVEY_SCHEMA_VERSION` remains 2 for ordinary factories. The supported reader maximum
-is 3. `upgradeSurveyDraft` preserves existing v1→v2 behavior and returns v3 with its pages intact;
+in this mutation module is 3; the separate branching module's runtime reader maximum is4.
+`upgradeSurveyDraft` preserves existing v1→v2 behavior and returns v3 with its pages intact;
 it never synthesizes pages into stored historical content. Published versions and room snapshots
 are not backfilled or rewritten. A v3→v2 save is rejected rather than silently discarding layout.
 

@@ -243,7 +243,7 @@ describe("paged Survey reader and writer HTTP boundary", () => {
     expect((await f.surveys.getRoom(f.room.id))?.content).toEqual(f.draft);
   });
 
-  it("requires the exact v3 reader header before admission, frozen content or accepted response acknowledgements", async () => {
+  it("requires a supported v3-or-newer reader before admission, frozen content or accepted response acknowledgements", async () => {
     const f = await fixture(),
       url = `/v1/survey-rooms/${f.room.id}`;
     const admit = vi.spyOn(SurveyRepository.prototype, "admit");
@@ -251,7 +251,7 @@ describe("paged Survey reader and writer HTTP boundary", () => {
     expect(metadata.statusCode, metadata.body).toBe(200);
     expect(metadata.json().room.title).toBe(f.draft.title);
     expect(metadata.json().room).not.toHaveProperty("content");
-    for (const value of [undefined, "2", "4", "3, 3"]) {
+    for (const value of [undefined, "2", "5", "3, 3"]) {
       const headers = {
         authorization: f.guest.authorization,
         ...(value ? { [SURVEY_READER_HEADER]: value } : {}),

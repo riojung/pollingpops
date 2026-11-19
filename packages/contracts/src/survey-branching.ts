@@ -5,11 +5,14 @@ import {
   SurveyDraftSchema,
   SurveyPageSchema,
   SurveyResponseSchema,
+  surveyPageViews,
   type SurveyDraft,
+  type SurveyPageView,
 } from "./surveys";
 
-/** Proposed contract only. Runtime Survey readers and writers still stop at v3. */
+/** Conditional-page content version; authoring and publication remain separately fenced. */
 export const PROPOSED_SURVEY_BRANCHING_SCHEMA_VERSION = 4;
+export const MAX_SUPPORTED_SURVEY_READER_VERSION = 4;
 
 export const SurveyPageVisibilityConditionSchema = z
   .object({
@@ -30,7 +33,7 @@ export type SurveyBranchingDraft = Omit<PagedSurveyDraft, "schemaVersion" | "pag
   pages: SurveyBranchingPage[];
 };
 
-/** Internal validation adapter only; never downgrade or persist a proposed document. */
+/** Internal validation adapter only; never downgrade or persist a document through it. */
 function flatValidationInput(draft: SurveyBranchingDraft) {
   return {
     ...draft,
@@ -105,13 +108,48 @@ export const SurveyBranchingDraftSchema = z
     }
   });
 
-/** Proposed publication validation; it enables neither publication nor runtime delivery. */
+/** Frozen-content validation does not grant authoring or publication access. */
 export const SurveyBranchingContentSchema = SurveyBranchingDraftSchema.superRefine((draft, ctx) => {
   const published = SurveyContentSchema.safeParse(flatValidationInput(draft));
   if (!published.success)
     for (const issue of published.error.issues)
       ctx.addIssue({ code: "custom", path: issue.path, message: issue.message });
 });
+
+/** Read compatibility does not expand the existing v1-v3 mutation schemas or writer grants. */
+export type SurveyReadableDraft = SurveyDraft | SurveyBranchingDraft;
+export const SurveyReadableDraftSchema = z.union([SurveyDraftSchema, SurveyBranchingDraftSchema]);
+export const SurveyReadableContentSchema = z.union([
+  SurveyContentSchema,
+  SurveyBranchingContentSchema,
+]);
+
+/** Explicit creator inspection of the entire frozen document, including conditional pages. */
+export function surveyReadableAllPageViews(content: SurveyReadableDraft): SurveyPageView[] {
+  if (content.schemaVersion !== 4) return surveyPageViews(content);
+  const items = new Map(content.items.map((item) => [item.question.id, item]));
+  return content.pages.map((page) => ({
+    id: page.id,
+    title: page.title,
+    description: page.description,
+    items: page.questionIds.map((id) => {
+      const item = items.get(id);
+      if (!item) throw new Error("Survey page references an unknown question");
+      return item;
+    }),
+  }));
+}
+
+/** Participant pages are derived from the current answer map, never a retained branch trace. */
+export function surveyReadablePageViews(
+  content: SurveyReadableDraft,
+  responses: unknown = {},
+): SurveyPageView[] {
+  const pages = surveyReadableAllPageViews(content);
+  if (content.schemaVersion !== 4) return pages;
+  const visible = new Set(surveyBranchingEligibility(content, responses).visiblePageIds);
+  return pages.filter((page) => page.id !== null && visible.has(page.id));
+}
 
 // Inspect keys and cardinality before any response payload. Hidden malformed payloads need
 // not parse as answers in order to be removed. Payload byte limits remain a future API concern.
@@ -172,7 +210,7 @@ function eligibility(content: SurveyBranchingDraft, responses: ResponseMap) {
   return { visiblePageIds, eligibleQuestionIds };
 }
 
-/** Preview-only calculation on a document parsed by the proposed schema; no access grant. */
+/** Eligibility on a parsed document; this calculation does not grant room access. */
 export function surveyBranchingEligibility(content: SurveyBranchingDraft, responses: unknown) {
   return eligibility(content, ResponseMapSchema.parse(responses));
 }
@@ -275,7 +313,7 @@ export function validateSurveyBranchingPageResponses(
 
 export type SurveyBranchingQuestionState = "skipped_logic" | "unanswered" | "invalid" | "answered";
 
-/** Proposed local projection only: no answer values, aggregates or reporting payload rollout. */
+/** Internal question-state projection only; no answer values or reporting payload. */
 export function surveyBranchingQuestionStates(content: SurveyBranchingDraft, responses: unknown) {
   const raw = ResponseMapSchema.parse(responses);
   const eligible = new Set(eligibility(content, raw).eligibleQuestionIds);
@@ -307,8 +345,8 @@ export function surveyBranchingResumePageId(content: SurveyBranchingDraft, respo
 }
 
 /**
- * Preview navigation only. Hidden/stale cursors return to the response-derived resume page.
- * A future caller must validate the current page and persist cleanup before advancing.
+ * Hidden/stale cursors return to the response-derived resume page. Callers must validate the
+ * current page and persist cleanup before advancing.
  */
 export function surveyBranchingPageNavigation(
   content: SurveyBranchingDraft,

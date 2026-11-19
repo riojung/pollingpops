@@ -231,6 +231,12 @@ reader validates the page partition and renders each heading/description before 
 V1/v2 Surveys and Rounds keep their flat response shape; Presentation review stays unchanged.
 No answer keys, explanations, private metadata or unpublished draft edits enter this projection.
 
+The separate `@openround/contracts/survey-branching` module defines a proposed v4 conditional-page
+contract for the next checkpoint. It is not an accepted HTTP format or a runtime reader/writer
+grant. Existing Survey APIs, `surveyPages`, stored versions and participant negotiation remain
+on v1–3. Do not pass proposed documents into current publication, response, aggregate or export
+paths. See the [selected visibility rules and remaining gates](survey-branching.md).
+
 ### Self-paced Survey beta
 
 Creator-cookie routes: `GET/POST /v1/surveys`, `GET/PUT /v1/surveys/:id`, `POST /publish`, `/archive`,

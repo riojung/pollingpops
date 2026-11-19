@@ -3,7 +3,8 @@
 WX-06A1 introduced the versioned layout and compatible stored, participant and creator readers.
 WX-06A2 adds explicit page organization in the Survey editor behind the separate `surveyPages`
 product capability. It starts disabled and depends on `surveys`. Ordinary blank/template creation
-continues to write v2. Conditional paths remain a separate increment.
+continues to write v2. The selected [conditional-page foundation](survey-branching.md) is a
+separate proposed contract; application writers and readers remain on v1–3.
 
 ## Content and compatibility
 

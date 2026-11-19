@@ -8,9 +8,30 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace experience: current position, November 19, 2026
+
+The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
+preview/use, All content Library, the Team meetings collection, and creation navigation/import
+preview/durable Round starter-copy recovery. Survey ordered-page readers (WX-06A1, PR #284) and
+opt-in page authoring (WX-06A2, PR #285 at `4dcefcc`) are also merged. The default-off `surveyPages`
+capability preserves existing v2 creation and published links; enabling it remains an explicit
+operator policy decision.
+
+The current WX-06B1 increment follows the owner's earlier single-choice **page visibility**
+decision. It adds only a separate proposed v4 contract and pure eligibility/cleanup/validation
+helpers. Runtime readers/writers remain on v1–3. Conditional authoring/delivery and branch-aware
+report/export privacy remain pending, with no effective branching grant or migration in B1.
+See the [conditional-page decisions](survey-branching.md) and
+[complete delivery backlog](workspace-experience-backlog-2026-11.md).
+
+WX-07–14 remain scoped/candidate work. WX-11 can proceed one surface at a time; recurrence and
+learning sequences need identity/privacy decisions, moderator passes need a permission design,
+organization collections need curator policy, and native integrations need a provider decision.
+Code completion does not advance the release-readiness ledger or human/native-language acceptance.
+
 ### WX-04 Team meetings template collection
 
-The next bounded increment on `codex/team-meeting-collection` groups five existing originals:
+The selected increment, merged through PR #273, groups five existing originals:
 two Rounds, two Presentations and one follow-up Survey. Collection selection survives format
 changes and browser navigation; existing catalogs, previews and independent-copy factories remain
 the source of content and actions. The two Rounds now have four opinion questions each, and the
@@ -22,7 +43,7 @@ Ten-locale seed content and complete collection guides enter source-bound review
 The [editorial record](evidence/team-meetings-editorial-review-2026-11.md) distinguishes automated
 content/code checks from pending human editorial and native-language acceptance. No migration,
 publication-format change, dependency, new asset or customer-outcome claim is introduced.
-WX-05 creation/source-intake consolidation remains the next P1 checkpoint.
+WX-05 creation/source-intake checkpoints A/B/C are merged through PRs #281–283.
 
 ### WX-03 All content Library discovery
 
@@ -40,8 +61,8 @@ No publication format, response format, sharing grant or participant
 identity model changes. Cursor boundaries do not grant access or imply a retained collection snapshot.
 
 The [Library discovery reference](library-discovery.md) records filtering/count semantics,
-compatibility, deployment prerequisites and qualification. WX-04 editorial collections and WX-05
-creation/source-intake consolidation remain subsequent increments in the
+compatibility, deployment prerequisites and qualification. The selected WX-04 editorial collection
+and WX-05 creation/source-intake checkpoints are merged; later work is tracked in the
 [workspace backlog](workspace-experience-backlog-2026-11.md).
 
 ### Workspace start and template reuse November 17, 2026

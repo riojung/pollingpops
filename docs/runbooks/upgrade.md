@@ -18,6 +18,42 @@
 7. Roll back only to an approved immutable image compatible with the stored data and authentication behavior described below. Keep applied migrations; use a reviewed forward repair.
 8. Contract or remove old schema only in a later release after every running version has stopped using it.
 
+## Round starter-copy retry intents
+
+WX-05C adds durable retries to the existing Round starter-copy API. Apply migration
+`116_starter_copy_receipts.sql` with the owner migration connection before deploying the
+matching API/database adapter, then deploy the chooser. Preserve migrations through 115 and
+their checksums. This does not change Round draft/publication formats, Survey retry identities
+or Presentation copy contracts. Legacy empty/locale-only starter requests remain supported.
+Bump `STARTER_CONTENT_VERSION` when template content or its localized variants change. Fresh
+requests must match that source version; accepted receipt lookup keeps the originally supplied
+version in its request hash, including across a content deployment.
+
+Before exposing the new chooser, verify:
+
+1. Browsing and preview remain read-only. Explicit creation pins actor/workspace, template,
+   language, catalog-content version and expiry under one UUID; request metadata is saved
+   before the POST. No question, answer or template body is stored in browser retry metadata.
+2. Concurrent and lost-response/reload retries create one draft/history and return the current
+   original Round, preserving later edits and immutable publications. Accepted replay survives
+   the fresh-intent expiry, content-version changes and a disabled response writer.
+3. Changed accepted requests conflict. Changed sign-in/workspace, lost membership and workspace
+   deletion block stale requests. Atomic creation rechecks editor authority and expiry after
+   serialization. Archived/deleted copies cannot be recreated through an old consumed key.
+4. Browser storage failure/corruption blocks an unsafe creation. Unknown errors retain the exact
+   pending request. An explicit renewal after an uncommitted expiry or changed catalog version
+   keeps the same UUID so an older in-flight request cannot produce a second copy; retain the
+   previous request for recovery if it wins that race. Only a definitively unavailable consumed
+   target or acknowledged success permits a new copy identity.
+5. Forced RLS, compact append-only receipts, account deletion and workspace erasure pass against
+   a restricted runtime role. Use isolated fixtures rather than customer data.
+
+During rollback, pause starter creation before reverting to a chooser that cannot read pending
+intents. Retain the receipt table, compatible recovery API and recovery access until interrupted
+attempts are resolved. An older API cannot honor durable request metadata. Never strip the retry
+envelope or route an interrupted attempt through legacy creation. Keep applied migrations and
+repair forward.
+
 ## Structured Round import preview and recovery
 
 WX-05B adds read-only import preview and explicit, retryable confirmation. Apply migration

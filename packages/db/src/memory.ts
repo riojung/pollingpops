@@ -12,6 +12,12 @@ import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
 import { RoundImportError, roundImportKey, type RoundImportIdentity } from "./round-imports.js";
+import {
+  StarterCopyError,
+  starterCopyKey,
+  assertStarterCopyFresh,
+  type StarterCopyIdentity,
+} from "./starter-copies.js";
 import { reserveRoomCoverageInMemory, releaseRoomCoverageInMemory } from "./platform-memory.js";
 import {
   AudienceStoreError,
@@ -336,6 +342,10 @@ export class MemoryRepository implements Repository {
   private readonly roundImportReceipts = new Map<
     string,
     { workspaceId: string; quizId: string; requestHash: string; createdAt: Date }
+  >();
+  private readonly starterCopyReceipts = new Map<
+    string,
+    { workspaceId: string; quizId: string; requestHash: string; createdAt: Date; expiresAt: Date }
   >();
   readonly questionHealthDismissals = new Map<string, QuestionHealthDismissalRecord>();
   readonly questionHealthApplications = new Map<string, QuestionHealthApplicationRecord>();
@@ -1520,6 +1530,87 @@ export class MemoryRepository implements Repository {
           quizId: quiz.id,
           requestHash: identity.requestHash,
           createdAt: new Date(input.createdAt),
+        });
+        return { status: "created" as const, quiz };
+      } catch (error) {
+        this.quizzes.delete(input.id);
+        const historyIds = new Set<string>();
+        for (const [key, history] of this.quizDraftHistory) {
+          if (history.quizId === input.id) {
+            historyIds.add(history.id);
+            this.quizDraftHistory.delete(key);
+          }
+        }
+        for (const [key, reference] of this.mediaReferences) {
+          if (
+            reference.workspaceId === input.workspaceId &&
+            ((reference.ownerType === "quiz_draft" && reference.ownerId === input.id) ||
+              (reference.ownerType === "quiz_history" && historyIds.has(reference.ownerId)))
+          )
+            this.mediaReferences.delete(key);
+        }
+        throw error;
+      }
+    });
+  }
+
+  private assertStarterCopyActor(identity: StarterCopyIdentity, write = false) {
+    const actor = this.users.get(identity.actorId);
+    const member = this.workspaceMembers.get(`${identity.workspaceId}:${identity.actorId}`);
+    if (
+      !actor ||
+      actor.deletedAt ||
+      !member ||
+      (write && !["owner", "editor"].includes(member.role)) ||
+      !this.workspaces.has(identity.workspaceId) ||
+      this.workspaceMediaDeletionClaims.has(identity.workspaceId)
+    )
+      throw new StarterCopyError("UNAUTHORIZED");
+  }
+
+  private starterCopyForState(identity: StarterCopyIdentity) {
+    this.assertStarterCopyActor(identity);
+    const prior = this.starterCopyReceipts.get(starterCopyKey(identity));
+    if (!prior) return null;
+    if (prior.requestHash !== identity.requestHash)
+      throw new StarterCopyError("IDEMPOTENCY_CONFLICT");
+    const quiz = this.quizzes.get(prior.quizId);
+    if (!quiz || quiz.workspaceId !== identity.workspaceId || quiz.status === "archived")
+      throw new StarterCopyError("STARTER_COPY_TARGET_UNAVAILABLE");
+    return structuredClone(normalizeQuizRecord(quiz));
+  }
+
+  async getStarterCopy(identity: StarterCopyIdentity) {
+    return this.withPublicationLock(identity.workspaceId, async () =>
+      this.starterCopyForState(identity),
+    );
+  }
+
+  async createStarterCopy(input: QuizRecord, identity: StarterCopyIdentity) {
+    return this.withPublicationLock(identity.workspaceId, async () => {
+      const prior = this.starterCopyForState(identity);
+      if (prior) return { status: "duplicate" as const, quiz: prior };
+      this.assertStarterCopyActor(identity, true);
+      assertStarterCopyFresh(identity.expiresAt);
+      if (
+        input.workspaceId !== identity.workspaceId ||
+        input.lastEditedBy !== identity.actorId ||
+        input.status !== "draft" ||
+        input.currentVersionId !== null ||
+        (input.draftRevision ?? 0) !== 0 ||
+        this.quizzes.has(input.id)
+      )
+        throw new StarterCopyError("IDEMPOTENCY_CONFLICT");
+      try {
+        // Keep the draft, initial history, media references and receipt in one synchronous
+        // section so actor/workspace erasure cannot interleave between these writes.
+        const quiz = this.insertQuiz(input);
+        this.starterCopyReceipts.set(starterCopyKey(identity), {
+          workspaceId: identity.workspaceId,
+          quizId: quiz.id,
+          requestHash: identity.requestHash,
+          createdAt: new Date(input.createdAt),
+          expiresAt: new Date(identity.expiresAt),
         });
         return { status: "created" as const, quiz };
       } catch (error) {
@@ -5806,6 +5897,9 @@ export class MemoryRepository implements Repository {
     }
     for (const [key, receipt] of this.roundImportReceipts) {
       if (ownedWorkspaceIds.has(receipt.workspaceId)) this.roundImportReceipts.delete(key);
+    }
+    for (const [key, receipt] of this.starterCopyReceipts) {
+      if (ownedWorkspaceIds.has(receipt.workspaceId)) this.starterCopyReceipts.delete(key);
     }
     for (const [key, dismissal] of this.questionHealthDismissals) {
       if (ownedWorkspaceIds.has(dismissal.workspaceId)) this.questionHealthDismissals.delete(key);

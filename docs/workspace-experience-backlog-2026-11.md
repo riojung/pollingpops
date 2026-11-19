@@ -10,7 +10,8 @@ delivery**, merged through [PR #271](https://github.com/riojung/pollingpops/pull
 with qualification in [Library discovery](library-discovery.md). **WX-04** merged through
 [PR #273](https://github.com/riojung/pollingpops/pull/273) at `efc0254`.
 **WX-05A** merged through [PR #281](https://github.com/riojung/pollingpops/pull/281) at `a68df09`.
-**WX-05B** is the current structured-import increment on `codex/import-preview`. Later items are scoped backlog,
+**WX-05B** merged through [PR #282](https://github.com/riojung/pollingpops/pull/282) at `bcac69e`.
+**WX-05C** is the current Round starter-copy reliability increment on `codex/starter-copy-recovery`. Later items are scoped backlog,
 not shipped features or a commitment to reproduce either competitor's product.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
@@ -32,7 +33,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below      | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery       | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings               | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A merged in PR #281; B implemented locally     | Authoring + frontend            |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | A/B merged; C implemented locally for review   | Authoring + frontend            |
 | WX-06 | P2       | L, three checkpoints               | Survey pages and answer-based branching                             | Contract/design discovery first                | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence        | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03               | Contracts + live experience     |
@@ -264,12 +265,43 @@ The durable Round **starter-copy** intent below remains its own API/storage chec
 receipts do not change starter-copy semantics. Survey pages/conditional paths (WX-06) still require
 their separate contract/design checkpoint after these P1 reliability increments.
 
-**Bounded reliability follow-up:** the existing Round starter-copy endpoint has no durable
-idempotency intent. The new client blocks simultaneous submissions, but a lost successful response
-can leave an already-created draft. Current error copy therefore asks users to check their Library
-before retrying. Add a server-bound actor/workspace/source/language intent in a separate API/storage
-increment; lost acknowledgements must return the original copy, and conflicting bodies, expiry,
-deletion and cross-tenant reuse must be tested. Survey retry intents already retain their exact body.
+**WX-05C: durable Round starter-copy retries.** The selected P1 follow-up adds an explicit
+actor/workspace/template/language intent to the existing Round starter-copy endpoint. A lost
+successful acknowledgement must recover the current original copy, including later draft edits,
+rather than create another draft. Template browsing and preview remain read-only. Ordinary
+locale-only API callers retain their existing creation behavior; the new web uses durable intents.
+
+The bounded slice covers a pinned source-content version, a 24-hour new-creation window,
+concurrent exact retries, conflicting bodies, reload recovery, role/context changes and
+archive/deletion tombstones. Browser storage contains only bounded request metadata, never
+template questions or answers. Blocked/corrupt storage prevents an unsafe new creation.
+Committed identities stay consumed until workspace erasure; expiry cannot make an accepted key
+create another copy. Survey retry behavior and independent Presentation copy contracts stay
+separate. Migration116 is required before deploying the matching API and chooser.
+
+**WX-05C local verification — 2026-11-18:** `VITEST_MAX_WORKERS=1 pnpm check` passes formatting,
+lint, strict types, package/support tests, production builds and compiled-server startup. It
+includes 6,170 web, 1,651 server and 526 support tests; default optional integration skips remain.
+All 97 focused client tests pass, covering exact-body reload recovery, disappeared/replaced
+metadata, bounded renewal history, current-preview version pinning, feature/authority changes
+and reopening a known successful copy after cleanup/navigation failure.
+
+All eight isolated-fixture browser scenarios pass: lost acknowledgement followed by real HTTP
+replay of the later-edited original, explicit same-UUID renewal after actual server expiry,
+blocked/corrupt storage, and 320px English/Korean recovery across mobile Chromium/WebKit with
+keyboard, light/dark, fit and axe checks. The WebKit status-message contrast repair is scoped to
+the chooser. The API writer-rollback regression uses a synthetic extended-response starter with
+the real feature gate. Independent read-only verification confirms the client recovery and
+preview-version fixes.
+
+All 16 new contract/memory/API tests and 11 restricted-role PostgreSQL17 conformance tests pass.
+The latter cover concurrent identical and conflicting requests, current-content recovery, expiry
+after lock waits, initial-history and receipt-insert rollback, actor/workspace isolation, role
+revocation, append-only/RLS guards and archive/deletion/erasure fences. Seven existing import
+PostgreSQL regressions also pass. The temporary isolated database fixture and credentials were
+removed; application data was not used. All ten source-bound editorial packets contain 729
+pending entries, including 13 new recovery phrases. Automated verification does not grant
+human/native-language acceptance.
 
 ### WX-06 Surveys: pages and conditional paths
 

@@ -78,6 +78,7 @@ import {
   SessionHistorySearchSchema,
   FollowupSummaryPageSchema,
   StarterIdSchema,
+  StarterUseRequestSchema,
   StartersResponseSchema,
   QuizContentSchema,
   RoundDraftMutationSchema,
@@ -102,6 +103,8 @@ import {
 } from "@openround/contracts";
 import {
   PublishedQuizLimitError,
+  StarterCopyError,
+  assertStarterCopyFresh,
   FolderError,
   QuizDraftMutationConflictError,
   QuizDraftRevisionConflictError,
@@ -1947,47 +1950,114 @@ export async function registerRoutes(
   });
 
   app.post("/v1/starters/:id/use", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
     const { id } = StarterParamsSchema.parse(request.params);
-    const { locale } = StarterLocaleRequestSchema.parse(
-      request.body === undefined ? {} : request.body,
-    );
-    const draft = instantiateStarter(id, locale);
-    if ((await requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id)) !== true)
-      return;
-    const now = new Date();
-    const quiz = await repository.createQuiz({
-      id: randomUUID(),
-      workspaceId: creator.workspaceId,
-      title: draft.title,
-      description: draft.description,
-      status: "draft",
-      draft,
-      draftSchemaVersion: roundArtifactSchemaVersion(draft),
-      lastEditedBy: creator.userId,
-      currentVersionId: null,
-      folderId: null,
-      tags: ["starter"],
-      createdAt: now,
-      updatedAt: now,
-    });
-    await repository.recordAudit({
-      workspaceId: creator.workspaceId,
-      actorId: creator.userId,
-      action: "starter.use",
-      targetType: "quiz",
-      targetId: quiz.id,
-      requestId: request.id,
-      metadata: {
-        starterId: id,
-        starterVersion: 1,
-        contentLocale: locale,
-        contentVersion: STARTER_CONTENT_VERSION,
-      },
-    });
-    return reply.code(201).send({ quiz });
+    const input = StarterUseRequestSchema.parse(request.body === undefined ? {} : request.body);
+    const { locale } = input;
+    const durable = "idempotencyKey" in input ? input : null;
+    const creationContext = {
+      actorId: creator.userId.toLowerCase(),
+      workspaceId: creator.workspaceId.toLowerCase(),
+    };
+    if (
+      durable &&
+      (durable.creationContext.actorId !== creationContext.actorId ||
+        durable.creationContext.workspaceId !== creationContext.workspaceId)
+    )
+      return apiError(
+        reply,
+        409,
+        "STARTER_COPY_CONTEXT_CHANGED",
+        "The account or workspace changed. Start a new starter copy in the current workspace.",
+        request.id,
+      );
+    const identity = durable
+      ? {
+          ...creationContext,
+          idempotencyKey: durable.idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(JSON.stringify({ protocol: "starter-copy-v1", starterId: id, ...durable }))
+            .digest("hex"),
+          expiresAt: new Date(durable.expiresAt),
+        }
+      : null;
+    try {
+      // A committed copy is a retained read, even after its intent or writer feature expires.
+      if (identity) {
+        const recovered = await repository.getStarterCopy(identity);
+        if (recovered) return { quiz: recovered, replayed: true };
+      }
+      if (durable) {
+        assertStarterCopyFresh(new Date(durable.expiresAt));
+        if (durable.contentVersion !== STARTER_CONTENT_VERSION)
+          return apiError(
+            reply,
+            409,
+            "STARTER_CONTENT_CHANGED",
+            "This starter changed. Review its current content before starting a new copy.",
+            request.id,
+          );
+      }
+      const draft = instantiateStarter(id, locale);
+      if ((await requireRoundResponseWrite(creator.workspaceId, draft, reply, request.id)) !== true)
+        return;
+      const now = new Date();
+      const record = {
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        title: draft.title,
+        description: draft.description,
+        status: "draft" as const,
+        draft,
+        draftSchemaVersion: roundArtifactSchemaVersion(draft),
+        lastEditedBy: creator.userId,
+        currentVersionId: null,
+        folderId: null,
+        tags: ["starter"],
+        createdAt: now,
+        updatedAt: now,
+      };
+      const created = identity
+        ? await repository.createStarterCopy(record, identity)
+        : { status: "created" as const, quiz: await repository.createQuiz(record) };
+      if (created.status === "created")
+        await repository.recordAudit({
+          workspaceId: creator.workspaceId,
+          actorId: creator.userId,
+          action: "starter.use",
+          targetType: "quiz",
+          targetId: created.quiz.id,
+          requestId: request.id,
+          metadata: {
+            starterId: id,
+            starterVersion: 1,
+            contentLocale: locale,
+            contentVersion: STARTER_CONTENT_VERSION,
+          },
+        });
+      return reply.code(created.status === "created" ? 201 : 200).send({
+        quiz: created.quiz,
+        ...(identity ? { replayed: created.status === "duplicate" } : {}),
+      });
+    } catch (caught) {
+      if (!(caught instanceof StarterCopyError)) throw caught;
+      return apiError(
+        reply,
+        caught.code === "UNAUTHORIZED"
+          ? 403
+          : caught.code === "IDEMPOTENCY_CONFLICT"
+            ? 409
+            : caught.code === "INVALID_INTENT"
+              ? 400
+              : 410,
+        caught.code,
+        caught.message,
+        request.id,
+      );
+    }
   });
 
   app.post("/v1/quizzes", async (request, reply) => {

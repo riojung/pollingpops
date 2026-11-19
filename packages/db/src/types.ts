@@ -1,4 +1,5 @@
 import type { RoundImportIdentity } from "./round-imports.js";
+import type { StarterCopyIdentity } from "./starter-copies.js";
 import type {
   AudienceSignal,
   BrandTheme,
@@ -1206,6 +1207,11 @@ export interface Repository {
   createImportedQuiz(
     input: QuizRecord,
     identity: RoundImportIdentity,
+  ): Promise<{ status: "created" | "duplicate"; quiz: QuizRecord }>;
+  getStarterCopy(identity: StarterCopyIdentity): Promise<QuizRecord | null>;
+  createStarterCopy(
+    input: QuizRecord,
+    identity: StarterCopyIdentity,
   ): Promise<{ status: "created" | "duplicate"; quiz: QuizRecord }>;
   getQuiz(workspaceId: string, quizId: string): Promise<QuizRecord | null>;
   updateQuiz(

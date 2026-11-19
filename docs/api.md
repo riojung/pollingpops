@@ -110,6 +110,46 @@ Flag-off new sessions retain state schema 5 or 6 without protocol metadata. Read
 existing schema-7/8/9 sessions even after the writer flag is disabled. Legacy scoring and deadlines
 are preserved; opinion formats remain outside learning accuracy and recovery denominators.
 
+## Round starter-copy recovery
+
+`GET /v1/starters?locale=...` and `GET /v1/starters/:id?locale=...` remain read-only and return
+the current string `contentVersion`. `POST /v1/starters/:id/use` retains its legacy empty or
+locale-only request and 201 `{quiz}` response. The additive durable request is:
+
+```json
+{
+  "locale": "en-CA",
+  "idempotencyKey": "UUID",
+  "creationContext": { "actorId": "UUID", "workspaceId": "UUID" },
+  "contentVersion": "VERSION_FROM_CATALOG",
+  "expiresAt": "ISO_UTC_TIMESTAMP"
+}
+```
+
+Preview actions pin the version returned with the inspected draft. Direct catalog-card actions
+use the list response's version. Refresh a changed preview before explicitly renewing a request.
+
+The current owner/editor authenticates with the creator cookie. First creation returns 201
+`{quiz,replayed:false}`; an exact accepted retry returns 200 `{quiz,replayed:true}` with the
+original Round's current record, without overwriting later edits or published versions.
+Actor/workspace, template path, locale, pinned content version and expiry form the request
+identity. Reusing an accepted key with different content returns 409 `IDEMPOTENCY_CONFLICT`;
+a mismatched signed-in actor/workspace returns 409 `STARTER_COPY_CONTEXT_CHANGED`.
+
+New intents have a 24-hour creation window; expiry beyond 24 hours plus five minutes of clock
+tolerance returns 400 `INVALID_INTENT`. Accepted replay precedes current source-version,
+expiry and response-writer feature checks while preserving current authentication and access
+checks. Unaccepted expired attempts return 410 `STARTER_COPY_EXPIRED`; a changed catalog version
+returns 409 `STARTER_CONTENT_CHANGED`. Archived/deleted targets return 410
+`STARTER_COPY_TARGET_UNAVAILABLE`; an old key never recreates them. Receipts retain hashes and
+target identity without template source content, follow workspace isolation, and are erased
+with the workspace. The browser persists the exact bounded pending request before submitting it;
+ordinary retries and reloads reuse it. Neither browsing nor preview creates a receipt or draft.
+After a definitive uncommitted expiry or catalog-version rejection, explicit renewal updates the
+pinned version/expiry under the same UUID and retains the previous request for recovery. If an
+older in-flight request wins, the renewed body conflicts rather than creating another draft.
+Only acknowledged success or a consumed unavailable target permits a new UUID for a new copy.
+
 ## Library metadata discovery
 
 Creator-cookie `GET /v1/library/items` returns a bounded mixed workspace metadata page and exact

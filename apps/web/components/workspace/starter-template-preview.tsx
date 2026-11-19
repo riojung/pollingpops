@@ -38,6 +38,10 @@ export function StarterTemplatePreview({
   useDisabled = false,
   readOnlyLabel,
   actionError,
+  actionErrorMessage,
+  actionNotice,
+  useNote,
+  recoveryWithoutPreview = false,
   reveal = false,
 }: {
   id: string;
@@ -59,6 +63,10 @@ export function StarterTemplatePreview({
   useDisabled?: boolean;
   readOnlyLabel?: string;
   actionError?: string;
+  actionErrorMessage?: string;
+  actionNotice?: ReactNode;
+  useNote?: string;
+  recoveryWithoutPreview?: boolean;
   reveal?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -108,12 +116,14 @@ export function StarterTemplatePreview({
         ) : null}
       </header>
       <div className={previewStyles.useBar}>
-        <p>{onUse ? previewCopy.copyNote : previewCopy.previewOnly}</p>
+        <p>{useNote ?? (onUse ? previewCopy.copyNote : previewCopy.previewOnly)}</p>
         {onUse ? (
           <button
             className="button"
             type="button"
-            disabled={useDisabled || loading || !content || Boolean(error)}
+            disabled={
+              useDisabled || (!recoveryWithoutPreview && (loading || !content || Boolean(error)))
+            }
             onClick={onUse}
           >
             {useLabel}
@@ -122,9 +132,10 @@ export function StarterTemplatePreview({
           <p role="status">{readOnlyLabel}</p>
         ) : null}
       </div>
+      {actionNotice}
       {actionError ? (
         <div className={previewStyles.error} role="alert">
-          <p>{previewCopy.actionError}</p>
+          <p>{actionErrorMessage ?? previewCopy.actionError}</p>
           <details>
             <summary>{previewCopy.details}</summary>
             <p lang="en-CA">{actionError}</p>

@@ -19,6 +19,13 @@ import {
   roundImportKey,
   type RoundImportIdentity,
 } from "./round-imports.js";
+import {
+  StarterCopyError,
+  starterCopyActorHash,
+  starterCopyKey,
+  assertStarterCopyFresh,
+  type StarterCopyIdentity,
+} from "./starter-copies.js";
 import { upgradeGameState, type EngineAnswer, type GameState } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
 import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
@@ -2582,6 +2589,103 @@ export class PostgresRepository implements Repository {
             identity.requestHash,
             quiz.id,
             input.createdAt,
+          ],
+        );
+        return { status: "created" as const, quiz };
+      },
+      { workspaceId: identity.workspaceId },
+    );
+  }
+
+  private async assertStarterCopyActor(
+    client: PoolClient,
+    identity: StarterCopyIdentity,
+    write = false,
+  ) {
+    // Identity rows have system-only RLS. Restore the workspace scope before touching content.
+    await client.query("SELECT set_config('app.system_access','on',true)");
+    const actor = await client.query(
+      "SELECT id FROM users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+      [identity.actorId],
+    );
+    await client.query("SELECT set_config('app.system_access','',true)");
+    const workspace = await client.query(
+      "SELECT id FROM workspaces WHERE id=$1 AND deletion_started_at IS NULL AND NOT EXISTS(SELECT 1 FROM workspace_media_deletion_jobs deletion WHERE deletion.workspace_id=workspaces.id) FOR SHARE",
+      [identity.workspaceId],
+    );
+    const member = await client.query(
+      "SELECT role FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE",
+      [identity.workspaceId, identity.actorId],
+    );
+    if (
+      actor.rowCount !== 1 ||
+      workspace.rowCount !== 1 ||
+      member.rowCount !== 1 ||
+      (write && !["owner", "editor"].includes(member.rows[0]?.role))
+    )
+      throw new StarterCopyError("UNAUTHORIZED");
+  }
+
+  private async starterCopyForTransaction(client: PoolClient, identity: StarterCopyIdentity) {
+    const prior = await client.query(
+      "SELECT request_hash,quiz_id FROM starter_copy_receipts WHERE workspace_id=$1 AND actor_hash=$2 AND idempotency_key=$3",
+      [identity.workspaceId, starterCopyActorHash(identity.actorId), identity.idempotencyKey],
+    );
+    if (!prior.rows[0]) return null;
+    if (prior.rows[0].request_hash !== identity.requestHash)
+      throw new StarterCopyError("IDEMPOTENCY_CONFLICT");
+    const current = await client.query(
+      "SELECT * FROM quizzes WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+      [identity.workspaceId, prior.rows[0].quiz_id],
+    );
+    if (!current.rows[0] || current.rows[0].status === "archived")
+      throw new StarterCopyError("STARTER_COPY_TARGET_UNAVAILABLE");
+    return mapQuiz(current.rows[0]);
+  }
+
+  async getStarterCopy(identity: StarterCopyIdentity) {
+    return this.transaction(
+      async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `starter-copy:${starterCopyKey(identity)}`,
+        ]);
+        await this.assertStarterCopyActor(client, identity);
+        return this.starterCopyForTransaction(client, identity);
+      },
+      { workspaceId: identity.workspaceId },
+    );
+  }
+
+  async createStarterCopy(input: QuizRecord, identity: StarterCopyIdentity) {
+    return this.transaction(
+      async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `starter-copy:${starterCopyKey(identity)}`,
+        ]);
+        await this.assertStarterCopyActor(client, identity);
+        const prior = await this.starterCopyForTransaction(client, identity);
+        if (prior) return { status: "duplicate" as const, quiz: prior };
+        await this.assertStarterCopyActor(client, identity, true);
+        assertStarterCopyFresh(identity.expiresAt);
+        if (
+          input.workspaceId !== identity.workspaceId ||
+          input.lastEditedBy !== identity.actorId ||
+          input.status !== "draft" ||
+          input.currentVersionId !== null ||
+          (input.draftRevision ?? 0) !== 0
+        )
+          throw new StarterCopyError("IDEMPOTENCY_CONFLICT");
+        const quiz = await this.insertQuiz(client, input);
+        await client.query(
+          "INSERT INTO starter_copy_receipts(workspace_id,actor_hash,idempotency_key,request_hash,quiz_id,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [
+            identity.workspaceId,
+            starterCopyActorHash(identity.actorId),
+            identity.idempotencyKey,
+            identity.requestHash,
+            quiz.id,
+            input.createdAt,
+            identity.expiresAt,
           ],
         );
         return { status: "created" as const, quiz };

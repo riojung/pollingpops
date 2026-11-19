@@ -1,0 +1,494 @@
+[
+  {
+    "id": "meeting-priorities",
+    "sourceId": "meeting-priorities",
+    "kind": "round",
+    "title": "Meeting priorities",
+    "summary": "Choose a useful focus, surface missing inputs, and leave with an owned next step.",
+    "useCases": ["meetings", "workshops"],
+    "guide": {
+      "audience": "3–12 colleagues who shared the work and can influence the next step.",
+      "minutes": 8,
+      "preparation": "Name one decision this group can make. Share its options and constraints before the meeting; cancel or replace the meeting with a written update if no discussion is needed.",
+      "facilitation": "Use 1 minute for questions 1–3, 5 minutes to discuss the focus and missing inputs, and 2 minutes for question 4 and the action record. Invite quieter perspectives without requiring anyone to explain a rating.",
+      "interpretation": "These are opinions, with no correct answers or scores. Discuss differences; a popular choice does not authorize a decision or prove an improvement.",
+      "followUp": "Record the decision or the missing input, one owner, a due date and the update location. Share the record within one working day and check the action at the next meeting."
+    },
+    "preview": [
+      {
+        "kind": "poll",
+        "title": "Where should we focus today’s discussion?",
+        "options": [
+          "A decision waiting on us",
+          "A shared blocker",
+          "Upcoming priorities",
+          "Questions needing context",
+          "No discussion needed today",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "How ready are you to contribute to today’s decision?",
+        "body": "1 — Need guidance · 5 — Ready to try",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "What would most help us make today’s decision?",
+        "options": [
+          "Evidence about the options",
+          "A missing perspective",
+          "Clarity on who can decide",
+          "No extra support needed",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "After the discussion, how clear is the next step and who owns it?",
+        "body": "1 — Not clear · 5 — Very clear",
+        "note": "Opinion activity · unscored"
+      }
+    ]
+  },
+  {
+    "id": "team-retrospective",
+    "sourceId": "team-retrospective",
+    "kind": "round",
+    "title": "Team retrospective",
+    "summary": "Review the last work cycle and choose one small experiment with a signal and review date.",
+    "useCases": ["meetings", "workshops"],
+    "guide": {
+      "audience": "3–12 colleagues who shared the work and can influence the next step.",
+      "minutes": 12,
+      "preparation": "Name the completed work cycle and bring two or three factual observations. Check the previous experiment before proposing another; focus on work conditions rather than blame.",
+      "facilitation": "Allow 2 minutes for the first two questions, 7 to discuss examples and choose an experiment, and 3 for questions 3–4 and the action record. Keeping a working practice is a valid outcome.",
+      "interpretation": "These are opinions, with no correct answers or scores. Discuss differences; a popular choice does not authorize a decision or prove an improvement.",
+      "followUp": "Write one experiment, its owner, the signal to observe and a review date next cycle. If no change is chosen, record what to preserve. Open the next retrospective by checking this record."
+    },
+    "preview": [
+      {
+        "kind": "poll",
+        "title": "Thinking about the last work cycle, what would most improve the next one?",
+        "options": [
+          "Smaller scope",
+          "Earlier feedback",
+          "Clearer ownership",
+          "Fewer interruptions",
+          "No change needed",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "How sustainable was our pace during the last work cycle?",
+        "body": "1 — Not sustainable · 5 — Very sustainable",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which small experiment should we try during the next work cycle?",
+        "options": [
+          "Write down decisions",
+          "Name a handoff owner",
+          "Share context earlier",
+          "Protect a regular focus period",
+          "No change needed",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which signal should we check at our next retrospective?",
+        "options": [
+          "Less waiting",
+          "Fewer repeated questions",
+          "More predictable completion",
+          "Better quality at handoff",
+          "No experiment planned",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      }
+    ]
+  },
+  {
+    "id": "meeting-presentation",
+    "sourceId": "meeting",
+    "kind": "presentation",
+    "title": "Team meeting",
+    "summary": "Set a useful agenda, surface blockers, and close with clear decisions and owners.",
+    "useCases": ["meetings", "workshops"],
+    "guide": {
+      "audience": "3–12 colleagues with a real decision to make.",
+      "minutes": 20,
+      "preparation": "Name one decision the group can make. Add the available time, practical options and constraints, and choose a place to record decisions and updates.",
+      "facilitation": "Use the agenda poll to choose where to spend discussion time. Make options and trade-offs visible and invite perspectives that have not been heard. Ask how clear the next step is, then read back the decision, owner, deadline and update location.",
+      "interpretation": "Use agenda responses to focus discussion. A clarity rating is a prompt to ask what is missing; it does not confirm agreement or that the decision will work.",
+      "followUp": "Send the decision and action record within one working day, including the owner, deadline and update location. Ask owners to correct anything unclear."
+    },
+    "preview": [
+      {
+        "kind": "slide",
+        "title": "Make this meeting useful",
+        "body": "Our goal: leave with one clear decision and a next step someone owns.",
+        "note": "Name the decision this group can make and the time available."
+      },
+      {
+        "kind": "poll",
+        "title": "Where should we spend most of our discussion time?",
+        "options": [
+          "A decision waiting on us",
+          "A shared blocker",
+          "Upcoming priorities",
+          "Questions needing context"
+        ],
+        "note": "Use the response distribution to guide discussion and agree on a next step."
+      },
+      {
+        "kind": "slide",
+        "title": "Discuss with a decision in view",
+        "body": "What do we know? What remains uncertain? Which options are practical within our constraints?",
+        "note": "Invite perspectives that have not been heard. Capture options and trade-offs visibly."
+      },
+      {
+        "kind": "rating",
+        "title": "How clear is the next step after this discussion?",
+        "body": "1 — Not clear · 5 — Very clear",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "slide",
+        "title": "Close the loop",
+        "body": "Write down the decision, owner, due date, and where the update will be shared.",
+        "note": "Read the actions back and confirm ownership before ending."
+      }
+    ]
+  },
+  {
+    "id": "retrospective-presentation",
+    "sourceId": "retrospective",
+    "kind": "presentation",
+    "title": "Retrospective to action",
+    "summary": "Reflect on recent work and choose one measurable experiment for the next cycle.",
+    "useCases": ["meetings", "workshops"],
+    "guide": {
+      "audience": "3–12 colleagues reflecting on a completed work cycle.",
+      "minutes": 25,
+      "preparation": "Choose the completed cycle and bring specific observations about the work and its conditions. Prepare a place to record one small experiment and make space for differing experiences.",
+      "facilitation": "Ask for facts and observations without assigning blame. Use the pace rating and friction poll to open discussion. Separate what was observed from possible explanations, then choose one experiment the team can try next cycle.",
+      "interpretation": "Treat responses as perspectives on this cycle, not proof of a cause or an improvement. Choose an observable signal to check whether the experiment helped, such as less waiting or fewer repeated questions.",
+      "followUp": "Record the experiment, owner, observable signal and review date. Share the record and begin the next retrospective by reviewing what happened before deciding whether to continue or change the experiment."
+    },
+    "preview": [
+      {
+        "kind": "slide",
+        "title": "Learn from the last cycle",
+        "body": "Look at the work and the conditions around it. Choose one improvement the team can actually test.",
+        "note": "Set the timeframe. Invite observations about systems and practices without assigning blame."
+      },
+      {
+        "kind": "rating",
+        "title": "How sustainable was the team's pace?",
+        "body": "1 — Unsustainable · 5 — Very sustainable",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which source of friction should we discuss first?",
+        "options": [
+          "Unclear priorities",
+          "Slow feedback",
+          "Handoffs and dependencies",
+          "Nothing to raise"
+        ],
+        "note": "Use the response distribution to guide discussion and agree on a next step."
+      },
+      {
+        "kind": "slide",
+        "title": "Turn an observation into an experiment",
+        "body": "We observed… We think… For the next cycle we will try… We will look for…",
+        "note": "Keep the experiment small enough to finish and give it a visible owner."
+      },
+      {
+        "kind": "poll",
+        "title": "Which signal would best show that our experiment helped?",
+        "options": [
+          "Less waiting",
+          "Fewer repeated questions",
+          "More predictable completion",
+          "Better quality at handoff"
+        ],
+        "note": "Use the response distribution to guide discussion and agree on a next step."
+      },
+      {
+        "kind": "slide",
+        "title": "Return to the result",
+        "body": "Record the experiment, its owner, the signal to watch, and the review date.",
+        "note": "Start the next retrospective by reviewing this experiment."
+      }
+    ]
+  },
+  {
+    "id": "team-collaboration-survey",
+    "sourceId": "team-collaboration",
+    "kind": "survey",
+    "title": "How we work together",
+    "summary": "Think about shared work in the last two weeks. About 3 minutes. Skip question 3 if you have not worked with another team recently. The facilitator will review responses and share an action and review date.",
+    "useCases": ["meetings", "training"],
+    "guide": {
+      "audience": "Colleagues who shared work during the last two weeks; cross-team experience is optional.",
+      "minutes": 3,
+      "preparation": "Use the last two weeks as the timeframe. Tell colleagues who can access responses and when collection closes. Skip question 3 if there was no recent cross-team work; it is optional in the Survey.",
+      "facilitation": "Allow about 3 minutes to answer, then a separate 10-minute team discussion: 3 minutes for patterns, 4 for one action and 3 for its owner, signal and review date. Question 3 in the collaboration Survey is optional.",
+      "interpretation": "Review response patterns, including no-change and unsure choices. Do not rank people or infer causes from ratings. Discuss only examples people choose to share.",
+      "followUp": "Choose one action or a practice to preserve. Name an owner, one signal and a review date two weeks away. Share the plan and report what happened at that review."
+    },
+    "preview": [
+      {
+        "kind": "rating",
+        "title": "In the last two weeks, how clear was ownership when work moved between teammates?",
+        "body": "1 — Not clear · 5 — Very clear",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which issue, if any, most slowed shared work in the last two weeks?",
+        "options": [
+          "Unclear decisions",
+          "Missing context",
+          "Too many handoffs",
+          "Competing priorities",
+          "No issue slowed our shared work",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "In the last two weeks, how easy was it to get needed context from another team?",
+        "body": "1 — Very difficult · 5 — Very easy",
+        "note": "Optional opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which small experiment, if any, should we try for the next two weeks?",
+        "options": [
+          "Write down decisions",
+          "Name a handoff owner",
+          "Share context earlier",
+          "Protect a regular focus period",
+          "No change needed",
+          "Not enough experience to say"
+        ],
+        "note": "Opinion activity · unscored"
+      }
+    ]
+  },
+  {
+    "id": "event-feedback-survey",
+    "sourceId": "event-feedback",
+    "kind": "survey",
+    "title": "Event experience",
+    "summary": "Tell us what was useful and what to improve next time. This is unscored feedback; skip optional questions that do not apply.",
+    "useCases": ["events", "workshops"],
+    "guide": {
+      "audience": "Event organizers, small organizations, educators, and service teams",
+      "minutes": 5,
+      "preparation": "Review the wording for your group and agree the purpose before sharing. No extra materials are needed.",
+      "facilitation": "Set a collection deadline, share the purpose, and close the run before reviewing results. Leave optional items optional.",
+      "interpretation": "Use question-level distributions, not individual judgments. Results require a closed run and at least five answers per item; small groups may have no distribution.",
+      "followUp": "Choose one improvement and tell attendees what will change before the next event. Intended application is not demonstrated learning."
+    },
+    "preview": [
+      {
+        "kind": "rating",
+        "title": "How useful was this event for the goal you brought?",
+        "body": "1 — Not useful · 5 — Very useful",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which part gave you the most value?",
+        "options": ["Examples", "Practice", "Discussion", "Take-away resources", "None yet"],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "How clear were the explanations?",
+        "body": "1 — Not clear · 5 — Very clear",
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "rating",
+        "title": "How easy was it to participate in the way you preferred?",
+        "body": "1 — Very difficult · 5 — Very easy",
+        "note": "Optional opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "How did the pace feel?",
+        "options": [
+          "Much too slow",
+          "A little slow",
+          "About right",
+          "A little fast",
+          "Much too fast"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which improvement should come first?",
+        "options": [
+          "Clearer examples",
+          "More practice",
+          "More participation time",
+          "Better logistics",
+          "More depth on fewer topics",
+          "No change needed"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "What are you most likely to do next?",
+        "options": [
+          "Try an idea",
+          "Share resources",
+          "Seek more learning",
+          "Revisit my notes",
+          "Nothing planned"
+        ],
+        "note": "Opinion activity · unscored"
+      },
+      {
+        "kind": "poll",
+        "title": "Which follow-up would help you?",
+        "options": [
+          "A worked example",
+          "Guided practice",
+          "A short summary",
+          "Discussion",
+          "No follow-up needed"
+        ],
+        "note": "Optional opinion activity · unscored"
+      }
+    ]
+  },
+  {
+    "id": "possibility-map-board",
+    "sourceId": "possibility-map",
+    "kind": "board",
+    "title": "Possibility map",
+    "summary": "Explore a challenge, open up possibilities, and choose a small experiment.",
+    "useCases": ["workshops", "meetings"],
+    "guide": {
+      "audience": "A team exploring a practical challenge.",
+      "minutes": 20,
+      "preparation": "What could we try to make this challenge easier for the people affected?",
+      "facilitation": "Use the section prompts to guide discussion. In a guided workshop, review submissions before making ideas visible and inviting priority votes.",
+      "interpretation": "Ideas and votes are a starting point for discussion. They do not establish agreement or show that a proposed change will work.",
+      "followUp": "Choose one next action, give it an owner and set a time to review what happened."
+    },
+    "preview": [
+      {
+        "kind": "board",
+        "title": "Name the challenge",
+        "body": "Start with a need, not a solution.",
+        "options": ["Who needs something to change?", "What is difficult for them today?"]
+      },
+      {
+        "kind": "board",
+        "title": "Open possibilities",
+        "body": "Explore different approaches before choosing.",
+        "options": ["What is one small possibility?", "What could we try with fewer constraints?"]
+      },
+      {
+        "kind": "board",
+        "title": "Try and learn",
+        "body": "Choose a reversible experiment and a learning signal.",
+        "options": ["What can we test first?", "What would tell us whether it helped?"]
+      }
+    ]
+  },
+  {
+    "id": "learning-reflection-board",
+    "sourceId": "learning-reflection",
+    "kind": "board",
+    "title": "Learning reflection",
+    "summary": "Connect a learning experience to a question and a concrete next use.",
+    "useCases": ["education", "training"],
+    "guide": {
+      "audience": "A class or group reflecting on a learning experience.",
+      "minutes": 15,
+      "preparation": "What did this experience change in your understanding, and how could you use that learning?",
+      "facilitation": "Use the section prompts to guide discussion. In a guided workshop, review submissions before making ideas visible and inviting priority votes.",
+      "interpretation": "Ideas and votes are a starting point for discussion. They do not establish agreement or show that a proposed change will work.",
+      "followUp": "Choose one next action, give it an owner and set a time to review what happened."
+    },
+    "preview": [
+      {
+        "kind": "board",
+        "title": "Notice",
+        "body": "Recall a moment, example, or idea that stood out.",
+        "options": ["What caught your attention?", "What surprised you?"]
+      },
+      {
+        "kind": "board",
+        "title": "Make sense",
+        "body": "Connect the experience with what you already know.",
+        "options": ["How has your thinking changed?", "What question remains?"]
+      },
+      {
+        "kind": "board",
+        "title": "Use it",
+        "body": "Choose a context where the learning could be useful.",
+        "options": ["Where could you try this?", "What support or practice would help?"]
+      }
+    ]
+  },
+  {
+    "id": "exit-ticket",
+    "sourceId": "exit-ticket",
+    "kind": "round",
+    "title": "Exit ticket",
+    "summary": "Close a lesson or workshop with understanding, confidence, and next-step evidence.",
+    "useCases": ["education", "training"],
+    "guide": {
+      "audience": "A class or workshop closing a learning session.",
+      "minutes": 5,
+      "preparation": "Review the original understanding check and its linked recheck. Adapt both to the idea you taught.",
+      "facilitation": "Ask the main question, discuss the reasoning and use the linked question to recheck understanding.",
+      "interpretation": "Compare answers from participants who completed both checks. A successful recheck is session evidence, not proof of lasting learning.",
+      "followUp": "Use unresolved questions to plan the next explanation or a suitable follow-up practice activity."
+    },
+    "preview": [
+      {
+        "kind": "quiz",
+        "title": "Which action best shows that you have understood someone else's point?",
+        "options": [
+          "Restate it in your own words and check with them",
+          "Wait for your turn to speak",
+          "Repeat your own position more loudly"
+        ],
+        "note": "Paraphrasing and checking gives the other person a chance to correct your interpretation."
+      },
+      {
+        "kind": "quiz",
+        "title": "A teammate raises a concern you disagree with. What is a useful first response?",
+        "options": [
+          "Summarize the concern and ask whether you understood it",
+          "Explain why they should not feel concerned",
+          "Change the subject before they finish"
+        ],
+        "note": "Check your understanding of the concern before evaluating it or proposing a solution."
+      }
+    ]
+  }
+]

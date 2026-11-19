@@ -15,6 +15,7 @@ import galleryStyles from "../../components/workspace/template-gallery.module.cs
 import { parseTemplateCollection, type TemplateCollectionId } from "../../lib/template-collections";
 import { templateCollectionCopy } from "../../lib/i18n/template-collection-copy";
 import { workspaceBlankCreationHref } from "../../components/workspace/workspace-creation-model";
+import { publicTemplateContext } from "../../lib/public-examples";
 
 const types = ["designs", "rounds", "presentations", "surveys"] as const;
 type TemplateType = (typeof types)[number];
@@ -46,6 +47,7 @@ function TemplatesWorkspace() {
   const collectionCopy = templateCollectionCopy(locale);
   const collection =
     type === "designs" ? null : parseTemplateCollection(searchParams.get("collection"));
+  const exampleContext = publicTemplateContext(searchParams.get("sourceId"), type);
   function selectType(next: TemplateType) {
     const query = new URLSearchParams(searchParams.toString());
     query.set("type", next);
@@ -86,6 +88,19 @@ function TemplatesWorkspace() {
       translationLevel="full"
     >
       <div className={styles.panel}>
+        {exampleContext ? (
+          <aside className="notice" lang="en-CA" aria-label="Selected public example">
+            <strong>{exampleContext.title}</strong>
+            <p>
+              Continue with the example you previewed. Select this title below to review the current
+              template, then choose Use to create an independent draft. Your workspace permissions
+              still apply.
+            </p>
+            <Link href={`/examples?example=${encodeURIComponent(exampleContext.id)}`}>
+              Return to the public preview
+            </Link>
+          </aside>
+        ) : null}
         <section
           className={galleryStyles.collectionHeader}
           aria-labelledby="template-collection-heading"

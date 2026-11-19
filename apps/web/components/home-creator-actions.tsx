@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useLocale } from "./locale-provider";
 import { creatorLandingHref, type CreatorNavigationFeatures } from "./brand";
+import { publicSiteShellCopy } from "../lib/i18n/public-site-shell-copy";
 
 export function HomeCreatorActions() {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const copy = publicSiteShellCopy(locale);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [productFeatures, setProductFeatures] = useState<CreatorNavigationFeatures | null>(null);
 
@@ -38,11 +40,7 @@ export function HomeCreatorActions() {
             : creatorLandingHref(productFeatures)
         }
       >
-        {signedIn === true
-          ? t("delivery.landing.manage")
-          : signedIn === false
-            ? t("delivery.landing.create")
-            : t("delivery.landing.createOrManage")}
+        {signedIn === true ? copy.openWorkspace : copy.startCreating}
       </Link>
       <Link className="button-quiet" href="#how-it-works">
         {t("delivery.landing.howItWorks")}

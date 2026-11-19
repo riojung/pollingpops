@@ -1,11 +1,29 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "./locale-provider";
 
-export function JoinCodeForm({ compact = false }: { compact?: boolean }) {
+interface JoinCodeFormProps {
+  compact?: boolean;
+  id?: string;
+  codeLabel?: string;
+  formLabel?: string;
+  submitLabel?: string;
+  className?: string;
+}
+
+export function JoinCodeForm({
+  compact = false,
+  id,
+  codeLabel,
+  formLabel,
+  submitLabel,
+  className,
+}: JoinCodeFormProps) {
   const { t } = useLocale();
+  const generatedId = useId();
+  const inputId = id ?? `${compact ? "home-code" : "join-code"}-${generatedId}`;
   const [code, setCode] = useState("");
   const router = useRouter();
 
@@ -15,15 +33,18 @@ export function JoinCodeForm({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <form onSubmit={submit} aria-label={t("delivery.join.formLabel")}>
+    <form
+      className={className}
+      onSubmit={submit}
+      aria-label={formLabel ?? t("delivery.join.formLabel")}
+    >
       <div className="field">
-        <label htmlFor={compact ? "home-code" : "join-code"}>{t("delivery.join.codeLabel")}</label>
+        <label htmlFor={inputId}>{codeLabel ?? t("delivery.join.codeLabel")}</label>
         <input
           autoComplete="one-time-code"
           className="input code-input"
-          id={compact ? "home-code" : "join-code"}
+          id={inputId}
           inputMode="numeric"
-          maxLength={7}
           onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 7))}
           placeholder="0000000"
           required
@@ -31,7 +52,7 @@ export function JoinCodeForm({ compact = false }: { compact?: boolean }) {
         />
       </div>
       <button className="button full-width" disabled={code.length !== 7} type="submit">
-        {t("delivery.common.continue")}
+        {submitLabel ?? t("delivery.common.continue")}
       </button>
     </form>
   );

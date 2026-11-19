@@ -8,6 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Public product website, November 19, 2026
+
+The selected public-site increment on `codex/public-product-experience` replaces the large
+homepage join card with product discovery and local illustrative interactions. A compact
+seven-digit Join form remains in the navigation. Ten feature pages, four use-case pages,
+nine original public examples and six guides describe current capabilities with availability,
+privacy and evidence boundaries. Public routes bypass creator-session checks; template use
+still requires the existing authenticated workflow. Light/dark/System appearance and localized
+navigation reuse existing controls. New long-form editorial copy is explicitly English.
+See the [research, claim matrix and follow-up scope](public-product-experience-2026-11.md).
+Commercial/legal qualification, native-language acceptance and observed usability remain open.
+
 ### Workspace experience: current position, November 19, 2026
 
 The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
@@ -18,7 +30,7 @@ capability preserves existing v2 creation and published links; enabling it remai
 operator policy decision.
 
 WX-06B1 merged through PR #286 at `f08ccbd`, following the owner's earlier single-choice
-**page visibility** decision. The current B2 increment on `codex/survey-branching-readers` adds
+**page visibility** decision. B2 merged through PR #287 at `ed011d0` and adds
 v1–4 frozen-content/storage readers, reader negotiation, eligible-page navigation, cascading
 answer removal, revision-safe replacement saves/retries/resume, and retained read-only inspection.
 Migration 118 expands four version checks only. Mutation schemas and effective writers remain

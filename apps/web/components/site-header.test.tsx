@@ -2,6 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ManagementNavigationModule from "./management-navigation";
 import { LOGOUT_REVOCATION_WARNING } from "../lib/api";
+import { loadMessages, localeDomainsForPath } from "../lib/i18n/catalog";
+import { publicSiteShellCopy } from "../lib/i18n/public-site-shell-copy";
+import { LocaleProvider } from "./locale-provider";
 
 const fixtures = vi.hoisted(() => ({
   pathname: "/",
@@ -26,7 +29,10 @@ vi.mock("./management-navigation", async (importOriginal) => ({
   useManagementNavigation: () => fixtures.navigation,
 }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => fixtures.pathname }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => fixtures.pathname,
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 import { SiteHeader } from "./site-header";
 
@@ -45,11 +51,43 @@ describe("management discovery in the product header", () => {
   it("uses current-page navigation controls in desktop and mobile layouts", () => {
     fixtures.pathname = "/pricing";
     const markup = renderToStaticMarkup(<SiteHeader />);
-    expect(markup.match(/<a[^>]*aria-current="page"[^>]*href="\/pricing"/g)).toHaveLength(2);
-    expect(markup).toContain('class="navigation-control" href="/privacy"');
+    expect(markup.match(/<a[^>]*aria-current="page"[^>]*href="\/pricing"/g)).toHaveLength(1);
+    expect(markup).toContain('href="/solutions"');
+    expect(markup).toContain('href="/examples"');
+    expect(markup).toContain('href="/resources"');
+    expect(markup).not.toContain('href="/templates"');
+    expect(markup).not.toContain('href="/help"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain('<a role="button"');
+    expect(markup).toContain("Join a live Round");
+    expect(markup).toContain("Seven-digit Round code");
+    expect(markup.match(/<form /g)).toHaveLength(1);
+    expect(markup).toContain('aria-label="Appearance: System"');
   });
+
+  it.each(["/product/live-polls", "/examples", "/resources", "/pricing"])(
+    "names the join form using the public shell locale on %s",
+    async (pathname) => {
+      fixtures.pathname = pathname;
+      const locale = "fr-FR";
+      const initialDomains = localeDomainsForPath(pathname);
+      const initialMessages = await loadMessages(locale, initialDomains);
+      expect(initialMessages["delivery.join.formLabel"]).toBeUndefined();
+
+      const markup = renderToStaticMarkup(
+        <LocaleProvider
+          initialLocale={locale}
+          initialDomains={initialDomains}
+          initialMessages={initialMessages}
+        >
+          <SiteHeader />
+        </LocaleProvider>,
+      );
+      const form = markup.match(/<form\b[^>]*>/)?.[0];
+      expect(form).toContain(`aria-label="${publicSiteShellCopy(locale).joinLabel}"`);
+      expect(markup).not.toContain("delivery.join.formLabel");
+    },
+  );
 
   it("recognizes billing-only identity before workspace authentication succeeds", () => {
     fixtures.navigation.user = { userId: "payer", email: "payer@example.com" };
@@ -57,6 +95,7 @@ describe("management discovery in the product header", () => {
     fixtures.navigation.organizations = [{ id: "paid", name: "Paid team", role: "billing" }];
     const markup = renderToStaticMarkup(<SiteHeader />);
     expect(markup).toContain("payer@example.com");
+    expect(markup).not.toContain("Open workspace");
     expect(markup).toContain('href="/account"');
     expect(markup).toContain('href="/organization"');
     expect(markup).toContain("Event credits");
@@ -80,7 +119,7 @@ describe("management discovery in the product header", () => {
     expect(markup).not.toContain("Super admin");
     expect(markup).not.toContain("Tenants");
     expect(markup).not.toContain("https://control.example.com");
-    expect(markup.match(/>Sign in<\/a>/g)).toHaveLength(2);
+    expect(markup.match(/>Sign in<\/a>/g)).toHaveLength(1);
     expect(markup).not.toContain("Organization settings");
     expect(markup).not.toContain("Business admin sign in");
   });

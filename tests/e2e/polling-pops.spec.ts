@@ -5,13 +5,17 @@ import { testEmail } from "./test-email";
 
 test("Polling Pops identity, lollipop assets, and entry actions are usable", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle("Polling Pops");
-  await expect(page.getByRole("link", { name: "Polling Pops", exact: true })).toBeVisible();
+  await expect(page).toHaveTitle(/Polling Pops/);
+  await expect(
+    page.locator("header").getByRole("link", { name: "Polling Pops", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Make every voice pop.", level: 1 }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Join a live Round" })).toBeVisible();
-  await expect(page.locator(".brand-pop svg")).toHaveAttribute("aria-hidden", "true");
+  const joinToggle = page.getByRole("button", { name: "Join", exact: true, expanded: false });
+  if (await joinToggle.isVisible()) await joinToggle.click();
+  await expect(page.getByLabel("Seven-digit Round code")).toBeVisible();
+  await expect(page.locator("header .brand-pop svg")).toHaveAttribute("aria-hidden", "true");
   await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute(
     "href",
     "/brand/polling-pops-icon.svg",
@@ -24,7 +28,7 @@ test("Polling Pops identity, lollipop assets, and entry actions are usable", asy
   }
 
   await page.getByLabel("Seven-digit Round code").fill("1234567");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Join", exact: true }).last().click();
   await expect(page).toHaveURL(/\/join\?code=1234567/);
 });
 
@@ -75,7 +79,9 @@ for (const colorScheme of ["light", "dark"] as const) {
     for (const path of ["/", "/signin", "/join", "/pricing"]) {
       await page.goto(path);
       await expect(page.locator("html")).toHaveAttribute("data-color-mode", colorScheme);
-      await expect(page.getByRole("link", { name: "Polling Pops", exact: true })).toBeVisible();
+      await expect(
+        page.locator("header").getByRole("link", { name: "Polling Pops", exact: true }),
+      ).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `${path} fits the viewport`,

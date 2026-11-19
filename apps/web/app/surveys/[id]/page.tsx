@@ -8,7 +8,9 @@ import {
   type SurveyDraft,
 } from "@openround/contracts/surveys";
 import { SurveyPagedReader } from "../../../components/survey-paged-reader";
-import { surveyPagesCopy } from "../../../lib/i18n/survey-pages-copy";
+import { SurveyPageAuthoring } from "../../../components/survey-page-authoring";
+import { surveyPageAuthoringCopy } from "../../../lib/i18n/survey-page-authoring-copy";
+import { convertSurveyToPages } from "../../../lib/survey-page-authoring";
 import {
   newSurveyQuestion,
   SurveyQuestionActions,
@@ -25,25 +27,30 @@ import {
 import { useLocale } from "../../../components/locale-provider";
 import { RoomPasswordOption } from "../../../components/room-password";
 import { canProtectRoom, roomPasswordFields, validRoomPassword } from "../../../lib/room-password";
-import { apiFetch, humanError, ApiClientError } from "../../../lib/api";
+import { apiFetch, humanError, ApiClientError, AUTH_CHANGE_EVENT } from "../../../lib/api";
+import { SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT } from "../../../lib/idle-session";
 import {
   surveyMutationKey,
   surveyReaderHeaders,
   type SurveyRecordView as SurveyRecord,
 } from "../../../lib/survey-client";
-import { SurveyAutosave, type SurveyAutosaveSnapshot } from "../../../lib/survey-autosave";
+import {
+  SurveyAutosave,
+  SurveySavePausedError,
+  type SurveyAutosaveSnapshot,
+} from "../../../lib/survey-autosave";
 import { isRetryableSaveError } from "../../../lib/retry";
 import styles from "../../../components/workspace/workspace-content.module.css";
 
 type Action = "publish" | "duplicate" | "archive" | "share";
-function ReadOnlySurveyPages({ draft }: { draft: SurveyDraft }) {
+function ReadOnlySurveyPages({ draft, paused }: { draft: SurveyDraft; paused: boolean }) {
   const { locale } = useLocale();
-  const copy = surveyPagesCopy(locale);
+  const copy = surveyPageAuthoringCopy(locale);
   const [pageIndex, setPageIndex] = useState(0);
   return (
     <section className={styles.panel} data-survey-pages-readonly lang={locale}>
-      <h2>{copy.readOnlyTitle}</h2>
-      <p className="notice">{copy.readOnlyNotice}</p>
+      <h2>{paused ? copy.pausedTitle : copy.readonlyTitle}</h2>
+      <p className="notice">{paused ? copy.pausedNotice : copy.readonlyNotice}</p>
       <p lang="">{draft.description}</p>
       <SurveyPagedReader
         content={draft}
@@ -58,10 +65,44 @@ function ReadOnlySurveyPages({ draft }: { draft: SurveyDraft }) {
     </section>
   );
 }
-function Editor({ id }: { id: string }) {
+export function SurveyEditor({ id, scope }: { id: string; scope: string }) {
   const router = useRouter();
-  const { canEdit, productFeatures, entitlements } = useWorkspace();
+  const {
+    canEdit,
+    productFeatures,
+    entitlements,
+    creator,
+    loading,
+    error: workspaceError,
+  } = useWorkspace();
   const { locale, t } = useLocale();
+  const copy = surveyPageAuthoringCopy(locale);
+  const [authRevoked, setAuthRevoked] = useState(false);
+  // Missing account data during a failed refresh pauses authority, not the editor lifetime.
+  // WorkspaceShell masks the retained local draft until a fresh account result is available.
+  const context = creator ? JSON.stringify([creator.userId, creator.workspaceId, id]) : scope;
+  const current = useRef({
+    scope,
+    context,
+    valid: true,
+    canEdit: false,
+    pages: false,
+    pageSavePaused: false,
+  });
+  current.current = {
+    scope,
+    context,
+    valid: !authRevoked && scope === context,
+    canEdit:
+      Boolean(creator) &&
+      canEdit &&
+      !loading &&
+      !workspaceError &&
+      !authRevoked &&
+      scope === context,
+    pages: Boolean(productFeatures?.surveyPages && productFeatures.surveys),
+    pageSavePaused: false,
+  };
   const [protectRoom, setProtectRoom] = useState(false);
   const [joinPassword, setJoinPassword] = useState("");
   const [passwordError, setPasswordError] = useState<
@@ -70,7 +111,6 @@ function Editor({ id }: { id: string }) {
   const passwordAvailable = canProtectRoom(entitlements);
   const [model, setModel] = useState<SurveyAutosaveSnapshot | null>(null);
   const autosave = useRef<SurveyAutosave | null>(null);
-  const editPermission = useRef(canEdit);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -90,10 +130,41 @@ function Editor({ id }: { id: string }) {
   const draft = model?.draft;
   const dirty = model?.dirty ?? false;
   const savePaused = Boolean(model && ["retry", "error", "conflict"].includes(model.phase));
+  current.current.pageSavePaused = model?.pauseReason === "survey-pages";
+  const canAuthorPages =
+    current.current.canEdit && current.current.pages && !current.current.pageSavePaused;
+  const editingAllowed = current.current.canEdit && (draft?.schemaVersion !== 3 || canAuthorPages);
+  function allowed(
+    schemaVersion = autosave.current?.snapshot().draft.schemaVersion,
+    retryPausedSave = false,
+  ) {
+    const latest = current.current;
+    return (
+      latest.valid &&
+      latest.scope === scope &&
+      latest.context === context &&
+      latest.canEdit &&
+      (schemaVersion !== 3 || (latest.pages && (retryPausedSave || !latest.pageSavePaused)))
+    );
+  }
   useEffect(() => {
-    editPermission.current = canEdit;
-    autosave.current?.setEnabled(canEdit);
-  }, [canEdit, model?.record.id]);
+    autosave.current?.setEnabled(editingAllowed);
+  }, [editingAllowed, model?.record.id]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const revoke = () => {
+      current.current.valid = false;
+      current.current.canEdit = false;
+      autosave.current?.dispose();
+      autosave.current = null;
+      setAuthRevoked(true);
+      setModel(null);
+      pending.current = null;
+    };
+    const events = [AUTH_CHANGE_EVENT, SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT];
+    events.forEach((name) => window.addEventListener(name, revoke));
+    return () => events.forEach((name) => window.removeEventListener(name, revoke));
+  }, []);
   useEffect(() => {
     let active = true;
     autosave.current?.dispose();
@@ -102,27 +173,31 @@ function Editor({ id }: { id: string }) {
     setError("");
     void apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`, { headers: surveyReaderHeaders() })
       .then((response) => {
-        if (!active) return;
-        if (response.survey.draft.schemaVersion === 3) {
-          const draft = SurveyDraftSchema.parse(response.survey.draft);
-          setModel({
-            record: response.survey,
-            draft,
-            phase: "idle",
-            dirty: false,
-            unsettled: false,
-            error: "",
-          });
+        if (
+          !active ||
+          !current.current.valid ||
+          current.current.scope !== scope ||
+          current.current.context !== context
+        )
           return;
-        }
+        SurveyDraftSchema.parse(response.survey.draft);
         const controller = new SurveyAutosave(response.survey, {
-          enabled: editPermission.current,
+          enabled: allowed(response.survey.draft.schemaVersion),
           changed: (snapshot) => {
-            if (active) setModel(snapshot);
+            if (
+              active &&
+              current.current.valid &&
+              current.current.scope === scope &&
+              current.current.context === context
+            )
+              setModel(snapshot);
           },
           save: async (body) => {
-            if (!editPermission.current)
-              throw new ApiClientError("Your role is read-only", "UNAUTHORIZED", 403);
+            if (
+              !active ||
+              !allowed((JSON.parse(body) as { draft: SurveyDraft }).draft.schemaVersion, true)
+            )
+              throw new SurveySavePausedError();
             return (
               await apiFetch<{ survey: SurveyRecord }>(`/v1/surveys/${id}`, { method: "PUT", body })
             ).survey;
@@ -139,8 +214,9 @@ function Editor({ id }: { id: string }) {
       autosave.current?.dispose();
       autosave.current = null;
     };
-  }, [id, loadAttempt]);
+  }, [id, scope, context, loadAttempt]);
   function setDraft(value: SurveyDraft) {
+    if (!allowed(value.schemaVersion)) return;
     setNotice("");
     if (!pending.current) setError("");
     autosave.current?.edit(value);
@@ -169,11 +245,26 @@ function Editor({ id }: { id: string }) {
     URL.revokeObjectURL(url);
   }
   async function saveNow() {
+    const controller = autosave.current;
+    if (!controller || !allowed(controller.snapshot().draft.schemaVersion, true)) return;
     setNotice("");
-    await autosave.current?.retry().catch(() => undefined);
+    // A server-side capability change can precede the cached /me flag. Explicit retry
+    // reuses the retained body; controls stay read-only until that save is acknowledged.
+    controller.setEnabled(true);
+    try {
+      await controller.retry();
+    } catch {
+      // The controller keeps the failed intent and publishes the actionable error.
+    } finally {
+      if (autosave.current === controller)
+        controller.setEnabled(
+          allowed(controller.snapshot().draft.schemaVersion, true) &&
+            controller.snapshot().pauseReason !== "survey-pages",
+        );
+    }
   }
   async function write(action: Action) {
-    if (!canEdit || working.current || !autosave.current) return;
+    if (!allowed() || working.current || !autosave.current) return;
     if (action === "share" && protectRoom && !passwordAvailable) {
       setPasswordError("live.protection.upgrade");
       return;
@@ -197,8 +288,13 @@ function Editor({ id }: { id: string }) {
       let operation = pending.current;
       if (!operation) {
         const saved = await controller.flush();
-        if (autosave.current !== controller) return;
+        if (autosave.current !== controller || !allowed(saved.draft.schemaVersion)) return;
         if (action === "publish") {
+          if (
+            saved.draft.schemaVersion === 3 &&
+            saved.draft.pages.some((page) => !page.questionIds.length)
+          )
+            throw new Error(copy.publishEmptyPageError);
           const validated = SurveyContentSchema.safeParse(saved.draft);
           if (!validated.success)
             throw new Error(
@@ -233,11 +329,19 @@ function Editor({ id }: { id: string }) {
         };
         pending.current = operation;
       }
+      if (!allowed()) return;
       const result = await apiFetch<{ survey?: SurveyRecord; room?: { id: string } }>(
         operation.path,
         { method: operation.method, body: operation.body },
       );
-      if (autosave.current !== controller) return;
+      if (
+        autosave.current !== controller ||
+        !current.current.valid ||
+        current.current.scope !== scope ||
+        current.current.context !== context
+      )
+        return;
+      if (!allowed()) throw new SurveySavePausedError();
       pending.current = null;
       if (result.survey && result.survey.id !== id) {
         router.push(`/surveys/${result.survey.id}`);
@@ -255,16 +359,27 @@ function Editor({ id }: { id: string }) {
             : "Saved.",
       );
     } catch (caught) {
-      if (autosave.current !== controller) return;
+      if (
+        autosave.current !== controller ||
+        !current.current.valid ||
+        current.current.scope !== scope ||
+        current.current.context !== context
+      )
+        return;
       if (caught instanceof ApiClientError && !isRetryableSaveError(caught)) pending.current = null;
       if (!controller.snapshot().error) setError(humanError(caught));
     } finally {
-      setBusy(false);
-      working.current = false;
+      if (autosave.current === controller && current.current.valid) {
+        setBusy(false);
+        working.current = false;
+      }
     }
   }
-  const operationBlocked = !canEdit || busy || Boolean(pending.current) || savePaused;
-  const blocked = !canEdit || busy || Boolean(pending.current) || record?.status === "archived";
+  const operationBlocked = !editingAllowed || busy || Boolean(pending.current) || savePaused;
+  const blocked =
+    !editingAllowed || busy || Boolean(pending.current) || record?.status === "archived";
+  if (!creator || loading || workspaceError || !current.current.valid)
+    return <WorkspaceShell title="Survey editor">{null}</WorkspaceShell>;
   return (
     <WorkspaceShell
       title={draft?.title || "Survey editor"}
@@ -280,7 +395,12 @@ function Editor({ id }: { id: string }) {
         <p className="error" role="alert">
           {error}{" "}
           {pending.current ? (
-            <button type="button" disabled={busy} onClick={() => void write("publish")}>
+            <button
+              type="button"
+              disabled={busy || !editingAllowed}
+              title={!editingAllowed ? copy.pausedNotice : undefined}
+              onClick={() => void write("publish")}
+            >
               Retry same operation
             </button>
           ) : (
@@ -299,7 +419,11 @@ function Editor({ id }: { id: string }) {
           </p>
           <p>{model.error}</p>
           {model.phase !== "conflict" ? (
-            <button type="button" disabled={busy || !canEdit} onClick={() => void saveNow()}>
+            <button
+              type="button"
+              disabled={busy || !allowed(draft?.schemaVersion, true)}
+              onClick={() => void saveNow()}
+            >
               Retry save
             </button>
           ) : null}
@@ -328,8 +452,15 @@ function Editor({ id }: { id: string }) {
                     : "Loading Survey…")}
       </p>
       {draft && record ? (
-        draft.schemaVersion === 3 ? (
-          <ReadOnlySurveyPages draft={draft} />
+        draft.schemaVersion === 3 && !canAuthorPages ? (
+          <>
+            <ReadOnlySurveyPages draft={draft} paused={model.unsettled || canEdit} />
+            {model.unsettled ? (
+              <button className="button-quiet" type="button" onClick={downloadLocalDraft}>
+                Download local draft
+              </button>
+            ) : null}
+          </>
         ) : (
           <>
             <section className={styles.panel}>
@@ -358,94 +489,124 @@ function Editor({ id }: { id: string }) {
                 Organizers see aggregate results after five submissions. Responses are not linked to
                 learning identities. Survey question timers are not used.
               </p>
-              <button className="button-quiet" type="button" onClick={() => setPreview(!preview)}>
-                {preview ? "Edit questions" : "Preview Survey"}
-              </button>
+              {draft.schemaVersion !== 3 ? (
+                <button className="button-quiet" type="button" onClick={() => setPreview(!preview)}>
+                  {preview ? "Edit questions" : "Preview Survey"}
+                </button>
+              ) : null}
             </section>
-            {draft.items.map((item, index) => (
-              <section className={styles.panel} key={item.question.id}>
-                <h2>Question {index + 1}</h2>
-                {preview ? (
-                  <SurveyResponseControl
-                    question={item.question}
-                    required={item.required}
-                    disabled
-                  />
-                ) : (
-                  <>
-                    <SurveyQuestionEditor
+            {draft.schemaVersion !== 3 && canAuthorPages ? (
+              <section className={styles.panel} lang={locale} data-survey-conversion>
+                <h2>{copy.convertTitle}</h2>
+                <p>{copy.convertNotice}</p>
+                <button
+                  className="button-quiet"
+                  type="button"
+                  disabled={blocked}
+                  onClick={() => {
+                    if (allowed(3) && window.confirm(copy.convertConfirm))
+                      setDraft(convertSurveyToPages(draft));
+                  }}
+                >
+                  {copy.convertAction}
+                </button>
+              </section>
+            ) : null}
+            {draft.schemaVersion === 3 ? (
+              <SurveyPageAuthoring
+                draft={draft}
+                locale={locale}
+                disabled={blocked}
+                onChange={setDraft}
+              />
+            ) : (
+              draft.items.map((item, index) => (
+                <section className={styles.panel} key={item.question.id}>
+                  <h2>Question {index + 1}</h2>
+                  {preview ? (
+                    <SurveyResponseControl
                       question={item.question}
-                      disabled={blocked}
-                      onChange={(question) =>
-                        setDraft({
-                          ...draft,
-                          items: draft.items.map((row, offset) =>
-                            offset === index ? { ...row, question } : row,
-                          ),
-                        })
-                      }
+                      required={item.required}
+                      disabled
                     />
-                    <label className="field">
-                      <input
-                        type="checkbox"
-                        checked={item.required}
+                  ) : (
+                    <>
+                      <SurveyQuestionEditor
+                        question={item.question}
                         disabled={blocked}
-                        onChange={(event) =>
+                        onChange={(question) =>
                           setDraft({
                             ...draft,
                             items: draft.items.map((row, offset) =>
-                              offset === index ? { ...row, required: event.target.checked } : row,
+                              offset === index ? { ...row, question } : row,
                             ),
                           })
                         }
                       />
-                      Required response
-                    </label>
-                    <SurveyQuestionActions
-                      index={index}
-                      count={draft.items.length}
-                      disabled={blocked}
-                      onMove={(direction) => {
-                        const items = [...draft.items];
-                        [items[index], items[index + direction]] = [
-                          items[index + direction]!,
-                          items[index]!,
-                        ];
-                        setDraft({ ...draft, items });
-                      }}
-                      onRemove={() =>
+                      <label className="field">
+                        <input
+                          type="checkbox"
+                          checked={item.required}
+                          disabled={blocked}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              items: draft.items.map((row, offset) =>
+                                offset === index ? { ...row, required: event.target.checked } : row,
+                              ),
+                            })
+                          }
+                        />
+                        Required response
+                      </label>
+                      <SurveyQuestionActions
+                        index={index}
+                        count={draft.items.length}
+                        disabled={blocked}
+                        onMove={(direction) => {
+                          const items = [...draft.items];
+                          [items[index], items[index + direction]] = [
+                            items[index + direction]!,
+                            items[index]!,
+                          ];
+                          setDraft({ ...draft, items });
+                        }}
+                        onRemove={() =>
+                          setDraft({
+                            ...draft,
+                            items: draft.items.filter((_, offset) => offset !== index),
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </section>
+              ))
+            )}
+            <section className={styles.panel}>
+              {draft.schemaVersion !== 3 ? (
+                <div className={styles.surveyActions}>
+                  {(["poll", "rating"] as const).map((type) => (
+                    <button
+                      className="button-quiet"
+                      key={type}
+                      type="button"
+                      disabled={blocked || draft.items.length >= 100}
+                      onClick={() =>
                         setDraft({
                           ...draft,
-                          items: draft.items.filter((_, offset) => offset !== index),
+                          items: [
+                            ...draft.items,
+                            { required: true, question: newSurveyQuestion(type, locale) },
+                          ],
                         })
                       }
-                    />
-                  </>
-                )}
-              </section>
-            ))}
-            <section className={styles.panel}>
-              <div className={styles.surveyActions}>
-                {(["poll", "rating"] as const).map((type) => (
-                  <button
-                    className="button-quiet"
-                    key={type}
-                    type="button"
-                    disabled={blocked || draft.items.length >= 100}
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        items: [
-                          ...draft.items,
-                          { required: true, question: newSurveyQuestion(type, locale) },
-                        ],
-                      })
-                    }
-                  >
-                    Add {type}
-                  </button>
-                ))}
-              </div>
+                    >
+                      Add {type}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className={styles.surveyActions}>
                 <button
                   className="button"
@@ -540,8 +701,17 @@ export default function SurveyEditorPage() {
   return (
     <NavigationGuardProvider>
       <WorkspaceProvider>
-        <Editor key={id} id={id} />
+        <ScopedSurveyEditor id={id} />
       </WorkspaceProvider>
     </NavigationGuardProvider>
   );
+}
+
+function ScopedSurveyEditor({ id }: { id: string }) {
+  const { creator } = useWorkspace();
+  const confirmed = useRef<{ actorId: string; workspaceId: string } | null>(null);
+  if (creator) confirmed.current = { actorId: creator.userId, workspaceId: creator.workspaceId };
+  if (!confirmed.current) return <WorkspaceShell title="Survey editor">{null}</WorkspaceShell>;
+  const scope = JSON.stringify([confirmed.current.actorId, confirmed.current.workspaceId, id]);
+  return <SurveyEditor key={scope} id={id} scope={scope} />;
 }

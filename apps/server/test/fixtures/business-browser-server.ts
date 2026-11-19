@@ -87,7 +87,26 @@ const platform = createPlatformRepository(repository);
 if (process.env.CANVAS_BROWSER_FIXTURE === "true") {
   const surveyPages = createSurveyRepository(repository);
   let surveyPagesCode = 7_800_000;
-  // Trusted reader fixture only: public authoring and room creation continue to cap at v2.
+  // Exercise durable policy changes without changing any other fixture capability.
+  built.app.post("/__test/surveys/page-authoring-policy", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
+      return reply.code(403).send({ error: { message: "Loopback fixture access required" } });
+    const token = request.cookies[config.COOKIE_NAME];
+    const actor = token ? await repository.getCreatorBySession(hashToken(token), new Date()) : null;
+    if (!actor || !["owner", "editor"].includes(actor.role))
+      return reply.code(403).send({ error: { message: "An editor fixture session is required" } });
+    const { enabled } = z.object({ enabled: z.boolean() }).strict().parse(request.body);
+    const current = await platform.getFeaturePolicy();
+    const policy = await platform.saveFeaturePolicy({
+      expectedRevision: current?.revision ?? 0,
+      features: {
+        ...current?.features,
+        surveyPages: { enabled, plans: ["free", "pro", "team"] },
+      },
+    });
+    return { enabled, revision: policy.revision };
+  });
+  // Seed retained v3 readers independently of the opt-in public authoring policy.
   built.app.post("/__test/surveys/pages", async (request, reply) => {
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip))
       return reply.code(403).send({ error: { message: "Loopback fixture access required" } });

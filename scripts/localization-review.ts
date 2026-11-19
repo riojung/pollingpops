@@ -30,6 +30,7 @@ import { creationMethodCopyEntries } from "../apps/web/lib/i18n/creation-method-
 import { importPreviewCopyEntries } from "../apps/web/lib/i18n/import-preview-copy";
 import { starterCopyCopyEntries } from "../apps/web/lib/i18n/starter-copy-copy";
 import { surveyPagesCopyEntries } from "../apps/web/lib/i18n/survey-pages-copy";
+import { surveyPageAuthoringCopyEntries } from "../apps/web/lib/i18n/survey-page-authoring-copy";
 import { templateMessages } from "../apps/web/lib/i18n/template-messages";
 import {
   practiceManagementCopy,
@@ -539,6 +540,14 @@ export async function buildReviewBundle(
     "surveyPagesCopy",
     surveyPagesCopyEntries("en-CA"),
     surveyPagesCopyEntries(locale),
+  );
+
+  ui(
+    "survey-page-authoring",
+    "apps/web/lib/i18n/survey-page-authoring-copy.ts",
+    "surveyPageAuthoringCopy",
+    surveyPageAuthoringCopyEntries("en-CA"),
+    surveyPageAuthoringCopyEntries(locale),
   );
 
   ui(

@@ -50,7 +50,11 @@ export type LibraryShareSnapshot =
   | { artifactType: "round"; content: QuizDraft }
   | { artifactType: "presentation"; content: PresentationContent }
   | { artifactType: "survey"; content: SurveyDraft };
-export interface LibraryShareRecord extends LibraryShareSummary {
+/** Internal policy metadata only; HTTP summaries must whitelist their public fields. */
+export interface LibraryShareSummaryRecord extends LibraryShareSummary {
+  surveySchemaVersion?: number;
+}
+export interface LibraryShareRecord extends LibraryShareSummaryRecord {
   snapshot: LibraryShareSnapshot;
   createdBy: string | null;
   requestId: string;
@@ -73,7 +77,7 @@ export interface LibrarySharingRepository {
     now: Date;
   }): Promise<{ share: LibraryShareRecord; replayed: boolean }>;
   list(input: { actorId: string } & Partial<LibraryShareListQuery>): Promise<{
-    shares: LibraryShareSummary[];
+    shares: LibraryShareSummaryRecord[];
     nextCursor: string | null;
     facets?: LibraryShareListFacets;
   }>;
@@ -84,7 +88,7 @@ export interface LibrarySharingRepository {
     id: string;
     status: "in_progress" | "done";
     now: Date;
-  }): Promise<LibraryShareSummary | null>;
+  }): Promise<LibraryShareSummaryRecord | null>;
   recipients(input: {
     actorId: string;
     workspaceId: string;
@@ -371,7 +375,7 @@ export class LibrarySharingService implements LibrarySharingRepository {
     tx: LibrarySharingTransaction,
     row: StoredLibraryShare,
     context: LibrarySharingContext,
-  ): Promise<LibraryShareSummary> {
+  ): Promise<LibraryShareSummaryRecord> {
     return {
       id: row.id,
       organizationId: row.organizationId,
@@ -389,6 +393,9 @@ export class LibrarySharingService implements LibrarySharingRepository {
       message: row.message,
       dueAt: row.dueAt,
       progress: await tx.status(row.id),
+      surveySchemaVersion:
+        row.surveySchemaVersion ??
+        (row.snapshot?.artifactType === "survey" ? row.snapshot.content.schemaVersion : undefined),
       capabilities: {
         view: true,
         copy:
@@ -506,6 +513,7 @@ export class LibrarySharingService implements LibrarySharingRepository {
         message: row.message,
         dueAt: row.dueAt,
         progress: row.progress,
+        surveySchemaVersion: row.surveySchemaVersion,
         capabilities: {
           view: true,
           copy: row.permission === "use" && row.surveySchemaVersion !== 3,

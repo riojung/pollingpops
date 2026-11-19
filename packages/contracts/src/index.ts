@@ -232,6 +232,7 @@ export const WorkspaceProductFeaturesSchema = z.object({
   questionHealth: z.boolean().default(false),
   recoveryPacks: z.boolean().default(false),
   surveys: z.boolean().default(false),
+  surveyPages: z.boolean().default(false),
   groups: z.boolean(),
   discover: z.boolean(),
 });

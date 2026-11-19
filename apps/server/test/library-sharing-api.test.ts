@@ -342,6 +342,116 @@ async function fixture(
 }
 
 describe("organization Library sharing APIs", () => {
+  it("uses the current destination page grant for every summary and fresh copy while replaying accepted copies after pause", async () => {
+    const f = await fixture();
+    const draft = surveyPagesFixture();
+    const source = await f.surveys.create(f.owner.workspaceId, randomUUID(), draft, randomUUID(), {
+      maximumSchemaVersion: 3,
+    });
+    const published = await f.surveys.publish(
+      f.owner.workspaceId,
+      source.id,
+      0,
+      randomUUID(),
+      null,
+      { maximumSchemaVersion: 3 },
+    );
+    const artifact = {
+      artifactType: "survey" as const,
+      artifactId: source.id,
+      versionId: published.versionId!,
+    };
+    const entry = await f.publish(artifact);
+    const viewOnly = await f.publish(artifact, { permission: "view" });
+    const platform = createPlatformRepository(f.repository);
+    const pageGrant = async (enabled: boolean) => {
+      const previous = await platform.getFeaturePolicy();
+      await platform.saveFeaturePolicy({
+        expectedRevision: previous?.revision ?? 0,
+        features: {
+          audienceScopes: { enabled: true, plans: ["free", "pro", "team"] },
+          feedbackRooms: { enabled: true, plans: ["free", "pro", "team"] },
+          surveys: { enabled: true, plans: ["free", "pro", "team"] },
+          surveyPages: { enabled, plans: ["team"] },
+        },
+      });
+    };
+    let destinationPlan: "free" | "team" = "free";
+    const plan = vi
+      .spyOn(f.repository, "getPlan")
+      .mockImplementation(async (workspaceId) =>
+        workspaceId === f.recipient.workspaceId ? destinationPlan : "team",
+      );
+    const copy = (id = entry.id, requestId = randomUUID()) =>
+      f.app.inject({
+        method: "POST",
+        url: `/v1/library/shares/${id}/copy`,
+        payload: { requestId },
+      });
+    const summaryResponses = async () => {
+      const read = await f.app.inject({ url: `/v1/library/shares/${entry.id}` });
+      const lookup = vi.spyOn(f.shares, "read");
+      let list;
+      try {
+        list = await f.app.inject({ url: "/v1/library/shares?scope=shared" });
+        expect(lookup).not.toHaveBeenCalled();
+      } finally {
+        lookup.mockRestore();
+      }
+      const progress = await f.app.inject({
+        method: "PUT",
+        url: `/v1/library/shares/${entry.id}/progress`,
+        payload: { status: "in_progress" },
+      });
+      for (const response of [read, list, progress]) {
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toMatch(/surveySchemaVersion|snapshot|recipientIds|intentHash/);
+      }
+      return [
+        read.json().share,
+        list.json().shares.find((share: { id: string }) => share.id === entry.id),
+        progress.json().share,
+      ];
+    };
+    try {
+      await pageGrant(true);
+      f.setActor(f.recipient);
+      // A source workspace with page authoring cannot grant it to a Free destination.
+      expect((await summaryResponses()).every((share) => !share.capabilities.copy)).toBe(true);
+      expect((await copy()).json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+      destinationPlan = "team";
+      for (const summary of await summaryResponses()) {
+        expect(summary.capabilities.copy).toBe(true);
+        expect(summary.copyUnavailableReason).toBeNull();
+        expect(LibraryShareSummarySchema.safeParse(summary).success).toBe(true);
+      }
+      const requestId = randomUUID();
+      const accepted = await copy(entry.id, requestId);
+      expect(accepted.statusCode, accepted.body).toBe(201);
+      expect(
+        (await f.surveys.get(f.recipient.workspaceId, accepted.json().artifactId))?.draft,
+      ).toEqual(draft);
+      expect((await copy(viewOnly.id)).statusCode).toBe(403);
+      f.setActor({ ...f.recipient, role: "viewer" });
+      expect((await summaryResponses()).every((share) => !share.capabilities.copy)).toBe(true);
+      expect((await copy()).statusCode).toBe(403);
+      f.setActor({ ...f.recipient, workspaceId: f.foreign.workspaceId });
+      expect((await summaryResponses()).every((share) => !share.capabilities.copy)).toBe(true);
+      expect((await copy()).statusCode).toBe(403);
+      f.setActor(f.recipient);
+      await pageGrant(false);
+      expect((await summaryResponses()).every((share) => !share.capabilities.copy)).toBe(true);
+      const denied = await copy();
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(denied.json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+      const replay = await copy(entry.id, requestId);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json()).toEqual({ ...accepted.json(), replayed: true });
+    } finally {
+      plan.mockRestore();
+    }
+  });
+
   it("advertises paged Survey copies as unavailable while preserving accepted copy recovery", async () => {
     const f = await fixture(),
       draft = surveyPagesFixture(),

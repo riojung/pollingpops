@@ -16,6 +16,7 @@ export interface SurveyAutosaveSnapshot {
   dirty: boolean;
   unsettled: boolean;
   error: string;
+  pauseReason: "survey-pages" | null;
 }
 interface SaveIntent {
   body: string;
@@ -28,6 +29,13 @@ interface Options {
   debounceMs?: number;
   key?: () => string;
   sleep?: (delayMs: number) => Promise<void>;
+}
+
+/** Local authority pauses retain the exact intent, including an unconfirmed earlier attempt. */
+export class SurveySavePausedError extends Error {
+  constructor() {
+    super("Saving is paused. Your local edits are kept in this editor.");
+  }
 }
 
 function draftJson(draft: SurveyDraft) {
@@ -46,6 +54,7 @@ export class SurveyAutosave {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private enabled: boolean;
   private disposed = false;
+  private pagesPaused = false;
 
   constructor(
     record: SurveyRecordView,
@@ -64,6 +73,7 @@ export class SurveyAutosave {
       dirty,
       unsettled: dirty || this.pending !== null,
       error: this.failure ? humanError(this.failure) : "",
+      pauseReason: this.pagesPaused ? "survey-pages" : null,
     };
   }
   private emit() {
@@ -152,10 +162,15 @@ export class SurveyAutosave {
       const record = await retryWithBackoff(
         () => {
           if (this.disposed) throw new Error("Editor closed");
+          if (!this.enabled) throw new SurveySavePausedError();
           return this.options.save(intent.body);
         },
         {
-          shouldRetry: (error) => !this.disposed && isRetryableSaveError(error),
+          shouldRetry: (error) =>
+            !this.disposed &&
+            this.enabled &&
+            !(error instanceof SurveySavePausedError) &&
+            isRetryableSaveError(error),
           sleep: this.options.sleep,
         },
       );
@@ -167,12 +182,18 @@ export class SurveyAutosave {
       upgradeSurveyDraft(record.draft);
       this.record = structuredClone(record);
       this.pending = null;
+      this.pagesPaused = false;
       this.phase = "saved";
       this.emit();
     } catch (error) {
       if (this.disposed) throw error;
       this.failure = error;
-      if (error instanceof ApiClientError && !isRetryableSaveError(error)) {
+      if (error instanceof ApiClientError && error.code === "SURVEY_PAGES_NOT_ENABLED") {
+        // A capability pause is neither a content conflict nor evidence that the request failed
+        // before commit. Keep its exact identity for explicit recovery after access is restored.
+        this.phase = "retry";
+        this.pagesPaused = true;
+      } else if (error instanceof ApiClientError && !isRetryableSaveError(error)) {
         this.pending = null;
         this.phase = error.code === "STALE_DRAFT" || error.status === 409 ? "conflict" : "error";
       } else {

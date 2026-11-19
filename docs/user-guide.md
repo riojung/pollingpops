@@ -85,10 +85,19 @@ screen. A closed retained Survey permits read-only review of its pages. Your fac
 receives question-level totals only after collection closes and the existing minimum sample is
 met; page visits are not reported.
 
-This is a reader foundation. Ordinary Survey creation continues to use the existing single-page
-format. Page-based Surveys appear read-only to creators; adding/editing pages, new page-based
-launches and conditional paths are subsequent checkpoints. Use an updated browser client if a
-page-based run asks you to refresh for compatible Survey support.
+Ordinary Survey creation continues to use the existing single-page format. If page editing is
+enabled for your workspace and you can edit the Survey, choose **Organize into pages** in the
+editor and confirm. Existing questions stay together on the first page. Add titles/instructions,
+add or reorder pages, and use **Move to page** to organize questions. Removing a page moves its
+questions to an adjacent page after confirmation; its title and instructions are removed. Keep
+at least one page, and add a question to every page before publishing. The limit is 20 pages and
+100 questions. **Preview Survey** reviews the current draft without submitting responses.
+
+Save and publish the latest changes before creating a sharing link. Existing links keep their
+published version. Page editing starts disabled and requires the separate Survey pages capability;
+when unavailable or view-only, retained pages can still be reviewed. A paused capability does not
+close existing runs. Conditional paths are a subsequent checkpoint. Use an updated browser client
+if a page-based run asks you to refresh for compatible Survey support.
 The shared Library view also shows each page's heading and instructions above its questions.
 
 ### Choose a creation method

@@ -27,6 +27,7 @@ export const productFeatureKeys = [
   "roundClientProtocol",
   "feedbackRooms",
   "surveys",
+  "surveyPages",
   "sessionSummaries",
   "ideaBoards",
   "canvasBoards",
@@ -209,6 +210,13 @@ export const productFeatureCatalog: readonly ProductFeatureDefinition[] = [
   define("surveys", "Surveys", "Create and publish self-paced Surveys.", "Feedback", [
     "feedbackRooms",
   ]),
+  define(
+    "surveyPages",
+    "Survey pages",
+    "Author, publish and launch Surveys with ordered pages. Disabled until explicitly enabled.",
+    "Feedback",
+    ["surveys"],
+  ),
   define(
     "sessionSummaries",
     "Session summaries",

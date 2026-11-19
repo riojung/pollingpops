@@ -1,0 +1,85 @@
+.editor,
+.selected,
+.questions {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.editor {
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid var(--ui-border);
+  border-radius: 1.15rem;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+
+.pages,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.pages {
+  padding: 0;
+  list-style: none;
+}
+
+.pages li,
+.pages button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pages button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.pages [aria-current="page"] {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.titleSummary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  max-block-size: 4.05em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.question {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.editor fieldset {
+  min-width: 0;
+}
+
+.selected h3:focus {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 5px;
+}
+
+.editor input,
+.editor textarea,
+.editor select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.actions button {
+  min-block-size: 44px;
+  white-space: normal;
+}

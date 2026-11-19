@@ -70,6 +70,32 @@ afterEach(() => {
   mocked.hooks = null;
 });
 describe("ordered Survey reader", () => {
+  it.each(["", "  \t  "])(
+    "uses the localized heading fallback for an unsaved blank title %j without changing source text",
+    (rawTitle) => {
+      const draft = {
+        ...content,
+        pages:
+          content.schemaVersion === 3
+            ? content.pages.map((page, index) =>
+                index === 0 ? { ...page, title: rawTitle } : page,
+              )
+            : [],
+      };
+      const markup = renderToStaticMarkup(
+        <SurveyPagedReader
+          content={draft}
+          pageIndex={0}
+          locale="en-CA"
+          preview
+          onBack={() => {}}
+          onNext={() => {}}
+        />,
+      );
+      expect(markup).toContain('lang="en-CA">Page 1</h2>');
+      expect(draft.pages[0]!.title).toBe(rawTitle);
+    },
+  );
   it("shows only the current page with authored headings, notes, progress and accessible response errors", () => {
     const markup = renderToStaticMarkup(
       <SurveyPagedReader

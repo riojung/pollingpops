@@ -1,14 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
-import { MemoryRepository, SurveyRepository } from "@openround/db";
+import { SURVEY_READER_HEADER, SurveyDraftSchema } from "@openround/contracts/surveys";
+import { MemoryRepository, SurveyRepository, createPlatformRepository } from "@openround/db";
 import { seedPagedSurvey } from "../../../packages/db/test/support/survey-pages-conformance.js";
 import { surveyFixture } from "../../../packages/db/test/support/survey-conformance.js";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { hashToken } from "../src/security.js";
+import { AuthService } from "../src/auth.js";
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -48,7 +49,139 @@ async function fixture() {
   return { ...f, repository, config, app, headers, guest };
 }
 
+async function pageAuthoring(f: Awaited<ReturnType<typeof fixture>>, enabled: boolean) {
+  const platform = createPlatformRepository(f.repository);
+  const previous = await platform.getFeaturePolicy();
+  await platform.saveFeaturePolicy({
+    expectedRevision: previous?.revision ?? 0,
+    features: {
+      audienceScopes: { enabled: true, plans: ["free", "pro", "team"] },
+      feedbackRooms: { enabled: true, plans: ["free", "pro", "team"] },
+      surveys: { enabled: true, plans: ["free", "pro", "team"] },
+      surveyPages: { enabled, plans: ["free", "pro", "team"] },
+    },
+  });
+}
+
 describe("paged Survey reader and writer HTTP boundary", () => {
+  it("authorizes explicit conversion, publication, launch and source copies while preserving exact retries after pause", async () => {
+    const f = await fixture();
+    const account = () => f.app.inject({ url: "/v1/auth/me", headers: f.headers });
+    expect((await account()).json().productFeatures.surveyPages).toBe(false);
+    const created = await f.app.inject({
+      method: "POST",
+      url: "/v1/surveys",
+      headers: f.headers,
+      payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const original = created.json().survey;
+    expect(original.draft.schemaVersion).toBe(2);
+    const draft = SurveyDraftSchema.parse({
+      ...original.draft,
+      schemaVersion: 3,
+      pages: [
+        {
+          id: randomUUID(),
+          title: "First page",
+          description: "Saved instructions",
+          questionIds: original.draft.items.map(
+            (item: { question: { id: string } }) => item.question.id,
+          ),
+        },
+      ],
+    });
+    const saveBody = { idempotencyKey: randomUUID(), expectedRevision: 0, draft };
+    const save = (payload = saveBody) =>
+      f.app.inject({
+        method: "PUT",
+        url: `/v1/surveys/${original.id}`,
+        headers: f.headers,
+        payload,
+      });
+    expect((await save()).json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+    await pageAuthoring(f, true);
+    expect((await account()).json().productFeatures.surveyPages).toBe(true);
+    const saved = await save();
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json().survey.draft).toEqual(draft);
+    const post = (url: string, payload: object) =>
+      f.app.inject({ method: "POST", url, headers: f.headers, payload });
+    const publishBody = { idempotencyKey: randomUUID(), expectedRevision: 1 };
+    const roomBody = { idempotencyKey: randomUUID(), expectedRevision: 1, windowDays: 1 };
+    const copyBody = { idempotencyKey: randomUUID(), sourceId: original.id };
+    const published = await post(`/v1/surveys/${original.id}/publish`, publishBody);
+    expect(published.statusCode, published.body).toBe(200);
+    const launched = await post(`/v1/surveys/${original.id}/rooms`, roomBody);
+    expect(launched.statusCode, launched.body).toBe(201);
+    const copied = await post("/v1/surveys", copyBody);
+    expect(copied.statusCode, copied.body).toBe(201);
+    const copiedDraft = SurveyDraftSchema.parse(copied.json().survey.draft);
+    if (copiedDraft.schemaVersion !== 3 || draft.schemaVersion !== 3)
+      throw new Error("Expected pages");
+    expect(copiedDraft.pages.flatMap((page) => page.questionIds)).toEqual(
+      copiedDraft.items.map((item) => item.question.id),
+    );
+    expect(copiedDraft.pages[0]!.id).not.toBe(draft.pages[0]!.id);
+    expect(copiedDraft.items[0]!.question.id).not.toBe(draft.items[0]!.question.id);
+    for (const payload of [
+      { idempotencyKey: randomUUID() },
+      { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+    ]) {
+      const ordinary = await post("/v1/surveys", payload);
+      expect(ordinary.statusCode, ordinary.body).toBe(201);
+      expect(ordinary.json().survey.draft.schemaVersion).toBe(2);
+    }
+    await pageAuthoring(f, false);
+    expect((await account()).json().productFeatures.surveyPages).toBe(false);
+    expect((await save()).json()).toEqual(saved.json());
+    for (const [url, payload, accepted] of [
+      [`/v1/surveys/${original.id}/publish`, publishBody, published],
+      [`/v1/surveys/${original.id}/rooms`, roomBody, launched],
+      ["/v1/surveys", copyBody, copied],
+    ] as const) {
+      expect((await post(url, payload)).json()).toEqual(accepted.json());
+      const denied = await post(url, { ...payload, idempotencyKey: randomUUID() });
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(denied.json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+    }
+    const fresh = await save({ ...saveBody, expectedRevision: 1, idempotencyKey: randomUUID() });
+    expect(fresh.json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+    expect(
+      (await save({ ...saveBody, draft: { ...draft, title: "Different request" } })).json().error
+        .code,
+    ).toBe("IDEMPOTENCY_CONFLICT");
+    const read = await f.app.inject({ url: `/v1/surveys/${original.id}`, headers: f.headers });
+    expect(read.json().survey.draft).toEqual(draft);
+    const joined = await f.app.inject({
+      method: "POST",
+      url: `/v1/survey-rooms/${launched.json().room.id}/join`,
+      headers: f.guest,
+      payload: {},
+    });
+    expect(joined.statusCode, joined.body).toBe(200);
+    expect(joined.json().attempt.content).toEqual(draft);
+  });
+
+  it("keeps page authoring subordinate to editor role and workspace ownership", async () => {
+    const f = await fixture();
+    await pageAuthoring(f, true);
+    const actor = vi.spyOn(AuthService.prototype, "requireCreator");
+    const save = () =>
+      f.app.inject({
+        method: "PUT",
+        url: `/v1/surveys/${f.id}`,
+        headers: f.headers,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: 0, draft: f.draft },
+      });
+    actor.mockResolvedValue({ ...f.actor, role: "viewer" });
+    expect((await save()).statusCode).toBe(403);
+    actor.mockResolvedValue({ ...f.actor, role: "editor", workspaceId: randomUUID() });
+    expect((await save()).statusCode).toBe(404);
+    actor.mockResolvedValue({ ...f.actor, role: "editor" });
+    const permitted = await save();
+    expect(permitted.statusCode, permitted.body).toBe(200);
+  });
   it("reads stored pages and metadata while blocking new page edits, publication, rooms and downgrades", async () => {
     const f = await fixture();
     const read = await f.app.inject({

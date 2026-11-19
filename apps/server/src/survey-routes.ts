@@ -17,6 +17,7 @@ import {
   createPlatformRepository,
   type Repository,
   type SurveyRepository,
+  type SurveyWritePolicy,
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { AuthService } from "./auth.js";
@@ -164,6 +165,18 @@ export async function registerSurveyRoutes(
     };
     const readerVersion = (request: Parameters<AuthService["requireCreator"]>[0]): 2 | 3 =>
       request.headers[SURVEY_READER_HEADER] === "3" ? 3 : 2;
+    // Pass the current grant into the repository; exact accepted receipts replay before
+    // its writer check, including after page authoring is paused.
+    const writerPolicy = async (workspaceId: string): Promise<SurveyWritePolicy> => ({
+      maximumSchemaVersion: (await workspaceFeatureEnabled(
+        deps.repository,
+        deps.config,
+        workspaceId,
+        "surveyPages",
+      ))
+        ? 3
+        : 2,
+    });
     const guestHash = async (request: Parameters<AuthService["requireCreator"]>[0]) => {
       if (!(await deps.consumeAdmission(`survey-ip:${request.ip}`, 600, 60000)))
         throw new SurveyError("RATE_LIMITED", "Too many requests. Wait a minute and retry");
@@ -236,6 +249,7 @@ export async function registerSurveyRoutes(
         input.idempotencyKey,
         draft,
         input.idempotencyKey,
+        await writerPolicy(actor.workspaceId),
       );
       await deps.repository.recordAudit({
         workspaceId: actor.workspaceId,
@@ -296,6 +310,7 @@ export async function registerSurveyRoutes(
           input.draft,
           input.expectedRevision,
           input.idempotencyKey,
+          await writerPolicy(actor.workspaceId),
         ),
       };
     });
@@ -316,6 +331,7 @@ export async function registerSurveyRoutes(
           input.expectedRevision,
           input.idempotencyKey,
           limits.maxPublishedQuizzes,
+          await writerPolicy(actor.workspaceId),
         ),
       };
     });
@@ -402,6 +418,7 @@ export async function registerSurveyRoutes(
       // Retain final results after collection closes, including the maximum Free window.
       // Both deadlines are frozen with the run; manual early closure does not extend them.
       const expiresAt = new Date(closesAt.getTime() + limits.reportRetentionDays * 86400000);
+      const policy = await writerPolicy(actor.workspaceId);
       for (let attempt = 0; attempt < 10; attempt++) {
         try {
           const room = await deps.surveys.createRoom(
@@ -417,6 +434,7 @@ export async function registerSurveyRoutes(
               windowDays: input.windowDays,
               joinPasswordHash,
               replayOnly: Boolean(previous),
+              ...policy,
             },
           );
           return reply.code(201).send({ room: publicRoom(room) });

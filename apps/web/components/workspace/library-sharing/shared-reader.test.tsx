@@ -221,9 +221,37 @@ describe("shared Survey page reader", () => {
     expect(first.indexOf("<h2")).toBeLessThan(first.indexOf("<h3"));
     expect(markup).toContain("First line\n\n  Second line &lt;script&gt;");
     expect(markup).toContain("Option 3 &lt;text&gt;");
-    expect(markup).not.toMatch(/<input|<textarea|<select|<form|<script>/);
+    for (const tag of ["input", "textarea", "select", "form"]) {
+      expect(markup.toLowerCase()).not.toContain(`<${tag}`);
+    }
     expect(JSON.stringify(source)).toBe(before);
   });
+  it.each(["script", "SCRIPT", "ScRiPt"])(
+    "escapes authored %s text instead of interpreting it as an HTML element",
+    (tag) => {
+      const source = detail();
+      const instructions = `Before <${tag}>globalThis.example = true;</${tag}> after & text`;
+      source.surveyPages![0]!.description = instructions;
+      const tree = SharedLibrarySurveyPages({
+        shareId: source.share.id,
+        questions: source.questions!,
+        pages: source.surveyPages!,
+      });
+      const nodes = elements(tree);
+      expect(
+        nodes.find((node) => node.type === "p" && node.props.children === instructions),
+      ).toBeDefined();
+      expect(nodes.every((node) => node.props.dangerouslySetInnerHTML === undefined)).toBe(true);
+      expect(
+        nodes.flatMap((node) => (typeof node.type === "string" ? [node.type.toLowerCase()] : [])),
+      ).not.toContain("script");
+      const markup = renderToStaticMarkup(tree);
+      expect(markup).toContain(
+        `Before &lt;${tag}&gt;globalThis.example = true;&lt;/${tag}&gt; after &amp; text`,
+      );
+      expect(markup.toLowerCase()).not.toContain("<script");
+    },
+  );
   it.each(["en-CA", "ko-KR", "ja-JP"] as const)(
     "localizes blank headings and per-page progress in %s",
     (locale) => {

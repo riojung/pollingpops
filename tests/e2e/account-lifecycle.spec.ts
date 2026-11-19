@@ -14,8 +14,9 @@ test("creator can return to signed-in Home and sign out on a narrow screen", asy
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   const mobileSignInLink = page
-    .locator(".site-mobile-actions")
+    .locator("header")
     .getByRole("link", { name: "Sign in", exact: true });
   await mobileSignInLink.click();
   await page.waitForURL(/\/signin$/, { waitUntil: "load" });
@@ -23,7 +24,7 @@ test("creator can return to signed-in Home and sign out on a narrow screen", asy
   await signInCreator(page, testEmail("navigation", testInfo));
   await page.goto("/");
   const publicHeaderBrand = page
-    .locator("header.site-header")
+    .locator("header")
     .getByRole("link", { name: "Polling Pops", exact: true });
   await expect(publicHeaderBrand).toHaveAttribute("href", "/home");
   await publicHeaderBrand.click();
@@ -46,11 +47,10 @@ test("creator can return to signed-in Home and sign out on a narrow screen", asy
 
   await page.goto("/");
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await page
-    .getByRole("navigation", { name: "Mobile navigation", exact: true })
-    .getByRole("button", { name: "Sign out", exact: true })
-    .click();
+  await page.locator("header summary").filter({ hasText: "Account" }).click();
+  await page.locator("header").getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(mobileSignInLink).toBeVisible();
 
   await page.goto("/dashboard");

@@ -1,0 +1,330 @@
+.page {
+  --public-action: #007e92;
+  --public-action-text: #006f80;
+  --public-action-ink: #fff;
+  padding: 56px 0 76px;
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+}
+:global(html[data-color-mode="dark"]) .page {
+  --public-action: #91d5df;
+  --public-action-text: #91d5df;
+  --public-action-ink: #172c31;
+}
+.hero {
+  max-width: 920px;
+  margin-bottom: 48px;
+}
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--public-action-text);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(2.5rem, 5.4vw, 4.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+}
+.hero h1 span {
+  color: var(--public-action-text);
+}
+.hero > p:not(.eyebrow) {
+  max-width: 720px;
+  margin: 23px 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 1.12rem;
+  line-height: 1.75;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: start;
+  padding: 28px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  text-decoration: none;
+}
+.card:hover {
+  border-color: var(--public-action-text);
+  background: var(--ui-surface-hover);
+}
+.cardTop,
+.cardBottom {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--ui-text-muted);
+  font-size: 0.75rem;
+}
+.cardTop span:last-child {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ui-text-strong);
+  background: var(--ui-surface-soft);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+.card:nth-child(3n + 1) .cardTop span:last-child {
+  box-shadow: inset 0 -3px #f9688a;
+}
+.card:nth-child(3n + 2) .cardTop span:last-child {
+  box-shadow: inset 0 -3px #91d5bf;
+}
+.card:nth-child(3n + 3) .cardTop span:last-child {
+  box-shadow: inset 0 -3px #ffc857;
+}
+.card h2 {
+  margin: 27px 0 13px;
+  color: var(--ui-text-strong);
+  font-size: 1.4rem;
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+}
+.card > p {
+  flex: 1;
+  margin: 0 0 30px;
+  color: var(--ui-text-subtle);
+  font-size: 0.89rem;
+  line-height: 1.7;
+}
+.cardBottom {
+  padding-top: 17px;
+  border-top: 1px solid var(--ui-border);
+}
+.cardBottom span {
+  color: var(--public-action-text);
+  font-size: 1.1rem;
+}
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  margin-top: 58px;
+  padding-top: 32px;
+  border-top: 1px solid var(--ui-border);
+}
+.bottom h2 {
+  max-width: 630px;
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+}
+.bottom p:not(.eyebrow) {
+  margin-bottom: 0;
+  color: var(--ui-text-subtle);
+  line-height: 1.65;
+}
+.primary {
+  display: inline-flex;
+  min-height: 45px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 11px 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--public-action-ink);
+  background: var(--public-action);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.primary:hover {
+  filter: brightness(0.94);
+}
+.notices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 35px;
+  color: var(--ui-text-muted);
+  font-size: 0.82rem;
+}
+.back {
+  display: inline-block;
+  margin-bottom: 28px;
+  color: var(--public-action-text);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.articleHero {
+  max-width: 960px;
+  margin-bottom: 44px;
+}
+.articleHero h1 {
+  max-width: 900px;
+  font-size: clamp(2.4rem, 4.8vw, 4.1rem);
+}
+.articleLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 70px;
+  align-items: start;
+}
+.article {
+  max-width: 760px;
+  min-width: 0;
+}
+.article > section {
+  padding: 30px 0;
+  border-top: 1px solid var(--ui-border);
+  scroll-margin-top: 100px;
+}
+.sectionNumber {
+  margin: 0 0 10px;
+  color: var(--public-action-text);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+.article h2 {
+  margin: 0 0 22px;
+  color: var(--ui-text-strong);
+  font-size: 1.7rem;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+}
+.article p:not(.sectionNumber),
+.article li {
+  color: var(--ui-text-subtle);
+  font-size: 1rem;
+  line-height: 1.85;
+}
+.article p:last-child {
+  margin-bottom: 0;
+}
+.article ol {
+  display: grid;
+  gap: 14px;
+  padding: 20px 25px 20px 43px;
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+.sidebar {
+  display: grid;
+  gap: 28px;
+}
+.takeaway {
+  padding: 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+}
+.takeaway > p:last-child {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 1.02rem;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+}
+.contents,
+.related {
+  display: grid;
+  gap: 15px;
+}
+.contents h2,
+.related h2 {
+  margin: 0 0 3px;
+  color: var(--ui-text-strong);
+  font-size: 0.88rem;
+}
+.contents a,
+.related a {
+  color: var(--ui-text-subtle);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.related {
+  padding-top: 25px;
+  border-top: 1px solid var(--ui-border);
+}
+.related a {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--public-action-text);
+  font-weight: 600;
+}
+.page :is(a, button):focus-visible {
+  outline: 3px solid var(--public-action);
+  outline-offset: 4px;
+}
+@media (max-width: 1000px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .articleLayout {
+    gap: 35px;
+    grid-template-columns: minmax(0, 1fr) 240px;
+  }
+}
+@media (max-width: 700px) {
+  .page {
+    padding-top: 36px;
+  }
+  .hero {
+    margin-bottom: 32px;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .card {
+    padding: 24px;
+  }
+  .card h2 {
+    margin-top: 20px;
+  }
+  .bottom {
+    flex-direction: column;
+    align-items: start;
+    gap: 22px;
+    margin-top: 40px;
+  }
+  .articleLayout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    grid-row: 1;
+    gap: 20px;
+  }
+  .contents {
+    display: none;
+  }
+  .related {
+    padding: 0;
+    border: 0;
+  }
+  .article h2 {
+    font-size: 1.5rem;
+  }
+  .hero > p:not(.eyebrow) {
+    font-size: 1rem;
+  }
+}
+@media (forced-colors: active) {
+  .primary {
+    border-color: ButtonText;
+  }
+}

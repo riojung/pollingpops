@@ -119,7 +119,7 @@ test("brand navigation returns a signed-in creator to Home", async ({ page }) =>
 
   await page.goto("/");
   const publicHeaderBrand = page
-    .locator("header.site-header")
+    .locator("header")
     .getByRole("link", { name: "Polling Pops", exact: true });
   await expect(publicHeaderBrand).toHaveAttribute("href", "/home");
   await publicHeaderBrand.click();

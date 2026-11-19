@@ -87,6 +87,9 @@ export function publishSessionSignal(
 /** Public audience passes have their own lifetime and never join creator idle tracking. */
 export function isWorkspaceSessionPath(path: string) {
   if (path === "/") return false;
+  // Editorial route families remain readable without a creator session. Keep
+  // segment boundaries so similarly named workspace routes stay protected.
+  if (/^\/(?:product|solutions|examples|resources)(?:\/|$)/.test(path)) return false;
   if (/^\/lti\/link\/?$/.test(path)) return false;
   if (
     /^\/(?:signin|join|play|present|embed|board|followup|presentation-assignment|presentation-practice|presentation-review|summary|survey|invite|help|status|pricing|privacy|terms)(?:\/|$)/.test(

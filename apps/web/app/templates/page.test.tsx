@@ -317,4 +317,19 @@ describe("Template library sections", () => {
     expect(view.markup()).toContain("templateLibrary.presentationUnavailable");
     expect(view.markup()).not.toContain('href="/create/presentation"');
   });
+  it("retains a known public example as navigation context without copying it", () => {
+    mocked.search = "?type=rounds&collection=team-meetings&sourceId=meeting-priorities";
+    const view = harness();
+    view.render();
+    expect(view.markup()).toContain('aria-label="Selected public example"');
+    expect(view.markup()).toContain("Meeting priorities");
+    expect(view.markup()).toContain('href="/examples?example=meeting-priorities"');
+    expect(view.markup()).toContain("Round content gallery");
+    mocked.search = "?type=surveys&sourceId=meeting-priorities";
+    view.render();
+    expect(view.markup()).not.toContain('aria-label="Selected public example"');
+    mocked.search = "?type=rounds&sourceId=untrusted-title";
+    view.render();
+    expect(view.markup()).not.toContain("untrusted-title");
+  });
 });

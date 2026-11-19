@@ -149,4 +149,127 @@ describe("authenticated library sharing client", () => {
     await expect(readLibraryShare(id, new AbortController().signal)).rejects.toThrow("unavailable");
     expect(mocked.fetch.mock.calls[0]![1]).toMatchObject({ cache: "no-store" });
   });
+  it("preserves v3 Survey layout and the unchanged flat question projection", async () => {
+    const questions = [
+      {
+        id: requestId,
+        type: "rating",
+        prompt: "Question",
+        mediaId: null,
+        mediaAlt: null,
+        min: 1,
+        max: 5,
+        required: true,
+      },
+    ];
+    const surveyPages = [
+      {
+        id: artifactId,
+        title: "Authored page",
+        description: "First line\n\n  Second line",
+        questionIds: [requestId],
+      },
+    ];
+    const share = shareFixture({
+      artifactType: "survey",
+      permission: "view",
+      capabilities: { view: true, copy: false, manage: false },
+    });
+    mocked.fetch.mockResolvedValue({ share, questions, surveyPages });
+    const result = await readLibraryShare(id, new AbortController().signal);
+    expect(result.surveyPages).toEqual(surveyPages);
+    expect(result.questions).toBe(questions);
+    expect(result.share.capabilities.copy).toBe(false);
+    expect(result.questions).toEqual(questions);
+  });
+  it.each(["round", "survey"] as const)(
+    "retains the flat legacy %s detail shape when no layout is present",
+    async (artifactType) => {
+      const questions = [
+        { id: requestId, type: "rating", prompt: "Flat question", mediaId: null, mediaAlt: null },
+      ];
+      mocked.fetch.mockResolvedValue({ share: shareFixture({ artifactType }), questions });
+      const result = await readLibraryShare(id, new AbortController().signal);
+      expect(result.questions).toBe(questions);
+      expect(result).not.toHaveProperty("surveyPages");
+    },
+  );
+  it("does not attach Survey layout to Round detail responses", async () => {
+    mocked.fetch.mockResolvedValue({
+      share: shareFixture(),
+      questions: [],
+      surveyPages: [
+        { id: artifactId, title: "Unexpected Survey field", description: "", questionIds: [] },
+      ],
+    });
+    expect(await readLibraryShare(id, new AbortController().signal)).not.toHaveProperty(
+      "surveyPages",
+    );
+  });
+  it("keeps Presentation review payloads on their existing reader projection", async () => {
+    const review = {
+      schemaVersion: 1,
+      versionId,
+      version: 1,
+      title: "Published deck",
+      blocks: [
+        {
+          id: requestId,
+          kind: "question",
+          question: { type: "poll", prompt: "Deck question", mediaId: null, mediaAlt: null },
+        },
+      ],
+      sections: [],
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    };
+    mocked.fetch.mockResolvedValue({
+      share: shareFixture({ artifactType: "presentation" }),
+      review,
+      surveyPages: [
+        { id: artifactId, title: "Unexpected Survey metadata", description: "", questionIds: [] },
+      ],
+    });
+    const result = await readLibraryShare(id, new AbortController().signal);
+    expect(result.review).toEqual(review);
+    expect(result).not.toHaveProperty("surveyPages");
+    expect(result).not.toHaveProperty("questions");
+  });
+  it.each([
+    "null",
+    "empty",
+    "duplicate-page",
+    "duplicate-question",
+    "missing-question",
+    "dangling-question",
+    "wrong-order",
+    "too-many-pages",
+    "private-fields",
+  ])("fails closed on present malformed Survey layout: %s", async (kind) => {
+    const questions = [requestId, versionId].map((id) => ({
+      id,
+      type: "rating",
+      prompt: id,
+      mediaId: null,
+      mediaAlt: null,
+    }));
+    const first = { id: artifactId, title: "First", description: "", questionIds: [requestId] };
+    const second = { id, title: "Second", description: "", questionIds: [versionId] };
+    let surveyPages: unknown = [first, second];
+    if (kind === "null") surveyPages = null;
+    if (kind === "empty") surveyPages = [];
+    if (kind === "duplicate-page") second.id = first.id;
+    if (kind === "duplicate-question") second.questionIds = [...first.questionIds];
+    if (kind === "missing-question") surveyPages = [first];
+    if (kind === "dangling-question") second.questionIds = [artifactId];
+    if (kind === "wrong-order") surveyPages = [second, first];
+    if (kind === "too-many-pages") surveyPages = Array.from({ length: 21 }, () => first);
+    if (kind === "private-fields")
+      surveyPages = [{ ...first, responses: { secret: true } }, second];
+    mocked.fetch.mockResolvedValue({
+      share: shareFixture({ artifactType: "survey" }),
+      questions,
+      surveyPages,
+    });
+    await expect(readLibraryShare(id, new AbortController().signal)).rejects.toThrow();
+  });
 });

@@ -85,6 +85,7 @@ vi.mock("../../../components/locale-provider", async () => {
 
 import SurveyPlayer from "./page";
 import { RoomPasswordInput } from "../../../components/room-password";
+import { SurveyPagedReader } from "../../../components/survey-paged-reader";
 import { ApiClientError } from "../../../lib/api";
 
 function find(
@@ -137,14 +138,49 @@ function harness() {
   };
   render();
   flush();
-  return { render, flush, settle, submit, changePassword };
+  return {
+    render,
+    flush,
+    settle,
+    submit,
+    changePassword,
+    pages: () =>
+      find(fixtures.tree, (node) => node.type === SurveyPagedReader)!
+        .props as unknown as ReactModule.ComponentProps<typeof SurveyPagedReader>,
+  };
 }
 const storage = new Map<string, string>();
 const writes: string[] = [];
 function attempt(roomId = "room-a") {
   return {
     roomId,
-    content: { title: `Survey ${roomId}`, description: "", items: [] },
+    content: {
+      schemaVersion: 2,
+      title: `Survey ${roomId}`,
+      description: "",
+      items: [
+        {
+          required: true,
+          question: {
+            id: "00000000-0000-4000-8000-000000000001",
+            type: "rating",
+            prompt: "How useful?",
+            purpose: "opinion",
+            confidence: "off",
+            delivery: "main",
+            min: 1,
+            max: 5,
+            minLabel: "Low",
+            maxLabel: "High",
+            timeLimitSeconds: 30,
+            basePoints: 0,
+            explanation: "",
+            mediaId: null,
+            mediaAlt: null,
+          },
+        },
+      ],
+    },
     responses: {},
     revision: 0,
     closed: false,
@@ -272,4 +308,105 @@ describe("direct Survey password admission", () => {
       expect(markup).not.toContain('type="password"');
     },
   );
+});
+
+function pagedAttempt(roomId = "room-a") {
+  const source = attempt(roomId);
+  const first = source.content.items[0]!;
+  const second = {
+    required: true,
+    question: {
+      ...first.question,
+      id: "00000000-0000-4000-8000-000000000002",
+      prompt: "Second page question",
+    },
+  };
+  return {
+    ...source,
+    content: {
+      ...source.content,
+      schemaVersion: 3,
+      items: [first, second],
+      pages: [first, second].map((item, index) => ({
+        id: `00000000-0000-4000-8000-00000000001${index}`,
+        title: `Page title ${index + 1}`,
+        description: "",
+        questionIds: [item.question.id],
+      })),
+    },
+  };
+}
+describe("ordered Survey route", () => {
+  it("routes Enter on an intermediate page through the draft save barrier and advances only after acknowledgement", async () => {
+    const source = pagedAttempt();
+    storage.set("pollingpops:survey:room-a", "room-credential");
+    const pending = deferred<{ attempt: ReturnType<typeof pagedAttempt> }>();
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      init?.method === "POST" ? pending.promise : { attempt: source },
+    );
+    const ui = harness();
+    await ui.settle();
+    ui.pages().onChange!(source.content.items[0]!.question.id, { kind: "rating", value: 4 });
+    ui.render();
+    await ui.submit();
+    const writes = fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]![0]).toBe("/v1/survey-rooms/room-a/draft");
+    expect(writes[0]![1].headers).toMatchObject({
+      authorization: "Bearer room-credential",
+      "x-pollingpops-survey-schema": "3",
+    });
+    expect(ui.pages().pageIndex).toBe(0);
+    expect(ui.pages().locked).toBe(true);
+    pending.resolve({
+      attempt: {
+        ...source,
+        revision: 1,
+        responses: { [source.content.items[0]!.question.id]: { kind: "rating", value: 4 } },
+      },
+    });
+    await ui.settle();
+    expect(ui.pages().pageIndex).toBe(1);
+    expect(ui.pages().locked).toBe(false);
+  });
+  it("fences saved responses and captured input handlers across room A to B to A", async () => {
+    const pending = deferred<{ attempt: ReturnType<typeof pagedAttempt> }>();
+    storage.set("pollingpops:survey:room-a", "room-a-token");
+    storage.set("pollingpops:survey:room-b", "room-b-token");
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? pending.promise
+        : { attempt: pagedAttempt(path.includes("room-b") ? "room-b" : "room-a") },
+    );
+    const ui = harness();
+    await ui.settle();
+    const oldChange = ui.pages().onChange!;
+    const questionId = pagedAttempt().content.items[0]!.question.id;
+    oldChange(questionId, { kind: "rating", value: 4 });
+    ui.render();
+    ui.pages().onNext();
+    await ui.settle();
+    fixtures.id = "room-b";
+    expect(ui.render()).not.toContain("Survey room-a");
+    ui.flush();
+    await ui.settle();
+    fixtures.id = "room-a";
+    ui.render();
+    ui.flush();
+    await ui.settle();
+    oldChange(questionId, { kind: "rating", value: 5 });
+    pending.resolve({
+      attempt: {
+        ...pagedAttempt(),
+        revision: 1,
+        responses: { [questionId]: { kind: "rating", value: 4 } },
+      },
+    });
+    await ui.settle();
+    expect(ui.pages().pageIndex).toBe(0);
+    expect(ui.pages().responses).toEqual({});
+    expect(fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+      1,
+    );
+  });
 });

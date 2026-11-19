@@ -86,6 +86,16 @@ export function projectLibraryReader(share: LibraryShareRecord) {
       questions: snapshot.content.items.map(({ question, required }) =>
         libraryReaderQuestion(question, required),
       ),
+      ...(snapshot.content.schemaVersion === 3
+        ? {
+            surveyPages: snapshot.content.pages.map((page) => ({
+              id: page.id,
+              title: page.title,
+              description: page.description,
+              questionIds: [...page.questionIds],
+            })),
+          }
+        : {}),
     };
   const content = visiblePresentationContent(snapshot.content);
   const review = projectPresentationReview(

@@ -24,7 +24,7 @@ import type {
 } from "./platform-types.js";
 
 const columns =
-  "share.id,share.organization_id,share.workspace_id,share.artifact_type,share.artifact_id,share.version_id,share.title,share.description,share.audience,share.recipient_ids,share.permission,share.message,share.due_at,share.created_by,share.request_id,share.intent_hash,share.shared_at,share.revoked_at";
+  "share.id,share.organization_id,share.workspace_id,share.artifact_type,share.artifact_id,share.version_id,share.title,share.description,share.audience,share.recipient_ids,share.permission,share.message,share.due_at,share.created_by,share.request_id,share.intent_hash,share.shared_at,share.revoked_at,CASE WHEN share.artifact_type='survey' THEN (share.snapshot->'content'->>'schemaVersion')::integer ELSE NULL END AS survey_schema_version";
 const sourceExists = `(CASE share.artifact_type
   WHEN 'round' THEN EXISTS(SELECT 1 FROM quizzes parent WHERE parent.workspace_id=share.workspace_id AND parent.id=share.artifact_id AND parent.status<>'archived')
   WHEN 'presentation' THEN EXISTS(SELECT 1 FROM presentations parent WHERE parent.workspace_id=share.workspace_id AND parent.id=share.artifact_id AND parent.status<>'archived')
@@ -49,6 +49,7 @@ function map(row: QueryResultRow): StoredLibraryShare {
     intentHash: row.intent_hash,
     sharedAt: new Date(row.shared_at).toISOString(),
     revokedAt: row.revoked_at ? new Date(row.revoked_at).toISOString() : null,
+    surveySchemaVersion: row.survey_schema_version ?? undefined,
     ...(row.snapshot ? { snapshot: row.snapshot as LibraryShareSnapshot } : {}),
   };
 }
@@ -223,7 +224,8 @@ export function createPostgresLibrarySharingRun(
           return result.rows[0] ? map(result.rows[0]) : null;
         },
         list: async (input) => {
-          // The authorized metadata set drives both the page and all counts. No snapshot,
+          // The authorized metadata set drives both the page and all counts. Only its schema
+          // discriminator is projected from the snapshot; no snapshot body,
           // source draft, content, or media column is read by discovery.
           return system(client, async () => {
             const normalizedTitle = `normalize(lower(normalize(share.title,NFC) COLLATE "und-x-icu"),NFC) COLLATE "C"`;

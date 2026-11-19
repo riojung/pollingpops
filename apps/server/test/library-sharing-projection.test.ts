@@ -6,12 +6,63 @@ import {
   type PresentationContent,
 } from "@openround/contracts";
 import type { LibraryShareRecord, LibraryShareSnapshot } from "@openround/db";
+import { SurveyContentSchema } from "@openround/contracts/surveys";
+import { surveyPagesFixture } from "../../../packages/db/test/support/survey-pages-conformance.js";
 import {
   projectLibraryReader,
   reusableLibrarySnapshot,
 } from "../src/library-sharing-projection.js";
 
 describe("Library source-workspace privacy projection", () => {
+  it("preserves only public v3 Survey page instructions and their ordered question references", () => {
+    const content = SurveyContentSchema.parse(surveyPagesFixture());
+    if (content.schemaVersion !== 3) throw new Error("Expected paged Survey content");
+    content.pages[0]!.title = "Before answering";
+    content.pages[0]!.description = "Read both options.\nChoose the closest match.";
+    content.items[0]!.question.explanation = "PRIVATE_EXPLANATION";
+    Object.assign(content.pages[0]!, { privateNotes: "PRIVATE_PAGE_NOTES" });
+    const before = structuredClone(content);
+    const share = { snapshot: { artifactType: "survey", content } } as LibraryShareRecord;
+    const result = projectLibraryReader(share);
+    if (!("questions" in result) || !result.questions || !result.surveyPages)
+      throw new Error("Expected a paged Survey reader");
+    expect(result.surveyPages).toEqual(
+      content.pages.map(({ id, title, description, questionIds }) => ({
+        id,
+        title,
+        description,
+        questionIds,
+      })),
+    );
+    expect(result.questions?.map((question) => question.id)).toEqual(
+      content.items.map((item) => item.question.id),
+    );
+    expect(JSON.stringify(result)).not.toMatch(
+      /PRIVATE_|isCorrect|sourceCitations|privateNotes|explanation/,
+    );
+    expect(content).toEqual(before);
+    result.surveyPages[0]!.questionIds.push(randomUUID());
+    expect(content).toEqual(before);
+  });
+
+  it.each([1, 2] as const)("keeps the legacy v%s Survey reader shape flat", (schemaVersion) => {
+    const paged = surveyPagesFixture();
+    const content = SurveyContentSchema.parse({
+      schemaVersion,
+      title: paged.title,
+      items: paged.items,
+    });
+    const result = projectLibraryReader({
+      snapshot: { artifactType: "survey", content },
+    } as LibraryShareRecord);
+    if (!("questions" in result) || !result.questions)
+      throw new Error("Expected a legacy Survey reader");
+    expect(Object.keys(result)).toEqual(["questions"]);
+    expect(result.questions?.map((question) => question.id)).toEqual(
+      content.items.map((item) => item.question.id),
+    );
+  });
+
   it("compiles hidden-slide dependencies together across scenes, groups, connectors, sections, branches and spatial frames", () => {
     const sceneBlockId = randomUUID(),
       questionBlockId = randomUUID(),

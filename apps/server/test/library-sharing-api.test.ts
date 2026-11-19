@@ -11,6 +11,7 @@ import {
   LibraryShareSummarySchema,
 } from "@openround/contracts";
 import { SurveyContentSchema } from "@openround/contracts/surveys";
+import { surveyPagesFixture } from "../../../packages/db/test/support/survey-pages-conformance.js";
 import {
   MemoryRepository,
   createLibrarySharingRepository,
@@ -341,6 +342,99 @@ async function fixture(
 }
 
 describe("organization Library sharing APIs", () => {
+  it("advertises paged Survey copies as unavailable while preserving accepted copy recovery", async () => {
+    const f = await fixture(),
+      draft = surveyPagesFixture(),
+      policy = { maximumSchemaVersion: 3 as const };
+    if (draft.schemaVersion !== 3) throw new Error("Expected paged Survey");
+    draft.pages[0]!.title = "Read before answering";
+    draft.pages[0]!.description = "Review both options.\nChoose the closest match.";
+    draft.items[0]!.question.explanation = "PRIVATE_SURVEY_EXPLANATION";
+    const survey = await f.surveys.create(
+      f.owner.workspaceId,
+      randomUUID(),
+      draft,
+      randomUUID(),
+      policy,
+    );
+    const published = await f.surveys.publish(
+      f.owner.workspaceId,
+      survey.id,
+      0,
+      randomUUID(),
+      null,
+      policy,
+    );
+    const entry = await f.publish({
+      artifactType: "survey",
+      artifactId: survey.id,
+      versionId: published.versionId!,
+    });
+    await f.surveys.save(
+      f.owner.workspaceId,
+      survey.id,
+      {
+        ...draft,
+        pages: draft.pages.map((page) => ({
+          ...page,
+          description: "PRIVATE_UNPUBLISHED_INSTRUCTIONS",
+        })),
+        items: draft.items.map((item) => ({
+          ...item,
+          question: { ...item.question, prompt: "PRIVATE_UNPUBLISHED_QUESTION" },
+        })),
+      },
+      0,
+      randomUUID(),
+      policy,
+    );
+    f.setActor(f.recipient);
+    const read = await f.app.inject({ url: `/v1/library/shares/${entry.id}` });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().share).toMatchObject({
+      capabilities: { view: true, copy: false },
+      copyUnavailableReason: "Creating paged Survey copies is not enabled yet",
+    });
+    expect(read.json().surveyPages).toEqual(draft.pages);
+    expect(read.json().questions.map((question: { id: string }) => question.id)).toEqual(
+      draft.items.map((item) => item.question.id),
+    );
+    expect(read.body).not.toMatch(/PRIVATE_|isCorrect|sourceCitations|explanation/);
+    const list = await f.app.inject({ url: "/v1/library/shares?scope=shared" });
+    expect(list.json().shares.find((share: { id: string }) => share.id === entry.id)).toMatchObject(
+      { capabilities: { copy: false } },
+    );
+    const requestId = randomUUID();
+    const blocked = await f.app.inject({
+      method: "POST",
+      url: `/v1/library/shares/${entry.id}/copy`,
+      payload: { requestId },
+    });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json().error.code).toBe("SURVEY_PAGES_NOT_ENABLED");
+    const source = (await f.shares.read({ actorId: f.recipient.userId, id: entry.id }))!;
+    const accepted = await f.shares.copy(
+      {
+        actorId: f.recipient.userId,
+        id: entry.id,
+        destinationWorkspaceId: f.recipient.workspaceId,
+        requestId,
+        now: new Date(),
+        maximumSurveySchemaVersion: 3,
+      },
+      async () => ({ snapshot: source.snapshot, mediaAssets: [] }),
+    );
+    const replay = await f.app.inject({
+      method: "POST",
+      url: `/v1/library/shares/${entry.id}/copy`,
+      payload: { requestId },
+    });
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toMatchObject({ artifactId: accepted.artifactId, replayed: true });
+    expect((await f.surveys.get(f.recipient.workspaceId, accepted.artifactId))?.draft).toEqual(
+      draft,
+    );
+  });
   it("reads all three pinned types without authoring secrets or foreign-workspace membership", async () => {
     const f = await fixture();
     const entries = [];

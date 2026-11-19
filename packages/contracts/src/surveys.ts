@@ -10,6 +10,20 @@ import {
 
 /** Surveys are separate, unscored artifacts. They never enter the learning engine. */
 export const CURRENT_SURVEY_SCHEMA_VERSION = 2;
+/** Expand readers before enabling page authoring. Ordinary factories still write v2. */
+export const MAX_SUPPORTED_SURVEY_SCHEMA_VERSION = 3;
+export const SURVEY_READER_HEADER = "x-pollingpops-survey-schema";
+export const MAX_SURVEY_PAGES = 20;
+
+export const SurveyPageSchema = z
+  .object({
+    id: z.string().uuid().toLowerCase(),
+    title: z.string().trim().max(160).default(""),
+    description: z.string().trim().max(1000).default(""),
+    questionIds: z.array(z.string().uuid()).max(100),
+  })
+  .strict();
+export type SurveyPage = z.infer<typeof SurveyPageSchema>;
 // Selection limits are Survey-specific until live client capability negotiation ships.
 export const SurveyQuestionDraftSchema = QuestionDraftSchema.and(
   z.object({ maxSelections: z.number().int().min(1).max(6).optional() }),
@@ -32,18 +46,26 @@ export const SurveyQuestionDraftSchema = QuestionDraftSchema.and(
 });
 export type SurveyQuestionDraft = z.infer<typeof SurveyQuestionDraftSchema>;
 
-export const SurveyDraftSchema = z
+// Keep the legacy parsed key order: accepted request hashes include its JSON representation.
+const surveyShape = {
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  title: z.string().trim().max(160),
+  description: z.string().trim().max(1000).default(""),
+  category: RoundCategorySchema.default("general"),
+  experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
+  items: z.array(z.object({ required: z.boolean(), question: SurveyQuestionDraftSchema })).max(100),
+};
+const flatSurveySchema = z.object(surveyShape).strict();
+const pagedSurveySchema = z
   .object({
-    schemaVersion: z.union([z.literal(1), z.literal(2)]),
-    title: z.string().trim().max(160),
-    description: z.string().trim().max(1000).default(""),
-    category: RoundCategorySchema.default("general"),
-    experiencePreset: ExperiencePresetRefSchema.default({ id: "focus", version: 1 }),
-    items: z
-      .array(z.object({ required: z.boolean(), question: SurveyQuestionDraftSchema }))
-      .max(100),
+    ...surveyShape,
+    schemaVersion: z.literal(3),
+    pages: z.array(SurveyPageSchema).min(1).max(MAX_SURVEY_PAGES),
   })
-  .strict()
+  .strict();
+
+export const SurveyDraftSchema = z
+  .discriminatedUnion("schemaVersion", [flatSurveySchema, pagedSurveySchema])
   .superRefine((draft, ctx) => {
     for (const [index, { question }] of draft.items.entries()) {
       if (draft.schemaVersion === 1 && (question.maxSelections ?? 1) > 1) {
@@ -82,13 +104,43 @@ export const SurveyDraftSchema = z
         message: "Survey question IDs must be unique",
       });
     }
+    if (draft.schemaVersion === 3) {
+      if (new Set(draft.pages.map((page) => page.id)).size !== draft.pages.length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["pages"],
+          message: "Survey page IDs must be unique",
+        });
+      const pageQuestions = draft.pages.flatMap((page) => page.questionIds);
+      if (
+        pageQuestions.length !== draft.items.length ||
+        pageQuestions.some((id, index) => id !== draft.items[index]?.question.id)
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["pages"],
+          message: "Pages must contain every Survey question exactly once, in question order",
+        });
+    }
   });
 export type SurveyDraft = z.infer<typeof SurveyDraftSchema>;
 /** Explicit reader upgrade: unknown future versions fail instead of losing fields. */
 export function upgradeSurveyDraft(value: unknown): SurveyDraft {
-  return { ...SurveyDraftSchema.parse(value), schemaVersion: CURRENT_SURVEY_SCHEMA_VERSION };
+  const parsed = SurveyDraftSchema.parse(value);
+  return parsed.schemaVersion === 3
+    ? parsed
+    : { ...parsed, schemaVersion: CURRENT_SURVEY_SCHEMA_VERSION };
 }
 export const SurveyContentSchema = SurveyDraftSchema.superRefine((draft, ctx) => {
+  if (draft.schemaVersion === 3)
+    for (const [index, page] of draft.pages.entries()) {
+      if (!page.questionIds.length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["pages", index, "questionIds"],
+          message: "Add at least one question to every Survey page before publishing",
+        });
+    }
   const content = QuizContentSchema.safeParse({
     ...draft,
     questions: draft.items.map((item) => item.question),
@@ -106,6 +158,31 @@ export const SurveyContentSchema = SurveyDraftSchema.superRefine((draft, ctx) =>
       });
     }
 });
+
+export interface SurveyPageView {
+  /** Null identifies the virtual single page of a legacy Survey; it is never stored. */
+  id: string | null;
+  title: string;
+  description: string;
+  items: SurveyDraft["items"];
+}
+
+/** Page layout is a reader projection; legacy documents and response identities stay intact. */
+export function surveyPageViews(draft: SurveyDraft): SurveyPageView[] {
+  if (draft.schemaVersion !== 3)
+    return [{ id: null, title: "", description: "", items: draft.items }];
+  const items = new Map(draft.items.map((item) => [item.question.id, item]));
+  return draft.pages.map((page) => ({
+    id: page.id,
+    title: page.title,
+    description: page.description,
+    items: page.questionIds.map((id) => {
+      const item = items.get(id);
+      if (!item) throw new Error("Survey page references an unknown question");
+      return item;
+    }),
+  }));
+}
 export const SurveyResponseSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -174,6 +251,33 @@ export function validateSurveyResponses(
     if (!valid) issues.push(`Question ${index + 1}: select a valid response`);
   }
   return issues;
+}
+
+/** Next-page validation adds only that page's required fields; final submission checks all. */
+export function validateSurveyPageResponses(
+  content: SurveyDraft,
+  responses: SurveyResponses,
+  pageId: string | null,
+) {
+  const page = surveyPageViews(content).find((candidate) => candidate.id === pageId);
+  if (!page) return ["Choose a valid Survey page"];
+  const issues = validateSurveyResponses(content, responses, false);
+  for (const item of page.items) {
+    if (item.required && !responses[item.question.id]) {
+      const index = content.items.findIndex(
+        (candidate) => candidate.question.id === item.question.id,
+      );
+      issues.push(`Question ${index + 1}: a response is required`);
+    }
+  }
+  return issues;
+}
+
+/** Resume hint from saved answers, including optional unanswered items; no visit tracking. */
+export function surveyResumePageIndex(content: SurveyDraft, responses: SurveyResponses) {
+  const pages = surveyPageViews(content);
+  const index = pages.findIndex((page) => page.items.some((item) => !responses[item.question.id]));
+  return index < 0 ? pages.length - 1 : index;
 }
 
 /** No attempt identifiers, response rows, aliases or precise respondent timestamps. */

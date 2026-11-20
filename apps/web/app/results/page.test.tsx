@@ -342,27 +342,217 @@ describe("Results workspace", () => {
       title: "First Presentation result",
     },
     { view: "surveys", path: "/v1/survey-rooms", title: "First Survey result" },
-  ])("retries a failed $view load without discarding the search", async ({ view, path, title }) => {
-    fixtures.query = `view=${view}&q=First`;
-    let failed = false;
-    fixtures.apiFetch.mockImplementation(async (url: string) => {
-      if (url.startsWith(path) && !failed) {
-        failed = true;
-        throw new Error("Connection interrupted");
+  ])(
+    "keeps $view loading, failure, and held retry distinct from zero results",
+    async ({ view, path, title }) => {
+      fixtures.query = `view=${view}&q=First`;
+      vi.mocked(window.localStorage.getItem).mockReturnValue("list");
+      const initial = deferred<unknown>();
+      const pendingRetry = deferred<unknown>();
+      let reads = 0;
+      fixtures.apiFetch.mockImplementation((url: string) => {
+        if (url.startsWith(path)) {
+          reads++;
+          return reads === 1 ? initial.promise : pendingRetry.promise;
+        }
+        return Promise.resolve(response(url));
+      });
+      const harness = resultsHarness();
+      const loadingMarkup = await harness.settle();
+      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      expect(resultsPanel().props["aria-labelledby"]).toBe(`results-${view}-link`);
+      expect(
+        elements(fixtures.tree).filter((node) => node.props.id === "results-panel"),
+      ).toHaveLength(1);
+      expect(
+        elements(fixtures.tree).find((node) => node.props.id === `results-${view}-link`)?.props[
+          "aria-current"
+        ],
+      ).toBe("page");
+      expect(loadingMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
+      const placeholders = elements(fixtures.tree).find(
+        (node) => node.props["aria-hidden"] === "true" && node.props["data-view"] === "list",
+      );
+      expect(placeholders).toBeDefined();
+      expect(
+        elements(placeholders).filter((node) =>
+          node.props.className?.toString().includes("loadingCard"),
+        ),
+      ).toHaveLength(3);
+      initial.reject(new Error("Connection interrupted"));
+      const failedMarkup = await harness.settle();
+      expect(failedMarkup).toContain("Connection interrupted");
+      expect(failedMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(failedMarkup).not.toContain(`<h2 lang="">${title}</h2>`);
+      const focus = attachFocus(resultsPanel());
+      clickButton("Try again");
+      expect(focus).toHaveBeenCalledOnce();
+      expect(harness.render()).not.toContain("Connection interrupted");
+      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      const pendingMarkup = await harness.settle();
+      expect(pendingMarkup).not.toContain("Try again");
+      expect(pendingMarkup).not.toMatch(/0 (?:results|practice items) shown/);
+      const requests = fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path));
+      expect(requests).toHaveLength(2);
+      expect(requests[1]![0]).toBe(requests[0]![0]);
+      expect(requests.every(([, options]) => !options.method || options.method === "GET")).toBe(
+        true,
+      );
+      pendingRetry.resolve(response(requests[1]![0]));
+      const markup = await harness.settle();
+      expect(markup).toContain(`<h2 lang="">${title}</h2>`);
+      expect(markup).not.toContain("Connection interrupted");
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(
+        elements(fixtures.tree).some((node) =>
+          node.props.className?.toString().includes("loadingCard"),
+        ),
+      ).toBe(false);
+      expect(markup).toContain('data-view="list"');
+      expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
+      harness.dispose();
+    },
+  );
+
+  it.each([
+    { view: "results", path: "/v1/reports", empty: "No results yet", destination: "/library" },
+    { view: "practice", path: "/v1/followups", empty: "No practice yet", destination: null },
+    {
+      view: "presentations",
+      path: "/v1/presentation-sessions",
+      empty: "No Presentation results yet",
+      destination: "/library?type=presentations",
+    },
+    {
+      view: "surveys",
+      path: "/v1/survey-rooms",
+      empty: "No Survey results yet",
+      destination: "/sessions?type=surveys",
+    },
+  ])(
+    "keeps successful empty $view evidence and its existing next step",
+    async ({ view, path, empty, destination }) => {
+      fixtures.query = `view=${view}`;
+      fixtures.apiFetch.mockImplementation(async (url: string) => {
+        if (!url.startsWith(path)) return response(url);
+        if (view === "presentations") return { sessions: [] };
+        if (view === "surveys") return { rooms: [], nextCursor: null };
+        return { items: [], nextCursor: null };
+      });
+      const harness = resultsHarness();
+      const markup = await harness.settle();
+      expect(headings()).toEqual([empty]);
+      expect(markup).toContain(view === "practice" ? "0 practice items shown" : "0 results shown");
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(markup).not.toContain("Clear filters");
+      if (destination) expect(markup).toContain(`<a class="button" href="${destination}">`);
+      harness.dispose();
+    },
+  );
+
+  it.each([
+    {
+      view: "results",
+      path: "/v1/reports",
+      title: "First Round result",
+      source: "Round",
+      sourceId: "round-source",
+      status: "Result Status",
+      statusValue: "ready",
+    },
+    {
+      view: "practice",
+      path: "/v1/followups",
+      title: "First practice",
+      source: "Round",
+      sourceId: "round-source",
+      status: "Practice Status",
+      statusValue: "open",
+    },
+    {
+      view: "presentations",
+      path: "/v1/presentation-sessions",
+      title: "First Presentation result",
+      source: "Presentation",
+      sourceId: "presentation-source",
+      status: "Status",
+      statusValue: "finished",
+    },
+    {
+      view: "surveys",
+      path: "/v1/survey-rooms",
+      title: "First Survey result",
+      source: "Survey",
+      sourceId: "survey-source",
+      status: null,
+      statusValue: "",
+    },
+  ])(
+    "recovers filtered empty $view from either reset with search focus and the saved view",
+    async ({ view, path, title, source, sourceId, status, statusValue }) => {
+      fixtures.query = `view=${view}`;
+      fixtures.apiFetch.mockImplementation(async (url: string) => {
+        if (
+          (view === "results" || view === "practice") &&
+          url.startsWith(path) &&
+          new URLSearchParams(url.split("?")[1]).get("search") === "missing"
+        )
+          return { items: [], nextCursor: null };
+        return response(url);
+      });
+      const harness = resultsHarness();
+      await harness.settle();
+      clickButton("List view");
+      const search = elements(fixtures.tree).find(
+        (node) => node.type === "input" && node.props.type === "search",
+      )!;
+      const focus = attachFocus(search);
+      for (const reset of ["toolbar", "empty"] as const) {
+        if (status) changeField(status, statusValue);
+        changeField(source, sourceId);
+        changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
+        changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
+        changeSearch("missing");
+        const markup = await harness.settle();
+        expect(headings()).toEqual([
+          view === "practice"
+            ? "No practice matches these filters."
+            : "No results match these filters.",
+        ]);
+        expect(markup).toContain(
+          view === "practice" ? "0 practice items shown" : "0 results shown",
+        );
+        const buttons = elements(fixtures.tree).filter(
+          (node) =>
+            node.type === "button" &&
+            elementText(node.props.children as ReactNode) === "Clear filters",
+        );
+        expect(buttons).toHaveLength(2);
+        const button = buttons.find(
+          (node) => (node.props.className === "button") === (reset === "empty"),
+        )!;
+        (button.props.onClick as () => void)();
+        expect(focus).toHaveBeenCalledTimes(reset === "toolbar" ? 1 : 2);
+        const restored = await harness.settle();
+        expect(restored).toContain(`<h2 lang="">${title}</h2>`);
+        expect(restored).toContain('data-view="list"');
+        expect(new URLSearchParams(fixtures.query).get("view")).toBe(view);
+        expect(new URLSearchParams(fixtures.query).has("q")).toBe(false);
+        const filterFields = elements(fixtures.tree).filter(
+          (node) => node.type === "select" || (node.type === "input" && node.props.type === "date"),
+        );
+        expect(
+          filterFields.every((node) => node.props.value === (node.type === "select" ? "all" : "")),
+        ).toBe(true);
       }
-      return response(url);
-    });
-    const harness = resultsHarness();
-    const failedMarkup = await harness.settle();
-    expect(failedMarkup).toContain("Connection interrupted");
-    expect(failedMarkup).not.toContain(`<h2 lang="">${title}</h2>`);
-    clickButton("Try again");
-    const markup = await harness.settle();
-    expect(markup).toContain(`<h2 lang="">${title}</h2>`);
-    expect(markup).not.toContain("Connection interrupted");
-    expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
-    harness.dispose();
-  });
+      if (view === "presentations" || view === "surveys")
+        expect(fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path))).toHaveLength(
+          1,
+        );
+      harness.dispose();
+    },
+  );
 
   it.each([
     {
@@ -384,10 +574,14 @@ describe("Results workspace", () => {
     async ({ view, path, title, later, more }) => {
       fixtures.query = `view=${view}`;
       let failed = false;
+      const pendingRetry = deferred<unknown>();
       fixtures.apiFetch.mockImplementation(async (url: string) => {
-        if (url.startsWith(path) && url.includes("cursor=") && !failed) {
-          failed = true;
-          throw new Error("Next page unavailable");
+        if (url.startsWith(path) && url.includes("cursor=")) {
+          if (!failed) {
+            failed = true;
+            throw new Error("Next page unavailable");
+          }
+          return pendingRetry.promise;
         }
         return response(url);
       });
@@ -397,15 +591,102 @@ describe("Results workspace", () => {
       let markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain("Previously loaded results remain below.");
+      const count = view === "practice" ? "1 practice items shown" : "1 results shown";
+      expect(markup).toContain(`${count} · More available`);
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      const focus = attachFocus(resultsPanel());
       clickButton("Try again");
+      expect(focus).toHaveBeenCalledOnce();
+      markup = await harness.settle();
+      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      expect(markup).toContain(`<h2 lang="">${title}</h2>`);
+      expect(markup).toContain(`${count} · More available`);
+      expect(markup).not.toContain("Next page unavailable");
+      expect(markup).not.toContain("Try again");
+      expect(
+        elements(fixtures.tree).some((node) =>
+          node.props.className?.toString().includes("loadingCard"),
+        ),
+      ).toBe(false);
+      expect(
+        elements(fixtures.tree).find(
+          (node) =>
+            node.type === "button" && elementText(node.props.children as ReactNode) === "Loading",
+        )?.props.disabled,
+      ).toBe(true);
+      pendingRetry.resolve(response(historyCalls(path).at(-1)![0]));
       markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`<h2 lang="">${later}</h2>`);
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
       const calls = historyCalls(path);
       expect(calls.at(-1)![0]).toBe(calls.at(-2)![0]);
       harness.dispose();
     },
   );
+
+  it.each([
+    { view: "results", path: "/v1/reports", more: "Load More", count: "0 results shown" },
+    {
+      view: "practice",
+      path: "/v1/followups",
+      more: "Load More Practice",
+      count: "0 practice items shown",
+    },
+  ])(
+    "keeps trusted zero $view counts when a later page fails",
+    async ({ view, path, more, count }) => {
+      fixtures.query = `view=${view}`;
+      fixtures.apiFetch.mockImplementation(async (url: string) => {
+        if (!url.startsWith(path)) return response(url);
+        if (url.includes("cursor=")) throw new Error("Later page unavailable");
+        return { items: [], nextCursor: "later-page" };
+      });
+      const harness = resultsHarness();
+      expect(await harness.settle()).toContain(`${count} · More available`);
+      clickButton(more);
+      const markup = await harness.settle();
+      expect(markup).toContain("Later page unavailable");
+      expect(markup).toContain(`${count} · More available`);
+      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      harness.dispose();
+    },
+  );
+
+  it.each([
+    { view: "results", path: "/v1/reports" },
+    { view: "practice", path: "/v1/followups" },
+    { view: "presentations", path: "/v1/presentation-sessions" },
+    { view: "surveys", path: "/v1/survey-rooms" },
+  ])("ignores an obsolete $view retry after the workspace changes", async ({ view, path }) => {
+    fixtures.query = `view=${view}&q=First`;
+    const pendingRetry = deferred<unknown>();
+    let reads = 0;
+    fixtures.apiFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith(path)) {
+        reads++;
+        if (reads === 1) throw new Error("First workspace unavailable");
+        if (reads === 2) return pendingRetry.promise;
+      }
+      return response(url);
+    });
+    const harness = resultsHarness();
+    await harness.settle();
+    clickButton("Try again");
+    await harness.settle();
+    const obsolete = fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path)).at(-1)!;
+    fixtures.workspaceId = "workspace-b";
+    const markup = harness.render();
+    expect(markup).not.toMatch(/0 (?:results|practice items) shown|First workspace unavailable/);
+    await harness.settle();
+    expect(obsolete[1].signal.aborted).toBe(true);
+    pendingRetry.reject(new Error("Obsolete retry failed"));
+    const settled = await harness.settle();
+    expect(settled).not.toContain("Obsolete retry failed");
+    expect(resultsPanel().props["aria-busy"]).toBe(false);
+    expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
+    harness.dispose();
+  });
 
   it.each(["delayed_probe", "full_sequence"] as const)(
     "updates frozen %s Pack attribution on locale changes without reloading practice history",
@@ -689,7 +970,7 @@ describe("Results workspace", () => {
     changeSearch("missing");
     markup = await harness.settle();
     expect(markup).toContain("No results match these filters.");
-    expect(markup).toContain('href="/sessions?type=surveys"');
+    expect(markup).not.toContain('href="/sessions?type=surveys"');
     expect(fixtures.replace).not.toHaveBeenCalledWith("/sessions?type=surveys", expect.anything());
     clickButton("Clear filters");
     await harness.settle();
@@ -983,7 +1264,7 @@ describe("Results workspace", () => {
     changeSearch("absent");
     markup = await harness.settle();
     expect(markup).toContain("No results match these filters.");
-    expect(headings()).toEqual(["No Presentation results yet"]);
+    expect(headings()).toEqual(["No results match these filters."]);
     clickButton("Clear filters");
     await harness.settle();
     expect(headings()).toHaveLength(4);
@@ -1087,7 +1368,10 @@ function resultsHarness() {
         }
         return expand(children, identity);
       }
-      return cloneElement(node, { children: expand(node.props.children as ReactNode, identity) });
+      return cloneElement(node, {
+        key: node.key ?? identity,
+        children: expand(node.props.children as ReactNode, identity),
+      });
     };
     fixtures.tree = expand(<ResultsPage />, "root");
     for (const [key, hooks] of instances)
@@ -1160,6 +1444,14 @@ function headings() {
     .filter((element) => element.type === "h2")
     .map((element) => elementText(element.props.children as ReactNode));
 }
+function resultsPanel() {
+  return elements(fixtures.tree).find((node) => node.props.id === "results-panel")!;
+}
+function attachFocus(node: ReactElement<Record<string, unknown>>) {
+  const focus = vi.fn();
+  (node.props.ref as { current: { focus: () => void } | null }).current = { focus };
+  return focus;
+}
 function historyCalls(path: string) {
   return fixtures.apiFetch.mock.calls.filter(([url]) =>
     String(url).startsWith(`${path}?`),
@@ -1167,8 +1459,10 @@ function historyCalls(path: string) {
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }

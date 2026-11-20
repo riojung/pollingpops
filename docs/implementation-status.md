@@ -8,17 +8,31 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Results workspace recovery and keyboard continuity, November 19, 2026
+
+WX-11B on `codex/results-workspace-polish` improves the existing Results overview across Rounds,
+Practice, Presentations and Surveys. Failed first reads no longer imply a successful zero count;
+filtered empty states foreground Clear filters rather than suggesting no history exists. Reset
+returns focus to the typed search input, and Retry hands focus to a stable named busy panel.
+Static placeholders preserve layout while trusted retained rows and lower-bound counts keep
+their existing meaning. Native date fields fit their own filter columns at 320px.
+
+No report calculation, disclosure rule, grant, endpoint, Pack attribution or evidence destination
+changes. See the [Results scope and acceptance record](results-workspace-polish.md). Library,
+Workspace and capability/plan explanations remain separate WX-11 checkpoints. Survey C3/C4/B3
+remain pending privacy acceptance.
+
 ### Sessions workspace recovery and action hierarchy, November 19, 2026
 
-WX-11A on `codex/sessions-workspace-polish` adds initial-history Retry, filtered-empty Clear
+WX-11A merged through PR #291 at `26f7a8c` and adds initial-history Retry, filtered-empty Clear
 filters with search focus, explicit loading states and one dominant permitted action per session
 card. Active Rounds and Presentations foreground Resume; reports remain secondary there and
 lead retained history. Existing Survey sharing/results permissions, counts, query/pagination
 semantics, destinations, credentials and deletion confirmation remain unchanged.
 
 The selected work is limited to Sessions and reuses existing localized copy and interface tokens.
-See the [scope and acceptance record](sessions-workspace-polish.md). Library, Results, Workspace
-and the capability/plan explanation audit remain separate WX-11 checkpoints. Survey privacy
+See the [scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is local;
+Library, Workspace and capability/plan explanations remain separate checkpoints. Survey privacy
 acceptance is still open; this ready independent surface increment does not enable C3/C4 or B3.
 
 ### Conditional Survey disclosure controls, November 19, 2026
@@ -86,8 +100,8 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A's Sessions increment is local,
-with other surfaces and commercial explanations pending; recurrence and
+WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions is merged and WX-11B Results
+is local, with other surfaces and commercial explanations pending; recurrence and
 learning sequences need identity/privacy decisions, moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.

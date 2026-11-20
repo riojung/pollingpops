@@ -8,9 +8,27 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Library recovery and keyboard continuity, November 20, 2026
+
+WX-11D on `codex/library-recovery-focus` keeps failed-page Retry below retained All content rows
+and gives pagination a stable named footer through pending, error and final-page completion.
+Initial Retry focuses the results region; toolbar and no-match Clear filters focus search and center it in view.
+Synchronous focus handoff avoids reclaiming deliberately moved focus when a request completes.
+Instant nearest scrolling keeps the footer visible only while it retains focus under the same query/authority.
+
+The existing pager, exact totals versus loaded counts, cursor recovery, authority fences and shared
+actions remain. No server, contract, database or grant change is introduced. See the
+[scope and acceptance record](library-recovery-focus.md). Sessions, Results and Workspace
+initialization are merged in PRs #291–293. Neutral capability copy, authoritative cause explanations
+and independent settings-section recovery remain separate work.
+
+The final full repository check passes, including 6,491 web tests, all application builds and
+compiled startup. All 88 focused tests and 12 browser cases pass across desktop/mobile Chromium
+and mobile WebKit, with visible focus, scoped axe/reflow, appearance and shared-permission coverage.
+
 ### Workspace settings initialization and recovery, November 20, 2026
 
-WX-11C on `codex/workspace-settings-recovery` adds an explicit loading/unavailable/ready boundary
+WX-11C merged through PR #293 at `223095c` and adds an explicit loading/unavailable/ready boundary
 to the account route. A complete set of current required GETs commits together before settings
 navigation or account-dependent forms render. Failed reads cannot masquerade as personal-account
 defaults, empty membership or absent institution setup. Retry repeats reads only and preserves
@@ -33,7 +51,7 @@ their existing meaning. Native date fields fit their own filter columns at 320px
 
 No report calculation, disclosure rule, grant, endpoint, Pack attribution or evidence destination
 changes. See the [Results scope and acceptance record](results-workspace-polish.md). WX-11C Workspace
-initialization/recovery is local; Library, independent subsection recovery and capability/plan
+initialization/recovery is merged; WX-11D Library recovery is local. Independent subsection recovery and capability/plan
 explanations remain separate checkpoints. Survey C3/C4/B3
 remain pending privacy acceptance.
 
@@ -47,7 +65,7 @@ semantics, destinations, credentials and deletion confirmation remain unchanged.
 
 The selected work is limited to Sessions and reuses existing localized copy and interface tokens.
 See the [scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is merged;
-WX-11C Workspace initialization/recovery is local. Library and the remaining Workspace/capability
+WX-11C Workspace initialization/recovery is merged. WX-11D Library recovery is local; remaining Workspace/capability
 work stay separate. Survey privacy
 acceptance is still open; this ready independent surface increment does not enable C3/C4 or B3.
 
@@ -116,8 +134,8 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions and WX-11B Results are merged;
-WX-11C Workspace initialization/recovery is local, with Library, subsection recovery and commercial
+WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions, WX-11B Results and
+WX-11C Workspace initialization/recovery are merged; WX-11D Library recovery is local, with subsection recovery and commercial
 explanations pending. Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

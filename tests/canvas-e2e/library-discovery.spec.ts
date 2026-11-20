@@ -121,13 +121,18 @@ for (const mobile of [false, true]) {
     const rows = root.locator("[data-library-item]");
     await expect(rows).toHaveCount(2);
     await expect(root.getByText("Results: 3", { exact: true })).toBeVisible();
-    await expect(root.getByText("Loaded: 2", { exact: true })).toBeVisible();
+    await expect(root.locator("#library-discovery-summary")).toContainText("Loaded: 2");
     await root.getByRole("button", { name: "Load more", exact: true }).click();
     await expect(root.getByRole("alert")).toContainText("Your current results are kept");
+    await expect(root.locator("[data-library-pagination]")).toBeFocused();
     await expect(rows).toHaveCount(2);
-    await root.getByRole("alert").getByRole("button", { name: "Retry", exact: true }).click();
+    await root
+      .locator("[data-library-pagination]")
+      .getByRole("button", { name: "Retry", exact: true })
+      .click();
     await expect(rows).toHaveCount(3);
-    await expect(root.getByText("Loaded: 3", { exact: true })).toBeVisible();
+    await expect(root.locator("#library-discovery-summary")).toContainText("Loaded: 3");
+    await expect(root.locator("[data-library-pagination]")).toBeFocused();
     await expect(root.getByRole("button", { name: "Load more", exact: true })).toHaveCount(0);
     await appearance(page, info, "all-content", mobile);
 
@@ -279,6 +284,15 @@ for (const mobile of [false, true]) {
       expect((await member.page.request.get(`${api}/v1/quizzes/${round.id}`)).status()).toBe(404);
       await appearance(member.page, info, "organization-discovery", mobile);
 
+      const clear = root.getByRole("button", { name: "Clear filters", exact: true });
+      await clear.focus();
+      await clear.press("Enter");
+      await expect(
+        root.getByRole("searchbox", { name: "Search shared content", exact: true }),
+      ).toBeFocused();
+      await expect(member.page).toHaveURL(/scope=organization$/);
+      await expect(rows).toHaveCount(2);
+
       await root.getByRole("link", { name: "Shared with me", exact: true }).click();
       await expect(rows).toHaveCount(1);
       await expect(rows).toContainText("Please review this specific follow-up");
@@ -298,6 +312,17 @@ for (const mobile of [false, true]) {
         .getByRole("combobox", { name: "Review progress", exact: true })
         .selectOption("new");
       await expect(rows).toHaveCount(0);
+      const noMatches = root.getByRole("heading", { name: "No matching content", exact: true });
+      const emptyClear = noMatches
+        .locator("..")
+        .getByRole("button", { name: "Clear filters", exact: true });
+      await emptyClear.focus();
+      await emptyClear.press("Enter");
+      await expect(
+        root.getByRole("searchbox", { name: "Search shared content", exact: true }),
+      ).toBeFocused();
+      await expect(member.page).toHaveURL(/scope=shared$/);
+      await expect(rows).toHaveCount(1);
       await root
         .getByRole("combobox", { name: "Review progress", exact: true })
         .selectOption("done");

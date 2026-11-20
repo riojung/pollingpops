@@ -2,6 +2,20 @@
   color: var(--ui-text);
 }
 
+.loadState {
+  min-width: 0;
+  border-color: var(--ui-border);
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+
+.loadState:focus,
+.settingsContent:focus {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+
 .sectionMenu {
   display: flex;
   flex-wrap: wrap;

@@ -63,6 +63,12 @@ test("personal Free settings provide named workspaces and accessible, selectable
   const account = await (await page.request.get(`${api}/v1/auth/me`)).json();
   expect(account.workspace.accountType).toBe("personal");
   expect(account.entitlements.plan).toBe("free");
+  expect(account.entitlements.brandTheme).toBe(false);
+  const brandingWrites: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET" && new URL(request.url()).pathname === "/v1/account/theme")
+      brandingWrites.push(request.method());
+  });
   await page.goto("/account");
   const navigation = page.getByRole("tablist", { name: "Settings categories", exact: true });
   await expect(navigation.getByRole("tab")).toHaveCount(categories.length);
@@ -137,23 +143,38 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await expect(overview).toHaveAttribute("aria-selected", "true");
 
   await selectCategory(page, "Appearance");
-  for (const name of ["Candy Pop", "Ocean", "Forest"])
-    await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
-  await expect(page.getByRole("textbox", { name: "Brand display name", exact: true })).toHaveValue(
-    renamed,
-  );
+  const personalAppearance = page.getByRole("region", { name: "Your interface", exact: true });
+  const brandAppearance = page.getByRole("region", { name: "Workspace live brand", exact: true });
+  for (const name of ["Candy Pop", "Ocean", "Forest"]) {
+    const label = new RegExp(`^${name}\\b`);
+    await expect(personalAppearance.getByRole("button", { name: label })).toBeEnabled();
+    await expect(brandAppearance.getByRole("button", { name: label })).toBeEnabled();
+  }
+  const brandName = brandAppearance.getByRole("textbox", {
+    name: "Brand display name",
+    exact: true,
+  });
+  await expect(brandName).toHaveValue(renamed);
+  await expect(brandName).toBeEnabled();
+  await brandAppearance.getByRole("button", { name: /^Ocean\b/ }).click();
+  await brandAppearance
+    .getByRole("group", { name: "Live appearance", exact: true })
+    .getByRole("button", { name: "Light", exact: true })
+    .click();
   await expect(
-    page.getByRole("textbox", { name: "Brand display name", exact: true }),
+    brandAppearance.getByRole("button", { name: "Save workspace brand", exact: true }),
   ).toBeDisabled();
-  const advanced = page
+  const advanced = brandAppearance
     .locator("details")
     .filter({ has: page.getByText("Custom colors", { exact: true }) });
   await expect(advanced).toHaveJSProperty("open", false);
-  await expect(page.getByLabel(/^Background colour/)).toBeHidden();
-  await page.getByText("Custom colors", { exact: true }).click();
-  await expect(page.getByLabel(/^Background colour/)).toBeVisible();
-  await expect(page.getByLabel(/^Background colour/)).toBeDisabled();
-  await page.getByText("Custom colors", { exact: true }).click();
+  const primaryColor = brandAppearance.getByLabel(/^Primary color\b/);
+  await expect(primaryColor).toBeHidden();
+  await brandAppearance.getByText("Custom colors", { exact: true }).click();
+  await expect(primaryColor).toBeVisible();
+  await expect(primaryColor).toBeEnabled();
+  await brandAppearance.getByText("Custom colors", { exact: true }).click();
+  expect(brandingWrites).toEqual([]);
 
   await selectCategory(page, "Security and integrations");
   await expect(
@@ -221,6 +242,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await expectAccessibleSettings(page);
   await selectCategory(page, "Privacy and data");
   await expectAccessibleSettings(page);
+  expect(brandingWrites).toEqual([]);
 });
 
 test("a real invited viewer reads the timeout policy without administrative mutation access", async ({

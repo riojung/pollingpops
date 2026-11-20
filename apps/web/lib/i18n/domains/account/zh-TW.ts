@@ -1,6 +1,7 @@
 import type { AccountMessages } from "./en-CA";
 
 const messages = {
+  "account.load.unavailable": "無法載入工作區設定",
   "account.common.none": "無",
   "account.common.saving": "正在儲存…",
   "account.confirm.removeMember": "要從工作區移除此成員嗎？",

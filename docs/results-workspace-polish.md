@@ -3,6 +3,7 @@
 Selected checkpoint: **WX-11B**, November 19, 2026.
 Baseline: merged Sessions WX-11A, [PR #291](https://github.com/riojung/pollingpops/pull/291), `26f7a8c`.
 Branch: `codex/results-workspace-polish`.
+Merged through [PR #292](https://github.com/riojung/pollingpops/pull/292) at `6e85bcf`.
 Owner: frontend and accessibility.
 
 This checkpoint improves the existing Results overview's Rounds, Practice, Presentations and
@@ -74,6 +75,7 @@ Automated checks do not replace the human acceptance described above.
 
 ## Remaining work
 
-The selected Sessions increment is merged and this Results increment is local. WX-11's Library,
-Workspace and capability/plan explanation work remain separate checkpoints. Other priorities and
+The selected Sessions and Results increments are merged. WX-11C's
+[Workspace initialization/recovery](workspace-settings-recovery.md) is implemented locally.
+Library, independent settings-section recovery and capability/plan explanations remain separate checkpoints. Other priorities and
 Survey gates are recorded in the [overall backlog](workspace-experience-backlog-2026-11.md).

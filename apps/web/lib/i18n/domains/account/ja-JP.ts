@@ -1,6 +1,7 @@
 import type { AccountMessages } from "./en-CA";
 
 const messages = {
+  "account.load.unavailable": "ワークスペースの設定を読み込めません",
   "account.common.none": "なし",
   "account.common.saving": "保存中…",
   "account.confirm.removeMember": "このメンバーをワークスペースから削除しますか？",

@@ -8,9 +8,23 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace settings initialization and recovery, November 20, 2026
+
+WX-11C on `codex/workspace-settings-recovery` adds an explicit loading/unavailable/ready boundary
+to the account route. A complete set of current required GETs commits together before settings
+navigation or account-dependent forms render. Failed reads cannot masquerade as personal-account
+defaults, empty membership or absent institution setup. Retry repeats reads only and preserves
+hash selection, with abort/generation guards and deliberate keyboard-focus handoff.
+
+Authority-first loading preserves signed-in personal-account fallback and the sign-in return path;
+peripheral 401 and transient failures stay recoverable. Permission helpers, owner restrictions,
+organization license exclusions, payment paths, mutations and confirmations remain unchanged.
+See the [scope, trade-offs and acceptance record](workspace-settings-recovery.md). Independent
+subsection recovery remains pending: one unavailable required read withholds the settings page.
+
 ### Results workspace recovery and keyboard continuity, November 19, 2026
 
-WX-11B on `codex/results-workspace-polish` improves the existing Results overview across Rounds,
+WX-11B merged through PR #292 at `6e85bcf` and improves the existing Results overview across Rounds,
 Practice, Presentations and Surveys. Failed first reads no longer imply a successful zero count;
 filtered empty states foreground Clear filters rather than suggesting no history exists. Reset
 returns focus to the typed search input, and Retry hands focus to a stable named busy panel.
@@ -18,8 +32,9 @@ Static placeholders preserve layout while trusted retained rows and lower-bound 
 their existing meaning. Native date fields fit their own filter columns at 320px.
 
 No report calculation, disclosure rule, grant, endpoint, Pack attribution or evidence destination
-changes. See the [Results scope and acceptance record](results-workspace-polish.md). Library,
-Workspace and capability/plan explanations remain separate WX-11 checkpoints. Survey C3/C4/B3
+changes. See the [Results scope and acceptance record](results-workspace-polish.md). WX-11C Workspace
+initialization/recovery is local; Library, independent subsection recovery and capability/plan
+explanations remain separate checkpoints. Survey C3/C4/B3
 remain pending privacy acceptance.
 
 ### Sessions workspace recovery and action hierarchy, November 19, 2026
@@ -31,8 +46,9 @@ lead retained history. Existing Survey sharing/results permissions, counts, quer
 semantics, destinations, credentials and deletion confirmation remain unchanged.
 
 The selected work is limited to Sessions and reuses existing localized copy and interface tokens.
-See the [scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is local;
-Library, Workspace and capability/plan explanations remain separate checkpoints. Survey privacy
+See the [scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is merged;
+WX-11C Workspace initialization/recovery is local. Library and the remaining Workspace/capability
+work stay separate. Survey privacy
 acceptance is still open; this ready independent surface increment does not enable C3/C4 or B3.
 
 ### Conditional Survey disclosure controls, November 19, 2026
@@ -77,7 +93,7 @@ navigation reuse existing controls. New long-form editorial copy is explicitly E
 See the [research, claim matrix and follow-up scope](public-product-experience-2026-11.md).
 Commercial/legal qualification, native-language acceptance and observed usability remain open.
 
-### Workspace experience: current position, November 19, 2026
+### Workspace experience: current position, November 20, 2026
 
 The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
 preview/use, All content Library, the Team meetings collection, and creation navigation/import
@@ -100,9 +116,10 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions is merged and WX-11B Results
-is local, with other surfaces and commercial explanations pending; recurrence and
-learning sequences need identity/privacy decisions, moderator passes need a permission design,
+WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions and WX-11B Results are merged;
+WX-11C Workspace initialization/recovery is local, with Library, subsection recovery and commercial
+explanations pending. Recurrence and learning sequences need identity/privacy decisions,
+moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 

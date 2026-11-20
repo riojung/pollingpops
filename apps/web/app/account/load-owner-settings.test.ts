@@ -40,6 +40,18 @@ const collaboration = { members: [], invitations: [] };
 beforeEach(() => vi.mocked(apiFetch).mockReset());
 
 describe("workspace owner settings loading", () => {
+  it("passes cancellation to both allowed owner reads", async () => {
+    const controller = new AbortController();
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(collaboration)
+      .mockResolvedValueOnce({ registrations: [registration] });
+    await loadOwnerSettings("owner", null, controller.signal);
+    expect(apiFetch).toHaveBeenCalledWith("/v1/workspace/members", { signal: controller.signal });
+    expect(apiFetch).toHaveBeenCalledWith("/v1/workspace/lti-registrations", {
+      signal: controller.signal,
+    });
+  });
+
   it("keeps configured LTI registrations available to licensed organization owners without enabling workspace-member invitations", async () => {
     vi.mocked(apiFetch).mockResolvedValueOnce({ registrations: [registration] });
 

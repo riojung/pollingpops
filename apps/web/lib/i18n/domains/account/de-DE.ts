@@ -1,6 +1,7 @@
 import type { AccountMessages } from "./en-CA";
 
 const messages = {
+  "account.load.unavailable": "Die Arbeitsbereichseinstellungen sind nicht verfügbar",
   "account.common.none": "Keine",
   "account.common.saving": "Wird gespeichert…",
   "account.confirm.removeMember": "Dieses Mitglied aus dem Arbeitsbereich entfernen?",

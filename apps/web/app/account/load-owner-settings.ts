@@ -10,15 +10,24 @@ interface WorkspaceCollaboration {
 export async function loadOwnerSettings(
   role: "owner" | "editor" | "viewer",
   workspace: WorkspaceAccountContext | null,
+  signal?: AbortSignal,
 ) {
+  signal?.throwIfAborted();
   if (role !== "owner") return { collaboration: null, registrations: [] as LtiRegistration[] };
   const organizationUserWorkspace =
     workspace?.accountType === "organization" && workspace.licenseUnit === "user";
   const [collaboration, lti] = await Promise.all([
     organizationUserWorkspace
       ? Promise.resolve(null)
-      : apiFetch<WorkspaceCollaboration>("/v1/workspace/members"),
-    apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations"),
+      : signal
+        ? apiFetch<WorkspaceCollaboration>("/v1/workspace/members", { signal })
+        : apiFetch<WorkspaceCollaboration>("/v1/workspace/members"),
+    signal
+      ? apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations", {
+          signal,
+        })
+      : apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations"),
   ]);
+  signal?.throwIfAborted();
   return { collaboration, registrations: lti.registrations };
 }

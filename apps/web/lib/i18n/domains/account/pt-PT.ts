@@ -1,6 +1,7 @@
 import type { AccountMessages } from "./en-CA";
 
 const messages = {
+  "account.load.unavailable": "As definições do espaço de trabalho estão indisponíveis",
   "account.common.none": "Nenhuma",
   "account.common.saving": "A guardar…",
   "account.confirm.removeMember": "Remover este membro do espaço de trabalho?",

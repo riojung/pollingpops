@@ -30,7 +30,7 @@ import { IdleTimeoutSettings } from "./idle-timeout-settings";
 import { PersonalInstitutionIdentities } from "./personal-institution-identities";
 import { PersonalSubscriptionOptions } from "./personal-subscription-options";
 import { PersonalBillingNotice } from "./personal-billing-notice";
-import { loadOwnerSettings } from "./load-owner-settings";
+import { loadAccountSettings, type AccountCreator as Creator } from "./load-account-settings";
 import {
   accountPermissions,
   canManagePersonalBilling,
@@ -48,20 +48,17 @@ import { formatDate, formatList, formatNumber } from "../../lib/i18n/format";
 import { PersonalInterfaceSettings, WorkspaceBrandSettings } from "./appearance-settings";
 import styles from "./account.module.css";
 
-interface Creator {
-  userId: string;
-  workspaceId: string;
-  email: string;
-  segment: "education" | "workplace";
-  role: "owner" | "editor" | "viewer";
-  plan: "free" | "pro" | "team";
-}
-
 export default function AccountPage() {
   const { locale, t } = useLocale();
   const management = useManagementNavigation();
   const tRef = useRef(t);
   const router = useRouter();
+  const loadGeneration = useRef(0);
+  const loadRegionRef = useRef<HTMLElement | null>(null);
+  const retryFocus = useRef(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadStatus, setLoadStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [loadError, setLoadError] = useState("");
   const [creator, setCreator] = useState<Creator | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceAccountContext | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -107,21 +104,45 @@ export default function AccountPage() {
   }, [t]);
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<{
-        creator: Creator;
-        workspace?: WorkspaceAccountContext;
-        entitlements: Entitlements;
-        businessManagementEnabled?: boolean;
-        productFeatures?: { uxBeta?: boolean; workspaceShell?: boolean };
-      }>("/v1/auth/me"),
-      apiFetch<{ theme: BrandTheme | null; enabled: boolean }>("/v1/account/theme"),
-      apiFetch<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }>("/v1/workspaces"),
-      apiFetch<{ origins: string[] }>("/v1/account/embed-origins"),
-      apiFetch<WorkspaceInstitutionPolicy>("/v1/workspace/institution-policy"),
-      apiFetch<{ identities: FederatedIdentity[] }>("/v1/auth/federated-identities"),
-    ])
-      .then(async ([account, branding, workspaceList, embedPolicy, policy, identities]) => {
+    const controller = new AbortController();
+    const generation = ++loadGeneration.current;
+    const current = () => !controller.signal.aborted && generation === loadGeneration.current;
+    setLoadStatus("loading");
+    setLoadError("");
+    void loadAccountSettings(controller.signal)
+      .then((loaded) => {
+        if (!current()) return;
+        if (loaded.kind === "unauthenticated") {
+          router.replace(
+            `/signin?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`,
+          );
+          return;
+        }
+        if (loaded.kind === "billing-only") {
+          setCreator(null);
+          setWorkspace(null);
+          setEntitlements(null);
+          setProductFeatures(null);
+          setUserIdentity(loaded.identity.user);
+          setBusinessManagementEnabled(loaded.identity.businessManagementEnabled);
+          setBillingOnly(true);
+          setLoadStatus("ready");
+          return;
+        }
+        const {
+          account,
+          branding,
+          workspaceList,
+          embedPolicy,
+          policy,
+          identities,
+          oidcStatus,
+          ownerSettings,
+        } = loaded;
+        // Commit only a complete trusted snapshot. Defaults must never masquerade as
+        // saved settings, confirmed empty membership, or missing institution setup.
+        setBillingOnly(false);
+        setUserIdentity(null);
         setCreator(account.creator);
         setWorkspace(account.workspace ?? null);
         setWorkspaceName(
@@ -151,40 +172,46 @@ export default function AccountPage() {
         setOriginRows(embedPolicy.origins);
         setInstitutionPolicy(policy);
         setFederatedIdentities(identities.identities);
-        setOidcStatus(
-          await apiFetch<OidcStatus>(
-            `/v1/auth/oidc/status?workspaceId=${encodeURIComponent(account.creator.workspaceId)}`,
-          ),
-        );
-        const { collaboration, registrations } = await loadOwnerSettings(
-          account.creator.role,
-          account.workspace ?? null,
-        );
-        if (collaboration) {
-          setMembers(collaboration.members);
-          setInvitations(collaboration.invitations);
-        }
-        setLtiRegistrations(registrations);
+        setOidcStatus(oidcStatus);
+        setMembers(ownerSettings.collaboration?.members ?? []);
+        setInvitations(ownerSettings.collaboration?.invitations ?? []);
+        setLtiRegistrations(ownerSettings.registrations);
+        setLoadStatus("ready");
       })
       .catch((caught) => {
-        if ((caught as { status?: number }).status === 401) {
-          void apiFetch<{
-            user: { userId: string; email: string };
-            businessManagementEnabled: boolean;
-          }>("/v1/auth/user")
-            .then((identity) => {
-              setUserIdentity(identity.user);
-              setBusinessManagementEnabled(identity.businessManagementEnabled);
-              setBillingOnly(true);
-            })
-            .catch(() =>
-              router.replace(
-                `/signin?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`,
-              ),
-            );
-        } else setError(humanError(caught));
+        if (!current()) return;
+        controller.abort();
+        setLoadError(humanError(caught));
+        setLoadStatus("error");
       });
-  }, [router]);
+    return () => controller.abort();
+  }, [router, loadAttempt]);
+
+  useEffect(() => {
+    const trackFocus = (event: FocusEvent) => {
+      if (retryFocus.current && !loadRegionRef.current?.contains(event.target as Node)) {
+        retryFocus.current = false;
+      }
+    };
+    document.addEventListener("focusin", trackFocus);
+    return () => document.removeEventListener("focusin", trackFocus);
+  }, []);
+
+  function focusLoadedPanel(node: HTMLDivElement | null) {
+    if (!node || !retryFocus.current) return;
+    const active = document.activeElement;
+    const ownsFocus = active === document.body || loadRegionRef.current?.contains(active);
+    retryFocus.current = false;
+    if (ownsFocus) node.focus();
+  }
+
+  function retrySettings() {
+    loadRegionRef.current?.focus();
+    retryFocus.current = true;
+    setLoadStatus("loading");
+    setLoadError("");
+    setLoadAttempt((attempt) => attempt + 1);
+  }
 
   async function refreshCollaboration() {
     const collaboration = await apiFetch<{
@@ -604,7 +631,7 @@ export default function AccountPage() {
         .map(([name]) => capabilityLabels[name as keyof typeof capabilityLabels])
     : [];
 
-  if (billingOnly && userIdentity)
+  if (loadStatus === "ready" && billingOnly && userIdentity)
     return (
       <>
         <SiteHeader />
@@ -616,6 +643,8 @@ export default function AccountPage() {
           />
           <div
             id="settings-panel"
+            ref={focusLoadedPanel}
+            tabIndex={-1}
             role="tabpanel"
             aria-labelledby={`settings-tab-${selectedSection === "data" ? "data" : "overview"}`}
           >
@@ -683,6 +712,34 @@ export default function AccountPage() {
       </>
     );
 
+  const loadState = (
+    <section
+      aria-busy={loadStatus === "loading"}
+      aria-labelledby="account-load-title"
+      className={`panel ${styles.loadState}`}
+      id="account-load-state"
+      ref={loadRegionRef}
+      role="region"
+      tabIndex={-1}
+    >
+      <h2 id="account-load-title">
+        {t(loadStatus === "loading" ? "page.account.title" : "account.load.unavailable")}
+      </h2>
+      {loadStatus === "loading" ? (
+        <p role="status">{t("account.legacy.loading")}</p>
+      ) : (
+        <>
+          <p className="error" lang="en-CA" role="alert">
+            {loadError}
+          </p>
+          <button className="button-quiet" onClick={retrySettings} type="button">
+            {t("workspace.retry")}
+          </button>
+        </>
+      )}
+    </section>
+  );
+
   const content = (
     <div className={productFeatures?.workspaceShell ? styles.account : undefined}>
       {error ? (
@@ -700,6 +757,8 @@ export default function AccountPage() {
         className={styles.settingsContent}
         role="tabpanel"
         id="settings-panel"
+        ref={focusLoadedPanel}
+        tabIndex={-1}
         aria-labelledby={`settings-tab-${selectedSection}`}
       >
         <div className="settings-grid">
@@ -1264,6 +1323,8 @@ export default function AccountPage() {
     </div>
   );
 
+  const visibleContent = loadStatus === "ready" ? content : loadState;
+
   if (productFeatures?.workspaceShell) {
     return (
       <WorkspaceProvider>
@@ -1274,7 +1335,7 @@ export default function AccountPage() {
           title={t("page.account.title")}
           translationLevel="full"
         >
-          {content}
+          {visibleContent}
         </WorkspaceShell>
       </WorkspaceProvider>
     );
@@ -1306,11 +1367,13 @@ export default function AccountPage() {
                         : t("account.segment.workplace"),
                     plan: planLabel(effectivePlan),
                   })
-                : t("account.legacy.loading")}
+                : loadStatus === "loading"
+                  ? t("account.legacy.loading")
+                  : ""}
             </p>
           </div>
         </div>
-        {content}
+        {visibleContent}
       </main>
     </>
   );

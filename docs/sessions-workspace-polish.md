@@ -73,7 +73,8 @@ native-language and physical-device acceptance remain separate.
 
 ## Remaining work
 
-WX-11B's [Results recovery increment](results-workspace-polish.md) is implemented locally.
-Library, Workspace and the separate capability/plan explanation audit remain pending.
+WX-11B's [Results recovery increment](results-workspace-polish.md) merged through PR #292.
+WX-11C Workspace initialization/recovery is local. Library, independent settings-section recovery
+and the capability/plan explanation audit remain pending.
 Other delivery priorities and Survey gates are tracked in the
 [overall backlog](workspace-experience-backlog-2026-11.md).

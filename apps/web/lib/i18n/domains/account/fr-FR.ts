@@ -1,6 +1,7 @@
 import type { AccountMessages } from "./en-CA";
 
 const messages = {
+  "account.load.unavailable": "Les paramètres de l’espace de travail sont indisponibles",
   "account.common.none": "Aucune",
   "account.common.saving": "Enregistrement…",
   "account.confirm.removeMember": "Retirer ce membre de l’espace de travail ?",

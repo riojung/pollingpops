@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
@@ -43,12 +51,19 @@ interface ListControls {
 
 function ResultsSummary({
   count,
+  countAvailable,
   loading,
   hasMore = false,
   practice = false,
   layout,
   onLayoutChange,
-}: ListControls & { count: number; loading: boolean; hasMore?: boolean; practice?: boolean }) {
+}: ListControls & {
+  count: number;
+  countAvailable: boolean;
+  loading: boolean;
+  hasMore?: boolean;
+  practice?: boolean;
+}) {
   const { t } = useLocale();
   const summary = t(practice ? "pages.results.practiceCount" : "pages.results.resultCount", {
     count,
@@ -58,9 +73,11 @@ function ResultsSummary({
       <p className={controls.resultSummary} role="status">
         {loading
           ? t("pages.results.loading")
-          : hasMore
-            ? t("pages.results.moreAvailable", { summary })
-            : summary}
+          : !countAvailable
+            ? null
+            : hasMore
+              ? t("pages.results.moreAvailable", { summary })
+              : summary}
       </p>
       <div aria-label={t("pages.results.layoutLabel")} className={controls.viewToggle} role="group">
         {(["grid", "list"] as const).map((value) => (
@@ -87,10 +104,16 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   const activeQueryKey = useRef(queryKey);
   activeQueryKey.current = queryKey;
   const loadMoreController = useRef<AbortController | null>(null);
-  const [page, setPage] = useState<{ key: string; items: T[]; nextCursor: string | null }>({
+  const [page, setPage] = useState<{
+    key: string;
+    items: T[];
+    nextCursor: string | null;
+    loaded: boolean;
+  }>({
     key: "",
     items: [],
     nextCursor: null,
+    loaded: false,
   });
   const [fetching, setFetching] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -120,12 +143,14 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
     void fetchPage(undefined, controller.signal)
       .then((response) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
-        setPage({ key: queryKey, ...response });
+        setPage({ key: queryKey, ...response, loaded: true });
       })
       .catch((caught) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
         setPage((current) =>
-          current.key === queryKey ? current : { key: queryKey, items: [], nextCursor: null },
+          current.key === queryKey
+            ? current
+            : { key: queryKey, items: [], nextCursor: null, loaded: false },
         );
         setFailure({ key: queryKey, message: humanError(caught), kind: "initial" });
       })
@@ -151,6 +176,7 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
         key: queryKey,
         items: [...current.items, ...response.items],
         nextCursor: response.nextCursor,
+        loaded: true,
       }));
     } catch (caught) {
       if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
@@ -165,22 +191,85 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
 
   return {
     items: page.key === queryKey ? page.items : [],
+    loaded: page.key === queryKey && page.loaded,
     nextCursor: page.key === queryKey ? page.nextCursor : null,
     loading: fetching || page.key !== queryKey,
     loadingMore,
     error: failure.key === queryKey ? failure.message : "",
-    retry: () => (failure.kind === "more" ? void more() : setReload((value) => value + 1)),
+    retry: () => {
+      if (fetching || failure.key !== queryKey || !failure.message) return;
+      if (failure.kind === "more") void more();
+      else {
+        setFetching(true);
+        setFailure({ key: queryKey, message: "", kind: "initial" });
+        setReload((value) => value + 1);
+      }
+    },
     more,
   };
+}
+
+function ResultsPanel({
+  view,
+  busy,
+  panelRef,
+  children,
+}: {
+  view: "results" | "practice" | "presentations" | "surveys";
+  busy: boolean;
+  panelRef: RefObject<HTMLElement | null>;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-busy={busy}
+      aria-labelledby={`results-${view}-link`}
+      className={resultStyles.panel}
+      id="results-panel"
+      ref={panelRef}
+      tabIndex={-1}
+    >
+      {children}
+    </section>
+  );
+}
+
+function ResultsLoading({
+  label,
+  layout,
+  hasRows,
+}: {
+  label: string;
+  layout: ResultsLayout;
+  hasRows: boolean;
+}) {
+  return (
+    <div className={resultStyles.loadingState}>
+      <p className={styles.muted}>{label}</p>
+      {!hasRows ? (
+        <div aria-hidden="true" className={resultStyles.collection} data-view={layout}>
+          {[0, 1, 2].map((placeholder) => (
+            <div className={resultStyles.loadingCard} key={placeholder}>
+              <span />
+              <span />
+              <span />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ResultsLoadError({
   error,
   onRetry,
+  panelRef,
   retained = false,
 }: {
   error: string;
   onRetry: () => void;
+  panelRef: RefObject<HTMLElement | null>;
   retained?: boolean;
 }) {
   const { t } = useLocale();
@@ -192,7 +281,14 @@ function ResultsLoadError({
         </p>
         {retained ? <p>{t("resultsOverview.retained")}</p> : null}
       </div>
-      <button className="button-quiet" onClick={onRetry} type="button">
+      <button
+        className="button-quiet"
+        onClick={() => {
+          panelRef.current?.focus();
+          onRetry();
+        }}
+        type="button"
+      >
         {t("pages.common.tryAgain")}
       </button>
     </section>
@@ -214,6 +310,7 @@ function HistoryFilters({
   onClear,
   listControls,
   count,
+  countAvailable,
   loading,
   hasMore,
   practice,
@@ -237,6 +334,7 @@ function HistoryFilters({
   onClear: () => void;
   listControls: ListControls;
   count: number;
+  countAvailable: boolean;
   loading: boolean;
   hasMore: boolean;
   practice?: boolean;
@@ -307,6 +405,7 @@ function HistoryFilters({
       <ResultsSummary
         {...listControls}
         count={count}
+        countAvailable={countAvailable}
         loading={loading}
         hasMore={hasMore}
         practice={practice}
@@ -325,12 +424,14 @@ function followupLifecycleLabel(report: ReportSummary, t: ReturnType<typeof useL
 
 function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
+  const panel = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<ReportStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const {
     items: reports,
+    loaded,
     nextCursor,
     loading,
     loadingMore,
@@ -344,6 +445,9 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
     toDate,
     search: listControls.search,
   });
+  const hasFilters = Boolean(
+    status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
+  );
 
   function clearFilters() {
     setStatus("all");
@@ -354,10 +458,11 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
   }
 
   return (
-    <>
+    <ResultsPanel view="results" busy={loading || loadingMore} panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={reports.length}
+        countAvailable={loaded}
         loading={loading}
         hasMore={Boolean(nextCursor)}
         fromDate={fromDate}
@@ -381,25 +486,36 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
       {!loading && reports.length > 0 ? (
         <ResultsOverview kind="rounds" items={reports} hasMore={Boolean(nextCursor)} />
       ) : null}
-      {error ? (
-        <ResultsLoadError error={error} onRetry={retry} retained={reports.length > 0} />
+      {error && !loading && !loadingMore ? (
+        <ResultsLoadError
+          error={error}
+          onRetry={retry}
+          panelRef={panel}
+          retained={reports.length > 0}
+        />
       ) : null}
       {loading ? (
-        <p className={styles.muted} role="status">
-          {t("pages.results.loading")}
-        </p>
+        <ResultsLoading
+          label={t("pages.results.loading")}
+          layout={listControls.layout}
+          hasRows={reports.length > 0}
+        />
       ) : null}
       {!loading && !reports.length && !error ? (
         <div className={styles.emptyState}>
-          <h2>{t("pages.results.emptyTitle")}</h2>
-          <p>
-            {status === "all" && quizId === "all" && !fromDate && !toDate && !listControls.search
-              ? t("pages.results.emptyDescription")
-              : t("pages.results.noMatches")}
-          </p>
-          <Link className="button" href="/library">
-            {t("pages.assignments.chooseRound")}
-          </Link>
+          <h2>{t(hasFilters ? "pages.results.noMatches" : "pages.results.emptyTitle")}</h2>
+          {hasFilters ? (
+            <button className="button" onClick={clearFilters} type="button">
+              {t("pages.results.clearFilters")}
+            </button>
+          ) : (
+            <>
+              <p>{t("pages.results.emptyDescription")}</p>
+              <Link className="button" href="/library">
+                {t("pages.assignments.chooseRound")}
+              </Link>
+            </>
+          )}
         </div>
       ) : null}
       <section
@@ -495,18 +611,20 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
           </button>
         </div>
       ) : null}
-    </>
+    </ResultsPanel>
   );
 }
 
 function PracticeList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
+  const panel = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<FollowupStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const {
     items: followups,
+    loaded,
     nextCursor,
     loading,
     loadingMore,
@@ -520,6 +638,9 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
     toDate,
     search: listControls.search,
   });
+  const hasFilters = Boolean(
+    status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
+  );
 
   function clearFilters() {
     setStatus("all");
@@ -530,10 +651,11 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
   }
 
   return (
-    <>
+    <ResultsPanel view="practice" busy={loading || loadingMore} panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={followups.length}
+        countAvailable={loaded}
         loading={loading}
         hasMore={Boolean(nextCursor)}
         practice
@@ -559,22 +681,33 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
       {!loading && followups.length > 0 ? (
         <ResultsOverview kind="practice" items={followups} hasMore={Boolean(nextCursor)} />
       ) : null}
-      {error ? (
-        <ResultsLoadError error={error} onRetry={retry} retained={followups.length > 0} />
+      {error && !loading && !loadingMore ? (
+        <ResultsLoadError
+          error={error}
+          onRetry={retry}
+          panelRef={panel}
+          retained={followups.length > 0}
+        />
       ) : null}
       {loading ? (
-        <p className={styles.muted} role="status">
-          {t("pages.results.loadingPractice")}
-        </p>
+        <ResultsLoading
+          label={t("pages.results.loadingPractice")}
+          layout={listControls.layout}
+          hasRows={followups.length > 0}
+        />
       ) : null}
       {!loading && !followups.length && !error ? (
         <div className={styles.emptyState}>
-          <h2>{t("pages.results.emptyPracticeTitle")}</h2>
-          <p>
-            {status === "all" && quizId === "all" && !fromDate && !toDate && !listControls.search
-              ? t("pages.results.emptyPracticeDescription")
-              : t("pages.results.noPracticeMatches")}
-          </p>
+          <h2>
+            {t(hasFilters ? "pages.results.noPracticeMatches" : "pages.results.emptyPracticeTitle")}
+          </h2>
+          {hasFilters ? (
+            <button className="button" onClick={clearFilters} type="button">
+              {t("pages.results.clearFilters")}
+            </button>
+          ) : (
+            <p>{t("pages.results.emptyPracticeDescription")}</p>
+          )}
         </div>
       ) : null}
       <section
@@ -691,12 +824,13 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
           </button>
         </div>
       ) : null}
-    </>
+    </ResultsPanel>
   );
 }
 
 function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
+  const panel = useRef<HTMLElement>(null);
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
   const activeWorkspace = useRef(workspaceId);
@@ -705,7 +839,8 @@ function PresentationResultList(listControls: ListControls) {
     workspaceId: string;
     sessions: PresentationResultSummary[];
     error: string;
-  }>({ workspaceId: "", sessions: [], error: "" });
+    loaded: boolean;
+  }>({ workspaceId: "", sessions: [], error: "", loaded: false });
   const [fetching, setFetching] = useState(true);
   const [reload, setReload] = useState(0);
   const sessions = snapshot.workspaceId === workspaceId ? snapshot.sessions : [];
@@ -728,7 +863,8 @@ function PresentationResultList(listControls: ListControls) {
       signal: controller.signal,
     })
       .then((response) => {
-        if (isCurrent()) setSnapshot({ workspaceId, sessions: response.sessions, error: "" });
+        if (isCurrent())
+          setSnapshot({ workspaceId, sessions: response.sessions, error: "", loaded: true });
       })
       .catch((caught) => {
         if (isCurrent())
@@ -736,6 +872,7 @@ function PresentationResultList(listControls: ListControls) {
             workspaceId,
             sessions: current.workspaceId === workspaceId ? current.sessions : [],
             error: humanError(caught),
+            loaded: current.workspaceId === workspaceId && current.loaded,
           }));
       })
       .finally(() => {
@@ -775,11 +912,19 @@ function PresentationResultList(listControls: ListControls) {
     listControls.onSearchClear();
   }
 
+  function retryHistory() {
+    if (loading || !error) return;
+    setFetching(true);
+    setSnapshot((current) => ({ ...current, error: "" }));
+    setReload((value) => value + 1);
+  }
+
   return (
-    <>
+    <ResultsPanel view="presentations" busy={loading} panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={visible.length}
+        countAvailable={snapshot.workspaceId === workspaceId && snapshot.loaded}
         loading={loading}
         hasMore={false}
         status={status}
@@ -804,25 +949,38 @@ function PresentationResultList(listControls: ListControls) {
       {!loading && !error && visible.length > 0 ? (
         <ResultsOverview kind="presentations" items={visible} />
       ) : null}
-      {loading ? <p className={styles.muted}>{t("pages.results.loadingPresentations")}</p> : null}
-      {error ? (
+      {loading ? (
+        <ResultsLoading
+          label={t("pages.results.loadingPresentations")}
+          layout={listControls.layout}
+          hasRows={visible.length > 0}
+        />
+      ) : null}
+      {error && !loading ? (
         <ResultsLoadError
           error={error}
-          onRetry={() => setReload((value) => value + 1)}
+          onRetry={retryHistory}
+          panelRef={panel}
           retained={sessions.length > 0}
         />
       ) : null}
       {!loading && !error && !visible.length ? (
         <div className={styles.emptyState}>
-          <h2>{t("pages.results.emptyPresentationsTitle")}</h2>
-          <p>
-            {t(
-              filtered ? "pages.results.noMatches" : "pages.results.emptyPresentationsDescription",
-            )}
-          </p>
-          <Link className="button" href="/library?type=presentations">
-            {t("pages.results.choosePresentation")}
-          </Link>
+          <h2>
+            {t(filtered ? "pages.results.noMatches" : "pages.results.emptyPresentationsTitle")}
+          </h2>
+          {filtered ? (
+            <button className="button" onClick={clearFilters} type="button">
+              {t("pages.results.clearFilters")}
+            </button>
+          ) : (
+            <>
+              <p>{t("pages.results.emptyPresentationsDescription")}</p>
+              <Link className="button" href="/library?type=presentations">
+                {t("pages.results.choosePresentation")}
+              </Link>
+            </>
+          )}
         </div>
       ) : null}
       <section
@@ -892,12 +1050,13 @@ function PresentationResultList(listControls: ListControls) {
           </article>
         ))}
       </section>
-    </>
+    </ResultsPanel>
   );
 }
 
 function SurveyResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
+  const panel = useRef<HTMLElement>(null);
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
   const activeWorkspace = useRef(workspaceId);
@@ -906,7 +1065,8 @@ function SurveyResultList(listControls: ListControls) {
     workspaceId: string;
     rooms: SurveySessionSummary[];
     error: string;
-  }>({ workspaceId: "", rooms: [], error: "" });
+    loaded: boolean;
+  }>({ workspaceId: "", rooms: [], error: "", loaded: false });
   const [sourceId, setSourceId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -948,7 +1108,8 @@ function SurveyResultList(listControls: ListControls) {
         for (const room of page.rooms) rooms.set(room.id, room);
         cursor = page.nextCursor;
       } while (cursor);
-      if (isCurrent()) setSnapshot({ workspaceId, rooms: [...rooms.values()], error: "" });
+      if (isCurrent())
+        setSnapshot({ workspaceId, rooms: [...rooms.values()], error: "", loaded: true });
     }
     void load()
       .catch((caught) => {
@@ -957,6 +1118,7 @@ function SurveyResultList(listControls: ListControls) {
             workspaceId,
             rooms: current.workspaceId === workspaceId ? current.rooms : [],
             error: humanError(caught),
+            loaded: current.workspaceId === workspaceId && current.loaded,
           }));
       })
       .finally(() => {
@@ -1010,11 +1172,19 @@ function SurveyResultList(listControls: ListControls) {
     listControls.onSearchClear();
   }
 
+  function retryHistory() {
+    if (loading || !error) return;
+    setFetching(true);
+    setSnapshot((current) => ({ ...current, error: "" }));
+    setReload((value) => value + 1);
+  }
+
   return (
-    <>
+    <ResultsPanel view="surveys" busy={loading} panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={visible.length}
+        countAvailable={snapshot.workspaceId === workspaceId && snapshot.loaded}
         loading={loading}
         hasMore={hasMore}
         hideStatus
@@ -1039,26 +1209,35 @@ function SurveyResultList(listControls: ListControls) {
         <ResultsOverview kind="surveys" items={visible} hasMore={hasMore} />
       ) : null}
       {loading ? (
-        <p className={styles.muted} role="status">
-          {t("pages.results.loadingSurveys")}
-        </p>
+        <ResultsLoading
+          label={t("pages.results.loadingSurveys")}
+          layout={listControls.layout}
+          hasRows={visible.length > 0}
+        />
       ) : null}
-      {error ? (
+      {error && !loading ? (
         <ResultsLoadError
           error={error}
-          onRetry={() => setReload((value) => value + 1)}
+          onRetry={retryHistory}
+          panelRef={panel}
           retained={retained.length > 0}
         />
       ) : null}
       {!loading && !error && !visible.length ? (
         <div className={styles.emptyState}>
-          <h2>{t("pages.results.emptySurveysTitle")}</h2>
-          <p>
-            {t(hasFilters ? "pages.results.noMatches" : "pages.results.emptySurveysDescription")}
-          </p>
-          <Link className="button" href="/sessions?type=surveys">
-            {t("pages.results.manageSurveyRuns")}
-          </Link>
+          <h2>{t(hasFilters ? "pages.results.noMatches" : "pages.results.emptySurveysTitle")}</h2>
+          {hasFilters ? (
+            <button className="button" onClick={clearFilters} type="button">
+              {t("pages.results.clearFilters")}
+            </button>
+          ) : (
+            <>
+              <p>{t("pages.results.emptySurveysDescription")}</p>
+              <Link className="button" href="/sessions?type=surveys">
+                {t("pages.results.manageSurveyRuns")}
+              </Link>
+            </>
+          )}
         </div>
       ) : null}
       <section
@@ -1118,12 +1297,13 @@ function SurveyResultList(listControls: ListControls) {
           </button>
         </div>
       ) : null}
-    </>
+    </ResultsPanel>
   );
 }
 
 function ResultsContent() {
   const { t } = useLocale();
+  const searchInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const params = useSearchParams();
   const { creator, productFeatures } = useWorkspace();
@@ -1195,7 +1375,10 @@ function ResultsContent() {
     search,
     layout,
     onLayoutChange: chooseLayout,
-    onSearchClear: () => updateSearch(""),
+    onSearchClear: () => {
+      updateSearch("");
+      searchInput.current?.focus();
+    },
   };
   const searchLabel = t(
     view === "practice"
@@ -1221,6 +1404,7 @@ function ResultsContent() {
             className={`${view === "results" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
             data-kind="round"
             href="/results"
+            id="results-results-link"
           >
             <WorkspaceKindIcon kind="round" />
             {t("pages.common.rounds")}
@@ -1231,6 +1415,7 @@ function ResultsContent() {
               className={`${view === "presentations" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
               data-kind="presentation"
               href="/results?view=presentations"
+              id="results-presentations-link"
             >
               <WorkspaceKindIcon kind="presentation" />
               {t("pages.common.presentations")}
@@ -1241,6 +1426,7 @@ function ResultsContent() {
             className={`${view === "surveys" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
             data-kind="survey"
             href="/results?view=surveys"
+            id="results-surveys-link"
           >
             <WorkspaceKindIcon kind="survey" />
             {t("pages.common.surveys")}
@@ -1250,6 +1436,7 @@ function ResultsContent() {
             className={`${view === "practice" ? controls.tabActive : controls.tab} ${signals.kindTab}`}
             data-kind="practice"
             href="/results?view=practice"
+            id="results-practice-link"
           >
             <WorkspaceKindIcon kind="practice" />
             {t("pages.results.practice")}
@@ -1261,6 +1448,7 @@ function ResultsContent() {
             maxLength={160}
             onChange={(event) => updateSearch(event.target.value)}
             placeholder={searchLabel}
+            ref={searchInput}
             type="search"
             value={search}
           />

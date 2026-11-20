@@ -3,6 +3,7 @@
 Selected checkpoint: **WX-11A**, November 19, 2026.
 Baseline: merged Survey C2, [PR #290](https://github.com/riojung/pollingpops/pull/290), `d6f3fd3`.
 Branch: `codex/sessions-workspace-polish`.
+Merged through [PR #291](https://github.com/riojung/pollingpops/pull/291) at `26f7a8c`.
 Owner: frontend and accessibility.
 
 Survey C3/C4 reporting and B3 authoring still depend on the recorded privacy acceptance.
@@ -72,6 +73,7 @@ native-language and physical-device acceptance remain separate.
 
 ## Remaining work
 
-WX-11's Library, Results and Workspace surfaces and its separate capability/plan explanation
-audit remain pending. Other delivery priorities and Survey gates are tracked in the
+WX-11B's [Results recovery increment](results-workspace-polish.md) is implemented locally.
+Library, Workspace and the separate capability/plan explanation audit remain pending.
+Other delivery priorities and Survey gates are tracked in the
 [overall backlog](workspace-experience-backlog-2026-11.md).

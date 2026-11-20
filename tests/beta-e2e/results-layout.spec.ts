@@ -8,6 +8,11 @@ import { signInBeta } from "./sign-in";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const web = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
 
+const toolbarClear = (page: Page) =>
+  page
+    .getByRole("region", { name: "History filters", exact: true })
+    .getByRole("button", { name: "Clear filters", exact: true });
+
 function canceledReadKey(rawUrl: string) {
   const url = new URL(rawUrl);
   if (url.origin === api && url.pathname.startsWith("/v1/")) return url.href;
@@ -256,7 +261,7 @@ for (const mobile of [false, true]) {
     await expect(
       collection.getByRole("link", { name: "View Status", exact: true }),
     ).toHaveAttribute("href", `/report/${fixture.reports[26]!.id}`);
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await toolbarClear(page).click();
     await expect(resultStatus).toHaveValue("all");
     const search = page.getByRole("searchbox", { name: "Search Round results", exact: true });
     await search.fill("Round evidence 26");
@@ -283,7 +288,7 @@ for (const mobile of [false, true]) {
     await expect(search).toHaveValue("Round evidence 26");
     await expect(collection).toHaveAttribute("data-view", "list");
     await expect(collection.getByRole("article")).toHaveCount(1);
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await toolbarClear(page).click();
     await expect(search).toHaveValue("");
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBeNull();
     await expect(page.getByRole("combobox", { name: "Round", exact: true })).toHaveValue("all");
@@ -327,11 +332,11 @@ for (const mobile of [false, true]) {
     await expect(
       practice.getByRole("heading", { name: "Synthetic assignment practice 25" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await toolbarClear(page).click();
     await page.getByRole("searchbox", { name: "Search practice", exact: true }).fill("recovery");
     await expect(practice.getByRole("article")).toHaveCount(1);
     await expect(recovery).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await toolbarClear(page).click();
 
     await views.getByRole("link", { name: "Presentations", exact: true }).click();
     await expect(page).toHaveURL(/\/results\?view=presentations$/);
@@ -359,7 +364,7 @@ for (const mobile of [false, true]) {
     await expect(overview.locator("dd").filter({ hasText: "24" })).toHaveCount(1);
     await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await toolbarClear(page).click();
     await expect(presentations.getByRole("article")).toHaveCount(2);
     expect(fixture.presentationReadCount()).toBe(presentationReads);
     await page

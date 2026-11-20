@@ -119,6 +119,16 @@
   width: var(--workspace-control-height, 2.25rem);
   padding: 0;
 }
+.actions.actions > [data-action="result"] {
+  --workspace-action-bg: var(--ui-surface);
+  --workspace-action-ink: var(--ui-text-strong);
+  --workspace-action-border: var(--ui-border);
+}
+.actions.actions > [data-primary="true"] {
+  --workspace-action-bg: var(--ui-accent);
+  --workspace-action-ink: var(--ui-on-accent);
+  --workspace-action-border: var(--ui-accent);
+}
 .deleteButton svg {
   width: 18px;
   height: 18px;
@@ -161,6 +171,59 @@
   max-width: 520px;
   margin: 0;
   color: var(--ui-text-muted);
+}
+.loadError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: var(--workspace-card-padding, 0.875rem);
+  border: 1px solid var(--ui-danger-border);
+  border-radius: 12px;
+  background: var(--ui-surface-raised);
+}
+.loadError p {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.loadError button,
+.empty > a,
+.empty > button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.loadingState > p {
+  margin-top: 0;
+}
+.loadingCard {
+  display: grid;
+  min-height: 13rem;
+  align-content: start;
+  gap: 12px;
+  padding: var(--workspace-card-padding, 0.875rem);
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface-raised);
+}
+.loadingCard span {
+  width: 100%;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--ui-skeleton-base);
+}
+.loadingCard span:first-child {
+  width: 70%;
+  height: 18px;
+}
+.loadingCard span:last-child {
+  width: 45%;
+}
+.collection[data-view="list"] .loadingCard {
+  min-height: 5.5rem;
 }
 .loadMore {
   display: flex;

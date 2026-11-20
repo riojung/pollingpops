@@ -8,9 +8,22 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Sessions workspace recovery and action hierarchy, November 19, 2026
+
+WX-11A on `codex/sessions-workspace-polish` adds initial-history Retry, filtered-empty Clear
+filters with search focus, explicit loading states and one dominant permitted action per session
+card. Active Rounds and Presentations foreground Resume; reports remain secondary there and
+lead retained history. Existing Survey sharing/results permissions, counts, query/pagination
+semantics, destinations, credentials and deletion confirmation remain unchanged.
+
+The selected work is limited to Sessions and reuses existing localized copy and interface tokens.
+See the [scope and acceptance record](sessions-workspace-polish.md). Library, Results, Workspace
+and the capability/plan explanation audit remain separate WX-11 checkpoints. Survey privacy
+acceptance is still open; this ready independent surface increment does not enable C3/C4 or B3.
+
 ### Conditional Survey disclosure controls, November 19, 2026
 
-WX-06C2 on `codex/survey-branching-privacy-policy` adds an isolated whole-report disclosure
+WX-06C2 merged through PR #290 at `d6f3fd3` and adds an isolated whole-report disclosure
 candidate. Its proposed aggregate-v4/source-v4 contract releases a closed report only when
 every complete joint contribution pattern has at least five finalized submissions. Any rare
 pattern withholds the whole report, including its total. C1's suppressed-only aggregate-v3
@@ -66,14 +79,15 @@ answer removal, revision-safe replacement saves/retries/resume, and retained rea
 Migration 118 expands four version checks only. Mutation schemas and effective writers remain
 v1–3; conditional publication, launch, Library sharing and copies stay disabled. V4 results,
 summaries and derived exports remain unavailable. C1 counting/withheld contracts are merged;
-C2's candidate disclosure policy is local with human privacy acceptance open. C3/C4 runtime
+C2's candidate disclosure policy is merged with human privacy acceptance open. C3/C4 runtime
 results/export integration and lifecycle qualification must precede
 B3 condition authoring and its explicit grant. Existing lifecycle/RLS/privacy guarantees
 and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–14 remain scoped/candidate work. WX-11 can proceed one surface at a time; recurrence and
+WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A's Sessions increment is local,
+with other surfaces and commercial explanations pending; recurrence and
 learning sequences need identity/privacy decisions, moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.

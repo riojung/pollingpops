@@ -416,6 +416,289 @@ describe("Sessions workspace", () => {
     expect(markup).not.toContain("counts unavailable");
   });
 
+  it.each(["rounds", "presentations", "surveys"])(
+    "retries only the failed %s history GET while preserving filters and layout",
+    async (type) => {
+      const source =
+        type === "rounds"
+          ? round().quizId
+          : type === "presentations"
+            ? presentation.presentationId
+            : openSurvey.surveyId;
+      const year = type === "surveys" ? "2099" : "2026";
+      const title =
+        type === "rounds"
+          ? "First Round"
+          : type === "presentations"
+            ? presentation.title
+            : openSurvey.title;
+      fixtures.query = new URLSearchParams({
+        type,
+        q: title,
+        status: "active",
+        source,
+        from: `${year}-09-30`,
+        to: `${year}-10-02`,
+      }).toString();
+      vi.mocked(window.localStorage.getItem).mockReturnValue("list");
+      const retried = deferred<unknown>();
+      const historyReads: string[] = [];
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (isHistoryPath(path, type)) {
+          historyReads.push(path);
+          return historyReads.length === 1
+            ? Promise.reject(new Error("History temporarily unavailable"))
+            : retried.promise;
+        }
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      const failed = await harness.settle();
+      expect(failed).toContain("History temporarily unavailable");
+      expect(failed).toContain("Session count unavailable");
+      expect(failed).not.toContain("0 sessions shown");
+      expect(buttonNames()).toContain("Try again");
+      const panel = elements(fixtures.tree).find((row) => row.props.role === "tabpanel")!;
+      const focus = vi.fn();
+      (panel.props.ref as { current: unknown }).current = { focus };
+      const originalQuery = fixtures.query;
+      clickButton("Try again");
+      const pending = await harness.settle();
+      expect(focus).toHaveBeenCalledOnce();
+      expect(pending).toContain('aria-busy="true"');
+      expect(pending).toContain('data-view="list"');
+      expect(pending).toContain("Loading sessions…");
+      expect(pending).not.toContain("0 sessions shown");
+      expect(buttonNames()).not.toContain("Try again");
+      expect(historyReads).toEqual([historyReads[0], historyReads[0]]);
+      retried.resolve(
+        type === "rounds"
+          ? { items: [{ ...round(), status: "active" }], nextCursor: null }
+          : type === "presentations"
+            ? { sessions: [presentation] }
+            : { rooms: [openSurvey], nextCursor: null },
+      );
+      const loaded = await harness.settle();
+      expect(loaded).toContain(`<h2 lang="">${title}</h2>`);
+      expect(loaded).toContain('aria-busy="false"');
+      expect(loaded).toContain('data-view="list"');
+      expect(loaded).not.toContain("History temporarily unavailable");
+      expect(fixtures.query).toBe(originalQuery);
+      expect(fixtures.push).not.toHaveBeenCalled();
+      expect(fixtures.replace).not.toHaveBeenCalled();
+      expect(fixtures.apiFetch.mock.calls.every(([, init]) => !init?.method)).toBe(true);
+      expect(
+        fixtures.apiFetch.mock.calls.filter(([path]) => path === "/v1/sessions/counts"),
+      ).toHaveLength(1);
+    },
+  );
+
+  it.each(["type", "workspace"])(
+    "ignores a stale history retry after changing %s",
+    async (change) => {
+      let roundReads = 0;
+      const retry = deferred<unknown>();
+      fixtures.apiFetch.mockImplementation((path: string) => {
+        if (isHistoryPath(path, "rounds")) {
+          roundReads += 1;
+          if (roundReads === 1) return Promise.reject(new Error("History unavailable"));
+          if (roundReads === 2) return retry.promise;
+          return Promise.resolve({ items: [round("later-round")], nextCursor: null });
+        }
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      clickButton("Try again");
+      await harness.settle();
+      const retriedRead = fixtures.apiFetch.mock.calls.filter(([path]) =>
+        isHistoryPath(String(path), "rounds"),
+      )[1];
+      if (change === "type") clickTab("surveys");
+      else fixtures.workspaceId = "workspace-b";
+      await harness.settle();
+      expect(retriedRead?.[1].signal.aborted).toBe(true);
+      retry.resolve({ items: [{ ...round(), title: "Stale retry Round" }], nextCursor: null });
+      const markup = await harness.settle();
+      expect(markup).toContain(change === "type" ? "Open Survey" : "Later Round");
+      expect(markup).not.toContain("Stale retry Round");
+      expect(buttonNames()).not.toContain("Try again");
+    },
+  );
+
+  it("retains Round rows and retries the same pagination cursor without a history retry", async () => {
+    fixtures.query = "type=rounds&q=Round&status=finished";
+    const firstPage = deferred<unknown>();
+    let attempts = 0;
+    fixtures.apiFetch.mockImplementation((path: string) => {
+      if (path.includes("cursor=next-round")) {
+        attempts += 1;
+        return attempts === 1
+          ? firstPage.promise
+          : Promise.resolve({ items: [round("later-round")], nextCursor: null });
+      }
+      return Promise.resolve(response(path));
+    });
+    const harness = sessionsHarness();
+    await harness.settle();
+    clickButton("Load more sessions");
+    const pending = await harness.settle();
+    expect(pending).toContain('aria-busy="true"');
+    expect(pending).toContain('<h2 lang="">First Round</h2>');
+    firstPage.reject(new Error("Next page unavailable"));
+    const failed = await harness.settle();
+    expect(failed).toContain("Next page unavailable");
+    expect(failed).toContain('<h2 lang="">First Round</h2>');
+    expect(buttonNames()).toContain("Load more sessions");
+    expect(buttonNames()).not.toContain("Try again");
+    clickButton("Load more sessions");
+    const loaded = await harness.settle();
+    expect(loaded).toContain('<h2 lang="">First Round</h2>');
+    expect(loaded).toContain('<h2 lang="">Later Round</h2>');
+    expect(loaded).not.toContain("Next page unavailable");
+    const pageReads = fixtures.apiFetch.mock.calls
+      .map(([path]) => String(path))
+      .filter((path) => path.includes("cursor=next-round"));
+    expect(pageReads).toEqual([
+      "/v1/sessions?limit=25&search=Round&status=finished&cursor=next-round",
+      "/v1/sessions?limit=25&search=Round&status=finished&cursor=next-round",
+    ]);
+  });
+
+  it.each(["resume", "delete"])(
+    "keeps a failed %s action separate from history retry",
+    async (action) => {
+      fixtures.apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+        if (path.endsWith("/control-pass") || init?.method === "DELETE")
+          return Promise.reject(new Error("Action unavailable"));
+        if (isHistoryPath(path, "rounds"))
+          return Promise.resolve({
+            items: [{ ...round(), status: action === "resume" ? "active" : "finished" }],
+            nextCursor: null,
+          });
+        return Promise.resolve(response(path));
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      clickButton(action === "resume" ? "Resume Session" : "Delete session");
+      const markup = await harness.settle();
+      expect(markup).toContain("Action unavailable");
+      expect(markup).toContain('<h2 lang="">First Round</h2>');
+      expect(buttonNames()).not.toContain("Try again");
+      expect(fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method)).toHaveLength(1);
+      expect(window.confirm).toHaveBeenCalledTimes(action === "delete" ? 1 : 0);
+      expect(
+        fixtures.apiFetch.mock.calls.filter(([path]) => isHistoryPath(String(path), "rounds")),
+      ).toHaveLength(1);
+    },
+  );
+
+  it.each(["rounds", "presentations", "surveys"])(
+    "clears %s filters while retaining type, layout, and keyboard focus",
+    async (type) => {
+      fixtures.query = `type=${type}&q=absent&status=finished&source=11111111-1111-4111-8111-111111111111&from=2026-10-01&to=2026-10-02`;
+      vi.mocked(window.localStorage.getItem).mockReturnValue("list");
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path.includes("search=absent") ? { items: [], nextCursor: null } : response(path),
+      );
+      const harness = sessionsHarness();
+      const empty = await harness.settle();
+      expect(empty).toContain("No sessions match these filters.");
+      expect(buttonNames()).toContain("Clear filters");
+      const input = elements(fixtures.tree).find(
+        (row) => row.type === "input" && row.props.type === "search",
+      )!;
+      const focus = vi.fn();
+      (input.props.ref as { current: unknown }).current = { focus };
+      clickButton("Clear filters");
+      expect(focus).toHaveBeenCalledOnce();
+      expect(fixtures.replace).toHaveBeenLastCalledWith(`/sessions?type=${type}`, {
+        scroll: false,
+      });
+      const loaded = await harness.settle();
+      expect(fixtures.query).toBe(`type=${type}`);
+      expect(loaded).toContain('data-view="list"');
+      expect(loaded).not.toContain("No sessions match these filters.");
+      expect(buttonNames()).not.toContain("Clear filters");
+      expect(window.localStorage.setItem).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["rounds", "presentations", "surveys"])(
+    "keeps the typed Library destination for genuinely empty %s history",
+    async (type) => {
+      fixtures.query = `type=${type}`;
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (isHistoryPath(path, "rounds")) return { items: [], nextCursor: null };
+        if (isHistoryPath(path, "presentations")) return { sessions: [] };
+        if (isHistoryPath(path, "surveys")) return { rooms: [], nextCursor: null };
+        return response(path);
+      });
+      const markup = await sessionsHarness().settle();
+      expect(markup).toContain(`class="button" href="/library?type=${type}"`);
+      expect(buttonNames()).not.toContain("Clear filters");
+      expect(buttonNames()).not.toContain("Try again");
+    },
+  );
+
+  it.each(["owner", "editor", "viewer"] as const)(
+    "gives each permitted %s session one primary task for its lifecycle",
+    async (role) => {
+      fixtures.role = role;
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (isHistoryPath(path, "rounds"))
+          return {
+            items: [
+              { ...round(), id: "active-round", title: "Active Round", status: "active" },
+              round(),
+              { ...round(), id: "expired-round", title: "Expired Round", status: "expired" },
+            ],
+            nextCursor: null,
+          };
+        if (isHistoryPath(path, "presentations"))
+          return {
+            sessions: [
+              presentation,
+              {
+                ...presentation,
+                id: "finished-presentation",
+                title: "Finished Presentation",
+                status: "finished",
+              },
+              {
+                ...presentation,
+                id: "expired-presentation",
+                title: "Expired Presentation",
+                liveExpiresAt: "2020-01-01T00:00:00Z",
+              },
+            ],
+          };
+        return response(path);
+      });
+      const harness = sessionsHarness();
+      await harness.settle();
+      expect(primaryActionNames("Active Round")).toEqual([
+        role === "viewer" ? "View Result" : "Resume Session",
+      ]);
+      expect(primaryActionNames("First Round")).toEqual(["View Result"]);
+      expect(primaryActionNames("Expired Round")).toEqual(["View Result"]);
+      clickTab("presentations");
+      await harness.settle();
+      expect(primaryActionNames("First Presentation")).toEqual([
+        role === "viewer" ? "View Report" : "Resume Presentation",
+      ]);
+      expect(primaryActionNames("Finished Presentation")).toEqual(["View Report"]);
+      expect(primaryActionNames("Expired Presentation")).toEqual(["View Report"]);
+      clickTab("surveys");
+      await harness.settle();
+      expect(primaryActionNames("Open Survey")).toEqual([
+        role === "viewer" ? "View Results" : "Manage sharing",
+      ]);
+      expect(primaryActionNames("Closed Survey")).toEqual(["View Results"]);
+      expect(primaryActionNames("Expired Survey")).toEqual([]);
+    },
+  );
+
   it("paginates Rounds and ignores a stale page after switching tabs", async () => {
     const stale = deferred<unknown>();
     fixtures.apiFetch.mockImplementation((path: string) =>
@@ -1043,6 +1326,31 @@ function elementText(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(elementText).join("");
   if (isValidElement<{ children?: ReactNode }>(node)) return elementText(node.props.children);
   return typeof node === "string" || typeof node === "number" ? String(node) : "";
+}
+function isHistoryPath(path: string, type: string): boolean {
+  return type === "rounds"
+    ? path.startsWith("/v1/sessions?")
+    : type === "presentations"
+      ? path === "/v1/presentation-sessions"
+      : path.startsWith("/v1/survey-rooms?");
+}
+function buttonNames() {
+  return elements(fixtures.tree)
+    .filter((row) => row.type === "button")
+    .map((row) => elementText(row.props.children as ReactNode));
+}
+function primaryActionNames(title: string) {
+  const article = elements(fixtures.tree).find(
+    (row) =>
+      row.type === "article" &&
+      elements(row.props.children as ReactNode).some(
+        (child) => child.type === "h2" && elementText(child.props.children as ReactNode) === title,
+      ),
+  );
+  if (!article) throw new Error(`Expected session card: ${title}`);
+  return elements(article.props.children as ReactNode)
+    .filter((row) => row.props["data-primary"] === true || row.props["data-primary"] === "true")
+    .map((row) => elementText(row.props.children as ReactNode));
 }
 function clickTab(type: string) {
   const tab = elements(fixtures.tree).find(

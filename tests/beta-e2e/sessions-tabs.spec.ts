@@ -227,9 +227,12 @@ for (const mobile of [false, true]) {
     await page
       .getByRole("searchbox", { name: "Search Round sessions", exact: true })
       .fill(fixture.round.code);
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(fixture.round.code);
     await expect(roundCard).toBeVisible();
     await page.getByRole("combobox", { name: "Round", exact: true }).selectOption(fixture.quizId);
+    await expect.poll(() => new URL(page.url()).searchParams.get("source")).toBe(fixture.quizId);
     await page.getByLabel("Started from", { exact: true }).fill("2020-01-01");
+    await expect.poll(() => new URL(page.url()).searchParams.get("from")).toBe("2020-01-01");
     await expect(roundCard).toBeVisible();
     await page.getByRole("button", { name: "List view", exact: true }).click();
     await expect(page.locator("#rounds-panel [data-view=list]")).toBeVisible();
@@ -239,6 +242,7 @@ for (const mobile of [false, true]) {
     await page
       .getByRole("searchbox", { name: "Search Round sessions", exact: true })
       .fill(fixture.title);
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(fixture.title);
     await tabs.getByRole("tab", { name: /^Presentations/ }).click();
     await expect(
       page.getByRole("searchbox", { name: "Search Presentation sessions", exact: true }),

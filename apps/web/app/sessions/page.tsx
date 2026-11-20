@@ -103,6 +103,7 @@ function SessionsContent() {
     loading: boolean;
   }>({ workspaceId: "", values: null, loading: true });
   const [countsRevision, setCountsRevision] = useState(0);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const [fetching, setFetching] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [displayPage, setDisplayPage] = useState({ key: "", limit: 25 });
@@ -128,6 +129,8 @@ function SessionsContent() {
   const actionController = useRef<AbortController | null>(null);
   const deletionControllers = useRef(new Map<string, AbortController>());
   const deletedIds = useRef(new Set<string>());
+  const searchInput = useRef<HTMLInputElement>(null);
+  const sessionPanel = useRef<HTMLElement>(null);
   activeQueryKey.current = queryKey;
   activeDataRequestKey.current = dataRequestKey;
   activeWorkspace.current = workspaceId;
@@ -299,7 +302,15 @@ function SessionsContent() {
       controller.abort();
       loadMoreController.current?.abort();
     };
-  }, [dataRequestKey, fetchRounds, featuresLoaded, loadingErrorMessage, type, workspaceId]);
+  }, [
+    dataRequestKey,
+    fetchRounds,
+    featuresLoaded,
+    historyRevision,
+    loadingErrorMessage,
+    type,
+    workspaceId,
+  ]);
 
   const filteredPresentations = filterSessionRows(current.presentations, filters, (row) => ({
     sourceId: row.presentationId,
@@ -347,6 +358,19 @@ function SessionsContent() {
   function chooseView(next: SessionView) {
     setViewPreference({ workspaceId, view: next });
     if (workspaceId) writeSessionsView(window.localStorage, workspaceId, next);
+  }
+
+  function clearFilters() {
+    updateFilters({ type, query: "", status: "all", sourceId: "all", from: "", to: "" });
+    searchInput.current?.focus();
+  }
+
+  function retryHistory() {
+    if (loading || loadError.key !== dataRequestKey || !loadError.message) return;
+    sessionPanel.current?.focus();
+    setFetching(true);
+    setLoadError({ key: dataRequestKey, message: "" });
+    setHistoryRevision((revision) => revision + 1);
   }
 
   function statusLabel(value: SessionStatus) {
@@ -547,9 +571,9 @@ function SessionsContent() {
         : surveys.length;
   const filtered =
     Boolean(query.trim()) || status !== "all" || sourceId !== "all" || Boolean(from || to);
-  const errorMessage =
-    (error.key === queryKey ? error.message : "") ||
-    (loadError.key === dataRequestKey ? loadError.message : "");
+  const operationError = error.key === queryKey ? error.message : "";
+  const historyError = loadError.key === dataRequestKey ? loadError.message : "";
+  const errorMessage = operationError || historyError;
   const availableTypes: SessionType[] = presentationsEnabled
     ? ["rounds", "presentations", "surveys"]
     : ["rounds", "surveys"];
@@ -637,6 +661,7 @@ function SessionsContent() {
             maxLength={160}
             onChange={(event) => updateFilters({ ...filters, query: event.target.value })}
             placeholder={searchLabel}
+            ref={searchInput}
             type="search"
             value={query}
           />
@@ -711,7 +736,9 @@ function SessionsContent() {
         <p className={controls.resultSummary} role="status">
           {loading
             ? t("pages.sessions.loading")
-            : t("pages.sessions.resultCount", { count: visibleCount })}
+            : historyError
+              ? t("pages.sessions.countUnavailable")
+              : t("pages.sessions.resultCount", { count: visibleCount })}
         </p>
         <div
           aria-label={t("pages.sessions.layoutLabel")}
@@ -736,16 +763,46 @@ function SessionsContent() {
           </button>
         </div>
       </section>
-      {errorMessage ? (
+      {operationError ? (
         <p className="error" lang="en-CA" role="alert">
-          {errorMessage}
+          {operationError}
         </p>
       ) : null}
-      <section aria-labelledby={`${type}-tab`} id={`${type}-panel`} role="tabpanel" tabIndex={0}>
+      <section
+        aria-busy={loading || loadingMore}
+        aria-labelledby={`${type}-tab`}
+        id={`${type}-panel`}
+        ref={sessionPanel}
+        role="tabpanel"
+        tabIndex={0}
+      >
         {type === "surveys" ? (
           <p className={styles.description}>{t("pages.sessions.surveyDescription")}</p>
         ) : null}
-        {loading ? <p className={contentStyles.muted}>{t("pages.sessions.loading")}</p> : null}
+        {historyError && !loading ? (
+          <div className={styles.loadError} role="alert">
+            <p className="error" lang="en-CA">
+              {historyError}
+            </p>
+            <button className="button" onClick={retryHistory} type="button">
+              {t("pages.common.tryAgain")}
+            </button>
+          </div>
+        ) : null}
+        {loading ? (
+          <div className={styles.loadingState}>
+            <p className={contentStyles.muted}>{t("pages.sessions.loading")}</p>
+            <div aria-hidden="true" className={styles.collection} data-view={view}>
+              {[0, 1, 2].map((placeholder) => (
+                <div className={styles.loadingCard} key={placeholder}>
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {!loading && !errorMessage && visibleCount === 0 ? (
           <div className={styles.empty}>
             <h2>
@@ -770,9 +827,15 @@ function SessionsContent() {
                 )}
               </p>
             ) : null}
-            <Link className="button-quiet" href={`/library?type=${type}`}>
-              {t("pages.sessions.backToLibrary", { type: singularTypeLabel })}
-            </Link>
+            {filtered ? (
+              <button className="button" onClick={clearFilters} type="button">
+                {t("pages.results.clearFilters")}
+              </button>
+            ) : (
+              <Link className="button" href={`/library?type=${type}`}>
+                {t("pages.sessions.backToLibrary", { type: singularTypeLabel })}
+              </Link>
+            )}
           </div>
         ) : null}
         {!loading ? (
@@ -844,6 +907,7 @@ function SessionsContent() {
                   {sessionActions("rounds", session.status, role).canResume ? (
                     <button
                       className={`button small-button ${signals.action}`}
+                      data-primary="true"
                       data-action="resume"
                       disabled={mutationBusy}
                       onClick={() => void resumeSession(session)}
@@ -857,6 +921,9 @@ function SessionsContent() {
                   {session.reportId ? (
                     <Link
                       className={`button-quiet small-button ${signals.action}`}
+                      data-primary={
+                        !sessionActions("rounds", session.status, role).canResume || undefined
+                      }
                       data-action="result"
                       href={`/report/${session.reportId}`}
                     >
@@ -949,6 +1016,7 @@ function SessionsContent() {
                     {actions.canResume ? (
                       <Link
                         className={`button small-button ${signals.action}`}
+                        data-primary="true"
                         data-action="resume"
                         href={`/presentation-session/${session.id}/host`}
                       >
@@ -957,6 +1025,7 @@ function SessionsContent() {
                     ) : null}
                     <Link
                       className={`button-quiet small-button ${signals.action}`}
+                      data-primary={!actions.canResume || undefined}
                       data-action="result"
                       href={`/presentation-session/${session.id}/report`}
                     >
@@ -1033,6 +1102,7 @@ function SessionsContent() {
                     {actions.canManageSharing ? (
                       <Link
                         className={`button small-button ${signals.action}`}
+                        data-primary="true"
                         data-action="view"
                         href={`/surveys/rooms/${session.id}`}
                       >
@@ -1042,6 +1112,7 @@ function SessionsContent() {
                     {actions.canViewSurveyResults ? (
                       <Link
                         className={`button-quiet small-button ${signals.action}`}
+                        data-primary={!actions.canManageSharing || undefined}
                         data-action="result"
                         href={`/results/surveys/${session.id}`}
                       >

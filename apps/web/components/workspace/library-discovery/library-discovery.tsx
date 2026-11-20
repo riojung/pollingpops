@@ -92,6 +92,12 @@ export function LibraryDiscovery({
   const busy = state.phase === "loading" || state.phase === "more";
   const initialError = state.phase === "error";
   const pageError = state.phase === "page-error";
+  const activeState = useRef(state);
+  activeState.current = state;
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const resultsPanel = useRef<HTMLElement | null>(null);
+  const paginationPanel = useRef<HTMLElement | null>(null);
+  const paginationFocusKey = useRef<string | null>(null);
   const facets = state.facets;
   const hasOrganizationLibrary = Boolean(
     workspace?.organization ||
@@ -109,6 +115,25 @@ export function LibraryDiscovery({
   }, [query.q]);
 
   useEffect(() => {
+    const panel = paginationPanel.current;
+    if (
+      !current ||
+      activeKey.current !== key ||
+      paginationFocusKey.current !== key ||
+      state.phase === "loading" ||
+      state.phase === "error" ||
+      !panel ||
+      document.activeElement !== panel
+    ) {
+      paginationFocusKey.current = null;
+      return;
+    }
+    // Appended rows can push the focused footer below a small viewport.
+    // Keep it visible without reclaiming focus from a user who moved elsewhere.
+    panel.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+  }, [current, key, state.items, state.phase]);
+
+  useEffect(() => {
     if (blocked) {
       currentPager.clear();
       return;
@@ -123,10 +148,12 @@ export function LibraryDiscovery({
 
   useEffect(() => {
     const invalidate = () => {
+      paginationFocusKey.current = null;
       currentPager.clear();
       setSessionEpoch((value) => value + 1);
     };
     const stop = () => {
+      paginationFocusKey.current = null;
       currentPager.clear();
       setStoppedActor(actor);
     };
@@ -154,14 +181,56 @@ export function LibraryDiscovery({
 
   function change(patch: Partial<LibraryDiscoveryQuery>, nextType = type) {
     if (activeKey.current !== key) return;
+    paginationFocusKey.current = null;
     if (patch.q !== undefined) setSearchDraft({ key: query.q, value: patch.q });
     router.push(libraryDiscoveryHref({ ...query, ...patch }, scope, nextType), { scroll: false });
   }
   function refresh() {
     if (activeKey.current === key && !blocked) currentPager.refresh(key);
   }
+  function retryInitialRead() {
+    if (activeKey.current !== key || blocked || activeState.current.phase !== "error") return;
+    // Move focus before the retry control disappears; completion never takes it back.
+    resultsPanel.current?.focus();
+    refresh();
+  }
   function more() {
-    if (activeKey.current === key && !blocked) currentPager.more(key, state.nextCursor);
+    const latest = activeState.current;
+    if (
+      activeKey.current !== key ||
+      blocked ||
+      latest.key !== key ||
+      !state.nextCursor ||
+      latest.nextCursor !== state.nextCursor ||
+      (latest.phase !== "ready" && latest.phase !== "page-error")
+    )
+      return;
+    // This region remains mounted through failure, retry and the final page.
+    paginationFocusKey.current = key;
+    paginationPanel.current?.focus();
+    currentPager.more(key, state.nextCursor);
+  }
+  function clearFilters() {
+    if (activeKey.current !== key || blocked) return;
+    searchInput.current?.focus();
+    // Center the handoff so sticky workspace navigation cannot cover the search field.
+    searchInput.current?.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "instant",
+    });
+    change(
+      {
+        q: "",
+        kind: "all",
+        status: "active",
+        favorites: false,
+        folder: "all",
+        progress: "all",
+        permission: "all",
+      },
+      "all",
+    );
   }
   const kinds = ["round", "presentation", "survey"] as const;
   const managementKinds = kinds.filter(
@@ -251,6 +320,7 @@ export function LibraryDiscovery({
             {shared ? sharing.search : copy.search}
           </label>
           <input
+            ref={searchInput}
             id="library-discovery-search"
             className="input"
             type="search"
@@ -394,24 +464,7 @@ export function LibraryDiscovery({
             </select>
           </label>
           {filtered ? (
-            <button
-              className="button-quiet"
-              type="button"
-              onClick={() =>
-                change(
-                  {
-                    q: "",
-                    kind: "all",
-                    status: "active",
-                    favorites: false,
-                    folder: "all",
-                    progress: "all",
-                    permission: "all",
-                  },
-                  "all",
-                )
-              }
-            >
+            <button className="button-quiet" type="button" onClick={clearFilters}>
               {t("pages.results.clearFilters")}
             </button>
           ) : null}
@@ -419,148 +472,197 @@ export function LibraryDiscovery({
         <p id="library-discovery-facet-help" className={styles.help}>
           {copy.facetHelp}
         </p>
-        <p className={styles.summary} role="status" aria-live="polite">
-          {state.phase === "loading" ? (
-            sharing.loading
-          ) : initialError ? (
-            ""
-          ) : (
-            <>
-              {facets ? (
-                <strong>
-                  {text(copy.total, { count: new Intl.NumberFormat(locale).format(facets.total) })}
-                </strong>
+        <section
+          ref={resultsPanel}
+          data-library-results=""
+          className={styles.results}
+          aria-label={copy.allContent}
+          aria-describedby="library-discovery-summary"
+          aria-busy={busy}
+          tabIndex={-1}
+        >
+          <p
+            id="library-discovery-summary"
+            className={styles.summary}
+            role="status"
+            aria-live="polite"
+          >
+            {state.phase === "loading" ? (
+              sharing.loading
+            ) : initialError ? (
+              ""
+            ) : (
+              <>
+                {facets ? (
+                  <strong>
+                    {text(copy.total, {
+                      count: new Intl.NumberFormat(locale).format(facets.total),
+                    })}
+                  </strong>
+                ) : null}
+                <span>
+                  {text(copy.shown, {
+                    count: new Intl.NumberFormat(locale).format(state.items.length),
+                  })}
+                </span>
+              </>
+            )}
+          </p>
+          {initialError ? (
+            <div role="alert" className={styles.error}>
+              <p>{copy.initialError}</p>
+              <button className="button-quiet" type="button" onClick={retryInitialRead}>
+                {sharing.retry}
+              </button>
+            </div>
+          ) : null}
+          {state.phase === "ready" && !state.items.length ? (
+            <section className={styles.empty}>
+              <h2>
+                {filtered ? copy.noResultsTitle : shared ? sharing.emptyTitle : copy.emptyTitle}
+              </h2>
+              <p>{filtered ? copy.noResultsHelp : shared ? sharing.emptyHelp : copy.emptyHelp}</p>
+              {filtered ? (
+                <button className="button" type="button" onClick={clearFilters}>
+                  {t("pages.results.clearFilters")}
+                </button>
               ) : null}
-              <span>
-                {text(copy.shown, {
-                  count: new Intl.NumberFormat(locale).format(state.items.length),
-                })}
-              </span>
-            </>
-          )}
-        </p>
-        {initialError || pageError ? (
-          <div role="alert" className={styles.error}>
-            <p>{pageError ? copy.pageError : copy.initialError}</p>
-            <button className="button-quiet" type="button" onClick={pageError ? more : refresh}>
-              {sharing.retry}
-            </button>
-          </div>
-        ) : null}
-        {state.phase === "ready" && !state.items.length ? (
-          <section className={styles.empty}>
-            <h2>
-              {filtered ? copy.noResultsTitle : shared ? sharing.emptyTitle : copy.emptyTitle}
-            </h2>
-            <p>{filtered ? copy.noResultsHelp : shared ? sharing.emptyHelp : copy.emptyHelp}</p>
-          </section>
-        ) : null}
-        <ul className={styles.list} aria-label={copy.allContent} aria-busy={busy}>
-          {state.items.map((item) => {
-            const isShare = "capabilities" in item;
-            const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
-              new Date(isShare ? item.sharedAt : item.updatedAt),
-            );
-            return (
-              <li
-                key={discoveryItemKey(item)}
-                data-library-item={discoveryItemKey(item)}
-                data-kind={item.artifactType}
-              >
-                <article className={styles.row}>
-                  <div className={styles.content}>
-                    <div className={styles.meta}>
-                      <span className={styles.kind}>
-                        <WorkspaceKindIcon kind={item.artifactType} />
-                        {kindLabel(item.artifactType)}
-                      </span>
+            </section>
+          ) : null}
+          <ul className={styles.list} aria-label={copy.allContent} aria-busy={busy}>
+            {state.items.map((item) => {
+              const isShare = "capabilities" in item;
+              const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+                new Date(isShare ? item.sharedAt : item.updatedAt),
+              );
+              return (
+                <li
+                  key={discoveryItemKey(item)}
+                  data-library-item={discoveryItemKey(item)}
+                  data-kind={item.artifactType}
+                >
+                  <article className={styles.row}>
+                    <div className={styles.content}>
+                      <div className={styles.meta}>
+                        <span className={styles.kind}>
+                          <WorkspaceKindIcon kind={item.artifactType} />
+                          {kindLabel(item.artifactType)}
+                        </span>
+                        {isShare ? (
+                          <>
+                            <span>
+                              {item.permission === "use" ? sharing.canUse : sharing.canView}
+                            </span>
+                            <span>{sharing[item.progress]}</span>
+                          </>
+                        ) : (
+                          <WorkspaceStatus status={item.status}>
+                            {t(`pages.common.status.${item.status}`)}
+                          </WorkspaceStatus>
+                        )}
+                      </div>
+                      <h2 lang="" dir="auto">
+                        {isShare ? (
+                          item.title
+                        ) : (
+                          <Link prefetch={false} href={itemHref(item)}>
+                            {item.title}
+                          </Link>
+                        )}
+                      </h2>
+                      {item.description ? (
+                        <p className={styles.description} lang="" dir="auto">
+                          {item.description}
+                        </p>
+                      ) : null}
+                      <p className={styles.details}>
+                        {isShare ? (
+                          <>
+                            <span lang="" dir="auto">
+                              {item.organizationName}
+                            </span>
+                            <span>
+                              {sharing.from}:{" "}
+                              <span lang="" dir="auto">
+                                {item.sourceWorkspaceName}
+                              </span>
+                            </span>
+                          </>
+                        ) : (
+                          <span>{text(copy.items, { count: item.itemCount })}</span>
+                        )}
+                        <span>{text(isShare ? copy.sharedDate : copy.updated, { date })}</span>
+                      </p>
+                      {isShare && item.message ? (
+                        <p
+                          className={styles.message}
+                          data-library-share-message=""
+                          lang=""
+                          dir="auto"
+                        >
+                          {item.message}
+                        </p>
+                      ) : null}
                       {isShare ? (
-                        <>
-                          <span>
-                            {item.permission === "use" ? sharing.canUse : sharing.canView}
-                          </span>
-                          <span>{sharing[item.progress]}</span>
-                        </>
-                      ) : (
-                        <WorkspaceStatus status={item.status}>
-                          {t(`pages.common.status.${item.status}`)}
-                        </WorkspaceStatus>
-                      )}
+                        <LibraryShareDue dueAt={item.dueAt} progress={item.progress} />
+                      ) : null}
                     </div>
-                    <h2 lang="" dir="auto">
+                    <div className={styles.actions}>
                       {isShare ? (
-                        item.title
+                        <LibraryShareActions
+                          share={item}
+                          onChange={refresh}
+                          onRevoked={refresh}
+                          onAccessChanged={refresh}
+                        />
                       ) : (
-                        <Link prefetch={false} href={itemHref(item)}>
-                          {item.title}
+                        <Link prefetch={false} className="button-quiet" href={itemHref(item)}>
+                          {t(
+                            canEdit && item.status !== "archived"
+                              ? "pages.library.edit"
+                              : "pages.library.view",
+                          )}
                         </Link>
                       )}
-                    </h2>
-                    {item.description ? (
-                      <p className={styles.description} lang="" dir="auto">
-                        {item.description}
-                      </p>
-                    ) : null}
-                    <p className={styles.details}>
-                      {isShare ? (
-                        <>
-                          <span lang="" dir="auto">
-                            {item.organizationName}
-                          </span>
-                          <span>
-                            {sharing.from}:{" "}
-                            <span lang="" dir="auto">
-                              {item.sourceWorkspaceName}
-                            </span>
-                          </span>
-                        </>
-                      ) : (
-                        <span>{text(copy.items, { count: item.itemCount })}</span>
-                      )}
-                      <span>{text(isShare ? copy.sharedDate : copy.updated, { date })}</span>
-                    </p>
-                    {isShare && item.message ? (
-                      <p
-                        className={styles.message}
-                        data-library-share-message=""
-                        lang=""
-                        dir="auto"
-                      >
-                        {item.message}
-                      </p>
-                    ) : null}
-                    {isShare ? (
-                      <LibraryShareDue dueAt={item.dueAt} progress={item.progress} />
-                    ) : null}
-                  </div>
-                  <div className={styles.actions}>
-                    {isShare ? (
-                      <LibraryShareActions
-                        share={item}
-                        onChange={refresh}
-                        onRevoked={refresh}
-                        onAccessChanged={refresh}
-                      />
-                    ) : (
-                      <Link prefetch={false} className="button-quiet" href={itemHref(item)}>
-                        {t(
-                          canEdit && item.status !== "archived"
-                            ? "pages.library.edit"
-                            : "pages.library.view",
-                        )}
-                      </Link>
-                    )}
-                  </div>
-                </article>
-              </li>
-            );
-          })}
-        </ul>
-        {current && state.nextCursor && !pageError ? (
-          <button className="button-quiet" disabled={busy} type="button" onClick={more}>
-            {state.phase === "more" ? sharing.loading : sharing.loadMore}
-          </button>
-        ) : null}
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+          <section
+            ref={paginationPanel}
+            data-library-pagination=""
+            className={styles.pagination}
+            aria-label={t("pages.common.results")}
+            aria-busy={busy}
+            tabIndex={-1}
+          >
+            {pageError ? (
+              <p role="alert" className={styles.pageError}>
+                {copy.pageError}
+              </p>
+            ) : null}
+            {!initialError ? (
+              <p className={styles.help}>
+                {state.phase === "loading"
+                  ? sharing.loading
+                  : text(copy.shown, {
+                      count: new Intl.NumberFormat(locale).format(state.items.length),
+                    })}
+              </p>
+            ) : null}
+            {current && state.nextCursor ? (
+              <button className="button-quiet" disabled={busy} type="button" onClick={more}>
+                {state.phase === "more"
+                  ? sharing.loading
+                  : pageError
+                    ? sharing.retry
+                    : sharing.loadMore}
+              </button>
+            ) : null}
+          </section>
+        </section>
       </div>
     </WorkspaceShell>
   );

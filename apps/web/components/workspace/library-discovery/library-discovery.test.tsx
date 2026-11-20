@@ -3,7 +3,7 @@ import type * as ReactModule from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Client from "./client";
 import type { DiscoveryPage, WorkspaceLibraryItem } from "./client";
-import { LibraryDiscovery } from "./library-discovery";
+import { LibraryDiscovery, type LibraryManagementType } from "./library-discovery";
 import { LibraryShareActions } from "../library-sharing/share-actions";
 import { AUTH_CHANGE_EVENT } from "../../../lib/api";
 import { SESSION_LOGOUT_EVENT } from "../../../lib/idle-session";
@@ -139,13 +139,47 @@ function text(node: ReactNode): string {
   if (isValidElement<{ children?: ReactNode }>(node)) return text(node.props.children);
   return typeof node === "string" || typeof node === "number" ? String(node) : "";
 }
-function mount(scope: "workspace" | "shared" | "organization" | "managed" = "workspace") {
+function deferredPage() {
+  let resolve!: (page: DiscoveryPage) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<DiscoveryPage>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+function focusTarget() {
+  const target = {
+    scrollIntoView: vi.fn(),
+    focus: vi.fn(() =>
+      Object.defineProperty(document, "activeElement", { configurable: true, value: target }),
+    ),
+  };
+  return target;
+}
+function mount(
+  scope: "workspace" | "shared" | "organization" | "managed" = "workspace",
+  type: LibraryManagementType = "all",
+) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
+  const targets = {
+    search: focusTarget(),
+    results: focusTarget(),
+    pagination: focusTarget(),
+  };
   function render() {
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      return elements(LibraryDiscovery({ scope }));
+      const tree = elements(LibraryDiscovery({ scope, type }));
+      for (const [element, target] of [
+        [tree.find((node) => node.props.id === "library-discovery-search"), targets.search],
+        [tree.find((node) => node.props["data-library-results"] === ""), targets.results],
+        [tree.find((node) => node.props["data-library-pagination"] === ""), targets.pagination],
+      ] as const) {
+        if (element?.props.ref) (element.props.ref as { current: unknown }).current = target;
+      }
+      return tree;
     } finally {
       mocked.hooks = null;
     }
@@ -194,6 +228,12 @@ function mount(scope: "workspace" | "shared" | "organization" | "managed" = "wor
     button,
     click,
     input,
+    targets,
+    setScope(next: typeof scope) {
+      scope = next;
+    },
+    pagination: () => render().find((element) => element.props["data-library-pagination"] === "")!,
+    results: () => render().find((element) => element.props["data-library-results"] === "")!,
     titles: () =>
       render()
         .filter((element) => element.type === "h2")
@@ -311,6 +351,233 @@ describe("All content discovery", () => {
     await library.settle();
     expect(library.titles()).toEqual(["No content yet"]);
   });
+
+  it.each([false, true])(
+    "keeps cursor recovery below retained rows and respects moved focus: %s",
+    async (moveFocus) => {
+      const library = mount();
+      await library.settle();
+      const failedPage = deferredPage();
+      mocked.list.mockReturnValueOnce(failedPage.promise);
+      library.click("Load more");
+      expect(document.activeElement).toBe(library.targets.pagination);
+      expect(library.pagination().props).toMatchObject({
+        "aria-label": "Results",
+        "aria-busy": true,
+        tabIndex: -1,
+      });
+      expect(library.titles()).toEqual(["Readiness"]);
+      expect(library.button("Loading…").props.disabled).toBe(true);
+      failedPage.reject(new TypeError("page offline"));
+      await library.settle();
+      const tree = library.render();
+      const footer = library.pagination();
+      const listIndex = tree.findIndex((element) => element.type === "ul");
+      const footerIndex = tree.findIndex(
+        (element) => element.props["data-library-pagination"] === "",
+      );
+      expect(footerIndex).toBeGreaterThan(listIndex);
+      expect(text(footer)).toContain("Your current results are kept");
+      expect(elements(footer).find((element) => element.props.role === "alert")).toBeDefined();
+      expect(footer.props["aria-busy"]).toBe(false);
+      expect(document.activeElement).toBe(library.targets.pagination);
+      expect(text(tree.find((element) => element.props.id === "library-discovery-summary"))).toBe(
+        "Results: 140Loaded: 1",
+      );
+
+      const retry = deferredPage();
+      mocked.list.mockReturnValueOnce(retry.promise);
+      const staleRetry = library.button("Retry").props.onClick as () => void;
+      library.click("Retry");
+      expect(document.activeElement).toBe(library.targets.pagination);
+      expect(library.pagination().props["aria-busy"]).toBe(true);
+      expect(mocked.list.mock.calls.slice(-2).map((call) => call[2])).toEqual(["next", "next"]);
+      expect(library.titles()).toEqual(["Readiness"]);
+      await library.settle();
+      const scrolls = library.targets.pagination.scrollIntoView.mock.calls.length;
+      if (moveFocus) library.targets.search.focus();
+      retry.resolve({ ...page(), items: [own("Second", "survey")], nextCursor: null });
+      await library.settle();
+      expect(library.titles()).toEqual(["Readiness", "Second"]);
+      expect(library.pagination().props["aria-busy"]).toBe(false);
+      expect(text(library.pagination())).toBe("Loaded: 2");
+      expect(library.button("Load more")).toBeUndefined();
+      expect(document.activeElement).toBe(
+        moveFocus ? library.targets.search : library.targets.pagination,
+      );
+      expect(library.targets.pagination.scrollIntoView).toHaveBeenCalledTimes(
+        scrolls + (moveFocus ? 0 : 1),
+      );
+      expect(library.targets.pagination.scrollIntoView).toHaveBeenLastCalledWith({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "instant",
+      });
+      const focusCalls = library.targets.pagination.focus.mock.calls.length;
+      const requests = mocked.list.mock.calls.length;
+      staleRetry();
+      expect(library.targets.pagination.focus).toHaveBeenCalledTimes(focusCalls);
+      expect(mocked.list).toHaveBeenCalledTimes(requests);
+    },
+  );
+
+  it("focuses the stable results panel for a first-read retry without inventing a count", async () => {
+    mocked.list.mockRejectedValueOnce(new TypeError("offline"));
+    const library = mount();
+    await library.settle();
+    expect(text(library.pagination())).toBe("");
+    expect(text(library.render())).not.toContain("Loaded: 0");
+    const retry = deferredPage();
+    mocked.list.mockReturnValueOnce(retry.promise);
+    library.click("Retry");
+    expect(document.activeElement).toBe(library.targets.results);
+    expect(library.results().props).toMatchObject({
+      "aria-label": "All content",
+      "aria-busy": true,
+      "aria-describedby": "library-discovery-summary",
+      tabIndex: -1,
+    });
+    expect(library.button("Retry")).toBeUndefined();
+    expect(mocked.list.mock.calls.at(-1)?.[2]).toBeNull();
+    retry.resolve(page());
+    await library.settle();
+    expect(document.activeElement).toBe(library.targets.results);
+    expect(library.results().props["aria-busy"]).toBe(false);
+    expect(library.titles()).toEqual(["Readiness"]);
+  });
+
+  it.each(["workspace", "shared", "organization", "managed"] as const)(
+    "resets both toolbar and no-match filters to search while preserving sort and %s scope",
+    async (scope) => {
+      mocked.query =
+        "q=missing&kind=survey&status=published&favorites=true&folder=unfiled&progress=done&permission=view&sort=title_desc";
+      mocked.list.mockResolvedValue({
+        items: [],
+        nextCursor: null,
+        facets: { ...facets, total: 0 },
+      });
+      const library = mount(scope, "surveys");
+      await library.settle();
+      const buttons = library
+        .render()
+        .filter((element) => element.type === "button" && text(element) === "Clear filters");
+      expect(buttons).toHaveLength(2);
+      expect(buttons[1]?.props.className).toBe("button");
+      for (const button of buttons) {
+        const previousFocuses = library.targets.search.focus.mock.calls.length;
+        const previousScrolls = library.targets.search.scrollIntoView.mock.calls.length;
+        (button.props.onClick as () => void)();
+        expect(document.activeElement).toBe(library.targets.search);
+        expect(library.targets.search.focus).toHaveBeenCalledTimes(previousFocuses + 1);
+        expect(library.targets.search.scrollIntoView).toHaveBeenCalledTimes(previousScrolls + 1);
+        expect(library.targets.search.scrollIntoView).toHaveBeenLastCalledWith({
+          block: "center",
+          inline: "nearest",
+          behavior: "instant",
+        });
+        expect(library.targets.search.focus.mock.invocationCallOrder.at(-1)).toBeLessThan(
+          library.targets.search.scrollIntoView.mock.invocationCallOrder.at(-1)!,
+        );
+        expect(library.targets.search.scrollIntoView.mock.invocationCallOrder.at(-1)).toBeLessThan(
+          mocked.push.mock.invocationCallOrder.at(-1)!,
+        );
+        const href = mocked.push.mock.calls.at(-1)?.[0] as string;
+        const params = new URLSearchParams(href.split("?")[1]);
+        expect(params.get("sort")).toBe("title_desc");
+        expect(params.get("scope")).toBe(scope === "workspace" ? null : scope);
+        expect(params.has("type")).toBe(false);
+        for (const name of ["q", "kind", "status", "favorites", "folder", "progress", "permission"])
+          expect(params.has(name)).toBe(false);
+      }
+      await library.settle();
+      expect(library.input().props.value).toBe("");
+      expect(document.activeElement).toBe(library.targets.search);
+    },
+  );
+
+  it.each(["query", "scope", "workspace", "actor", "role", "organization", "logout"])(
+    "fences stale recovery focus and late pages after %s changes",
+    async (change) => {
+      const library = mount();
+      await library.settle();
+      const staleMore = library.button("Load more").props.onClick as () => void;
+      const pending = deferredPage();
+      mocked.list.mockReturnValueOnce(pending.promise);
+      library.click("Load more");
+      library.targets.search.focus();
+      if (change === "query") mocked.query = "q=new";
+      if (change === "scope") library.setScope("shared");
+      if (change === "workspace") mocked.workspaceId = "workspace-b";
+      if (change === "actor") mocked.actor = "actor-b";
+      if (change === "role") mocked.role = "viewer";
+      if (change === "organization") mocked.orgRole = "admin";
+      if (change === "logout") window.dispatchEvent(new Event(SESSION_LOGOUT_EVENT));
+      library.render();
+      const requests = mocked.list.mock.calls.length;
+      const focusCalls = library.targets.pagination.focus.mock.calls.length;
+      staleMore();
+      expect(mocked.list).toHaveBeenCalledTimes(requests);
+      expect(library.targets.pagination.focus).toHaveBeenCalledTimes(focusCalls);
+      pending.resolve({ ...page(), items: [own("Obsolete page", "survey")], nextCursor: null });
+      await library.settle();
+      expect(library.titles()).not.toContain("Obsolete page");
+      expect(document.activeElement).toBe(library.targets.search);
+      expect(library.targets.pagination.focus).toHaveBeenCalledTimes(focusCalls);
+    },
+  );
+
+  it.each(["query", "scope", "role", "logout"])(
+    "cancels footer scrolling when %s changes even if the footer retains focus",
+    async (change) => {
+      const library = mount();
+      await library.settle();
+      const pending = deferredPage();
+      mocked.list.mockReturnValueOnce(pending.promise);
+      library.click("Load more");
+      await library.settle();
+      expect(document.activeElement).toBe(library.targets.pagination);
+      expect(library.targets.pagination.scrollIntoView).toHaveBeenCalled();
+      library.targets.pagination.scrollIntoView.mockClear();
+      if (change === "query") mocked.query = "q=new";
+      if (change === "scope") library.setScope("shared");
+      if (change === "role") mocked.role = "viewer";
+      if (change === "logout") window.dispatchEvent(new Event(SESSION_LOGOUT_EVENT));
+      await library.settle();
+      pending.resolve({ ...page(), items: [own("Obsolete page", "survey")], nextCursor: null });
+      await library.settle();
+      expect(library.titles()).not.toContain("Obsolete page");
+      expect(library.targets.pagination.scrollIntoView).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(library.targets.pagination);
+    },
+  );
+
+  it.each(["query", "scope", "role"])(
+    "rejects obsolete initial-retry and reset focus callbacks after %s changes",
+    async (change) => {
+      mocked.query = "q=missing";
+      mocked.list.mockRejectedValueOnce(new TypeError("offline"));
+      const library = mount();
+      await library.settle();
+      const staleRetry = library.button("Retry").props.onClick as () => void;
+      const staleReset = library.button("Clear filters").props.onClick as () => void;
+      const elsewhere = focusTarget();
+      elsewhere.focus();
+      if (change === "query") mocked.query = "q=new";
+      if (change === "scope") library.setScope("shared");
+      if (change === "role") mocked.role = "viewer";
+      library.render();
+      const requests = mocked.list.mock.calls.length;
+      staleRetry();
+      staleReset();
+      expect(mocked.list).toHaveBeenCalledTimes(requests);
+      expect(mocked.push).not.toHaveBeenCalled();
+      expect(library.targets.results.focus).not.toHaveBeenCalled();
+      expect(library.targets.search.focus).not.toHaveBeenCalled();
+      expect(library.targets.search.scrollIntoView).not.toHaveBeenCalled();
+      await library.settle();
+      expect(document.activeElement).toBe(elsewhere);
+    },
+  );
 
   it.each(["workspace", "actor", "role", "organization", "loading", "error"])(
     "hides prior rows/counts immediately on %s context change",

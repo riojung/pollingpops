@@ -4,6 +4,7 @@ Selected checkpoint: **WX-11C**, November 20, 2026.
 Baseline: merged Results WX-11B, [PR #292](https://github.com/riojung/pollingpops/pull/292), `6e85bcf`.
 Branch: `codex/workspace-settings-recovery`.
 Owner: frontend and accessibility.
+Merged through [PR #293](https://github.com/riojung/pollingpops/pull/293) at `223095c`.
 
 ## Selected behavior
 
@@ -75,7 +76,8 @@ privacy, assistive-technology, native-language or physical-device acceptance.
 
 ## Remaining work
 
-Library pagination/reset focus is the next ready surface checkpoint. Independent settings-section
+Library pagination/reset focus is implemented locally as WX-11D on `codex/library-recovery-focus`;
+see its [scope and acceptance record](library-recovery-focus.md). Independent settings-section
 recovery and capability/plan explanations remain pending. The current entitlement/feature booleans
 support effective availability, but not every underlying cause. Neutral unavailable copy can be
 corrected independently; precise plan/operator/rollout/provider explanations need an authoritative

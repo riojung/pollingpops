@@ -2,6 +2,7 @@
 
 Baseline: merged C1, [PR #289](https://github.com/riojung/pollingpops/pull/289), `01df23d`.
 Branch: `codex/survey-branching-privacy-policy`.
+Merged through [PR #290](https://github.com/riojung/pollingpops/pull/290) at `d6f3fd3`.
 The owner selected **withhold the whole report until privacy checks pass** on November 19, 2026.
 
 C2 implements an isolated candidate disclosure policy and automated qualification fixtures. It

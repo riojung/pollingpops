@@ -8,16 +8,32 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Conditional Survey disclosure controls, November 19, 2026
+
+WX-06C2 on `codex/survey-branching-privacy-policy` adds an isolated whole-report disclosure
+candidate. Its proposed aggregate-v4/source-v4 contract releases a closed report only when
+every complete joint contribution pattern has at least five finalized submissions. Any rare
+pattern withholds the whole report, including its total. C1's suppressed-only aggregate-v3
+contract and all existing runtime/writer paths stay unchanged.
+
+The automated bound covers Boolean cohorts over the report's fixed contribution predicates.
+It does not establish differential privacy, verified-person anonymity, protection against
+known-answer/status-oracle attacks or safety across multiple releases. Utility costs, remaining
+human privacy acceptance and C3/C4's required single immutable outcome/withdrawal protocol are
+recorded in the [C2 policy qualification](survey-branching-disclosure-policy.md). No live report
+or conditional authoring grant is enabled by this candidate.
+
 ### Conditional Survey reporting foundation, November 19, 2026
 
-WX-06C1 on `codex/survey-branching-results-contracts` adds an isolated proposed aggregate-v3
+WX-06C1 merged through PR #289 at `01df23d` and adds an isolated proposed aggregate-v3
 contract for source content v4, internal finalized-response counting, and a strict withheld-only
 projection. Eligible, answered, eligible-unanswered and logic-skipped counts form explicit
 partitions. Coverage uses eligible submissions; answer distributions use answered respondents.
 Finalized rows are normalized and validated without silently dropping hidden or invalid answers.
 
 The public proposal contains no counts, distributions or respondent paths, even after closure or
-above five submissions. Adversarial qualification fixtures demonstrate direct, complementary,+nested and overlapping-cohort risks; historical aggregate-v2 bytes stay unchanged. No runtime
+above five submissions. Adversarial qualification fixtures demonstrate direct, complementary,
+nested and overlapping-cohort risks; historical aggregate-v2 bytes stay unchanged. No runtime
 results, summary/export path, new writer or feature grant is enabled. C2 disclosure qualification,
 C3 result readers and C4 summaries/exports/lifecycle remain prerequisites for B3 authoring.
 See the [counting and privacy record](survey-branching-results.md).
@@ -49,8 +65,9 @@ v1–4 frozen-content/storage readers, reader negotiation, eligible-page navigat
 answer removal, revision-safe replacement saves/retries/resume, and retained read-only inspection.
 Migration 118 expands four version checks only. Mutation schemas and effective writers remain
 v1–3; conditional publication, launch, Library sharing and copies stay disabled. V4 results,
-summaries and derived exports remain unavailable. C1 adds isolated counting/withheld contracts;
-C2–C4 privacy qualification and runtime results/export integration must precede
+summaries and derived exports remain unavailable. C1 counting/withheld contracts are merged;
+C2's candidate disclosure policy is local with human privacy acceptance open. C3/C4 runtime
+results/export integration and lifecycle qualification must precede
 B3 condition authoring and its explicit grant. Existing lifecycle/RLS/privacy guarantees
 and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and

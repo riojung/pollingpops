@@ -255,3 +255,248 @@ export function surveyBranchingSuppressedResults(
     })),
   });
 }
+
+/** C2 is separate from the immutable C1 suppressed-only aggregate-v3 contract. */
+export const SURVEY_BRANCHING_DISCLOSURE_AGGREGATE_SCHEMA_VERSION = 4;
+export const SURVEY_BRANCHING_DISCLOSURE_PRIVACY_POLICY = "joint_contribution_atoms_v1";
+
+const disclosedCountSchema = z
+  .number()
+  .int()
+  .nonnegative()
+  .max(Number.MAX_SAFE_INTEGER)
+  .refine(
+    (value) => value === 0 || value >= SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS,
+    "Released cohort counts must be zero or meet the minimum",
+  );
+const disclosureBucketSchema = z
+  .object({ label: z.string().min(1).max(180), count: disclosedCountSchema })
+  .strict();
+const disclosedQuestionEvidence = {
+  eligibleCount: disclosedCountSchema,
+  answeredCount: disclosedCountSchema,
+  unansweredCount: disclosedCountSchema,
+  skippedLogicCount: disclosedCountSchema,
+  suppressed: z.literal(false),
+};
+const disclosureQuestionSchema = z
+  .discriminatedUnion("type", [
+    z
+      .object({
+        ...questionMetadata,
+        type: z.literal("poll"),
+        maxSelections: z.number().int().min(1).max(6),
+        ...disclosedQuestionEvidence,
+        distribution: z.array(disclosureBucketSchema).min(2).max(6),
+      })
+      .strict(),
+    z
+      .object({
+        ...questionMetadata,
+        type: z.literal("rating"),
+        ...disclosedQuestionEvidence,
+        distribution: z.array(disclosureBucketSchema).min(2).max(10),
+      })
+      .strict(),
+  ])
+  .superRefine((question, ctx) => {
+    const counts = [
+      question.eligibleCount,
+      question.answeredCount,
+      question.unansweredCount,
+      question.skippedLogicCount,
+      ...question.distribution.map((bucket) => bucket.count),
+    ];
+    if (!counts.every(Number.isSafeInteger)) return;
+    const eligible = BigInt(question.eligibleCount);
+    const answered = BigInt(question.answeredCount);
+    const unanswered = BigInt(question.unansweredCount);
+    if (eligible !== answered + unanswered)
+      ctx.addIssue({
+        code: "custom",
+        message: "Eligible responses must equal answered plus unanswered",
+      });
+    if (question.distribution.some((bucket) => bucket.count > question.answeredCount))
+      ctx.addIssue({
+        code: "custom",
+        path: ["distribution"],
+        message: "A bucket cannot exceed the answered sample",
+      });
+    const selections = question.distribution.reduce(
+      (total, bucket) => total + BigInt(bucket.count),
+      0n,
+    );
+    if (question.type === "rating" || question.maxSelections === 1) {
+      if (selections !== answered)
+        ctx.addIssue({
+          code: "custom",
+          path: ["distribution"],
+          message: "Single-response buckets must total the answered sample",
+        });
+    } else if (Number.isSafeInteger(question.maxSelections)) {
+      if (question.maxSelections > question.distribution.length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["maxSelections"],
+          message: "Selection limit exceeds the available choices",
+        });
+      if (selections < answered || selections > answered * BigInt(question.maxSelections))
+        ctx.addIssue({
+          code: "custom",
+          path: ["distribution"],
+          message: "Selection totals must fit the answered sample and selection limit",
+        });
+    }
+  });
+
+const disclosureMetadata = {
+  schemaVersion: z.literal(SURVEY_BRANCHING_DISCLOSURE_AGGREGATE_SCHEMA_VERSION),
+  sourceSchemaVersion: z.literal(SURVEY_BRANCHING_RESULTS_SOURCE_SCHEMA_VERSION),
+  privacyPolicy: z.literal(SURVEY_BRANCHING_DISCLOSURE_PRIVACY_POLICY),
+  title: z.string().min(1).max(160),
+  minimumRespondents: z.literal(SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS),
+};
+
+/**
+ * Structural validation cannot prove joint qualification from marginal counts. Only the
+ * trusted projector below evaluates the full submitted population. No runtime grant is added.
+ */
+export const SurveyBranchingDisclosureResultsSchema = z
+  .discriminatedUnion("resultsStatus", [
+    z
+      .object({
+        ...disclosureMetadata,
+        submittedCount: z.null(),
+        suppressed: z.literal(true),
+        resultsStatus: z.enum(["collecting", "privacy_withheld"]),
+        questions: z.array(SurveyBranchingSuppressedQuestionSchema).min(1).max(100),
+      })
+      .strict(),
+    z
+      .object({
+        ...disclosureMetadata,
+        submittedCount: z
+          .number()
+          .int()
+          .min(SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS)
+          .max(Number.MAX_SAFE_INTEGER),
+        suppressed: z.literal(false),
+        resultsStatus: z.literal("available"),
+        questions: z.array(disclosureQuestionSchema).min(1).max(100),
+      })
+      .strict(),
+  ])
+  .superRefine((results, ctx) => {
+    if (new Set(results.questions.map((question) => question.id)).size !== results.questions.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["questions"],
+        message: "Survey result question IDs must be unique",
+      });
+    if (results.resultsStatus !== "available" || !Number.isSafeInteger(results.submittedCount))
+      return;
+    const submitted = BigInt(results.submittedCount);
+    for (const [index, question] of results.questions.entries()) {
+      if (
+        !Number.isSafeInteger(question.eligibleCount) ||
+        !Number.isSafeInteger(question.skippedLogicCount)
+      )
+        continue;
+      if (submitted !== BigInt(question.eligibleCount) + BigInt(question.skippedLogicCount))
+        ctx.addIssue({
+          code: "custom",
+          path: ["questions", index],
+          message: "Submitted responses must equal eligible plus logic-skipped",
+        });
+    }
+  });
+export type SurveyBranchingDisclosureResults = z.infer<
+  typeof SurveyBranchingDisclosureResultsSchema
+>;
+
+/** Private complete contribution patterns; never expose signatures, frequencies, or diagnostics. */
+function jointContributionAtomsMeetMinimum(
+  content: SurveyBranchingDraft,
+  responses: SurveyResponses[],
+) {
+  if (responses.length < SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS) return false;
+  const atoms = new Map<string, number>();
+  for (const row of responses) {
+    const eligible = new Set(surveyBranchingEligibility(content, row).eligibleQuestionIds);
+    const signature: number[] = [];
+    for (const { question } of content.items) {
+      if (!eligible.has(question.id)) {
+        signature.push(0, 0); // Logic-skipped, with no answer contribution.
+        continue;
+      }
+      const answer = row[question.id];
+      if (!answer) {
+        signature.push(1, 0); // Eligible, but unanswered.
+        continue;
+      }
+      // Frozen choice positions distinguish complete selection sets, even with equal labels.
+      if (question.type === "poll" && answer.kind === "poll") {
+        const selected = new Set(answer.choiceIds);
+        const mask = question.choices.reduce(
+          (value, choice, index) => value | (selected.has(choice.id) ? 1 << index : 0),
+          0,
+        );
+        signature.push(2, mask);
+      } else if (question.type === "rating" && answer.kind === "rating") {
+        signature.push(2, answer.value);
+      } else {
+        throw new SurveyBranchingResultsInputError("INVALID_SURVEY_BRANCHING_SUBMISSIONS");
+      }
+    }
+    const key = JSON.stringify(signature);
+    atoms.set(key, (atoms.get(key) ?? 0) + 1);
+  }
+  return [...atoms.values()].every(
+    (count) => count >= SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS,
+  );
+}
+
+/**
+ * Candidate C2 policy for one fixed closed report: every Boolean cohort over its contribution
+ * predicates is a union of full atoms. This is not differential privacy, side-information
+ * protection, a finalization proof, or permission for repeated snapshots/runtime collection.
+ */
+export function surveyBranchingDisclosureResults(
+  content: unknown,
+  submissions: unknown,
+  closed = false,
+): SurveyBranchingDisclosureResults {
+  const parsedContent = parseContent(content);
+  const responses = parseFinalizedResponses(parsedContent, submissions);
+  const metadata = {
+    schemaVersion: SURVEY_BRANCHING_DISCLOSURE_AGGREGATE_SCHEMA_VERSION,
+    sourceSchemaVersion: SURVEY_BRANCHING_RESULTS_SOURCE_SCHEMA_VERSION,
+    privacyPolicy: SURVEY_BRANCHING_DISCLOSURE_PRIVACY_POLICY,
+    title: parsedContent.title,
+    minimumRespondents: SURVEY_BRANCHING_RESULTS_MINIMUM_RESPONDENTS,
+  };
+  if (closed !== true || !jointContributionAtomsMeetMinimum(parsedContent, responses))
+    return SurveyBranchingDisclosureResultsSchema.parse({
+      ...metadata,
+      submittedCount: null,
+      suppressed: true,
+      resultsStatus: closed === true ? "privacy_withheld" : "collecting",
+      questions: parsedContent.items.map(({ question }) => ({
+        ...metadataForQuestion(question),
+        eligibleCount: null,
+        answeredCount: null,
+        unansweredCount: null,
+        skippedLogicCount: null,
+        distribution: [],
+        suppressed: true,
+      })),
+    });
+  const analysis = analyzeParsedResponses(parsedContent, responses);
+  return SurveyBranchingDisclosureResultsSchema.parse({
+    ...metadata,
+    submittedCount: analysis.submittedCount,
+    suppressed: false,
+    resultsStatus: "available",
+    questions: analysis.questions.map((question) => ({ ...question, suppressed: false })),
+  });
+}

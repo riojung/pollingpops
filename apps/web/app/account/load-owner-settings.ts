@@ -1,33 +1,28 @@
 import type { LtiRegistration, WorkspaceInvitation, WorkspaceMember } from "@openround/contracts";
-import type { WorkspaceAccountContext } from "../../components/workspace/workspace-provider";
 import { apiFetch } from "../../lib/api";
+import { workspaceSettingsPath } from "./workspace-settings-request";
 
 interface WorkspaceCollaboration {
   members: WorkspaceMember[];
   invitations: WorkspaceInvitation[];
 }
 
-export async function loadOwnerSettings(
-  role: "owner" | "editor" | "viewer",
-  workspace: WorkspaceAccountContext | null,
-  signal?: AbortSignal,
-) {
-  signal?.throwIfAborted();
-  if (role !== "owner") return { collaboration: null, registrations: [] as LtiRegistration[] };
-  const organizationUserWorkspace =
-    workspace?.accountType === "organization" && workspace.licenseUnit === "user";
-  const [collaboration, lti] = await Promise.all([
-    organizationUserWorkspace
-      ? Promise.resolve(null)
-      : signal
-        ? apiFetch<WorkspaceCollaboration>("/v1/workspace/members", { signal })
-        : apiFetch<WorkspaceCollaboration>("/v1/workspace/members"),
-    signal
-      ? apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations", {
-          signal,
-        })
-      : apiFetch<{ registrations: LtiRegistration[] }>("/v1/workspace/lti-registrations"),
-  ]);
-  signal?.throwIfAborted();
-  return { collaboration, registrations: lti.registrations };
+export async function loadWorkspaceCollaboration(workspaceId: string, signal: AbortSignal) {
+  const collaboration = await apiFetch<WorkspaceCollaboration>(
+    workspaceSettingsPath("/v1/workspace/members", workspaceId),
+    { signal },
+  );
+  if (!Array.isArray(collaboration?.members) || !Array.isArray(collaboration?.invitations)) {
+    throw new Error("Invalid workspace collaboration response");
+  }
+  return collaboration;
+}
+
+export async function loadLtiRegistrations(workspaceId: string, signal: AbortSignal) {
+  const lti = await apiFetch<{ registrations: LtiRegistration[] }>(
+    workspaceSettingsPath("/v1/workspace/lti-registrations", workspaceId),
+    { signal },
+  );
+  if (!Array.isArray(lti?.registrations)) throw new Error("Invalid LTI registrations response");
+  return lti.registrations;
 }

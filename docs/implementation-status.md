@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Independent settings-section recovery, November 20, 2026
+
+WX-11F on `codex/settings-section-recovery` keeps Workspace settings usable when a People or LTI
+registration read is pending or unavailable. Each section can retry its read in place. A successful
+member change can also recover from a failed list refresh through the same retry. Required account
+data and the initial authority check still gate the page. See the
+[settings recovery record](workspace-settings-recovery.md#independent-section-recovery).
+
 ### Capability availability copy, November 20, 2026
 
-WX-11E on `codex/capability-availability-copy` clarifies CSV export, live-brand saving and
+WX-11E merged through PR #295 at `b6e1770` and clarifies CSV export, live-brand saving and
 billing access in Workspace settings. The labels follow effective availability and appear in all
 ten configured locales. Export and branding rejections describe availability for the current
 workspace or room. Focused tests cover a Free workspace with CSV export enabled, a Pro
@@ -28,7 +36,7 @@ Instant nearest scrolling keeps the footer visible only while it retains focus u
 The existing pager, exact totals versus loaded counts, cursor recovery, authority fences and shared
 actions remain. No server, contract, database or grant change is introduced. See the
 [scope and acceptance record](library-recovery-focus.md). Sessions, Results and Workspace
-initialization merged in PRs #291–293. Availability copy is local as WX-11E.
+initialization merged in PRs #291–293. Availability copy merged in PR #295.
 
 The final full repository check passes, including 6,491 web tests, all application builds and
 compiled startup. All 88 focused tests and 12 browser cases pass across desktop/mobile Chromium
@@ -45,8 +53,8 @@ hash selection, with abort/generation guards and deliberate keyboard-focus hando
 Authority-first loading preserves signed-in personal-account fallback and the sign-in return path;
 peripheral 401 and transient failures stay recoverable. Permission helpers, owner restrictions,
 organization license exclusions, payment paths, mutations and confirmations remain unchanged.
-See the [scope, trade-offs and acceptance record](workspace-settings-recovery.md). Independent
-subsection recovery remains pending: one unavailable required read withholds the settings page.
+See the [scope, trade-offs and acceptance record](workspace-settings-recovery.md). WX-11F
+adds independent subsection recovery locally.
 
 ### Results workspace recovery and keyboard continuity, November 19, 2026
 
@@ -141,9 +149,9 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped work. WX-11A–D surface recovery merged through PR #294.
-WX-11E availability copy is local. Independent settings-section recovery is the next ready
-checkpoint, and authoritative capability explanations remain pending.
+WX-07–10 and WX-12–14 remain scoped work. WX-11A–E merged through PR #295. WX-11F
+independent settings-section recovery is the current local increment. Checkpoint-set import
+availability copy is next, and authoritative capability explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

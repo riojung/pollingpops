@@ -3,18 +3,23 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { WorkspaceAccountContext } from "../../components/workspace/workspace-provider";
 import { useLocale } from "../../components/locale-provider";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, type ApiClientError } from "../../lib/api";
 import { idleSessionCopy } from "../../lib/i18n/idle-session-messages";
 import { SESSION_POLICY_UPDATED_EVENT } from "../../lib/idle-session";
+import { isWorkspaceSettingsConflict, workspaceSettingsPath } from "./workspace-settings-request";
 
 export function IdleTimeoutSettings({
   workspace,
   canManage,
+  signal,
   onSaved,
+  onWorkspaceConflict,
 }: {
   workspace: WorkspaceAccountContext | null;
   canManage: boolean;
+  signal: AbortSignal;
   onSaved: (workspace: WorkspaceAccountContext) => void;
+  onWorkspaceConflict: (error: ApiClientError) => void;
 }) {
   const { locale } = useLocale();
   const copy = idleSessionCopy(locale);
@@ -31,26 +36,30 @@ export function IdleTimeoutSettings({
   const valid = /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 240;
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canManage || !workspace || busy || !valid) return;
+    if (!canManage || !workspace || busy || !valid || signal.aborted) return;
     setBusy(true);
     setStatus("");
     try {
       const result = await apiFetch<{ workspace: WorkspaceAccountContext }>(
-        "/v1/workspace/settings",
+        workspaceSettingsPath("/v1/workspace/settings", workspace.id),
         {
           method: "PATCH",
           body: JSON.stringify({
             sessionPolicy: { idleTimeoutMinutes: Number(value), warningDurationSeconds: 60 },
           }),
+          signal,
         },
       );
+      if (signal.aborted) return;
       onSaved(result.workspace);
       window.dispatchEvent(new Event(SESSION_POLICY_UPDATED_EVENT));
       setStatus("saved");
-    } catch {
-      setStatus("error");
+    } catch (caught) {
+      if (signal.aborted) return;
+      if (isWorkspaceSettingsConflict(caught)) onWorkspaceConflict(caught);
+      else setStatus("error");
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   }
   return (

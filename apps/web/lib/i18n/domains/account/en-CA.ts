@@ -1,5 +1,7 @@
 export const accountEnglishMessages = {
   "account.load.unavailable": "Workspace settings are unavailable",
+  "account.section.loading": "Loading this section…",
+  "account.section.unavailable": "This section is unavailable.",
   "account.common.none": "None",
   "account.common.saving": "Saving…",
   "account.confirm.removeMember": "Remove this member from the workspace?",

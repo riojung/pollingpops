@@ -114,7 +114,8 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await page.getByRole("textbox", { name: "Workspace name", exact: true }).fill(renamed);
   const savedName = page.waitForResponse(
     (response) =>
-      response.request().method() === "PATCH" && response.url().endsWith("/v1/workspace/settings"),
+      response.request().method() === "PATCH" &&
+      new URL(response.url()).pathname === "/v1/workspace/settings",
   );
   await page.getByRole("button", { name: "Save workspace name", exact: true }).click();
   expect((await savedName).status()).toBe(200);
@@ -196,7 +197,8 @@ test("personal Free settings provide named workspaces and accessible, selectable
     .fill("https://lms.example.org");
   const savedOrigins = page.waitForResponse(
     (response) =>
-      response.request().method() === "PUT" && response.url().endsWith("/v1/account/embed-origins"),
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/v1/account/embed-origins",
   );
   await page.getByRole("button", { name: "Save embed origins", exact: true }).click();
   expect((await savedOrigins).status()).toBe(200);
@@ -209,7 +211,8 @@ test("personal Free settings provide named workspaces and accessible, selectable
   );
   const removedOrigin = page.waitForResponse(
     (response) =>
-      response.request().method() === "PUT" && response.url().endsWith("/v1/account/embed-origins"),
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/v1/account/embed-origins",
   );
   await page.getByRole("button", { name: "Save embed origins", exact: true }).click();
   expect((await removedOrigin).status()).toBe(200);
@@ -378,7 +381,8 @@ test("licensed organization users have usable presets and role-aware settings in
   );
   await expect(owner.getByLabel(/^Background colour/)).toBeHidden();
   const savedTheme = owner.waitForResponse(
-    (result) => result.request().method() === "PUT" && result.url().endsWith("/v1/account/theme"),
+    (result) =>
+      result.request().method() === "PUT" && new URL(result.url()).pathname === "/v1/account/theme",
   );
   await owner.getByRole("button", { name: "Save theme", exact: true }).click();
   expect((await savedTheme).status()).toBe(200);
@@ -434,7 +438,7 @@ test("licensed organization users have usable presets and role-aware settings in
     const savedPolicy = member.waitForResponse(
       (response) =>
         response.request().method() === "PATCH" &&
-        response.url().endsWith("/v1/workspace/settings"),
+        new URL(response.url()).pathname === "/v1/workspace/settings",
     );
     await member.getByRole("button", { name: timeout.save, exact: true }).click();
     expect((await savedPolicy).status()).toBe(200);

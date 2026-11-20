@@ -2,6 +2,8 @@ import type { AccountMessages } from "./en-CA";
 
 const messages = {
   "account.load.unavailable": "워크스페이스 설정을 불러올 수 없습니다",
+  "account.section.loading": "이 섹션을 불러오는 중…",
+  "account.section.unavailable": "이 섹션을 사용할 수 없습니다.",
   "account.common.none": "없음",
   "account.common.saving": "저장 중…",
   "account.confirm.removeMember": "이 구성원을 워크스페이스에서 삭제하시겠습니까?",

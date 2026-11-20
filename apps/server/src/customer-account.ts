@@ -24,6 +24,16 @@ const requestKeySchema = z
   .max(200)
   .regex(/^[A-Za-z0-9:_-]+$/);
 
+const ExpectedWorkspaceQuerySchema = z.object({
+  expectedWorkspaceId: z.string().uuid().optional(),
+});
+
+export function requireExpectedWorkspace(query: unknown, workspaceId: string) {
+  const { expectedWorkspaceId } = ExpectedWorkspaceQuerySchema.parse(query);
+  if (expectedWorkspaceId !== undefined && expectedWorkspaceId !== workspaceId)
+    throw new PlatformError("CONFLICT", "The active workspace changed");
+}
+
 export async function workspaceAccountContext(
   repository: Repository,
   config: AppConfig,
@@ -77,6 +87,7 @@ export function registerCustomerAccountRoutes(
   app.patch("/v1/workspace/settings", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const { name, sessionPolicy } = UpdateWorkspaceSettingsSchema.parse(request.body);
     const context = await workspaceAccountContext(repository, config, creator);
     if (!context.permissions.manageWorkspace)

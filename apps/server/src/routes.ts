@@ -153,7 +153,11 @@ import type { ProductEventDispatcher } from "./product-events.js";
 import { ROUND_DRAFT_BODY_LIMIT } from "./draft-limits.js";
 import { TextResponseReadError } from "./response-moderation.js";
 import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-rollout.js";
-import { registerCustomerAccountRoutes, workspaceAccountContext } from "./customer-account.js";
+import {
+  registerCustomerAccountRoutes,
+  requireExpectedWorkspace,
+  workspaceAccountContext,
+} from "./customer-account.js";
 import { registerCheckpointSetImportRoutes } from "./checkpoint-set-import-routes.js";
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
@@ -1214,6 +1218,7 @@ export async function registerRoutes(
   app.get("/v1/auth/federated-identities", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const identities = await repository.listExternalIdentities(creator.workspaceId, creator.userId);
     return {
       identities: identities.map((identity) =>
@@ -1232,6 +1237,7 @@ export async function registerRoutes(
   app.delete("/v1/auth/federated-identities/:identityId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const { identityId } = FederatedIdentityParamsSchema.parse(request.params);
     const removed = await repository.unlinkExternalIdentity(
       creator.workspaceId,
@@ -1455,6 +1461,7 @@ export async function registerRoutes(
   app.get("/v1/workspace/members", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const [members, invitations] = await Promise.all([
       repository.listWorkspaceMembers(creator.workspaceId),
@@ -1483,6 +1490,7 @@ export async function registerRoutes(
   app.get("/v1/workspace/institution-policy", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const policy = await repository.getInstitutionPolicy(creator.workspaceId);
     return WorkspaceInstitutionPolicySchema.parse({
       ...policy,
@@ -1493,6 +1501,7 @@ export async function registerRoutes(
   app.get("/v1/workspace/lti-registrations", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const registrations = await repository.listLtiRegistrations(creator.workspaceId);
     return {
@@ -1509,6 +1518,7 @@ export async function registerRoutes(
   app.post("/v1/workspace/invitations", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const input = CreateWorkspaceInvitationSchema.parse(request.body);
     const members = await repository.listWorkspaceMembers(creator.workspaceId);
@@ -1547,6 +1557,7 @@ export async function registerRoutes(
   app.delete("/v1/workspace/invitations/:invitationId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const { invitationId } = WorkspaceInvitationParamsSchema.parse(request.params);
     const revoked = await repository.revokeWorkspaceInvitation(creator.workspaceId, invitationId);
@@ -1567,6 +1578,7 @@ export async function registerRoutes(
   app.patch("/v1/workspace/members/:userId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const { userId } = WorkspaceMemberParamsSchema.parse(request.params);
     const input = UpdateWorkspaceMemberSchema.parse(request.body);
@@ -1604,6 +1616,7 @@ export async function registerRoutes(
   app.delete("/v1/workspace/members/:userId", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const { userId } = WorkspaceMemberParamsSchema.parse(request.params);
     if (userId === creator.userId) {
@@ -1633,6 +1646,7 @@ export async function registerRoutes(
   app.get("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const entitlements = await workspaceEntitlements(
       repository,
       config,
@@ -1648,6 +1662,7 @@ export async function registerRoutes(
   app.put("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     const entitlements = await workspaceEntitlements(
       repository,
@@ -1685,6 +1700,7 @@ export async function registerRoutes(
   app.delete("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     await repository.updateBrandTheme(creator.workspaceId, null);
     await repository.recordAudit({
@@ -1707,12 +1723,14 @@ export async function registerRoutes(
   app.get("/v1/account/embed-origins", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     return { origins: await repository.getEmbedAllowedOrigins(creator.workspaceId) };
   });
 
   app.put("/v1/account/embed-origins", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
     const input = EmbedAllowedOriginsSchema.parse(request.body);
     const origins = await repository.updateEmbedAllowedOrigins(creator.workspaceId, input.origins);
@@ -3927,6 +3945,7 @@ export async function registerRoutes(
   app.get("/v1/workspace/audit-export", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
     const policy = await repository.getInstitutionPolicy(creator.workspaceId);
     if (policy.contractStatus === "disabled" || !policy.capabilities.auditExports) {

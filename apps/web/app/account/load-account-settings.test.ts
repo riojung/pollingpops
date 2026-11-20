@@ -15,14 +15,15 @@ const account = {
 
 function response(path: string): unknown {
   if (path === "/v1/auth/me") return account;
-  if (path === "/v1/account/theme") return { theme: null, enabled: true };
+  if (path === "/v1/account/theme?expectedWorkspaceId=workspace")
+    return { theme: null, enabled: true };
   if (path === "/v1/workspaces") return { activeWorkspaceId: "workspace", workspaces: [] };
-  if (path === "/v1/account/embed-origins") return { origins: [] };
-  if (path === "/v1/workspace/institution-policy") return { capabilities: { lti: true } };
-  if (path === "/v1/auth/federated-identities") return { identities: [] };
+  if (path === "/v1/account/embed-origins?expectedWorkspaceId=workspace") return { origins: [] };
+  if (path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace")
+    return { capabilities: { lti: true } };
+  if (path === "/v1/auth/federated-identities?expectedWorkspaceId=workspace")
+    return { identities: [] };
   if (path.startsWith("/v1/auth/oidc/status?")) return { enabled: true };
-  if (path === "/v1/workspace/members") return { members: [], invitations: [] };
-  if (path === "/v1/workspace/lti-registrations") return { registrations: [] };
   throw new Error(`Unexpected read: ${path}`);
 }
 
@@ -48,20 +49,26 @@ describe("atomic account settings reads", () => {
     resolveAccount(account);
     const loaded = await pending;
     expect(loaded.kind).toBe("workspace");
-    expect(apiFetch).toHaveBeenCalledTimes(9);
+    expect(vi.mocked(apiFetch).mock.calls.map(([path]) => path)).toEqual([
+      "/v1/auth/me",
+      "/v1/account/theme?expectedWorkspaceId=workspace",
+      "/v1/workspaces",
+      "/v1/account/embed-origins?expectedWorkspaceId=workspace",
+      "/v1/workspace/institution-policy?expectedWorkspaceId=workspace",
+      "/v1/auth/federated-identities?expectedWorkspaceId=workspace",
+      "/v1/auth/oidc/status?workspaceId=workspace",
+    ]);
     for (const [, init] of vi.mocked(apiFetch).mock.calls)
       expect(init).toEqual({ signal: controller.signal });
   });
 
   it.each([
-    "/v1/account/theme",
+    "/v1/account/theme?expectedWorkspaceId=workspace",
     "/v1/workspaces",
-    "/v1/account/embed-origins",
-    "/v1/workspace/institution-policy",
-    "/v1/auth/federated-identities",
+    "/v1/account/embed-origins?expectedWorkspaceId=workspace",
+    "/v1/workspace/institution-policy?expectedWorkspaceId=workspace",
+    "/v1/auth/federated-identities?expectedWorkspaceId=workspace",
     "/v1/auth/oidc/status?workspaceId=workspace",
-    "/v1/workspace/members",
-    "/v1/workspace/lti-registrations",
   ])(
     "rejects a required %s failure instead of returning a partial or billing-only snapshot",
     async (failed) => {
@@ -72,6 +79,18 @@ describe("atomic account settings reads", () => {
       });
       await expect(loadAccountSettings(new AbortController().signal)).rejects.toBe(failure);
       expect(vi.mocked(apiFetch).mock.calls.some(([path]) => path === "/v1/auth/user")).toBe(false);
+    },
+  );
+
+  it.each(["other-workspace", null])(
+    "withholds the snapshot when the active workspace resolves to %s",
+    async (activeWorkspaceId) => {
+      vi.mocked(apiFetch).mockImplementation(async (path) =>
+        path === "/v1/workspaces" ? { activeWorkspaceId, workspaces: [] } : response(path),
+      );
+      await expect(loadAccountSettings(new AbortController().signal)).rejects.toThrow(
+        "The active workspace changed",
+      );
     },
   );
 
@@ -113,36 +132,6 @@ describe("atomic account settings reads", () => {
     },
   );
 
-  it.each(["editor", "viewer"])(
-    "does not request owner-only settings for an authoritative %s",
-    async (role) => {
-      vi.mocked(apiFetch).mockImplementation(async (path) =>
-        path === "/v1/auth/me"
-          ? { ...account, creator: { ...account.creator, role } }
-          : response(path),
-      );
-      await loadAccountSettings(new AbortController().signal);
-      expect(
-        vi.mocked(apiFetch).mock.calls.some(([path]) => /members|lti-registrations/.test(path)),
-      ).toBe(false);
-    },
-  );
-
-  it("preserves the organization user-license member-read exclusion while loading owner LTI", async () => {
-    vi.mocked(apiFetch).mockImplementation(async (path) =>
-      path === "/v1/auth/me"
-        ? { ...account, workspace: { accountType: "organization", licenseUnit: "user" } }
-        : response(path),
-    );
-    await loadAccountSettings(new AbortController().signal);
-    expect(vi.mocked(apiFetch).mock.calls.some(([path]) => path === "/v1/workspace/members")).toBe(
-      false,
-    );
-    expect(
-      vi.mocked(apiFetch).mock.calls.some(([path]) => path === "/v1/workspace/lti-registrations"),
-    ).toBe(true);
-  });
-
   it("refuses an aborted authority response before issuing dependent settings reads", async () => {
     const controller = new AbortController();
     vi.mocked(apiFetch).mockImplementation(async () => {
@@ -158,7 +147,8 @@ describe("atomic account settings reads", () => {
   it("refuses an aborted complete snapshot even if the transport ignores cancellation", async () => {
     const controller = new AbortController();
     vi.mocked(apiFetch).mockImplementation(async (path) => {
-      if (path === "/v1/workspace/lti-registrations") controller.abort();
+      if (path === "/v1/auth/federated-identities?expectedWorkspaceId=workspace")
+        controller.abort();
       return response(path);
     });
     await expect(loadAccountSettings(controller.signal)).rejects.toMatchObject({

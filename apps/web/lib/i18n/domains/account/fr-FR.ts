@@ -2,6 +2,8 @@ import type { AccountMessages } from "./en-CA";
 
 const messages = {
   "account.load.unavailable": "Les paramètres de l’espace de travail sont indisponibles",
+  "account.section.loading": "Chargement de cette section…",
+  "account.section.unavailable": "Cette section est indisponible.",
   "account.common.none": "Aucune",
   "account.common.saving": "Enregistrement…",
   "account.confirm.removeMember": "Retirer ce membre de l’espace de travail ?",

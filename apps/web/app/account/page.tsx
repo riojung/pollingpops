@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   BrandTheme,
   Entitlements,
   FederatedIdentity,
-  LtiRegistration,
   OidcStatus,
   WorkspaceInstitutionPolicy,
   WorkspaceInvitation,
@@ -31,6 +30,10 @@ import { PersonalInstitutionIdentities } from "./personal-institution-identities
 import { PersonalSubscriptionOptions } from "./personal-subscription-options";
 import { PersonalBillingNotice } from "./personal-billing-notice";
 import { loadAccountSettings, type AccountCreator as Creator } from "./load-account-settings";
+import { loadLtiRegistrations, loadWorkspaceCollaboration } from "./load-owner-settings";
+import { SettingsSectionRead } from "./settings-section-read";
+import { useOwnerSettingsSection, type SettingsAuthority } from "./use-owner-settings-section";
+import { isWorkspaceSettingsConflict, workspaceSettingsPath } from "./workspace-settings-request";
 import {
   accountPermissions,
   canManagePersonalBilling,
@@ -43,7 +46,7 @@ import {
   type PersonalBillingState,
 } from "./account-settings-model";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
-import { apiFetch, humanError } from "../../lib/api";
+import { AUTH_CHANGE_EVENT, apiFetch, humanError } from "../../lib/api";
 import { formatDate, formatList, formatNumber } from "../../lib/i18n/format";
 import { PersonalInterfaceSettings, WorkspaceBrandSettings } from "./appearance-settings";
 import styles from "./account.module.css";
@@ -54,12 +57,21 @@ export default function AccountPage() {
   const tRef = useRef(t);
   const router = useRouter();
   const loadGeneration = useRef(0);
+  const accountLoad = useRef<AbortController | null>(null);
+  const workspaceSelection = useRef<AbortController | null>(null);
+  const localWorkspaceUpdate = useRef(false);
+  const collaborationMutation = useRef<object | null>(null);
+  const membersRegion = useRef<HTMLElement | null>(null);
+  const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const loadRegionRef = useRef<HTMLElement | null>(null);
+  const settingsOwnedFocus = useRef(false);
+  const recoveryFocus = useRef(false);
   const retryFocus = useRef(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadStatus, setLoadStatus] = useState<"loading" | "error" | "ready">("loading");
   const [loadError, setLoadError] = useState("");
-  const [creator, setCreator] = useState<Creator | null>(null);
+  const [settingsAuthority, setSettingsAuthority] = useState<SettingsAuthority | null>(null);
+  const creator = settingsAuthority?.creator ?? null;
   const [workspace, setWorkspace] = useState<WorkspaceAccountContext | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
   const [requestedSection, setRequestedSection] = useState("");
@@ -85,8 +97,6 @@ export default function AccountPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
   const [inviteUrl, setInviteUrl] = useState("");
@@ -96,7 +106,6 @@ export default function AccountPage() {
   );
   const [oidcStatus, setOidcStatus] = useState<OidcStatus | null>(null);
   const [federatedIdentities, setFederatedIdentities] = useState<FederatedIdentity[]>([]);
-  const [ltiRegistrations, setLtiRegistrations] = useState<LtiRegistration[]>([]);
   const [productFeatures, setProductFeatures] = useState<{ workspaceShell: boolean } | null>(null);
 
   useEffect(() => {
@@ -105,10 +114,12 @@ export default function AccountPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    accountLoad.current = controller;
     const generation = ++loadGeneration.current;
     const current = () => !controller.signal.aborted && generation === loadGeneration.current;
     setLoadStatus("loading");
     setLoadError("");
+    setSettingsAuthority(null);
     void loadAccountSettings(controller.signal)
       .then((loaded) => {
         if (!current()) return;
@@ -119,7 +130,6 @@ export default function AccountPage() {
           return;
         }
         if (loaded.kind === "billing-only") {
-          setCreator(null);
           setWorkspace(null);
           setEntitlements(null);
           setProductFeatures(null);
@@ -129,21 +139,13 @@ export default function AccountPage() {
           setLoadStatus("ready");
           return;
         }
-        const {
-          account,
-          branding,
-          workspaceList,
-          embedPolicy,
-          policy,
-          identities,
-          oidcStatus,
-          ownerSettings,
-        } = loaded;
+        const { account, branding, workspaceList, embedPolicy, policy, identities, oidcStatus } =
+          loaded;
         // Commit only a complete trusted snapshot. Defaults must never masquerade as
-        // saved settings, confirmed empty membership, or missing institution setup.
+        // saved settings or missing institution setup.
         setBillingOnly(false);
         setUserIdentity(null);
-        setCreator(account.creator);
+        setSettingsAuthority({ creator: account.creator, signal: controller.signal });
         setWorkspace(account.workspace ?? null);
         setWorkspaceName(
           account.workspace?.name ??
@@ -173,9 +175,12 @@ export default function AccountPage() {
         setInstitutionPolicy(policy);
         setFederatedIdentities(identities.identities);
         setOidcStatus(oidcStatus);
-        setMembers(ownerSettings.collaboration?.members ?? []);
-        setInvitations(ownerSettings.collaboration?.invitations ?? []);
-        setLtiRegistrations(ownerSettings.registrations);
+        collaborationMutation.current = null;
+        setCollaborationBusy("");
+        setInviteEmail("");
+        setInviteRole("editor");
+        setInviteUrl("");
+        setConfirmation("");
         setLoadStatus("ready");
       })
       .catch((caught) => {
@@ -187,9 +192,45 @@ export default function AccountPage() {
     return () => controller.abort();
   }, [router, loadAttempt]);
 
+  const suspendSettings = useCallback(() => {
+    accountLoad.current?.abort();
+    collaborationMutation.current = null;
+    settingsOwnedFocus.current = false;
+    setSettingsAuthority(null);
+    setCollaborationBusy("");
+    setBusy("");
+    setLoadStatus("loading");
+    setLoadError("");
+  }, []);
+
+  useEffect(() => {
+    const refreshAuthority = () => {
+      if (localWorkspaceUpdate.current) return;
+      workspaceSelection.current?.abort();
+      workspaceSelection.current = null;
+      suspendSettings();
+      setConfirmation("");
+      setMessage("");
+      setError("");
+      setLoadAttempt((attempt) => attempt + 1);
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, refreshAuthority);
+    window.addEventListener("polling-pops:workspace-updated", refreshAuthority);
+    return () => {
+      workspaceSelection.current?.abort();
+      window.removeEventListener(AUTH_CHANGE_EVENT, refreshAuthority);
+      window.removeEventListener("polling-pops:workspace-updated", refreshAuthority);
+    };
+  }, [suspendSettings]);
+
   useEffect(() => {
     const trackFocus = (event: FocusEvent) => {
-      if (retryFocus.current && !loadRegionRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // Disabling a focused Save button may blur it without focusing another control.
+      if (target !== document.body) {
+        settingsOwnedFocus.current = settingsContentRef.current?.contains(target) ?? false;
+      }
+      if (retryFocus.current && !loadRegionRef.current?.contains(target)) {
         retryFocus.current = false;
       }
     };
@@ -208,129 +249,182 @@ export default function AccountPage() {
   function retrySettings() {
     loadRegionRef.current?.focus();
     retryFocus.current = true;
-    setLoadStatus("loading");
-    setLoadError("");
+    suspendSettings();
     setLoadAttempt((attempt) => attempt + 1);
   }
 
-  async function refreshCollaboration() {
-    const collaboration = await apiFetch<{
-      members: WorkspaceMember[];
-      invitations: WorkspaceInvitation[];
-    }>("/v1/workspace/members");
-    setMembers(collaboration.members);
-    setInvitations(collaboration.invitations);
+  function focusRecoveryRegion(node: HTMLElement | null) {
+    loadRegionRef.current = node;
+    if (!node || !recoveryFocus.current) return;
+    recoveryFocus.current = false;
+    if (document.activeElement === document.body) node.focus();
+  }
+
+  function reportWorkspaceRequestFailure(caught: unknown, signal: AbortSignal) {
+    if (signal.aborted) return;
+    if (isWorkspaceSettingsConflict(caught)) {
+      const active = document.activeElement;
+      recoveryFocus.current =
+        active === document.body
+          ? settingsOwnedFocus.current
+          : (settingsContentRef.current?.contains(active) ?? false);
+      suspendSettings();
+      setMessage("");
+      setError("");
+      setLoadError(humanError(caught));
+      setLoadStatus("error");
+    } else {
+      setError(humanError(caught));
+    }
   }
 
   async function switchWorkspace(workspaceId: string) {
-    if (!creator || workspaceId === creator.workspaceId) return;
-    setCollaborationBusy("switch");
+    if (
+      !settingsAuthority ||
+      settingsAuthority.signal.aborted ||
+      workspaceId === creator?.workspaceId ||
+      workspaceSelection.current
+    ) {
+      return;
+    }
+    const selection = new AbortController();
+    workspaceSelection.current = selection;
+    suspendSettings();
+    setError("");
+    setMessage("");
+    try {
+      await apiFetch(`/v1/workspaces/${workspaceId}/select`, {
+        method: "POST",
+        body: "{}",
+        signal: selection.signal,
+      });
+      if (!selection.signal.aborted) window.location.reload();
+    } catch (caught) {
+      if (selection.signal.aborted) return;
+      workspaceSelection.current = null;
+      setError(humanError(caught));
+      setLoadAttempt((attempt) => attempt + 1);
+    }
+  }
+
+  async function mutateCollaboration<T>(
+    action: string,
+    write: (workspaceId: string) => Promise<T>,
+    onSuccess?: (result: T) => void,
+  ) {
+    if (!ownerAuthority || !collaboration.isReady() || collaborationMutation.current) return;
+    const mutation = {};
+    collaborationMutation.current = mutation;
+    const current = () => collaborationMutation.current === mutation && collaboration.isCurrent();
+    setCollaborationBusy(action);
     setError("");
     try {
-      await apiFetch(`/v1/workspaces/${workspaceId}/select`, { method: "POST", body: "{}" });
-      window.location.reload();
+      const result = await write(ownerAuthority.creator.workspaceId);
+      if (!current()) return;
+      onSuccess?.(result);
+      const region = membersRegion.current;
+      if (
+        region?.querySelector("[data-account-section-content]")?.contains(document.activeElement)
+      ) {
+        region.focus();
+      }
+      collaboration.refresh();
     } catch (caught) {
-      setError(humanError(caught));
-      setCollaborationBusy("");
+      if (current()) setError(humanError(caught));
+    } finally {
+      if (collaborationMutation.current === mutation) {
+        collaborationMutation.current = null;
+        setCollaborationBusy("");
+      }
     }
   }
 
   async function inviteMember(event: FormEvent) {
     event.preventDefault();
-    setCollaborationBusy("invite");
-    setError("");
-    setMessage("");
-    setInviteUrl("");
-    try {
-      const result = await apiFetch<{ invitation: WorkspaceInvitation; debugUrl?: string }>(
-        "/v1/workspace/invitations",
-        {
-          method: "POST",
-          body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
-        },
-      );
-      setInviteEmail("");
-      setInviteUrl(result.debugUrl ?? "");
-      setMessage(t("account.feedback.invitationSent", { email: result.invitation.email }));
-      await refreshCollaboration();
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setCollaborationBusy("");
-    }
+    await mutateCollaboration(
+      "invite",
+      (workspaceId) => {
+        setMessage("");
+        setInviteUrl("");
+        return apiFetch<{ invitation: WorkspaceInvitation; debugUrl?: string }>(
+          workspaceSettingsPath("/v1/workspace/invitations", workspaceId),
+          {
+            method: "POST",
+            body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+          },
+        );
+      },
+      (result) => {
+        setInviteEmail("");
+        setInviteUrl(result.debugUrl ?? "");
+        setMessage(t("account.feedback.invitationSent", { email: result.invitation.email }));
+      },
+    );
   }
 
   async function updateMemberRole(userId: string, role: "editor" | "viewer") {
-    setCollaborationBusy(`member:${userId}`);
-    setError("");
-    try {
-      await apiFetch(`/v1/workspace/members/${userId}`, {
+    await mutateCollaboration(`member:${userId}`, (workspaceId) =>
+      apiFetch(workspaceSettingsPath(`/v1/workspace/members/${userId}`, workspaceId), {
         method: "PATCH",
         body: JSON.stringify({ role }),
-      });
-      await refreshCollaboration();
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setCollaborationBusy("");
-    }
+      }),
+    );
   }
 
   async function removeMember(userId: string) {
     if (!window.confirm(t("account.confirm.removeMember"))) return;
-    setCollaborationBusy(`member:${userId}`);
-    setError("");
-    try {
-      await apiFetch(`/v1/workspace/members/${userId}`, { method: "DELETE" });
-      await refreshCollaboration();
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setCollaborationBusy("");
-    }
+    await mutateCollaboration(`member:${userId}`, (workspaceId) =>
+      apiFetch(workspaceSettingsPath(`/v1/workspace/members/${userId}`, workspaceId), {
+        method: "DELETE",
+      }),
+    );
   }
 
   async function revokeInvitation(invitationId: string) {
-    setCollaborationBusy(`invitation:${invitationId}`);
-    setError("");
-    try {
-      await apiFetch(`/v1/workspace/invitations/${invitationId}`, { method: "DELETE" });
-      await refreshCollaboration();
-    } catch (caught) {
-      setError(humanError(caught));
-    } finally {
-      setCollaborationBusy("");
-    }
+    await mutateCollaboration(`invitation:${invitationId}`, (workspaceId) =>
+      apiFetch(workspaceSettingsPath(`/v1/workspace/invitations/${invitationId}`, workspaceId), {
+        method: "DELETE",
+      }),
+    );
   }
 
   async function saveTheme(event: FormEvent) {
     event.preventDefault();
-    if (!entitlements?.brandTheme || !permissions.manageWorkspace) return;
+    if (!settingsAuthority || !entitlements?.brandTheme || !permissions.manageWorkspace) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted) return;
     setBusy("theme");
     setError("");
     setMessage("");
     try {
-      const response = await apiFetch<{ theme: BrandTheme }>("/v1/account/theme", {
-        method: "PUT",
-        body: JSON.stringify(theme),
-      });
+      const response = await apiFetch<{ theme: BrandTheme }>(
+        workspaceSettingsPath("/v1/account/theme", creator.workspaceId),
+        { method: "PUT", body: JSON.stringify(theme), signal },
+      );
+      if (signal.aborted) return;
       setTheme(response.theme);
       setSavedTheme(response.theme);
       setMessage(t("account.feedback.themeSaved"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
   async function resetTheme() {
-    if (!savedTheme || !permissions.manageWorkspace) return;
+    if (!settingsAuthority || !savedTheme || !permissions.manageWorkspace) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted) return;
     setBusy("theme");
     setError("");
     setMessage("");
     try {
-      await apiFetch("/v1/account/theme", { method: "DELETE" });
+      await apiFetch(workspaceSettingsPath("/v1/account/theme", creator.workspaceId), {
+        method: "DELETE",
+        signal,
+      });
+      if (signal.aborted) return;
       setSavedTheme(null);
       setTheme({
         organizationName: (
@@ -344,31 +438,38 @@ export default function AccountPage() {
       });
       setMessage(t("account.feedback.themeRemoved"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
   async function saveEmbedOrigins(event: FormEvent) {
     event.preventDefault();
-    if (!permissions.manageIntegrations) return;
+    if (!settingsAuthority || !permissions.manageIntegrations) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted) return;
     setBusy("embed");
     setError("");
     setMessage("");
     try {
-      const response = await apiFetch<{ origins: string[] }>("/v1/account/embed-origins", {
-        method: "PUT",
-        body: JSON.stringify({
-          origins: originRows.map((origin) => origin.trim()).filter(Boolean),
-        }),
-      });
+      const response = await apiFetch<{ origins: string[] }>(
+        workspaceSettingsPath("/v1/account/embed-origins", creator.workspaceId),
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            origins: originRows.map((origin) => origin.trim()).filter(Boolean),
+          }),
+          signal,
+        },
+      );
+      if (signal.aborted) return;
       setOriginRows(response.origins);
       setMessage(t("account.feedback.embedSaved"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
@@ -389,19 +490,25 @@ export default function AccountPage() {
   }
 
   async function unlinkInstitutionIdentity(identityId: string) {
-    if (!window.confirm(t("account.confirm.unlinkIdentity"))) return;
+    if (!settingsAuthority) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted || !window.confirm(t("account.confirm.unlinkIdentity"))) return;
     setBusy("federation");
     setError("");
     try {
-      await apiFetch(`/v1/auth/federated-identities/${identityId}`, { method: "DELETE" });
+      await apiFetch(
+        workspaceSettingsPath(`/v1/auth/federated-identities/${identityId}`, creator.workspaceId),
+        { method: "DELETE", signal },
+      );
+      if (signal.aborted) return;
       setFederatedIdentities((identities) =>
         identities.filter((identity) => identity.id !== identityId),
       );
       setMessage(t("account.feedback.identityRemoved"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
@@ -430,26 +537,33 @@ export default function AccountPage() {
   }
 
   async function downloadAuditExport() {
+    if (!settingsAuthority) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted) return;
     setBusy("audit");
     setError("");
     setMessage("");
     try {
-      const data = await apiFetch<Record<string, unknown>>("/v1/workspace/audit-export");
+      const data = await apiFetch<Record<string, unknown>>(
+        workspaceSettingsPath("/v1/workspace/audit-export", creator.workspaceId),
+        { signal },
+      );
+      if (signal.aborted) return;
       const url = URL.createObjectURL(
         new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" }),
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = `polling-pops-audit-${creator?.workspaceId ?? "workspace"}.json`;
+      link.download = `polling-pops-audit-${creator.workspaceId}.json`;
       document.body.append(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setMessage(t("account.feedback.auditExportDownloaded"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
@@ -507,6 +621,20 @@ export default function AccountPage() {
   const selectedSection = selectedSettingsSection(requestedSection, sections);
   const organizationUserWorkspace =
     workspace?.accountType === "organization" && workspace.licenseUnit === "user";
+  const ownerAuthority =
+    loadStatus === "ready" && creator?.role === "owner" ? settingsAuthority : null;
+  const organizationPeople =
+    organizationUserWorkspace || (workspace?.organization && !ownerAuthority);
+  const collaboration = useOwnerSettingsSection(
+    organizationUserWorkspace ? null : ownerAuthority,
+    selectedSection === "people",
+    loadWorkspaceCollaboration,
+  );
+  const ltiRegistrations = useOwnerSettingsSection(
+    ownerAuthority,
+    selectedSection === "security",
+    loadLtiRegistrations,
+  );
   const hasInstitutionAccess = Boolean(
     oidcStatus?.enabled ||
     federatedIdentities.length ||
@@ -533,15 +661,18 @@ export default function AccountPage() {
 
   async function saveWorkspaceName(event: FormEvent) {
     event.preventDefault();
-    if (!permissions.manageWorkspace || !workspaceName.trim()) return;
+    if (!settingsAuthority || !permissions.manageWorkspace || !workspaceName.trim()) return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted) return;
     setBusy("workspace");
     setError("");
     setMessage("");
     try {
       const result = await apiFetch<{ workspace: WorkspaceAccountContext }>(
-        "/v1/workspace/settings",
-        { method: "PATCH", body: JSON.stringify({ name: workspaceName.trim() }) },
+        workspaceSettingsPath("/v1/workspace/settings", creator.workspaceId),
+        { method: "PATCH", body: JSON.stringify({ name: workspaceName.trim() }), signal },
       );
+      if (signal.aborted) return;
       setWorkspace(result.workspace);
       setWorkspaceName(result.workspace.name);
       setWorkspaces((items) =>
@@ -549,12 +680,17 @@ export default function AccountPage() {
           item.id === result.workspace.id ? { ...item, name: result.workspace.name } : item,
         ),
       );
-      window.dispatchEvent(new Event("polling-pops:workspace-updated"));
+      localWorkspaceUpdate.current = true;
+      try {
+        window.dispatchEvent(new Event("polling-pops:workspace-updated"));
+      } finally {
+        localWorkspaceUpdate.current = false;
+      }
       setMessage(t("customer.workspace.saved"));
     } catch (caught) {
-      setError(humanError(caught));
+      reportWorkspaceRequestFailure(caught, signal);
     } finally {
-      setBusy("");
+      if (!signal.aborted) setBusy("");
     }
   }
 
@@ -568,21 +704,23 @@ export default function AccountPage() {
   );
 
   useEffect(() => {
-    if (!personalBillingOwner || !creator?.workspaceId) return;
+    if (!personalBillingOwner || !settingsAuthority) return;
+    const { signal } = settingsAuthority;
     let active = true;
+    setPersonalBillingStatus({ state: "loading" });
     void apiFetch<{ billing: PersonalBillingProfile }>("/v1/billing/status")
       .then(({ billing }) => {
         if (!billing || typeof billing.status !== "string")
           throw new Error("Invalid billing status");
-        if (active) setPersonalBillingStatus({ state: "ready", billing });
+        if (active && !signal.aborted) setPersonalBillingStatus({ state: "ready", billing });
       })
       .catch(() => {
-        if (active) setPersonalBillingStatus({ state: "error" });
+        if (active && !signal.aborted) setPersonalBillingStatus({ state: "error" });
       });
     return () => {
       active = false;
     };
-  }, [personalBillingOwner, creator?.workspaceId, billingStatusAttempt]);
+  }, [personalBillingOwner, settingsAuthority, billingStatusAttempt]);
   const roleLabel = (
     role:
       | Creator["role"]
@@ -718,7 +856,7 @@ export default function AccountPage() {
       aria-labelledby="account-load-title"
       className={`panel ${styles.loadState}`}
       id="account-load-state"
-      ref={loadRegionRef}
+      ref={focusRecoveryRegion}
       role="region"
       tabIndex={-1}
     >
@@ -741,7 +879,11 @@ export default function AccountPage() {
   );
 
   const content = (
-    <div className={productFeatures?.workspaceShell ? styles.account : undefined}>
+    <div
+      className={productFeatures?.workspaceShell ? styles.account : undefined}
+      id="account-settings-content"
+      ref={settingsContentRef}
+    >
       {error ? (
         <p className="error" lang="en-CA" role="alert">
           {error}
@@ -800,7 +942,7 @@ export default function AccountPage() {
                 <span>{t("account.workspace.field")}</span>
                 <select
                   className="select"
-                  disabled={!creator || collaborationBusy === "switch" || workspaces.length < 2}
+                  disabled={!creator || workspaces.length < 2}
                   id="active-workspace"
                   onChange={(event) => void switchWorkspace(event.target.value)}
                   value={creator?.workspaceId ?? ""}
@@ -861,11 +1003,15 @@ export default function AccountPage() {
               ) : null}
             </section>
           ) : null}
-          {selectedSection === "security" ? (
+          {selectedSection === "security" && settingsAuthority ? (
             <IdleTimeoutSettings
               workspace={workspace}
               canManage={permissions.manageWorkspace}
+              signal={settingsAuthority.signal}
               onSaved={setWorkspace}
+              onWorkspaceConflict={(caught) =>
+                reportWorkspaceRequestFailure(caught, settingsAuthority.signal)
+              }
             />
           ) : null}
           {selectedSection === "security" && hasInstitutionAccess ? (
@@ -899,26 +1045,39 @@ export default function AccountPage() {
               ) : (
                 <p className="muted">{t("account.institution.loading")}</p>
               )}
-              {institutionPolicy?.capabilities.lti && creator?.role === "owner" ? (
-                <div className="stack-sm institution-registration-list">
-                  <h3>{t("account.institution.ltiTitle")}</h3>
-                  {ltiRegistrations.length ? (
-                    <ul>
-                      {ltiRegistrations.map((registration) => (
-                        <li key={registration.id}>
-                          <strong>{registration.name}</strong>
-                          <span>
-                            {registration.issuer} · {registration.deploymentId} ·{" "}
-                            {registration.status === "active"
-                              ? t("account.status.active")
-                              : t("account.status.disabled")}
-                          </span>
-                        </li>
+              {institutionPolicy?.capabilities.lti && ownerAuthority ? (
+                <div
+                  aria-labelledby="account-lti-title"
+                  className={`stack-sm institution-registration-list ${styles.sectionReadRegion}`}
+                  data-account-settings-section=""
+                  id="account-lti-section"
+                  role="region"
+                  tabIndex={-1}
+                >
+                  <h3 id="account-lti-title">{t("account.institution.ltiTitle")}</h3>
+                  <SettingsSectionRead
+                    status={ltiRegistrations.state.status}
+                    onRetry={ltiRegistrations.retry}
+                  >
+                    {ltiRegistrations.state.status === "ready" &&
+                      (ltiRegistrations.state.data.length ? (
+                        <ul>
+                          {ltiRegistrations.state.data.map((registration) => (
+                            <li key={registration.id}>
+                              <strong>{registration.name}</strong>
+                              <span>
+                                {registration.issuer} · {registration.deploymentId} ·{" "}
+                                {registration.status === "active"
+                                  ? t("account.status.active")
+                                  : t("account.status.disabled")}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="notice">{t("account.institution.ltiEmpty")}</p>
                       ))}
-                    </ul>
-                  ) : (
-                    <p className="notice">{t("account.institution.ltiEmpty")}</p>
-                  )}
+                  </SettingsSectionRead>
                 </div>
               ) : null}
               {institutionPolicy?.capabilities.auditExports && creator?.role === "owner" ? (
@@ -1099,7 +1258,7 @@ export default function AccountPage() {
               )}
             </section>
           ) : null}
-          {selectedSection === "people" && organizationUserWorkspace ? (
+          {selectedSection === "people" && organizationPeople ? (
             <section className="panel">
               <h2>{t("customer.section.people")}</h2>
               <p>{t("customer.organization.people")}</p>
@@ -1110,136 +1269,161 @@ export default function AccountPage() {
           ) : null}
           {selectedSection === "people" &&
           permissions.managePeople &&
+          ownerAuthority &&
           !organizationUserWorkspace ? (
-            <section className="panel workspace-members-panel">
+            <section
+              aria-labelledby="account-members-title"
+              className={`panel workspace-members-panel ${styles.sectionReadRegion}`}
+              data-account-settings-section=""
+              id="account-members-section"
+              ref={membersRegion}
+              tabIndex={-1}
+            >
               <p className="eyebrow">{t("account.members.eyebrow")}</p>
-              <h2 style={{ fontSize: "1.8rem" }}>{t("account.members.title")}</h2>
+              <h2 id="account-members-title" style={{ fontSize: "1.8rem" }}>
+                {t("account.members.title")}
+              </h2>
               <p className="muted">{t("account.members.description")}</p>
-              <form className="toolbar" onSubmit={(event) => void inviteMember(event)}>
-                <label className="field workspace-invite-email">
-                  <span>{t("account.members.email")}</span>
-                  <input
-                    className="input"
-                    maxLength={320}
-                    onChange={(event) => setInviteEmail(event.target.value)}
-                    required
-                    type="email"
-                    value={inviteEmail}
-                  />
-                </label>
-                <label className="field">
-                  <span>{t("account.members.role")}</span>
-                  <select
-                    className="select"
-                    onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
-                    value={inviteRole}
-                  >
-                    <option value="editor">{t("role.editor")}</option>
-                    <option value="viewer">{t("role.viewer")}</option>
-                  </select>
-                </label>
-                <button
-                  className="button"
-                  disabled={collaborationBusy !== ""}
-                  style={{ alignSelf: "end" }}
-                  type="submit"
-                >
-                  {collaborationBusy === "invite"
-                    ? t("account.members.sending")
-                    : t("account.members.invite")}
-                </button>
-              </form>
               {inviteUrl ? (
                 <p className="notice">
                   {t("account.members.localInvitationLink")}:{" "}
                   <a href={inviteUrl}>{t("account.members.openInvitation")}</a>
                 </p>
               ) : null}
-              <div
-                className="table-scroll"
-                role="region"
-                aria-label={t("account.members.tableLabel")}
-                tabIndex={0}
+              <SettingsSectionRead
+                status={collaboration.state.status}
+                onRetry={collaboration.retry}
               >
-                <table className="report-table">
-                  <thead>
-                    <tr>
-                      <th>{t("account.members.email")}</th>
-                      <th>{t("account.members.role")}</th>
-                      <th>{t("account.members.action")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {members.map((member) => (
-                      <tr key={member.userId}>
-                        <td>{member.email}</td>
-                        <td>
-                          {member.role === "owner" ? (
-                            t("role.owner")
-                          ) : (
-                            <select
-                              aria-label={t("account.members.roleFor", { email: member.email })}
-                              className="select compact-select"
-                              disabled={collaborationBusy === `member:${member.userId}`}
-                              onChange={(event) =>
-                                void updateMemberRole(
-                                  member.userId,
-                                  event.target.value as "editor" | "viewer",
-                                )
-                              }
-                              value={member.role}
-                            >
-                              <option value="editor">{t("role.editor")}</option>
-                              <option value="viewer">{t("role.viewer")}</option>
-                            </select>
-                          )}
-                        </td>
-                        <td>
-                          {member.role !== "owner" ? (
-                            <button
-                              className="button-danger small-button"
-                              disabled={collaborationBusy === `member:${member.userId}`}
-                              onClick={() => void removeMember(member.userId)}
-                              type="button"
-                            >
-                              {t("account.members.remove")}
-                            </button>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {invitations.some((invitation) => !invitation.acceptedAt && !invitation.revokedAt) ? (
-                <div className="workspace-invitations">
-                  <h3>{t("account.members.pendingInvitations")}</h3>
-                  <ul>
-                    {invitations
-                      .filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)
-                      .map((invitation) => (
-                        <li key={invitation.id}>
-                          <span>
-                            {invitation.email} · {roleLabel(invitation.role)} ·{" "}
-                            {t("account.members.expires", {
-                              date: formatDate(locale, invitation.expiresAt),
-                            })}
-                          </span>
-                          <button
-                            className="button-danger small-button"
-                            disabled={collaborationBusy === `invitation:${invitation.id}`}
-                            onClick={() => void revokeInvitation(invitation.id)}
-                            type="button"
-                          >
-                            {t("account.members.revoke")}
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              ) : null}
+                {collaboration.state.status === "ready" && (
+                  <>
+                    <form className="toolbar" onSubmit={(event) => void inviteMember(event)}>
+                      <label className="field workspace-invite-email">
+                        <span>{t("account.members.email")}</span>
+                        <input
+                          className="input"
+                          maxLength={320}
+                          onChange={(event) => setInviteEmail(event.target.value)}
+                          required
+                          type="email"
+                          value={inviteEmail}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t("account.members.role")}</span>
+                        <select
+                          className="select"
+                          onChange={(event) =>
+                            setInviteRole(event.target.value as "editor" | "viewer")
+                          }
+                          value={inviteRole}
+                        >
+                          <option value="editor">{t("role.editor")}</option>
+                          <option value="viewer">{t("role.viewer")}</option>
+                        </select>
+                      </label>
+                      <button
+                        className="button"
+                        disabled={collaborationBusy !== ""}
+                        style={{ alignSelf: "end" }}
+                        type="submit"
+                      >
+                        {collaborationBusy === "invite"
+                          ? t("account.members.sending")
+                          : t("account.members.invite")}
+                      </button>
+                    </form>
+                    <div
+                      className="table-scroll"
+                      role="group"
+                      aria-label={t("account.members.tableLabel")}
+                      tabIndex={0}
+                    >
+                      <table className="report-table">
+                        <thead>
+                          <tr>
+                            <th>{t("account.members.email")}</th>
+                            <th>{t("account.members.role")}</th>
+                            <th>{t("account.members.action")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {collaboration.state.data.members.map((member) => (
+                            <tr key={member.userId}>
+                              <td>{member.email}</td>
+                              <td>
+                                {member.role === "owner" ? (
+                                  t("role.owner")
+                                ) : (
+                                  <select
+                                    aria-label={t("account.members.roleFor", {
+                                      email: member.email,
+                                    })}
+                                    className="select compact-select"
+                                    disabled={collaborationBusy !== ""}
+                                    onChange={(event) =>
+                                      void updateMemberRole(
+                                        member.userId,
+                                        event.target.value as "editor" | "viewer",
+                                      )
+                                    }
+                                    value={member.role}
+                                  >
+                                    <option value="editor">{t("role.editor")}</option>
+                                    <option value="viewer">{t("role.viewer")}</option>
+                                  </select>
+                                )}
+                              </td>
+                              <td>
+                                {member.role !== "owner" ? (
+                                  <button
+                                    className="button-danger small-button"
+                                    disabled={collaborationBusy !== ""}
+                                    onClick={() => void removeMember(member.userId)}
+                                    type="button"
+                                  >
+                                    {t("account.members.remove")}
+                                  </button>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {collaboration.state.data.invitations.some(
+                      (invitation) => !invitation.acceptedAt && !invitation.revokedAt,
+                    ) ? (
+                      <div className="workspace-invitations">
+                        <h3>{t("account.members.pendingInvitations")}</h3>
+                        <ul>
+                          {collaboration.state.data.invitations
+                            .filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)
+                            .map((invitation) => (
+                              <li key={invitation.id}>
+                                <span>
+                                  {invitation.email} · {roleLabel(invitation.role)} ·{" "}
+                                  {t("account.members.expires", {
+                                    date: formatDate(locale, invitation.expiresAt),
+                                  })}
+                                </span>
+                                <button
+                                  className="button-danger small-button"
+                                  disabled={collaborationBusy !== ""}
+                                  onClick={() => void revokeInvitation(invitation.id)}
+                                  type="button"
+                                >
+                                  {t("account.members.revoke")}
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </SettingsSectionRead>
             </section>
           ) : null}
           {selectedSection === "appearance" ? (

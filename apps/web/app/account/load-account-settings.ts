@@ -8,7 +8,7 @@ import type {
 } from "@openround/contracts";
 import type { WorkspaceAccountContext } from "../../components/workspace/workspace-provider";
 import { apiFetch } from "../../lib/api";
-import { loadOwnerSettings } from "./load-owner-settings";
+import { workspaceSettingsPath } from "./workspace-settings-request";
 
 export interface AccountCreator {
   userId: string;
@@ -54,22 +54,40 @@ export async function loadAccountSettings(signal: AbortSignal) {
     }
   }
   signal.throwIfAborted();
-  const [branding, workspaceList, embedPolicy, policy, identities, oidcStatus, ownerSettings] =
-    await Promise.all([
-      apiFetch<{ theme: BrandTheme | null; enabled: boolean }>("/v1/account/theme", { signal }),
-      apiFetch<{ activeWorkspaceId: string; workspaces: WorkspaceSummary[] }>("/v1/workspaces", {
+  const { workspaceId } = account.creator;
+  const [branding, workspaceList, embedPolicy, policy, identities, oidcStatus] = await Promise.all([
+    apiFetch<{ theme: BrandTheme | null; enabled: boolean }>(
+      workspaceSettingsPath("/v1/account/theme", workspaceId),
+      { signal },
+    ),
+    apiFetch<{ activeWorkspaceId: string | null; workspaces: WorkspaceSummary[] }>(
+      "/v1/workspaces",
+      {
         signal,
-      }),
-      apiFetch<{ origins: string[] }>("/v1/account/embed-origins", { signal }),
-      apiFetch<WorkspaceInstitutionPolicy>("/v1/workspace/institution-policy", { signal }),
-      apiFetch<{ identities: FederatedIdentity[] }>("/v1/auth/federated-identities", { signal }),
-      apiFetch<OidcStatus>(
-        `/v1/auth/oidc/status?workspaceId=${encodeURIComponent(account.creator.workspaceId)}`,
-        { signal },
-      ),
-      loadOwnerSettings(account.creator.role, account.workspace ?? null, signal),
-    ]);
+      },
+    ),
+    apiFetch<{ origins: string[] }>(
+      workspaceSettingsPath("/v1/account/embed-origins", workspaceId),
+      {
+        signal,
+      },
+    ),
+    apiFetch<WorkspaceInstitutionPolicy>(
+      workspaceSettingsPath("/v1/workspace/institution-policy", workspaceId),
+      { signal },
+    ),
+    apiFetch<{ identities: FederatedIdentity[] }>(
+      workspaceSettingsPath("/v1/auth/federated-identities", workspaceId),
+      { signal },
+    ),
+    apiFetch<OidcStatus>(`/v1/auth/oidc/status?workspaceId=${encodeURIComponent(workspaceId)}`, {
+      signal,
+    }),
+  ]);
   signal.throwIfAborted();
+  if (workspaceList.activeWorkspaceId !== workspaceId) {
+    throw new Error("The active workspace changed");
+  }
   return {
     kind: "workspace",
     account,
@@ -79,6 +97,5 @@ export async function loadAccountSettings(signal: AbortSignal) {
     policy,
     identities,
     oidcStatus,
-    ownerSettings,
   } as const;
 }

@@ -508,7 +508,8 @@ counts under the bounded `product_event` resource label.
 workspaceName,segment}` and creates a user-license organization and its owner's setup workspace.
   The selected session context changes only after successful setup. Organization setup requires
   enabled hosted business management; it does not create a paid subscription.
-- `PATCH /v1/workspace/settings` — owner or authorized organization administrator updates `{name}`.
+- `PATCH /v1/workspace/settings` — owner or authorized organization administrator updates the name
+  or session policy.
 - `GET /v1/workspace/members`
 - `POST /v1/workspace/invitations`
 - `POST /v1/invitations/accept` — returns `{creator, requiresSignIn, redirectTo}`. Anonymous invitees
@@ -516,6 +517,14 @@ workspaceName,segment}` and creates a user-license organization and its owner's 
   and switches to the invited workspace.
 - `DELETE /v1/workspace/invitations/{invitationId}`
 - `PATCH|DELETE /v1/workspace/members/{userId}`
+
+Workspace settings, theme, embed origins, institution policy, linked identities, LTI registrations,
+institution audit export, and the owner-only People routes accept an optional
+`expectedWorkspaceId` UUID query parameter. Signed-in workspace requests return `409 CONFLICT`
+when the active workspace differs from the expected ID. Requests for the matching workspace still
+require the route's usual permissions. Callers can omit the parameter to use the active workspace
+directly.
+
 - `GET|PUT|DELETE /v1/account/theme` — workspace Round branding. The existing
   `{organizationName, primaryColor, accentColor}` object accepts optional
   `colorMode: "light" | "dark"`; omitted mode preserves legacy rendering. PUT retains

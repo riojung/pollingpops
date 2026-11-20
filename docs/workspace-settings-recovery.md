@@ -31,9 +31,8 @@ This is a client initialization boundary. Server authorization continues to gove
 and mutation. Existing permission helpers, billing-status recovery, payment destinations,
 destructive confirmations and loaded settings forms remain unchanged.
 
-All current required reads gate the page. An unavailable member or integration read therefore
-withholds the remaining settings until recovery. Independent subsection availability/retry is a
-separate follow-up, not a capability delivered by this increment.
+At WX-11C, all settings reads gated the page. The independent section recovery below changes
+the behavior for member and LTI registration reads.
 
 ## Copy and experience acceptance
 
@@ -74,11 +73,48 @@ expectations were aligned with the existing gallery's local-preview and gated-sa
 gallery implementation and grants were not changed. These automated checks do not supply human
 privacy, assistive-technology, native-language or physical-device acceptance.
 
+## Independent section recovery
+
+WX-11F is implemented locally on `codex/settings-section-recovery` from merged PR #295
+at `b6e1770`. The account authority and required settings reads still form the initial load.
+Member and LTI registration reads start separately for eligible owners once it succeeds.
+The People panel distinguishes pending or unavailable data from a list that loaded successfully.
+The institution area shows an empty LTI registration notice only after the registration read
+succeeds with no registrations. A failure in either section leaves the rest of Settings usable.
+
+Each section's **Try again** repeats its read and keeps keyboard focus on that section when
+activated from the focused button. After a successful member or invitation change, a failed list
+refresh offers the same read retry. This lets users recover the current list without submitting the
+change again. A successful invite's local link remains available during list recovery. Workspace
+and session transitions invalidate pending reads and stale responses. The required theme,
+embed-origin, institution-policy and linked-identity reads, owner-section operations and related Settings actions
+carry the expected workspace ID. The loader also checks the active workspace returned by the
+workspace list before presenting the snapshot. If the session switches workspaces during loading,
+the settings stay hidden until Retry reads the current workspace. If a rename, idle-policy, theme,
+embed, identity removal or audit export request detects a workspace change, Settings discards the
+stale view. Focus moves to recovery when Settings previously held it. Retry only reloads Settings.
+The query parameter is optional for existing clients. See the [API reference](api.md).
+
+The section messages use ten locale catalogs. Focused verification passed 92 account, 39 API and
+19 locale tests. Ten production browser cases passed across desktop Chromium, mobile Chromium and
+mobile WebKit. They cover pending, unavailable and recovered sections, continued use of billing,
+privacy confirmation and unrelated Security controls, GET-only retries, keyboard focus, reflow and
+automated accessibility in light, dark and forced-color appearances. The cross-tab case exercises a
+switch to an editor workspace both during the required reads and before a stale rename. It checks the
+conflict, focus and retry without replaying the write. Server tests exercise all 16 guarded methods and
+check matching-workspace permissions. The business browser check verifies successful renaming and
+embed-origin saves in the current workspace and accessible landmarks in People.
+
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed on rerun, including 6,503 web tests, 1,676 server tests,
+529 support tests, four application builds and compiled server startup. Optional PostgreSQL suites
+were skipped in this run. Automated checks cover locale parity and browser accessibility.
+Native-language and manual accessibility review remain open.
+
 ## Remaining work
 
 Library pagination and reset focus merged as WX-11D in PR #294. See the
-[scope and acceptance record](library-recovery-focus.md). WX-11E availability copy is implemented
-locally. Independent settings-section recovery is next. Detailed plan, operator, rollout and
+[scope and acceptance record](library-recovery-focus.md). WX-11E availability copy merged in
+PR #295. Checkpoint-set import availability copy is next. Detailed plan, operator, rollout and
 provider explanations need an authoritative reason projection.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the

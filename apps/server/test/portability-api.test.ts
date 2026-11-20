@@ -2,7 +2,7 @@ import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { MemoryRepository } from "@openround/db";
+import { MemoryRepository, createPlatformRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -14,7 +14,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function authenticatedApp(communityMode: boolean) {
+async function authenticatedApp(communityMode: boolean, repository = new MemoryRepository()) {
   const built = await buildApp(
     ConfigSchema.parse({
       NODE_ENV: "test",
@@ -24,7 +24,7 @@ async function authenticatedApp(communityMode: boolean) {
       PUBLIC_API_URL: "http://localhost:4000",
       LOG_LEVEL: "silent",
     }),
-    { repository: new MemoryRepository(), cache: new MemorySessionCache() },
+    { repository, cache: new MemorySessionCache() },
   );
   app = built.app;
   const magic = await app.inject({
@@ -246,5 +246,60 @@ describe("checkpoint-set portability API", () => {
       headers: { cookie },
     });
     expect(qtiExport.statusCode).toBe(402);
+  });
+
+  it("reports unavailable exports and branding when a Pro workspace has both features disabled", async () => {
+    const repository = new MemoryRepository();
+    const { app: server, cookie } = await authenticatedApp(false, repository);
+    const quizId = await createCheckpointSet(server, cookie);
+    const headers = { cookie };
+    const { creator } = (await server.inject({ url: "/v1/auth/me", headers })).json<{
+      creator: { workspaceId: string };
+    }>();
+    await repository.setPlan(creator.workspaceId, "pro");
+    await createPlatformRepository(repository).saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        csvExport: { enabled: false, plans: [] },
+        brandTheme: { enabled: false, plans: [] },
+      },
+    });
+    const account = await server.inject({ url: "/v1/auth/me", headers });
+    expect(account.statusCode).toBe(200);
+    expect(account.json()).toMatchObject({
+      entitlements: { plan: "pro", csvExport: false, brandTheme: false },
+    });
+
+    for (const format of ["json", "csv", "qti.zip"]) {
+      const exported = await server.inject({
+        url: `/v1/quizzes/${quizId}/export.${format}`,
+        headers,
+      });
+      expect(exported.statusCode).toBe(402);
+      expect(exported.json()).toMatchObject({
+        error: {
+          code: "ENTITLEMENT_LIMIT",
+          message: "Checkpoint-set export is unavailable for this workspace",
+        },
+      });
+    }
+
+    const theme = await server.inject({
+      method: "PUT",
+      url: "/v1/account/theme",
+      headers,
+      payload: {
+        organizationName: "Northern Learning",
+        primaryColor: "#0B2239",
+        accentColor: "#087375",
+      },
+    });
+    expect(theme.statusCode).toBe(402);
+    expect(theme.json()).toMatchObject({
+      error: {
+        code: "ENTITLEMENT_LIMIT",
+        message: "Saving the live brand is unavailable for this workspace",
+      },
+    });
   });
 });

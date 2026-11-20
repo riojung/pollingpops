@@ -8,9 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Capability availability copy, November 20, 2026
+
+WX-11E on `codex/capability-availability-copy` clarifies CSV export, live-brand saving and
+billing access in Workspace settings. The labels follow effective availability and appear in all
+ten configured locales. Export and branding rejections describe availability for the current
+workspace or room. Focused tests cover a Free workspace with CSV export enabled, a Pro
+workspace with exports and branding disabled, and Community and hosted billing states.
+See the [delivery backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Library recovery and keyboard continuity, November 20, 2026
 
-WX-11D on `codex/library-recovery-focus` keeps failed-page Retry below retained All content rows
+WX-11D merged through PR #294 at `2f5782d` and keeps failed-page Retry below retained All content rows
 and gives pagination a stable named footer through pending, error and final-page completion.
 Initial Retry focuses the results region; toolbar and no-match Clear filters focus search and center it in view.
 Synchronous focus handoff avoids reclaiming deliberately moved focus when a request completes.
@@ -19,8 +28,7 @@ Instant nearest scrolling keeps the footer visible only while it retains focus u
 The existing pager, exact totals versus loaded counts, cursor recovery, authority fences and shared
 actions remain. No server, contract, database or grant change is introduced. See the
 [scope and acceptance record](library-recovery-focus.md). Sessions, Results and Workspace
-initialization are merged in PRs #291–293. Neutral capability copy, authoritative cause explanations
-and independent settings-section recovery remain separate work.
+initialization merged in PRs #291–293. Availability copy is local as WX-11E.
 
 The final full repository check passes, including 6,491 web tests, all application builds and
 compiled startup. All 88 focused tests and 12 browser cases pass across desktop/mobile Chromium
@@ -51,8 +59,8 @@ their existing meaning. Native date fields fit their own filter columns at 320px
 
 No report calculation, disclosure rule, grant, endpoint, Pack attribution or evidence destination
 changes. See the [Results scope and acceptance record](results-workspace-polish.md). WX-11C Workspace
-initialization/recovery is merged; WX-11D Library recovery is local. Independent subsection recovery and capability/plan
-explanations remain separate checkpoints. Survey C3/C4/B3
+initialization and recovery and WX-11D Library recovery merged in PRs #293–294. Independent
+subsection recovery and authoritative capability explanations remain pending. Survey C3/C4/B3
 remain pending privacy acceptance.
 
 ### Sessions workspace recovery and action hierarchy, November 19, 2026
@@ -65,9 +73,8 @@ semantics, destinations, credentials and deletion confirmation remain unchanged.
 
 The selected work is limited to Sessions and reuses existing localized copy and interface tokens.
 See the [scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is merged;
-WX-11C Workspace initialization/recovery is merged. WX-11D Library recovery is local; remaining Workspace/capability
-work stay separate. Survey privacy
-acceptance is still open; this ready independent surface increment does not enable C3/C4 or B3.
+WX-11C Workspace initialization and recovery and WX-11D Library recovery merged in PRs #293–294.
+Survey C3/C4/B3 remain pending privacy acceptance.
 
 ### Conditional Survey disclosure controls, November 19, 2026
 
@@ -134,9 +141,10 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped/candidate work. WX-11A Sessions, WX-11B Results and
-WX-11C Workspace initialization/recovery are merged; WX-11D Library recovery is local, with subsection recovery and commercial
-explanations pending. Recurrence and learning sequences need identity/privacy decisions,
+WX-07–10 and WX-12–14 remain scoped work. WX-11A–D surface recovery merged through PR #294.
+WX-11E availability copy is local. Independent settings-section recovery is the next ready
+checkpoint, and authoritative capability explanations remain pending.
+Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.

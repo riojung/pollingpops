@@ -76,12 +76,10 @@ privacy, assistive-technology, native-language or physical-device acceptance.
 
 ## Remaining work
 
-Library pagination/reset focus is implemented locally as WX-11D on `codex/library-recovery-focus`;
-see its [scope and acceptance record](library-recovery-focus.md). Independent settings-section
-recovery and capability/plan explanations remain pending. The current entitlement/feature booleans
-support effective availability, but not every underlying cause. Neutral unavailable copy can be
-corrected independently; precise plan/operator/rollout/provider explanations need an authoritative
-reason projection. No cause taxonomy, pricing change or new paid gate is added here.
+Library pagination and reset focus merged as WX-11D in PR #294. See the
+[scope and acceptance record](library-recovery-focus.md). WX-11E availability copy is implemented
+locally. Independent settings-section recovery is next. Detailed plan, operator, rollout and
+provider explanations need an authoritative reason projection.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

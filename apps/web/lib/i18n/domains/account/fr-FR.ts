@@ -80,13 +80,13 @@ const messages = {
   "account.subscription.unlimitedPublished": "Jeux de vérification publiés illimités",
   "account.subscription.published": "{count} jeux de vérification publiés",
   "account.subscription.retention": "Conservation des rapports pendant {count} jours",
-  "account.subscription.csvIncluded": "CSV inclus",
-  "account.subscription.csvRequiresPro": "CSV nécessite Pro",
+  "account.subscription.csvAvailable": "Export CSV disponible",
+  "account.subscription.csvUnavailable": "Export CSV indisponible",
   "account.subscription.openingPortal": "Ouverture du portail…",
   "account.subscription.manageBilling": "Gérer la facturation",
   "account.subscription.comparePlans": "Comparer les forfaits",
-  "account.subscription.operatorLimits":
-    "Les limites sont contrôlées par votre opérateur communautaire.",
+  "account.subscription.billingUnavailable":
+    "La gestion de la facturation est indisponible pour ce compte.",
   "account.members.eyebrow": "Collaboration",
   "account.members.title": "Membres de l’espace de travail",
   "account.members.description":

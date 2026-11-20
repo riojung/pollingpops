@@ -18,7 +18,7 @@ describe("appearance gallery translations", () => {
           "previewHelp",
           "brandModeHelp",
           "readOnly",
-          "requiresPro",
+          "brandSaveUnavailable",
           "legacyHelp",
           "contrastHelp",
         ] as const) {

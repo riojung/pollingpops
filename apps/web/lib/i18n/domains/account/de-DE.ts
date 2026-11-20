@@ -79,12 +79,13 @@ const messages = {
   "account.subscription.unlimitedPublished": "Unbegrenzt veröffentlichte Fragensätze",
   "account.subscription.published": "{count} veröffentlichte Fragensätze",
   "account.subscription.retention": "{count} Tage Berichtsaufbewahrung",
-  "account.subscription.csvIncluded": "CSV enthalten",
-  "account.subscription.csvRequiresPro": "CSV erfordert Pro",
+  "account.subscription.csvAvailable": "CSV-Export verfügbar",
+  "account.subscription.csvUnavailable": "CSV-Export nicht verfügbar",
   "account.subscription.openingPortal": "Portal wird geöffnet…",
   "account.subscription.manageBilling": "Abrechnung verwalten",
   "account.subscription.comparePlans": "Tarife vergleichen",
-  "account.subscription.operatorLimits": "Grenzen werden von Ihrem Community-Betreiber festgelegt.",
+  "account.subscription.billingUnavailable":
+    "Die Abrechnungsverwaltung ist für dieses Konto nicht verfügbar.",
   "account.members.eyebrow": "Zusammenarbeit",
   "account.members.title": "Mitglieder des Arbeitsbereichs",
   "account.members.description":

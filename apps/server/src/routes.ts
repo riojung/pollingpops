@@ -1660,7 +1660,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "A workspace brand theme requires Pro",
+        "Saving the live brand is unavailable for this workspace",
         request.id,
       );
     }
@@ -2126,7 +2126,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "Checkpoint-set export is available on the Pro plan",
+        "Checkpoint-set export is unavailable for this workspace",
         request.id,
       );
     }
@@ -2153,7 +2153,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "Checkpoint-set export is available on the Pro plan",
+        "Checkpoint-set export is unavailable for this workspace",
         request.id,
       );
     }
@@ -2177,7 +2177,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "Checkpoint-set export is available on the Pro plan",
+        "Checkpoint-set export is unavailable for this workspace",
         request.id,
       );
     }
@@ -3125,7 +3125,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "Interaction transcript export is available on the Pro plan",
+        "Interaction transcript export is unavailable for this room",
         request.id,
       );
     }
@@ -3170,7 +3170,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "CSV export is available on the Pro plan",
+        "CSV export is unavailable for this room",
         request.id,
       );
     }
@@ -3205,7 +3205,7 @@ export async function registerRoutes(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
-        "Report exports are available on the Pro plan",
+        "Report export is unavailable for this room",
         request.id,
       );
     }

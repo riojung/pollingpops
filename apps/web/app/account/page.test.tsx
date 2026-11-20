@@ -520,3 +520,95 @@ describe("account settings bootstrap recovery", () => {
     route.dispose();
   });
 });
+
+describe("account plan availability", () => {
+  it.each([
+    { plan: "free", csvExport: true, label: "CSV export available", billingAction: "Explore Pro" },
+    {
+      plan: "pro",
+      csvExport: false,
+      label: "CSV export unavailable",
+      billingAction: "Manage billing",
+    },
+  ] as const)("reports effective CSV availability for a $plan workspace", async (scenario) => {
+    browser.location.hash = "#plan";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/auth/me")
+        return {
+          ...account,
+          creator: { ...account.creator, plan: scenario.plan },
+          workspace: {
+            ...account.workspace,
+            planSource: scenario.plan === "free" ? "free" : "subscription",
+          },
+          entitlements: {
+            ...account.entitlements,
+            plan: scenario.plan,
+            csvExport: scenario.csvExport,
+          },
+        };
+      if (path === "/v1/billing/status" && scenario.plan === "pro")
+        return {
+          billing: {
+            status: "active",
+            customerId: "fixture-customer",
+            subscriptionId: "fixture-subscription",
+          },
+        };
+      return response(path);
+    });
+    const route = harness();
+    try {
+      const markup = await route.settle();
+      expect(markup).toContain(scenario.label);
+      expect(markup).toContain(scenario.billingAction);
+      expect(markup).not.toContain("CSV requires Pro");
+    } finally {
+      route.dispose();
+    }
+  });
+
+  it.each(["hosted", "community"] as const)(
+    "distinguishes %s billing unavailability without requesting billing status",
+    async (deployment) => {
+      browser.location.hash = "#plan";
+      const community = deployment === "community";
+      const plan = community ? "team" : "free";
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path === "/v1/auth/me"
+          ? {
+              ...account,
+              creator: { ...account.creator, role: community ? "owner" : "viewer", plan },
+              workspace: {
+                ...account.workspace,
+                planSource: community ? "community" : "free",
+                permissions: {
+                  manageWorkspace: community,
+                  managePeople: community,
+                  manageBilling: community,
+                  manageIntegrations: community,
+                },
+              },
+              entitlements: { ...account.entitlements, plan },
+            }
+          : response(path),
+      );
+      const route = harness();
+      try {
+        const markup = await route.settle();
+        const hostedNotice = "Billing management is unavailable for this account.";
+        const communityNotice = "Features are provided by this installation";
+        expect(markup).toContain(community ? communityNotice : hostedNotice);
+        expect(markup).not.toContain(community ? hostedNotice : communityNotice);
+        expect(markup).not.toContain("Limits are controlled by your community operator.");
+        expect(markup).not.toContain("Manage billing");
+        expect(markup).not.toContain("Explore Pro");
+        expect(fixtures.apiFetch.mock.calls.some(([path]) => path === "/v1/billing/status")).toBe(
+          false,
+        );
+      } finally {
+        route.dispose();
+      }
+    },
+  );
+});

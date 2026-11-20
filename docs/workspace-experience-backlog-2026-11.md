@@ -27,9 +27,10 @@ privacy acceptance remains open. **WX-11A** Sessions recovery and action hierarc
 [PR #292](https://github.com/riojung/pollingpops/pull/292) at `6e85bcf`.
 **WX-11C** Workspace settings initialization/recovery merged through
 [PR #293](https://github.com/riojung/pollingpops/pull/293) at `223095c`.
-The current **WX-11D** slice on `codex/library-recovery-focus` improves All content Library
-pagination/reset focus independently of that gate. Later items are scoped backlog,
-not shipped features or a commitment to reproduce either competitor's product.
+**WX-11D** Library pagination and reset focus merged through
+[PR #294](https://github.com/riojung/pollingpops/pull/294) at `2f5782d`.
+The current **WX-11E** slice on `codex/capability-availability-copy` clarifies feature
+availability and billing access.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -44,22 +45,22 @@ follow its smaller checkpoints below; do not combine every checkpoint into one p
 Each delivery needs an assigned owner, tests, documentation and an explicit disposition of its
 remaining work. Candidate priorities indicate evaluation order, not a release promise.
 
-| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                        | Responsible role                |
-| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                 | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                 | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                  | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                          | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                    | Authoring + frontend            |
-| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open         | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                   | Async delivery + privacy        |
-| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                          | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                   | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                   | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Sessions/Results/Workspace merged; Library recovery local | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                          | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                         | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace            | Library + organization access   |
+| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                 | Responsible role                |
+| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------- |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below          | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below          | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery           | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                   | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                             | Authoring + frontend            |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open  | Surveys + contracts + reporting |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence            | Async delivery + privacy        |
+| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                   | Contracts + live experience     |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                            | Realtime + security + frontend  |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                            | Reporting + learning evidence   |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Recovery A–D merged. Availability copy E is local. | Design system + frontend        |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                   | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                  | Learning delivery + privacy     |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace     | Library + organization access   |
 
 ## Selected first delivery
 
@@ -69,12 +70,10 @@ been enabled in the product. C1's internal counting and withheld-only contract a
 C2's candidate whole-report policy is merged; human privacy acceptance, C3/C4 runtime
 reporting/exports and B3 writers remain pending.
 The public product website is merged in PR #288. WX-11A's Sessions recovery/action hierarchy is
-merged in PR #291, WX-11B Results recovery in PR #292, and WX-11C Workspace initialization/recovery
-in PR #293. WX-11D Library recovery/focus is implemented locally. The rest of WX-11 and WX-07–10/WX-12–14 remain scoped/candidate
-work. These are delivery
-positions, not a percentage of product completeness or release acceptance. Additional customer-job
-collections and human/native-language acceptance remain open even though the selected WX-04
-collection is merged.
+merged in PR #291, WX-11B Results recovery in PR #292, WX-11C Workspace initialization and recovery
+in PR #293, and WX-11D Library recovery in PR #294. WX-11E availability copy is implemented locally.
+Independent settings-section recovery, detailed capability explanations, WX-07–10 and WX-12–14
+remain pending. Additional customer-job collections and human review of localized copy remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -668,10 +667,9 @@ retained history/viewers. Survey sharing/results availability stays unchanged.
 Owner: frontend and accessibility. Merged through PR #291 at `26f7a8c`, based on merged
 PR #290 at `d6f3fd3`. Reuse existing translations and local token-based styles; preserve compact
 grid/list density, counts, URLs, scope fences and credential/deletion behavior. See the
-[Sessions scope and acceptance record](sessions-workspace-polish.md). WX-11B Results is merged;
-WX-11C Workspace initialization/recovery is merged. WX-11D Library recovery is local; independent subsection recovery and
-capability/plan explanations remain pending. These selected
-surface increments do not complete all of WX-11.
+[Sessions scope and acceptance record](sessions-workspace-polish.md). WX-11B through WX-11D
+also merged in PRs #292–294. Independent subsection recovery and
+authoritative capability explanations remain pending.
 
 **WX-11A local verification — 2026-11-19:** full `VITEST_MAX_WORKERS=1 pnpm check` passed,
 including 6,423 web, 1,140 contract, 1,672 server, 666 default database and 529 support tests,
@@ -696,8 +694,8 @@ Owner: frontend and accessibility. Merged through PR #292 at `6e85bcf`, based on
 PR #291 at `26f7a8c`. The selected scope spans the overview's existing Rounds, Practice,
 Presentations and Surveys views; no report detail route or data contract changes. See the
 [Results scope and acceptance record](results-workspace-polish.md). WX-11C Workspace initialization
-and recovery is merged. WX-11D Library recovery is local; independent subsection recovery and capability/plan explanations
-remain pending as separate increments.
+and recovery merged in PR #293, and WX-11D Library recovery merged in PR #294.
+Independent subsection recovery and authoritative capability explanations remain pending.
 
 **WX-11B local verification — 2026-11-19:** full `VITEST_MAX_WORKERS=1 pnpm check` passed,
 including 6,437 web, 1,140 contract, 1,672 server, 666 default database and 529 support tests,
@@ -741,8 +739,8 @@ sort/scope and the existing reset to All content. Completion never reclaims focu
 scrolling keeps the footer visible only while it retains focus under the initiating query/authority.
 A user who moves elsewhere keeps focus and avoids completion scrolling. Preserve exact totals versus loaded counts, typed management
 routes, share actions, cursor recovery, deduplication and authority fences. Folder management stays
-in typed views. Owner: frontend and accessibility. Branch: `codex/library-recovery-focus`, based on
-merged PR #293 at `223095c`; implemented locally. See the [acceptance record](library-recovery-focus.md).
+in typed views. Owner: frontend and accessibility. Merged in PR #294 at `2f5782d`.
+See the [acceptance record](library-recovery-focus.md).
 
 **WX-11D local verification — 2026-11-20:** the final `VITEST_MAX_WORKERS=1 pnpm check` passed
 formatting, Docker dependency checks, lint, types, repository tests, four application builds and
@@ -757,25 +755,33 @@ actionable issue. The [acceptance record](library-recovery-focus.md) records the
 visibility defects found and fixed during verification. Existing optional integration skips and
 human acceptance gates remain.
 
-**Next ready WX-11E — Neutral capability-unavailable copy:** correct unsupported paid-plan and
-community-operator diagnoses using availability wording grounded in the existing projection.
-Keep actual prices, grants, permissions, payment destinations and upgrade eligibility unchanged.
-This bounded copy increment does not add a cause taxonomy or claim that a false entitlement
-identifies operator policy, plan, rollout or provider setup. Owner: frontend, content and localization;
-not implemented here. Authoritative cause explanations remain a later server/contracts checkpoint.
+**Selected WX-11E — Capability availability copy.** Plan and usage shows whether CSV export is
+available in the active workspace. Appearance distinguishes workspace-wide live-brand availability
+from role permissions and preserves theme previews. In hosted personal workspaces, users without
+billing access see an account-specific notice. Community workspaces show their deployment-specific
+description. These settings messages cover all ten locales. The direct branding, Round content export and Round report
+export rejection messages also describe availability in the workspace or room. They retain the
+existing HTTP status, error code and eligibility checks. Owner: frontend, content and localization.
+Implemented locally on `codex/capability-availability-copy` from merged PR #294.
 
-**Remaining capability/plan explanation checkpoint:** current booleans do not prove every reason
-for unavailability. CSV and branding copy can falsely attribute operator-controlled absence to a
-paid plan; the nonpayer fallback can mention a community operator in a hosted workspace. Neutral
-copy corrections can proceed independently. Precise plan/operator/rollout/provider explanations
-need a sanitized authoritative cause projection, server/contracts ownership and compatibility tests.
-Preserve actual prices, payment destinations and existing grants; do not invent a paid gate or
-diagnose a cause from a false boolean. Neither the copy correction nor the cause projection ships
-with WX-11C or WX-11D.
+**WX-11E local verification — 2026-11-20.** The full `VITEST_MAX_WORKERS=1 pnpm check` passed,
+including 6,496 web tests, 1,674 server tests, 529 support tests, four application builds and
+compiled startup. Focused verification covers locale catalog parity and exports from a retained
+Round after its workspace gains export access. The Free personal workspace browser case passed
+with appearance previews, billing navigation and accessibility checks. Independent review found
+the disabled-branding viewer notice and prompted the entitlement-first fix. The viewer regression
+passed for both enabled and disabled branding.
 
-**Remaining checkpoints:** deliver neutral capability copy, independent settings-section recovery
-and authoritative cause projections as separate increments. Continue preserving permission and
-payment destinations; the selected A–D surface work does not establish every capability explanation.
+**Next ready WX-11F — Independent settings-section recovery.** Keep the initial authority check
+and required account data. Scope failed member and LTI registration reads to the sections that
+depend on them, with local Retry and distinct unavailable and confirmed-empty states. Fence
+conditional reads and retries by workspace and role. Reverify billing and destructive
+confirmations with a failed section. Owner: frontend and accessibility.
+
+Detailed plan, operator-policy, rollout and provider explanations need an authoritative reason
+projection, server and contract ownership, and compatibility tests. Checkpoint-set import also
+has plan wording tied to the effective portability flag and needs its own copy pass across creation
+and import rejection states.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -873,10 +879,10 @@ The next work session should select **one ID/checkpoint**, confirm its current b
 assign an owner and define a testable completion target. C2 candidate code is merged in PR #290;
 its human privacy acceptance remains open. The next Survey implementation checkpoint after acceptance is
 **C3 frozen runtime results/readers**, followed by C4 summaries/exports before B3 enables
-writers. **WX-11A Sessions**, **WX-11B Results** and **WX-11C Workspace initialization/recovery**
-are merged in PRs #291–293. **WX-11D Library pagination/reset focus** is implemented locally.
-Neutral capability-unavailable copy is the next ready checkpoint. Independent settings-section
-recovery and authoritative cause explanations remain separate work. The public-site work merged in PR #288.
+writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initialization and recovery**,
+and **WX-11D Library recovery** are merged in PRs #291–294. **WX-11E availability copy** is implemented
+locally. **WX-11F independent settings-section recovery** is the next ready checkpoint.
+Detailed cause explanations remain pending. The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a
 provider choice. Do not mark these later items implemented because earlier slices are merged.

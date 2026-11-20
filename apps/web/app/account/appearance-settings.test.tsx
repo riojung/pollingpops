@@ -257,42 +257,48 @@ describe("personal interface gallery", () => {
 });
 
 describe("workspace live brand gallery", () => {
-  it("allows viewer exploration while preventing submit and reset", () => {
-    hooks.capture = true;
-    const onChange = vi.fn();
-    const onSave = vi.fn();
-    const nodes = elements(
-      WorkspaceBrandSettings({
-        theme: brand,
-        savedTheme: brand,
-        canManage: false,
-        entitled: true,
-        busy: false,
-        onChange,
-        onSave,
-        onReset: vi.fn(),
-      }),
-    );
-    expect(content(nodes[0])).toContain("A workspace manager can save");
-    click(nodes.find((node) => node.type === "button" && content(node).startsWith("Forest"))!);
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        primaryColor: "#183C31",
-        accentColor: "#176B50",
-        colorMode: "light",
-      }),
-    );
-    expect(button(nodes, "Save workspace brand").props.disabled).toBe(true);
-    expect(
-      nodes.some((node) => node.type === "button" && content(node) === "Use default live brand"),
-    ).toBe(false);
-    const preventDefault = vi.fn();
-    (nodes.find((node) => node.type === "form")!.props.onSubmit as (event: unknown) => void)({
-      preventDefault,
-    });
-    expect(onSave).not.toHaveBeenCalled();
-    expect(preventDefault).toHaveBeenCalledOnce();
-  });
+  it.each([true, false])(
+    "describes live-brand availability to viewers with entitlement %s",
+    (entitled) => {
+      hooks.capture = true;
+      const onChange = vi.fn();
+      const onSave = vi.fn();
+      const nodes = elements(
+        WorkspaceBrandSettings({
+          theme: brand,
+          savedTheme: brand,
+          canManage: false,
+          entitled,
+          busy: false,
+          onChange,
+          onSave,
+          onReset: vi.fn(),
+        }),
+      );
+      const { brandSaveUnavailable } = appearanceMessages("en-CA");
+      const managerCanSave = "A workspace manager can save";
+      expect(content(nodes[0])).toContain(entitled ? managerCanSave : brandSaveUnavailable);
+      expect(content(nodes[0])).not.toContain(entitled ? brandSaveUnavailable : managerCanSave);
+      click(nodes.find((node) => node.type === "button" && content(node).startsWith("Forest"))!);
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          primaryColor: "#183C31",
+          accentColor: "#176B50",
+          colorMode: "light",
+        }),
+      );
+      expect(button(nodes, "Save workspace brand").props.disabled).toBe(true);
+      expect(
+        nodes.some((node) => node.type === "button" && content(node) === "Use default live brand"),
+      ).toBe(false);
+      const preventDefault = vi.fn();
+      (nodes.find((node) => node.type === "form")!.props.onSubmit as (event: unknown) => void)({
+        preventDefault,
+      });
+      expect(onSave).not.toHaveBeenCalled();
+      expect(preventDefault).toHaveBeenCalledOnce();
+    },
+  );
 
   it("preserves both custom legacy colors on mode edits and requires both colors to match a palette", () => {
     const legacy = { organizationName: "Acme", primaryColor: "#183C31", accentColor: "#AC2855" };
@@ -336,17 +342,19 @@ describe("workspace live brand gallery", () => {
       onReset: vi.fn(),
     };
     const nodes = elements(WorkspaceBrandSettings(props));
+    expect(content(nodes[0])).not.toContain(appearanceMessages("en-CA").brandSaveUnavailable);
     expect(button(nodes, "Save workspace brand").props.disabled).toBe(false);
     const event = { preventDefault: vi.fn() };
     (nodes.find((node) => node.type === "form")!.props.onSubmit as (event: unknown) => void)(event);
     expect(onSave).toHaveBeenCalledWith(event);
     hooks.cursor = 0;
-    expect(
-      button(
-        elements(WorkspaceBrandSettings({ ...props, entitled: false })),
-        "Save workspace brand",
-      ).props.disabled,
-    ).toBe(true);
+    const unavailable = elements(WorkspaceBrandSettings({ ...props, entitled: false }));
+    expect(content(unavailable[0])).toContain(
+      "You can preview themes. Saving a live brand is unavailable in this workspace.",
+    );
+    expect(content(unavailable[0])).not.toContain("A workspace manager can save");
+    expect(button(unavailable, "Save workspace brand").props.disabled).toBe(true);
+    expect(button(unavailable, "Use default live brand").props.disabled).toBe(false);
     hooks.cursor = 0;
     expect(
       button(elements(WorkspaceBrandSettings({ ...props, busy: true })), "Saving…").props.disabled,

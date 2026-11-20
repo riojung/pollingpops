@@ -496,10 +496,10 @@ export function WorkspaceBrandSettings({
           <p>{copy.brandHelp}</p>
         </div>
       </div>
-      {!canManage ? (
+      {!entitled ? (
+        <p className={styles.accessNote}>{copy.brandSaveUnavailable}</p>
+      ) : !canManage ? (
         <p className={styles.accessNote}>{copy.readOnly}</p>
-      ) : !entitled ? (
-        <p className={styles.accessNote}>{copy.requiresPro}</p>
       ) : null}
       <form
         onSubmit={(event) => {

@@ -4,6 +4,7 @@ Selected checkpoint: **WX-11D**, November 20, 2026.
 Baseline: merged Workspace settings WX-11C, [PR #293](https://github.com/riojung/pollingpops/pull/293), `223095c`.
 Branch: `codex/library-recovery-focus`.
 Owner: frontend and accessibility.
+Merged through [PR #294](https://github.com/riojung/pollingpops/pull/294) at `2f5782d`.
 
 ## Selected behavior
 
@@ -73,10 +74,9 @@ production cases passed after rebuilding with these fixes; no visibility asserti
 
 ## Remaining work
 
-The selected Sessions, Results and Workspace initialization increments are merged in PRs #291–293.
-WX-11D is local. Neutral unavailable copy is the next ready capability-explanation checkpoint;
-precise plan/operator/rollout/provider reasons require a sanitized authoritative projection.
-Independent settings-section recovery is also pending. These increments do not complete all of WX-11.
+Sessions, Results, Workspace initialization and Library recovery merged in PRs #291–294.
+WX-11E availability copy is implemented locally. Independent settings-section recovery is next.
+Detailed plan, operator, rollout and provider reasons require an authoritative projection.
 
 Survey C3/C4 runtime reports/exports and B3 authoring remain pending the recorded privacy acceptance.
 Other feature and release gates are tracked in the [overall backlog](workspace-experience-backlog-2026-11.md).

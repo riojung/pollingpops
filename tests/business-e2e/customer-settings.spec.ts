@@ -63,6 +63,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
   const account = await (await page.request.get(`${api}/v1/auth/me`)).json();
   expect(account.workspace.accountType).toBe("personal");
   expect(account.entitlements.plan).toBe("free");
+  expect(account.entitlements.csvExport).toBe(false);
   expect(account.entitlements.brandTheme).toBe(false);
   const brandingWrites: string[] = [];
   page.on("request", (request) => {
@@ -94,6 +95,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
     "true",
   );
   expect((await catalogResponse).status()).toBe(200);
+  await expect(page.getByRole("tabpanel")).toContainText("CSV export unavailable");
   await expect(
     page.getByRole("combobox", { name: "Personal subscription", exact: true }),
   ).toBeVisible();
@@ -145,6 +147,9 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await selectCategory(page, "Appearance");
   const personalAppearance = page.getByRole("region", { name: "Your interface", exact: true });
   const brandAppearance = page.getByRole("region", { name: "Workspace live brand", exact: true });
+  await expect(brandAppearance).toContainText(
+    "You can preview themes. Saving a live brand is unavailable in this workspace.",
+  );
   for (const name of ["Candy Pop", "Ocean", "Forest"]) {
     const label = new RegExp(`^${name}\\b`);
     await expect(personalAppearance.getByRole("button", { name: label })).toBeEnabled();

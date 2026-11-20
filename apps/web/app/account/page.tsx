@@ -1037,8 +1037,8 @@ export default function AccountPage() {
                       count: formatNumber(locale, entitlements.reportRetentionDays),
                     }),
                     entitlements.csvExport
-                      ? t("account.subscription.csvIncluded")
-                      : t("account.subscription.csvRequiresPro"),
+                      ? t("account.subscription.csvAvailable")
+                      : t("account.subscription.csvUnavailable"),
                   ])}
                 </p>
               ) : null}
@@ -1094,8 +1094,8 @@ export default function AccountPage() {
                     setBillingStatusAttempt((current) => current + 1);
                   }}
                 />
-              ) : (
-                <p className="muted">{t("account.subscription.operatorLimits")}</p>
+              ) : workspace?.planSource === "community" ? null : (
+                <p className="muted">{t("account.subscription.billingUnavailable")}</p>
               )}
             </section>
           ) : null}

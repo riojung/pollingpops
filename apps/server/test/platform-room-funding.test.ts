@@ -273,6 +273,70 @@ describe("live event credit integration", () => {
       ),
     ).toBe(false);
   });
+
+  it("reports unavailable exports for a retained Round even after workspace exports become available", async () => {
+    const f = await fixture();
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { csvExport: { enabled: false, plans: [] } },
+    });
+    const built = await buildApp(f.config, {
+      repository: f.repository,
+      cache: new MemorySessionCache(),
+    });
+    try {
+      const verified = await requestPinAndSignIn(built.app, f.creator.email);
+      const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+      const headers = { cookie };
+      const launch = await built.app.inject({
+        method: "POST",
+        url: "/v1/sessions",
+        headers: { ...headers, "x-idempotency-key": randomUUID() },
+        payload: { quizId: f.quizId, settings, useEventCredit: true },
+      });
+      expect(launch.statusCode).toBe(201);
+      const room = launch.json<{
+        sessionId: string;
+        hostToken: string;
+        snapshot: { version: number };
+      }>();
+      await built.sessions.hostCommand({
+        sessionId: room.sessionId,
+        hostToken: room.hostToken,
+        commandId: randomUUID(),
+        expectedVersion: room.snapshot.version,
+        action: "end",
+      });
+      await built.reportWorker.runUntilIdle();
+      const report = await f.repository.getReportBySession(f.creator.workspaceId, room.sessionId);
+      expect(report?.status).toBe("ready");
+
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 1,
+        features: { csvExport: { enabled: true, plans: ["free", "pro"] } },
+      });
+      const account = await built.app.inject({ url: "/v1/auth/me", headers });
+      expect(account.statusCode).toBe(200);
+      expect(account.json()).toMatchObject({ entitlements: { plan: "free", csvExport: true } });
+      const reportUrl = `/v1/reports/${report!.id}`;
+      const retained = await built.app.inject({ url: reportUrl, headers });
+      expect(retained.statusCode).toBe(200);
+      expect(retained.json()).toMatchObject({ entitlements: { plan: "pro", csvExport: false } });
+
+      for (const [suffix, message] of [
+        [".csv", "CSV export is unavailable for this room"],
+        [".json", "Report export is unavailable for this room"],
+        ["/interactions.csv", "Interaction transcript export is unavailable for this room"],
+      ]) {
+        const exported = await built.app.inject({ url: `${reportUrl}${suffix}`, headers });
+        expect(exported.statusCode).toBe(402);
+        expect(exported.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT", message } });
+      }
+    } finally {
+      await built.app.close();
+    }
+  });
+
   it("keeps funded feature grants and exact API retries when product access is paused", async () => {
     const f = await fixture();
     await f.platform.saveFeaturePolicy({

@@ -35,8 +35,8 @@ export const appearanceEnglishMessages = {
   saving: "Saving…",
   remove: "Use default live brand",
   readOnly: "You can explore this preview. A workspace manager can save the live brand.",
-  requiresPro:
-    "Explore freely. Saving a workspace live brand requires a plan with custom branding.",
+  brandSaveUnavailable:
+    "You can preview themes. Saving a live brand is unavailable in this workspace.",
   legacyHelp:
     "Your existing custom colors are preserved. Choose a light or dark appearance for your next save.",
   contrastHelp: "Choose colors with clear contrast. Saved brand colors must support readable text.",
@@ -120,8 +120,8 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "Utiliser l’identité par défaut",
     readOnly:
       "Vous pouvez explorer cet aperçu. Un gestionnaire peut enregistrer l’identité visuelle.",
-    requiresPro:
-      "Explorez librement. L’enregistrement nécessite une offre avec personnalisation de marque.",
+    brandSaveUnavailable:
+      "Vous pouvez essayer les thèmes. L’enregistrement de l’identité visuelle est indisponible dans cet espace.",
     legacyHelp:
       "Vos couleurs personnalisées sont conservées. Choisissez une apparence claire ou sombre avant le prochain enregistrement.",
     contrastHelp:
@@ -200,8 +200,8 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "Wird gespeichert…",
     remove: "Standard-Branding verwenden",
     readOnly: "Du kannst die Vorschau erkunden. Die Verwaltung kann das Live-Branding speichern.",
-    requiresPro:
-      "Erkunde alle Möglichkeiten. Zum Speichern ist ein Tarif mit eigenem Branding erforderlich.",
+    brandSaveUnavailable:
+      "Du kannst die Themes ausprobieren. Das Live-Branding kann in diesem Arbeitsbereich nicht gespeichert werden.",
     legacyHelp:
       "Deine bisherigen Farben bleiben erhalten. Wähle beim nächsten Speichern eine helle oder dunkle Darstellung.",
     contrastHelp:
@@ -279,7 +279,7 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "Guardando…",
     remove: "Usar marca predeterminada",
     readOnly: "Puedes explorar esta vista previa. Un gestor puede guardar la marca del espacio.",
-    requiresPro: "Explora libremente. Para guardar se necesita un plan con marca personalizada.",
+    brandSaveUnavailable: "Puedes probar los temas. En este espacio no se puede guardar la marca.",
     legacyHelp:
       "Se conservan tus colores personalizados. Elige una apariencia clara u oscura antes de volver a guardar.",
     contrastHelp:
@@ -358,7 +358,7 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "Salvataggio…",
     remove: "Usa il brand predefinito",
     readOnly: "Puoi esplorare questa anteprima. Un gestore può salvare il brand dello spazio.",
-    requiresPro: "Esplora liberamente. Il salvataggio richiede un piano con brand personalizzato.",
+    brandSaveUnavailable: "Puoi provare i temi. In questo spazio non è possibile salvare il brand.",
     legacyHelp:
       "I tuoi colori personalizzati sono conservati. Scegli un aspetto chiaro o scuro al prossimo salvataggio.",
     contrastHelp:
@@ -436,7 +436,8 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "A guardar…",
     remove: "Usar marca predefinida",
     readOnly: "Pode explorar esta pré-visualização. Um gestor pode guardar a marca do espaço.",
-    requiresPro: "Explore livremente. Guardar requer um plano com marca personalizada.",
+    brandSaveUnavailable:
+      "Pode experimentar os temas. Neste espaço, não é possível guardar a marca.",
     legacyHelp:
       "As suas cores personalizadas são preservadas. Escolha uma aparência clara ou escura na próxima gravação.",
     contrastHelp:
@@ -514,7 +515,8 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "保存中…",
     remove: "標準のライブブランドを使う",
     readOnly: "プレビューを試せます。ライブブランドの保存はワークスペース管理者が行えます。",
-    requiresPro: "自由にお試しください。保存にはカスタムブランド対応プランが必要です。",
+    brandSaveUnavailable:
+      "テーマはプレビューできます。このワークスペースではライブブランドを保存できません。",
     legacyHelp:
       "既存のカスタムカラーは維持されます。次に保存するときにライトまたはダークを選んでください。",
     contrastHelp:
@@ -594,7 +596,8 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "기본 라이브 브랜드 사용",
     readOnly:
       "미리보기를 자유롭게 살펴볼 수 있습니다. 라이브 브랜드 저장은 워크스페이스 관리자가 할 수 있습니다.",
-    requiresPro: "자유롭게 둘러보세요. 저장하려면 사용자 지정 브랜딩이 포함된 요금제가 필요합니다.",
+    brandSaveUnavailable:
+      "테마를 미리 볼 수 있습니다. 이 워크스페이스에서는 라이브 브랜드를 저장할 수 없습니다.",
     legacyHelp:
       "기존 사용자 지정 색상은 유지됩니다. 다음에 저장할 때 라이트 또는 다크 모드를 선택하세요.",
     contrastHelp:
@@ -670,7 +673,7 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "保存中…",
     remove: "使用默认直播品牌",
     readOnly: "你可以自由预览。工作区管理员可以保存直播品牌。",
-    requiresPro: "欢迎自由探索。保存需要包含自定义品牌功能的套餐。",
+    brandSaveUnavailable: "你可以预览主题。此工作区无法保存直播品牌。",
     legacyHelp: "现有的自定义颜色会保留。下次保存时请选择浅色或深色外观。",
     contrastHelp: "请选择对比清晰的颜色。保存的品牌颜色必须确保文字可读。",
     custom: "自定义配色",
@@ -744,7 +747,7 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     saving: "儲存中…",
     remove: "使用預設即時品牌",
     readOnly: "你可以自由預覽。工作區管理員可以儲存即時品牌。",
-    requiresPro: "歡迎自由探索。儲存需要包含自訂品牌功能的方案。",
+    brandSaveUnavailable: "你可以預覽主題。這個工作區無法儲存即時品牌。",
     legacyHelp: "現有的自訂色彩會保留。下次儲存時請選擇淺色或深色外觀。",
     contrastHelp: "請選擇對比清晰的色彩。儲存的品牌色彩必須確保文字可讀。",
     custom: "自訂配色",

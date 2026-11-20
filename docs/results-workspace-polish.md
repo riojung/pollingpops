@@ -77,5 +77,6 @@ Automated checks do not replace the human acceptance described above.
 
 The selected Sessions and Results increments are merged. WX-11C's
 [Workspace initialization/recovery](workspace-settings-recovery.md) merged in PR #293.
-[Library recovery](library-recovery-focus.md) is local as WX-11D. Independent settings-section recovery and capability/plan explanations remain separate checkpoints. Other priorities and
+[Library recovery](library-recovery-focus.md) merged in PR #294. Independent settings-section
+recovery and authoritative capability explanations remain pending. Other priorities and
 Survey gates are recorded in the [overall backlog](workspace-experience-backlog-2026-11.md).

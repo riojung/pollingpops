@@ -79,13 +79,13 @@ const messages = {
   "account.subscription.unlimitedPublished": "Set di verifica pubblicati illimitati",
   "account.subscription.published": "{count} set di verifica pubblicati",
   "account.subscription.retention": "Conservazione report per {count} giorni",
-  "account.subscription.csvIncluded": "CSV incluso",
-  "account.subscription.csvRequiresPro": "CSV richiede Pro",
+  "account.subscription.csvAvailable": "Esportazione CSV disponibile",
+  "account.subscription.csvUnavailable": "Esportazione CSV non disponibile",
   "account.subscription.openingPortal": "Apertura del portale…",
   "account.subscription.manageBilling": "Gestisci fatturazione",
   "account.subscription.comparePlans": "Confronta piani",
-  "account.subscription.operatorLimits":
-    "I limiti sono controllati dall’operatore della community.",
+  "account.subscription.billingUnavailable":
+    "La gestione della fatturazione non è disponibile per questo account.",
   "account.members.eyebrow": "Collaborazione",
   "account.members.title": "Membri dello spazio di lavoro",
   "account.members.description":

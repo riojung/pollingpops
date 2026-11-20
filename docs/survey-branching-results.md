@@ -1,7 +1,8 @@
 # Conditional Survey results: C1 counting and withheld contract
 
 Baseline: `main` at `ce79b19`, after public product discovery merged in PR #288.
-Selected work: **WX-06C1**, the first bounded results/privacy increment after B2 readers.
+**WX-06C1** merged through [PR #289](https://github.com/riojung/pollingpops/pull/289) at `01df23d`.
+It is the first bounded results/privacy increment after B2 readers.
 This prepares reporting for the owner's earlier single-choice page-visibility decision.
 It does not enable conditional Survey authoring, collection, results, summaries or exports.
 
@@ -100,17 +101,18 @@ or new browser interface to claim complete.
 
 ## Next reviewable increments
 
-| Checkpoint                           | Completion target                                                                                                                                                                                                                       |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **C1 — implemented locally**         | Correct internal finalized-response counting, strict withheld-only proposal, adversarial qualification fixtures and legacy byte compatibility                                                                                           |
-| **C2 — disclosure policy**           | Qualify the owner-selected whole-report release policy; qualify exact counts/zeros, direct groups, complements, ancestor differences and overlapping cohorts together; specify one final snapshot and deletion/retention handling       |
-| **C3 — runtime results/readers**     | Apply the qualified policy under current workspace/RLS/frozen-version authority; negotiate the new aggregate version, fence publication of one final result, update retained result readers and explanatory UI without enabling writers |
-| **C4 — summaries/exports/lifecycle** | Use the same qualified result snapshot and suppression in every shared/downloaded format; test revocation, expiry, erasure, reconstruction across releases and historical aggregate-v2 compatibility                                    |
-| **B3 — authoring and writer grant**  | After B2 and all C prerequisites qualify, add condition editing, safe move/delete/copy with ID remapping, preview and an explicit effective writer grant                                                                                |
+| Checkpoint                             | Completion target                                                                                                                                                                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C1 — merged in PR #289**             | Correct internal finalized-response counting, strict withheld-only proposal, adversarial qualification fixtures and legacy byte compatibility                                                                                           |
+| **C2 — candidate implemented locally** | Additive aggregate-v4 joint-contribution policy and automated qualification fixtures; [bounded guarantees, utility costs and lifecycle requirements](survey-branching-disclosure-policy.md). Human privacy acceptance remains open.     |
+| **C3 — runtime results/readers**       | Apply the qualified policy under current workspace/RLS/frozen-version authority; negotiate the new aggregate version, fence publication of one final result, update retained result readers and explanatory UI without enabling writers |
+| **C4 — summaries/exports/lifecycle**   | Use the same qualified result snapshot and suppression in every shared/downloaded format; test revocation, expiry, erasure, reconstruction across releases and historical aggregate-v2 compatibility                                    |
+| **B3 — authoring and writer grant**    | After B2 and all C prerequisites qualify, add condition editing, safe move/delete/copy with ID remapping, preview and an explicit effective writer grant                                                                                |
 
 On November 19, 2026, the owner selected **withhold the whole report until it passes privacy
 checks** for C2. C1 already withholds all evidence; the decision does not itself qualify a
-future release algorithm or complete C2. Human privacy review, editorial/native-language
+future release algorithm or grant privacy acceptance to C2. The separate C2 aggregate-v4
+candidate does not relax C1's immutable suppressed-only aggregate-v3 schema. Human privacy review, editorial/native-language
 acceptance and hosted release evidence remain separate from automated code checks.
 
 ## Local verification, November 19, 2026

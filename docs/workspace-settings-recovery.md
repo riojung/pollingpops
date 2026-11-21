@@ -118,8 +118,9 @@ Native-language and manual accessibility review remain open.
 Library pagination and reset focus merged as WX-11D in PR #294. See the
 [scope and acceptance record](library-recovery-focus.md). WX-11E availability copy merged in
 PR #295. Checkpoint-set import availability copy merged in PR #297 and import reasons merged in
-PR #298. Live-brand save reasons merged in PR #299. Workspace CSV export reasons are implemented
-locally. Retained report eligibility and other capability explanations remain pending.
+PR #298. Live-brand save reasons merged in PR #299 and workspace CSV export reasons merged in
+PR #300. Retained Round report export reasons are implemented locally. Other capability
+explanations remain pending.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

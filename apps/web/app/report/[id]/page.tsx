@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { RoundReportExportUnavailableReasonSchema } from "@openround/contracts";
 import type {
   Entitlements,
   Followup,
@@ -14,6 +15,7 @@ import type {
   ReportV6,
   ReportV7,
   ResponseDistribution,
+  RoundReportExportUnavailableReason,
   WorkspaceProductFeatures,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../../components/brand";
@@ -52,6 +54,12 @@ type ReportTab =
   | "participants"
   | "interactions"
   | "manage";
+
+const reportExportUnavailableCopy = {
+  room_coverage: "This room’s saved access does not include exports.",
+  plan_limit: "The workspace’s current plan does not include report exports.",
+  operator_policy: "The deployment’s feature policy disables report exports for this room.",
+} as const satisfies Record<RoundReportExportUnavailableReason, string>;
 
 function RecoveryStory({
   report,
@@ -432,10 +440,12 @@ function DecisionTimeline({ report }: { report: ReportV4 | ReportV5 | ReportV6 |
 function InteractionEvidenceSections({
   report,
   transcriptExport,
+  exportNotice,
   uxBeta,
 }: {
   report: ReportV3 | ReportV4 | ReportV5 | ReportV6 | ReportV7;
   transcriptExport: boolean;
+  exportNotice?: string;
   uxBeta: boolean;
 }) {
   const { locale, t } = useLocale();
@@ -533,6 +543,9 @@ function InteractionEvidenceSections({
       ) : (
         <p className="muted">{copy("No retained room conversation was collected.")}</p>
       )}
+      {report.conversation.transcriptAvailable && exportNotice ? (
+        <p className="muted">{exportNotice}</p>
+      ) : null}
     </section>
   );
 }
@@ -1299,7 +1312,10 @@ export default function ReportPage() {
   const router = useRouter();
   const [report, setReport] = useState<Report | null>(null);
   const [context, setContext] = useState<ReportContext | null>(null);
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [reportAccess, setReportAccess] = useState<{
+    entitlements: Entitlements;
+    csvExportUnavailableReason?: RoundReportExportUnavailableReason;
+  } | null>(null);
   const [followup, setFollowup] = useState<Followup | null>(null);
   const [productFeatures, setProductFeatures] = useState<Pick<
     WorkspaceProductFeatures,
@@ -1322,13 +1338,19 @@ export default function ReportPage() {
         const response = await apiFetch<{
           report: Report;
           entitlements: Entitlements;
+          csvExportUnavailableReason?: unknown;
           followup: Followup | null;
           context?: ReportContext;
         }>(`/v1/reports/${id}`);
         if (cancelled || generation !== authority.current.generation) return;
         setReport(response.report);
         setContext(response.context ?? null);
-        setEntitlements(response.entitlements);
+        setReportAccess({
+          entitlements: response.entitlements,
+          csvExportUnavailableReason: RoundReportExportUnavailableReasonSchema.safeParse(
+            response.csvExportUnavailableReason,
+          ).data,
+        });
         setFollowup(response.followup);
         setError("");
         if (response.report.status === "pending") retryTimer = setTimeout(load, 1_500);
@@ -1382,7 +1404,7 @@ export default function ReportPage() {
       setProductFeatures(null);
       setReport(null);
       setContext(null);
-      setEntitlements(null);
+      setReportAccess(null);
       setFollowup(null);
       setError("");
       setAuthContextRevision((revision) => revision + 1);
@@ -1396,6 +1418,16 @@ export default function ReportPage() {
     };
   }, [id, authContextRevision]);
 
+  const entitlements = reportAccess?.entitlements;
+  const exportReason = reportAccess?.csvExportUnavailableReason;
+  const exportNotice =
+    entitlements && !entitlements.csvExport
+      ? copy(
+          exportReason
+            ? reportExportUnavailableCopy[exportReason]
+            : "Report exports are unavailable for this room.",
+        )
+      : undefined;
   const uxBeta = productFeatures?.uxBeta === true;
   const showResponseDistributions =
     uxBeta || report?.questions.some((question) => question.correct === null) === true;
@@ -1633,6 +1665,7 @@ export default function ReportPage() {
                 <InteractionEvidenceSections
                   report={report}
                   transcriptExport={Boolean(entitlements?.csvExport)}
+                  exportNotice={exportNotice}
                   uxBeta={uxBeta}
                 />
               </div>
@@ -1792,10 +1825,8 @@ export default function ReportPage() {
                       {copy("Download JSON")}
                     </a>
                   </div>
-                ) : entitlements ? (
-                  <Link className="button-quiet" href="/pricing">
-                    {copy("CSV was not included for this room")}
-                  </Link>
+                ) : exportNotice ? (
+                  <p className="muted">{exportNotice}</p>
                 ) : null}
                 <p className="muted" style={{ marginBottom: 0 }}>
                   {copy("Report retained until {date}. Current plan default: {days} days.", {

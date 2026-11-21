@@ -108,17 +108,41 @@ test("legacy authoring remains available while professional features are off", a
     await expect(page.getByRole("columnheader", { name: "Distribution", exact: true })).toHaveCount(
       0,
     );
-    await page.getByRole("tab", { name: "Manage data", exact: true }).click();
-    const exportNotice = page.getByRole("link", { name: "CSV was not included for this room" });
-    await expect(exportNotice).toBeVisible();
-    await expect(exportNotice).toHaveAttribute("href", "/pricing");
-    await expect(page.getByRole("link", { name: /^Download (CSV|JSON)$/ })).toHaveCount(0);
+    const expectExportNotice = async (message: string) => {
+      await page.getByRole("tab", { name: "Manage data", exact: true }).click();
+      const managePanel = page.getByRole("tabpanel", { name: "Manage data", exact: true });
+      await expect(managePanel.getByText(message, { exact: true })).toBeVisible();
+      await expect(managePanel.getByRole("link")).toHaveCount(0);
+      await expect(managePanel.getByRole("button", { name: message, exact: true })).toHaveCount(0);
+    };
+    await expectExportNotice("This room’s saved access does not include exports.");
     const reportId = new URL(page.url()).pathname.split("/").at(-1)!;
+    const reportUrl = `${apiUrl}/v1/reports/${reportId}`;
     for (const format of ["csv", "json"]) {
-      const response = await page.request.get(`${apiUrl}/v1/reports/${reportId}.${format}`);
+      const response = await page.request.get(`${reportUrl}.${format}`);
       expect(response.status()).toBe(402);
       expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
     }
+    let unavailableReason: string | undefined;
+    const fallbackNotice = "Report exports are unavailable for this room.";
+    await page.route(reportUrl, async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        json: { ...(await response.json()), csvExportUnavailableReason: unavailableReason },
+      });
+    });
+    for (const [reason, message] of [
+      ["plan_limit", "The workspace’s current plan does not include report exports."],
+      ["operator_policy", "The deployment’s feature policy disables report exports for this room."],
+      [undefined, fallbackNotice],
+      ["unknown_reason", fallbackNotice],
+    ] as const) {
+      unavailableReason = reason;
+      await page.reload();
+      await expectExportNotice(message);
+    }
+    await page.unroute(reportUrl);
   } finally {
     await participant.close();
   }

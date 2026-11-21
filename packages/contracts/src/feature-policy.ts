@@ -45,6 +45,13 @@ export const WorkspaceCapabilityUnavailableReasonSchema = z.enum(["plan_limit", 
 export type WorkspaceCapabilityUnavailableReason = z.infer<
   typeof WorkspaceCapabilityUnavailableReasonSchema
 >;
+export const RoundReportExportUnavailableReasonSchema = z.enum([
+  "room_coverage",
+  ...WorkspaceCapabilityUnavailableReasonSchema.options,
+]);
+export type RoundReportExportUnavailableReason = z.infer<
+  typeof RoundReportExportUnavailableReasonSchema
+>;
 export const ProductFeatureRuleSchema = z
   .object({
     enabled: z.boolean(),

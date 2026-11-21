@@ -62,7 +62,7 @@ async function joinParticipant(browser: Browser, code: string) {
     clientCapabilities: currentRoundClientCapabilities(),
   });
   await expect(page).toHaveURL(/\/play\//);
-  await expect(page.getByRole("img", { name: "Owl avatar" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Owl avatar" }).first()).toBeVisible();
   return { context, page };
 }
 
@@ -973,7 +973,7 @@ test("creator and participants complete a beta Recovery loop through report", as
       participants.push(await joinParticipant(browser, session.code));
     }
     await expect(
-      page.locator(".room-readiness span").filter({ hasText: "joined" }).getByText("5"),
+      page.getByRole("region", { name: "Room readiness" }).getByText("5", { exact: true }),
     ).toBeVisible();
     await expect(
       page
@@ -1018,7 +1018,7 @@ test("creator and participants complete a beta Recovery loop through report", as
     await clickHostCommand(page, "Reveal answer");
     await clickHostCommand(page, "Continue after recheck");
     await expect(page.getByText("Results are ready.")).toBeVisible();
-    await page.getByTestId("host-stage").getByRole("link", { name: "Open report" }).click();
+    await page.getByRole("link", { name: "Open report", exact: true }).click();
 
     await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
       "aria-selected",

@@ -8,7 +8,7 @@ import {
   type CheckpointSetImportRequest,
   type QuizDraft,
 } from "@openround/contracts";
-import { MemoryRepository } from "@openround/db";
+import { createPlatformRepository, MemoryRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -307,6 +307,51 @@ describe("structured Round import preview and confirmation", () => {
     expect((await f.confirm(review, bulk, key)).statusCode).toBe(200);
     expect((await f.confirm(newer)).statusCode).toBe(402);
     expect(await f.repository.listQuizzes(f.actor.workspaceId)).toHaveLength(2);
+  });
+
+  it("uses effective workspace availability for import when it differs from the plan", async () => {
+    const f = await fixture(false);
+    await createPlatformRepository(f.repository).saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { csvExport: { enabled: true, plans: ["free"] } },
+    });
+    const review = await f.preview();
+    const key = randomUUID();
+    const created = await f.confirm(review, bulk, key);
+    expect(created.statusCode, created.body).toBe(201);
+    const { quiz } = created.json<{ quiz: { id: string } }>();
+
+    await f.repository.setPlan(f.actor.workspaceId, "pro");
+    const account = await f.app.inject({ url: "/v1/auth/me", headers: f.headers });
+    expect(account.json()).toMatchObject({ entitlements: { plan: "pro", csvExport: false } });
+    for (const denied of [
+      await f.app.inject({
+        method: "POST",
+        url: "/v1/quizzes/import/preview",
+        headers: f.headers,
+        payload: bulk,
+      }),
+      await f.confirm(review),
+      await f.app.inject({
+        method: "POST",
+        url: "/v1/quizzes/import",
+        headers: f.headers,
+        payload: bulk,
+      }),
+    ]) {
+      expect(denied.statusCode).toBe(402);
+      expect(denied.json()).toMatchObject({
+        error: {
+          code: "ENTITLEMENT_LIMIT",
+          message: "Checkpoint-set import is unavailable for this workspace",
+        },
+      });
+    }
+
+    const recovered = await f.confirm(review, bulk, key);
+    expect(recovered.statusCode).toBe(200);
+    expect(recovered.json()).toMatchObject({ quiz: { id: quiz.id }, replayed: true });
+    expect(await f.repository.listQuizzes(f.actor.workspaceId)).toHaveLength(1);
   });
 
   it("keeps validation authoritative when the source was previewed before private media vanished", async () => {

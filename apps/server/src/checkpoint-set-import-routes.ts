@@ -70,7 +70,7 @@ export function registerCheckpointSetImportRoutes(
       reply,
       402,
       "ENTITLEMENT_LIMIT",
-      "Checkpoint-set import is available on the Pro plan",
+      "Checkpoint-set import is unavailable for this workspace",
       requestId,
     );
     return false;

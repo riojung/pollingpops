@@ -96,9 +96,7 @@ const messages = {
   "reportRound.import.draftOnly": "Nur Entwurf",
   "reportRound.import.description":
     "Importe werden validiert, bevor etwas gespeichert wird. Nicht unterstützte oder unvollständige Inhalte werden ausdrücklich zur Überprüfung aufgeführt.",
-  "reportRound.import.proRound": "Rundenimport und -export sind in Hosted Pro enthalten.",
-  "reportRound.import.proLegacy":
-    "Import- und Checkpoint-Set-Exporte sind in Hosted Pro enthalten.",
+  "reportRound.import.unavailable": "Importe sind in diesem Arbeitsbereich nicht verfügbar.",
   "reportRound.import.format": "Importformat",
   "reportRound.import.bulkPaste": "Massenpaste",
   "reportRound.import.qtiPackage": "QTI 3-Paket",

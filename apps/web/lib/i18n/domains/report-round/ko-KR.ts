@@ -91,9 +91,7 @@ const messages = {
   "reportRound.import.draftOnly": "초안만",
   "reportRound.import.description":
     "가져오기는 저장되기 전에 검증됩니다. 지원되지 않거나 불완전한 콘텐츠는 검토를 위해 명시적으로 나열됩니다.",
-  "reportRound.import.proRound": "Hosted Pro에는 라운드 가져오기 및 내보내기가 포함되어 있습니다.",
-  "reportRound.import.proLegacy":
-    "Hosted Pro에는 가져오기 및 체크포인트 설정 내보내기가 포함되어 있습니다.",
+  "reportRound.import.unavailable": "이 워크스페이스에서는 가져오기를 사용할 수 없습니다.",
   "reportRound.import.format": "가져오기 형식",
   "reportRound.import.bulkPaste": "대량 붙여넣기",
   "reportRound.import.qtiPackage": "QTI 3 패키지",

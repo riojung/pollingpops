@@ -75,8 +75,8 @@ privacy, assistive-technology, native-language or physical-device acceptance.
 
 ## Independent section recovery
 
-WX-11F is implemented locally on `codex/settings-section-recovery` from merged PR #295
-at `b6e1770`. The account authority and required settings reads still form the initial load.
+WX-11F merged through PR #296 at `68b8716`. The account authority and required settings reads
+still form the initial load.
 Member and LTI registration reads start separately for eligible owners once it succeeds.
 The People panel distinguishes pending or unavailable data from a list that loaded successfully.
 The institution area shows an empty LTI registration notice only after the registration read
@@ -117,8 +117,8 @@ Native-language and manual accessibility review remain open.
 
 Library pagination and reset focus merged as WX-11D in PR #294. See the
 [scope and acceptance record](library-recovery-focus.md). WX-11E availability copy merged in
-PR #295. Checkpoint-set import availability copy is next. Detailed plan, operator, rollout and
-provider explanations need an authoritative reason projection.
+PR #295. Checkpoint-set import availability copy is implemented locally. Detailed plan, operator,
+rollout and provider explanations need an authoritative reason projection.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

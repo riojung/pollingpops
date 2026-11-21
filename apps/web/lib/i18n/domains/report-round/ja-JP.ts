@@ -93,10 +93,7 @@ const messages = {
   "reportRound.import.draftOnly": "ドラフトのみ",
   "reportRound.import.description":
     "インポートは、何かが保存される前に検証されます。 サポートされていない、または不完全なコンテンツは、レビューのために明示的にリストされています。",
-  "reportRound.import.proRound":
-    "ラウンドのインポートとエクスポートは、Hosted Pro に含まれています。",
-  "reportRound.import.proLegacy":
-    "Hosted Pro には、インポートとチェックポイント セットのエクスポートが含まれています。",
+  "reportRound.import.unavailable": "このワークスペースではインポートを利用できません。",
   "reportRound.import.format": "インポート形式",
   "reportRound.import.bulkPaste": "一括貼り付け",
   "reportRound.import.qtiPackage": "QTI 3 パッケージ",

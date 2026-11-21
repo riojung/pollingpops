@@ -8,9 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Checkpoint-set import availability, November 20, 2026
+
+Implemented locally on `codex/checkpoint-import-availability` from merged PR #296. Creator and
+legacy import use the effective portability entitlement to explain unavailable access. The ten
+locale catalogs display the same availability message if the server rejects preview or
+confirmation, and the API retains `402 ENTITLEMENT_LIMIT`. The existing import permission and
+receipt behavior still govern new creation and exact retries. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Independent settings-section recovery, November 20, 2026
 
-WX-11F on `codex/settings-section-recovery` keeps Workspace settings usable when a People or LTI
+WX-11F merged through PR #296 at `68b8716` and keeps Workspace settings usable when a People or LTI
 registration read is pending or unavailable. Each section can retry its read in place. A successful
 member change can also recover from a failed list refresh through the same retry. Required account
 data and the initial authority check still gate the page. See the
@@ -54,7 +63,7 @@ Authority-first loading preserves signed-in personal-account fallback and the si
 peripheral 401 and transient failures stay recoverable. Permission helpers, owner restrictions,
 organization license exclusions, payment paths, mutations and confirmations remain unchanged.
 See the [scope, trade-offs and acceptance record](workspace-settings-recovery.md). WX-11F
-adds independent subsection recovery locally.
+adds independent subsection recovery through PR #296.
 
 ### Results workspace recovery and keyboard continuity, November 19, 2026
 
@@ -149,9 +158,8 @@ and historical request hashes remain unchanged.
 See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
-WX-07–10 and WX-12–14 remain scoped work. WX-11A–E merged through PR #295. WX-11F
-independent settings-section recovery is the current local increment. Checkpoint-set import
-availability copy is next, and authoritative capability explanations remain pending.
+WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296. Checkpoint-set import
+availability copy is the current local increment. Authoritative capability explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

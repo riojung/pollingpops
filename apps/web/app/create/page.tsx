@@ -395,7 +395,6 @@ function CreateContent() {
                     onImported={async (quiz) => {
                       router.push(`/quiz/${quiz.id}`);
                     }}
-                    onUpgrade={() => router.push("/pricing")}
                     plain
                     terminology="round"
                     trackCreation

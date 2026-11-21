@@ -97,10 +97,7 @@ const messages = {
   "reportRound.import.draftOnly": "Solo borrador",
   "reportRound.import.description":
     "Las importaciones se validan antes de guardar algo. El contenido no compatible o incompleto se incluye explícitamente para su revisión.",
-  "reportRound.import.proRound":
-    "La importación y exportación de rondas están incluidas con Hosted Pro.",
-  "reportRound.import.proLegacy":
-    "Las importaciones y exportaciones de conjuntos de puntos de control están incluidas con Hosted Pro.",
+  "reportRound.import.unavailable": "La importación no está disponible en este espacio de trabajo.",
   "reportRound.import.format": "Formato de importación",
   "reportRound.import.bulkPaste": "pasta a granel",
   "reportRound.import.qtiPackage": "Paquete QTI 3",

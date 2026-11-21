@@ -335,7 +335,6 @@ function LegacyDashboardPage() {
               featureKey: JSON.stringify(workspaceFeatures),
             }}
             onImported={() => refresh(showArchived)}
-            onUpgrade={() => void upgrade()}
           />
         ) : null}
         {creator ? <AuthoringAssistant canEdit={canEdit} /> : null}

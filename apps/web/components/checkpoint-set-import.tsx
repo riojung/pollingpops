@@ -32,7 +32,6 @@ interface CheckpointSetImportProps {
   enabled: boolean;
   authority: ImportAuthority;
   onImported: (quiz: { id: string; title: string }) => Promise<void>;
-  onUpgrade: () => void;
   plain?: boolean;
   trackCreation?: boolean;
   terminology?: "legacy" | "round";
@@ -102,7 +101,6 @@ export function CheckpointSetImport({
   enabled,
   authority,
   onImported,
-  onUpgrade,
   plain = false,
   trackCreation = false,
   terminology = "legacy",
@@ -241,6 +239,7 @@ export function CheckpointSetImport({
     invalid: copy.previewInvalid,
     creation: copy.creationError,
     expired: copy.previewExpired,
+    unavailable: t("reportRound.import.unavailable"),
     opening: copy.openingError,
     recovery: copy.recoveryError,
   };
@@ -294,16 +293,9 @@ export function CheckpointSetImport({
           {invalidAuthority === "auth" ? copy.authChanged : copy.authorityUnavailable}
         </p>
       ) : !enabled ? (
-        <div className="notice">
-          <p>
-            {terminology === "round"
-              ? t("reportRound.import.proRound")
-              : t("reportRound.import.proLegacy")}
-          </p>
-          <button className="button-quiet small-button" onClick={onUpgrade} type="button">
-            {t("workspace.explorePro")}
-          </button>
-        </div>
+        <p className="notice" role="status">
+          {feedback.unavailable}
+        </p>
       ) : !allowed ? (
         <p className="notice" role="status">
           {copy.authorityUnavailable}

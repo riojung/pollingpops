@@ -23,6 +23,7 @@ interface AccountResponse {
   creator: AccountCreator;
   workspace?: WorkspaceAccountContext;
   entitlements: Entitlements;
+  csvExportUnavailableReason?: unknown;
   businessManagementEnabled?: boolean;
   productFeatures?: { uxBeta?: boolean; workspaceShell?: boolean };
 }

@@ -1120,7 +1120,7 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     reply.header("cache-control", "private, no-store");
-    const { entitlements, unavailableReason: checkpointSetImportUnavailableReason } =
+    const { entitlements, unavailableReason: csvExportUnavailableReason } =
       await workspaceEntitlementsWithAvailability(
         repository,
         config,
@@ -1133,7 +1133,8 @@ export async function registerRoutes(
       workspace: await workspaceAccountContext(repository, config, creator),
       businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
       entitlements,
-      checkpointSetImportUnavailableReason,
+      csvExportUnavailableReason,
+      checkpointSetImportUnavailableReason: csvExportUnavailableReason,
       productFeatures: await workspaceProductFeatures(creator.workspaceId),
       brandTheme: entitlements.brandTheme
         ? await repository.getBrandTheme(creator.workspaceId)

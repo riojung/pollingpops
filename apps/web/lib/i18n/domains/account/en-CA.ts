@@ -81,6 +81,10 @@ export const accountEnglishMessages = {
   "account.subscription.retention": "{count}-day report retention",
   "account.subscription.csvAvailable": "CSV export available",
   "account.subscription.csvUnavailable": "CSV export unavailable",
+  "account.subscription.csvUnavailablePlanLimit":
+    "This workspace’s plan doesn’t include CSV export.",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "The deployment’s feature policy disables CSV export for this workspace.",
   "account.subscription.openingPortal": "Opening portal…",
   "account.subscription.manageBilling": "Manage billing",
   "account.subscription.comparePlans": "Compare plans",

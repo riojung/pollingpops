@@ -83,6 +83,10 @@ const messages = {
   "account.subscription.retention": "보고서 {count}일 보관",
   "account.subscription.csvAvailable": "CSV 내보내기 사용 가능",
   "account.subscription.csvUnavailable": "CSV 내보내기 사용 불가",
+  "account.subscription.csvUnavailablePlanLimit":
+    "이 워크스페이스의 요금제에는 CSV 내보내기가 포함되어 있지 않습니다.",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "이 배포 환경의 기능 정책에 따라 이 워크스페이스에서는 CSV 내보내기가 비활성화되어 있습니다.",
   "account.subscription.openingPortal": "포털 여는 중…",
   "account.subscription.manageBilling": "결제 관리",
   "account.subscription.comparePlans": "요금제 비교",

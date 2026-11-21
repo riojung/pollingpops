@@ -498,9 +498,10 @@ counts under the bounded `product_event` resource label.
   is applied. The `workspace` object carries the actual name, explicit personal/organization
   account type, organization identity and assigned role, license unit, plan source, and settings
   permissions. Community feature access is distinct from a paid organization subscription.
-  `checkpointSetImportUnavailableReason` is `null` when the effective portability grant is enabled.
-  A disabled grant projects `operator_policy` when an explicit rule denies access and `plan_limit`
-  when the deployment's default plan entitlement denies access. This field explains the grant.
+  The top-level `csvExportUnavailableReason` and `checkpointSetImportUnavailableReason` fields
+  reflect the same effective `csvExport` grant. Both are `null` when the grant is enabled,
+  `operator_policy` when an explicit rule denies access, and `plan_limit` when the deployment's
+  default plan entitlement denies access.
   Role checks still apply separately. Clients can show a generic availability message for a
   missing or unfamiliar reason.
 - `POST /v1/auth/logout`

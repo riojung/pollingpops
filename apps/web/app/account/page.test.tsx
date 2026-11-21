@@ -1327,20 +1327,50 @@ describe("owner settings section recovery", () => {
 
 describe("account plan availability", () => {
   it.each([
-    { plan: "free", csvExport: true, label: "CSV export available", billingAction: "Explore Pro" },
+    {
+      plan: "free",
+      csvExport: true,
+      reason: "operator_policy",
+      label: "CSV export available",
+      billingAction: "Explore Pro",
+    },
+    {
+      plan: "free",
+      csvExport: false,
+      reason: "plan_limit",
+      label: "This workspace’s plan doesn’t include CSV export.",
+      billingAction: "Explore Pro",
+    },
     {
       plan: "pro",
       csvExport: false,
+      reason: "operator_policy",
+      label: "The deployment’s feature policy disables CSV export for this workspace.",
+      billingAction: "Manage billing",
+    },
+    {
+      plan: "pro",
+      csvExport: false,
+      reason: undefined,
       label: "CSV export unavailable",
       billingAction: "Manage billing",
     },
-  ] as const)("reports effective CSV availability for a $plan workspace", async (scenario) => {
+    {
+      plan: "pro",
+      csvExport: false,
+      reason: "future_reason",
+      label: "CSV export unavailable",
+      billingAction: "Manage billing",
+    },
+  ] as const)("reports $label for a $plan workspace with reason $reason", async (scenario) => {
     browser.location.hash = "#plan";
     fixtures.apiFetch.mockImplementation(async (path: string) => {
       if (path === "/v1/auth/me")
         return {
           ...account,
           creator: { ...account.creator, plan: scenario.plan },
+          csvExportUnavailableReason: scenario.reason,
+          checkpointSetImportUnavailableReason: "plan_limit",
           workspace: {
             ...account.workspace,
             planSource: scenario.plan === "free" ? "free" : "subscription",
@@ -1365,6 +1395,14 @@ describe("account plan availability", () => {
     try {
       const markup = await route.settle();
       expect(markup).toContain(scenario.label);
+      for (const label of [
+        "CSV export available",
+        "CSV export unavailable",
+        "This workspace’s plan doesn’t include CSV export.",
+        "The deployment’s feature policy disables CSV export for this workspace.",
+      ]) {
+        if (label !== scenario.label) expect(markup).not.toContain(label);
+      }
       expect(markup).toContain(scenario.billingAction);
       expect(markup).not.toContain("CSV requires Pro");
     } finally {

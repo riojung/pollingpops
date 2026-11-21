@@ -83,6 +83,10 @@ const messages = {
   "account.subscription.retention": "Retenção de relatórios durante {count} dias",
   "account.subscription.csvAvailable": "Exportação CSV disponível",
   "account.subscription.csvUnavailable": "Exportação CSV indisponível",
+  "account.subscription.csvUnavailablePlanLimit":
+    "O plano deste espaço de trabalho não inclui a exportação CSV.",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "A política de funcionalidades desta implementação desativa a exportação CSV para este espaço de trabalho.",
   "account.subscription.openingPortal": "A abrir o portal…",
   "account.subscription.manageBilling": "Gerir faturação",
   "account.subscription.comparePlans": "Comparar planos",

@@ -66,6 +66,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
   expect(account.workspace.accountType).toBe("personal");
   expect(account.entitlements.plan).toBe("free");
   expect(account.entitlements.csvExport).toBe(false);
+  expect(account.csvExportUnavailableReason).toBe("plan_limit");
   expect(account.entitlements.brandTheme).toBe(false);
   const themeAccess = await page.request.get(`${api}/v1/account/theme`);
   expect(themeAccess.ok()).toBe(true);
@@ -103,19 +104,54 @@ test("personal Free settings provide named workspaces and accessible, selectable
     "true",
   );
   expect((await catalogResponse).status()).toBe(200);
-  await expect(page.getByRole("tabpanel")).toContainText("CSV export unavailable");
-  await expect(
-    page.getByRole("combobox", { name: "Personal subscription", exact: true }),
-  ).toBeVisible();
+  const planPanel = page.getByRole("tabpanel");
+  const csvPlanNotice = planPanel.getByText("This workspace’s plan doesn’t include CSV export.", {
+    exact: true,
+  });
+  const personalSubscription = planPanel.getByRole("combobox", {
+    name: "Personal subscription",
+    exact: true,
+  });
+  const explorePro = planPanel.getByRole("button", { name: "Explore Pro", exact: true });
+  await expect(csvPlanNotice).toBeVisible();
+  await expect(personalSubscription).toBeVisible();
   await expect(
     page.getByText(
       "Online checkout is not configured for this installation. Contact its administrator.",
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(
-    page.getByRole("tabpanel").getByRole("button", { name: "Explore Pro", exact: true }),
-  ).toBeDisabled();
+  await expect(explorePro).toBeDisabled();
+
+  const accountUrl = `${api}/v1/auth/me`;
+  await page.route(accountUrl, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: { ...(await response.json()), csvExportUnavailableReason: "operator_policy" },
+    });
+  });
+  try {
+    await page.reload();
+    await expect(
+      planPanel.getByText(
+        "The deployment’s feature policy disables CSV export for this workspace.",
+        {
+          exact: true,
+        },
+      ),
+    ).toBeVisible();
+    await expect(csvPlanNotice).toHaveCount(0);
+    await expect(personalSubscription).toBeVisible();
+    await expect(explorePro).toBeDisabled();
+    await page.setViewportSize({ width: 320, height: 900 });
+    await expectAccessibleSettings(page);
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 960 });
+    await page.unroute(accountUrl);
+  }
+  await page.reload();
+  await expect(csvPlanNotice).toBeVisible();
   await selectCategory(page, "Overview");
 
   const renamed = "Alex's personal workspace";

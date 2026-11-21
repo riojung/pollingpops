@@ -63,6 +63,11 @@ import styles from "./account.module.css";
 
 type SettingsError = string | { brandSaveUnavailableReason?: WorkspaceCapabilityUnavailableReason };
 
+const csvUnavailableMessageKeys = {
+  plan_limit: "account.subscription.csvUnavailablePlanLimit",
+  operator_policy: "account.subscription.csvUnavailableOperatorPolicy",
+} as const satisfies Record<WorkspaceCapabilityUnavailableReason, string>;
+
 export default function AccountPage() {
   const { locale, t } = useLocale();
   const management = useManagementNavigation();
@@ -97,7 +102,10 @@ export default function AccountPage() {
     state: "loading",
   });
   const [billingStatusAttempt, setBillingStatusAttempt] = useState(0);
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [planUsage, setPlanUsage] = useState<{
+    entitlements: Entitlements;
+    csvExportUnavailableReason?: WorkspaceCapabilityUnavailableReason;
+  } | null>(null);
   const [theme, setTheme] = useState<BrandTheme>(() => ({
     organizationName: t("account.theme.defaultOrganizationName"),
     primaryColor: "#39243C",
@@ -159,7 +167,7 @@ export default function AccountPage() {
         }
         if (loaded.kind === "billing-only") {
           setWorkspace(null);
-          setEntitlements(null);
+          setPlanUsage(null);
           setProductFeatures(null);
           setUserIdentity(loaded.identity.user);
           setBusinessManagementEnabled(loaded.identity.businessManagementEnabled);
@@ -182,7 +190,12 @@ export default function AccountPage() {
             "",
         );
         setBusinessManagementEnabled(account.businessManagementEnabled === true);
-        setEntitlements(account.entitlements);
+        setPlanUsage({
+          entitlements: account.entitlements,
+          csvExportUnavailableReason: WorkspaceCapabilityUnavailableReasonSchema.safeParse(
+            account.csvExportUnavailableReason,
+          ).data,
+        });
         setProductFeatures({ workspaceShell: account.productFeatures?.workspaceShell === true });
         setBrandAvailability({
           enabled: branding.enabled === true,
@@ -791,6 +804,11 @@ export default function AccountPage() {
     }
   }
 
+  const entitlements = planUsage?.entitlements;
+  const csvUnavailableReason = planUsage?.csvExportUnavailableReason;
+  const csvUnavailableMessage = csvUnavailableReason
+    ? csvUnavailableMessageKeys[csvUnavailableReason]
+    : "account.subscription.csvUnavailable";
   const effectivePlan = entitlements?.plan ?? creator?.plan;
   const personalBillingOwner = canManagePersonalBilling(workspace, creator?.role);
   const personalBilling = personalBillingAction(
@@ -1289,24 +1307,30 @@ export default function AccountPage() {
                 )}
               </p>
               {entitlements ? (
-                <p className="muted">
-                  {formatList(locale, [
-                    t("account.subscription.participants", {
-                      count: formatNumber(locale, entitlements.maxParticipants),
-                    }),
-                    entitlements.maxPublishedQuizzes === null
-                      ? t("account.subscription.unlimitedPublished")
-                      : t("account.subscription.published", {
-                          count: formatNumber(locale, entitlements.maxPublishedQuizzes),
-                        }),
-                    t("account.subscription.retention", {
-                      count: formatNumber(locale, entitlements.reportRetentionDays),
-                    }),
-                    entitlements.csvExport
-                      ? t("account.subscription.csvAvailable")
-                      : t("account.subscription.csvUnavailable"),
-                  ])}
-                </p>
+                <>
+                  <p className="muted">
+                    {formatList(locale, [
+                      t("account.subscription.participants", {
+                        count: formatNumber(locale, entitlements.maxParticipants),
+                      }),
+                      entitlements.maxPublishedQuizzes === null
+                        ? t("account.subscription.unlimitedPublished")
+                        : t("account.subscription.published", {
+                            count: formatNumber(locale, entitlements.maxPublishedQuizzes),
+                          }),
+                      t("account.subscription.retention", {
+                        count: formatNumber(locale, entitlements.reportRetentionDays),
+                      }),
+                    ])}
+                  </p>
+                  <p className="muted">
+                    {t(
+                      entitlements.csvExport
+                        ? "account.subscription.csvAvailable"
+                        : csvUnavailableMessage,
+                    )}
+                  </p>
+                </>
               ) : null}
               {workspace?.organization ? (
                 permissions.manageBilling ? (

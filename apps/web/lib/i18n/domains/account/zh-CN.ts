@@ -78,6 +78,9 @@ const messages = {
   "account.subscription.retention": "报告保留 {count} 天",
   "account.subscription.csvAvailable": "可导出 CSV",
   "account.subscription.csvUnavailable": "无法导出 CSV",
+  "account.subscription.csvUnavailablePlanLimit": "此工作区的方案不包含 CSV 导出功能。",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "根据此部署环境的功能策略，此工作区的 CSV 导出功能已禁用。",
   "account.subscription.openingPortal": "正在打开门户…",
   "account.subscription.manageBilling": "管理账单",
   "account.subscription.comparePlans": "比较方案",

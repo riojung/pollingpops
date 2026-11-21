@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Workspace CSV export availability reasons, November 21, 2026
+
+Implemented locally on `codex/workspace-csv-availability-reasons` from merged PR #299. Plan and
+usage explains the effective workspace CSV export grant using a plan limit, operator policy or
+generic unavailable message. The two reasons are localized in all ten account catalogs. Retained
+Round report eligibility remains a separate backlog item. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Live-brand save availability reasons
 
-Implemented locally on `codex/live-brand-availability-reasons` from merged PR #298. Appearance
+Merged through PR #299 at `23c74a5`. Appearance
 uses the effective brand save grant and the reason returned by the same theme response. After
 a denial, workspace managers can check save access again in Appearance and keep their preview
 edits. A denial that arrives on another Settings tab clears there when the user returns to
@@ -152,7 +160,7 @@ navigation reuse existing controls. New long-form editorial copy is explicitly E
 See the [research, claim matrix and follow-up scope](public-product-experience-2026-11.md).
 Commercial/legal qualification, native-language acceptance and observed usability remain open.
 
-### Workspace experience: current position, November 20, 2026
+### Workspace experience: current position, November 21, 2026
 
 The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
 preview/use, All content Library, the Team meetings collection, and creation navigation/import
@@ -176,8 +184,9 @@ See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
 WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296. Checkpoint-set import
-availability copy merged in PR #297 and import reasons in PR #298. Live-brand save reasons are
-implemented locally. Other capability explanations remain pending.
+availability copy merged in PR #297, import reasons in PR #298, and live-brand save reasons in
+PR #299. Workspace CSV export reasons are implemented locally. Other capability explanations
+remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

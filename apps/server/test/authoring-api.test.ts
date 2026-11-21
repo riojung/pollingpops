@@ -112,6 +112,7 @@ describe("authoring assistant API", () => {
       repository,
       cache: new MemorySessionCache(),
       authoringAssistant: null,
+      scanner: { scan: vi.fn().mockResolvedValue({ clean: true, signature: null }) },
     });
     app = built.app;
     const cookie = await signIn(app, "disabled-authoring@example.com");
@@ -121,8 +122,16 @@ describe("authoring assistant API", () => {
       url: "/v1/authoring/status",
       headers: { cookie },
     });
+    expect(status.statusCode).toBe(200);
+    expect(status.headers["cache-control"]).toBe("private, no-store");
     expect(status.json()).toMatchObject({
-      status: { enabled: false, monthlyLimit: 3, used: 0, remaining: 3 },
+      status: {
+        enabled: false,
+        fileUploadAvailable: false,
+        monthlyLimit: 3,
+        used: 0,
+        remaining: 3,
+      },
     });
     const attempted = await app.inject({
       method: "POST",
@@ -137,6 +146,57 @@ describe("authoring assistant API", () => {
     expect(attempted.statusCode).toBe(503);
     expect(attempted.json()).toMatchObject({ error: { code: "AUTHORING_DISABLED" } });
     expect(repository.authoringJobs.size).toBe(0);
+  });
+
+  it("reports unavailable file upload and still accepts pasted text without a scanner", async () => {
+    const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
+    const built = await buildApp(config(), {
+      repository,
+      cache: new MemorySessionCache(),
+      authoringAssistant: testAssistant(),
+      scanner: null,
+    });
+    app = built.app;
+    const cookie = await signIn(app, "unscanned-authoring@example.com");
+
+    const status = await app.inject({
+      method: "GET",
+      url: "/v1/authoring/status",
+      headers: { cookie },
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({
+      status: { enabled: true, fileUploadAvailable: false, monthlyLimit: 3, used: 0, remaining: 3 },
+    });
+
+    const uploaded = await app.inject({
+      method: "POST",
+      url: "/v1/authoring/jobs",
+      headers: { cookie },
+      payload: {
+        sourceType: "pdf",
+        sourceName: "Handout.pdf",
+        mimeType: "application/pdf",
+        encoding: "base64",
+        data: Buffer.from("%PDF-test-source").toString("base64"),
+      },
+    });
+    expect(uploaded.statusCode).toBe(503);
+    expect(uploaded.json()).toMatchObject({ error: { code: "AUTHORING_DISABLED" } });
+    expect(repository.authoringJobs.size).toBe(0);
+
+    const pasted = await app.inject({
+      method: "POST",
+      url: "/v1/authoring/jobs",
+      headers: { cookie },
+      payload: {
+        sourceType: "pasted_text",
+        sourceName: "Safety guide",
+        text: "Lockout physically isolates hazardous energy before maintenance.",
+      },
+    });
+    expect(pasted.statusCode).toBe(202);
+    expect(repository.authoringJobs.size).toBe(1);
   });
 
   it("queues, processes, reviews, and explicitly applies an unpublished draft", async () => {
@@ -345,14 +405,24 @@ describe("authoring assistant API", () => {
 
   it("accepts a private file request above the global JSON body limit", async () => {
     const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
+    const scan = vi.fn().mockResolvedValue({ clean: true, signature: null });
     const built = await buildApp(config(), {
       repository,
       cache: new MemorySessionCache(),
       authoringAssistant: testAssistant(),
-      scanner: { scan: vi.fn().mockResolvedValue({ clean: true, signature: null }) },
+      scanner: { scan },
     });
     app = built.app;
     const cookie = await signIn(app, "file-authoring@example.com");
+    const status = await app.inject({
+      method: "GET",
+      url: "/v1/authoring/status",
+      headers: { cookie },
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({ status: { enabled: true, fileUploadAvailable: true } });
+    expect(scan).not.toHaveBeenCalled();
+
     const fakePdf = Buffer.concat([Buffer.from("%PDF-"), Buffer.alloc(180_000, 32)]);
     const queued = await app.inject({
       method: "POST",
@@ -367,6 +437,7 @@ describe("authoring assistant API", () => {
       },
     });
     expect(queued.statusCode).toBe(202);
+    expect(scan).toHaveBeenCalledExactlyOnceWith(fakePdf);
   });
 
   it("rejects file sources before retention when malware scanning fails", async () => {

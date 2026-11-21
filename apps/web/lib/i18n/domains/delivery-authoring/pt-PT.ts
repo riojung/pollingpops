@@ -348,6 +348,8 @@ export default {
   "delivery.assistant.privateFile": "Ficheiro de origem privado",
   "delivery.assistant.fileHelp":
     "PDF, DOCX ou PPTX; máximo de 6 MB. Não são aceites URL da Web arbitrários.",
+  "delivery.assistant.fileUploadUnavailable":
+    "Não é possível carregar ficheiros porque a análise de ficheiros não está configurada nesta instalação. Em alternativa, pode colar texto.",
   "delivery.assistant.uploading": "A carregar fonte…",
   "delivery.assistant.createProposal": "Criar proposta para revisão",
   "delivery.assistant.viewerNotice":

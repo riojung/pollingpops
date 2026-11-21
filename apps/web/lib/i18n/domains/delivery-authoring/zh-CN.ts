@@ -320,6 +320,8 @@ export default {
   "delivery.assistant.textPlaceholder": "请粘贴至少 50 个字符的参与者应掌握材料。",
   "delivery.assistant.privateFile": "私有来源文件",
   "delivery.assistant.fileHelp": "PDF、DOCX 或 PPTX，最大 6 MB。不接受任意网页 URL。",
+  "delivery.assistant.fileUploadUnavailable":
+    "此部署环境未配置文件安全扫描，无法上传文件。您可以改为粘贴文本。",
   "delivery.assistant.uploading": "正在上传来源…",
   "delivery.assistant.createProposal": "创建审核建议",
   "delivery.assistant.viewerNotice": "查看者可以检查建议，但不能创建草稿。",

@@ -1271,10 +1271,27 @@ test("source and import starts reach real review drafts through mocked external 
   const sourceQuizId = await createReviewDraft("Source review draft");
   const importQuizId = await createReviewDraft("Imported review draft");
 
+  const statusError = "Fixture authoring status failed.";
+  let statusMode: "legacy" | "error" | "no scanner" = "legacy";
+  let releaseStatus!: () => void;
+  const pendingStatus = new Promise<void>((resolve) => {
+    releaseStatus = resolve;
+  });
   await page.route("**/v1/authoring/status", async (route) => {
+    await pendingStatus;
+    if (statusMode === "error") {
+      await route.fulfill({
+        json: { error: { message: statusError } },
+        status: 503,
+      });
+      return;
+    }
+    const fileUploadAvailable = statusMode === "no scanner" ? false : undefined;
     await route.fulfill({
       contentType: "application/json",
-      json: { status: { enabled: true, monthlyLimit: 3, used: 0, remaining: 3 } },
+      json: {
+        status: { enabled: true, monthlyLimit: 3, used: 0, remaining: 3, fileUploadAvailable },
+      },
       status: 200,
     });
   });
@@ -1305,12 +1322,11 @@ test("source and import starts reach real review drafts through mocked external 
       model: "deterministic",
     },
   };
-  let sourceSubmitted = false;
-  let sourcePayload: Record<string, unknown> | null = null;
+  const sourcePayloads: Record<string, unknown>[] = [];
+  let pendingHistory: Promise<void> | undefined;
   await page.route("**/v1/authoring/jobs", async (route) => {
     if (route.request().method() === "POST") {
-      sourcePayload = route.request().postDataJSON() as Record<string, unknown>;
-      sourceSubmitted = true;
+      sourcePayloads.push(route.request().postDataJSON() as Record<string, unknown>);
       await route.fulfill({
         contentType: "application/json",
         json: { job: readyJob },
@@ -1318,9 +1334,10 @@ test("source and import starts reach real review drafts through mocked external 
       });
       return;
     }
+    await pendingHistory;
     await route.fulfill({
       contentType: "application/json",
-      json: { jobs: sourceSubmitted ? [readyJob] : [] },
+      json: { jobs: sourcePayloads.length ? [readyJob] : [] },
       status: 200,
     });
   });
@@ -1332,7 +1349,47 @@ test("source and import starts reach real review drafts through mocked external 
     });
   });
 
-  await page.goto("/create#source");
+  const fileUpload = page.getByRole("radio", { name: "Upload a private file", exact: true });
+  const fileInput = page
+    .getByRole("tabpanel", { name: "Source assistance", exact: true })
+    .locator('input[type="file"]');
+  try {
+    await Promise.all([page.waitForRequest("**/v1/authoring/status"), page.goto("/create#source")]);
+    await expect(fileUpload).toBeDisabled();
+    await expect(fileInput).toHaveCount(0);
+  } finally {
+    releaseStatus();
+  }
+  await expect(page.getByText("0 of 3 source-grounded jobs used this month")).toBeVisible();
+  await fileUpload.check();
+  await expect(fileInput).toBeVisible();
+
+  statusMode = "error";
+  await page.reload();
+  await expect(page.getByRole("alert").filter({ hasText: statusError })).toBeVisible();
+  await expect(fileUpload).toBeDisabled();
+  await expect(fileInput).toHaveCount(0);
+
+  statusMode = "no scanner";
+  let releaseHistory!: () => void;
+  pendingHistory = new Promise<void>((resolve) => {
+    releaseHistory = resolve;
+  });
+  try {
+    await page.reload();
+    await expect(fileUpload).toBeDisabled();
+    await expect(fileInput).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: "Paste text", exact: true })).toBeChecked();
+    await expect(
+      page.getByText(
+        "File uploads are unavailable because this deployment has no file scanning configured. You can paste text instead.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+  } finally {
+    releaseHistory();
+    pendingHistory = undefined;
+  }
   await expect(page.getByLabel("Trusted source text")).toBeVisible();
   await page.getByLabel("Source name").fill("Fixture source");
   await page
@@ -1343,13 +1400,15 @@ test("source and import starts reach real review drafts through mocked external 
   const sourceStarted = waitForCreationEvent(page, "creation_started", "source");
   await page.getByRole("button", { name: "Create review proposal" }).click();
   expect((await sourceStarted).status()).toBe(202);
-  expect(sourcePayload).toEqual({
-    sourceType: "pasted_text",
-    sourceName: "Fixture source",
-    text: "This deterministic source contains enough grounded material to propose one question and a review draft.",
-  });
   const proposal = page.getByRole("article").filter({ hasText: "Fixture source" });
   await expect(proposal.getByText("Ready to review", { exact: true })).toBeVisible();
+  expect(sourcePayloads).toEqual([
+    {
+      sourceType: "pasted_text",
+      sourceName: "Fixture source",
+      text: "This deterministic source contains enough grounded material to propose one question and a review draft.",
+    },
+  ]);
   const sourceCompleted = waitForCreationEvent(page, "creation_completed", "source");
   await proposal.getByRole("button", { name: "Create unpublished review draft" }).click();
   expect((await sourceCompleted).status()).toBe(202);

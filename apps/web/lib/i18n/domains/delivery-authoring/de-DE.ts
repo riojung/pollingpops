@@ -349,6 +349,8 @@ export default {
   "delivery.assistant.privateFile": "Private Quelldatei",
   "delivery.assistant.fileHelp":
     "PDF, DOCX oder PPTX; maximal 6 MB. Beliebige Web-URLs werden nicht akzeptiert.",
+  "delivery.assistant.fileUploadUnavailable":
+    "Sie können keine Dateien hochladen, da für diese Installation keine Sicherheitsprüfung für Dateien konfiguriert ist. Sie können stattdessen Text einfügen.",
   "delivery.assistant.uploading": "Quelle wird hochgeladen…",
   "delivery.assistant.createProposal": "Prüfvorschlag erstellen",
   "delivery.assistant.viewerNotice":

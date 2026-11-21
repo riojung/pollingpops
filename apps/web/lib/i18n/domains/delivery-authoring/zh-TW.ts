@@ -319,6 +319,8 @@ export default {
   "delivery.assistant.textPlaceholder": "請貼上至少 50 個字元的參與者應理解資料。",
   "delivery.assistant.privateFile": "私人來源檔案",
   "delivery.assistant.fileHelp": "PDF、DOCX 或 PPTX，最大 6 MB。不接受任意網頁 URL。",
+  "delivery.assistant.fileUploadUnavailable":
+    "此部署環境未設定檔案安全掃描，無法上傳檔案。您可以改為貼上文字。",
   "delivery.assistant.uploading": "正在上傳來源…",
   "delivery.assistant.createProposal": "建立審核建議",
   "delivery.assistant.viewerNotice": "檢視者可以查看建議，但不能建立草稿。",

@@ -349,6 +349,8 @@ export default {
   "delivery.assistant.privateFile": "Fichier source privé",
   "delivery.assistant.fileHelp":
     "PDF, DOCX ou PPTX ; 6 Mo maximum. Les URL web ne sont pas acceptées.",
+  "delivery.assistant.fileUploadUnavailable":
+    "L’importation de fichiers est indisponible, car l’analyse des fichiers n’est pas configurée sur cette instance. Vous pouvez coller du texte à la place.",
   "delivery.assistant.uploading": "Import de la source…",
   "delivery.assistant.createProposal": "Créer une proposition à réviser",
   "delivery.assistant.viewerNotice":

@@ -75,6 +75,7 @@ export class AuthoringService {
     const used = await this.repository.countAuthoringJobsSince(workspaceId, monthStart);
     return {
       enabled: this.enabled,
+      fileUploadAvailable: this.enabled && this.scanner !== null,
       monthlyLimit,
       used,
       remaining: monthlyLimit === null ? null : Math.max(0, monthlyLimit - used),

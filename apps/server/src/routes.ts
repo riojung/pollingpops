@@ -1791,6 +1791,7 @@ export async function registerRoutes(
   app.get("/v1/authoring/status", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    reply.header("cache-control", "private, no-store");
     const entitlements = await workspaceEntitlements(
       repository,
       config,

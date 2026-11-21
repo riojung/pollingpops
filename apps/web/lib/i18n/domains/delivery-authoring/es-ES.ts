@@ -346,6 +346,8 @@ export default {
   "delivery.assistant.privateFile": "Archivo fuente privado",
   "delivery.assistant.fileHelp":
     "PDF, DOCX o PPTX; máximo 6 MB. No se aceptan URL web arbitrarias.",
+  "delivery.assistant.fileUploadUnavailable":
+    "No puedes subir archivos porque el análisis de archivos no está configurado en esta instalación. Puedes pegar texto en su lugar.",
   "delivery.assistant.uploading": "Subiendo fuente…",
   "delivery.assistant.createProposal": "Crear propuesta para revisar",
   "delivery.assistant.viewerNotice":

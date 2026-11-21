@@ -260,23 +260,26 @@ export default function AccountPage() {
     if (document.activeElement === document.body) node.focus();
   }
 
-  function reportWorkspaceRequestFailure(caught: unknown, signal: AbortSignal) {
-    if (signal.aborted) return;
-    if (isWorkspaceSettingsConflict(caught)) {
-      const active = document.activeElement;
-      recoveryFocus.current =
-        active === document.body
-          ? settingsOwnedFocus.current
-          : (settingsContentRef.current?.contains(active) ?? false);
-      suspendSettings();
-      setMessage("");
-      setError("");
-      setLoadError(humanError(caught));
-      setLoadStatus("error");
-    } else {
-      setError(humanError(caught));
-    }
-  }
+  const reportWorkspaceRequestFailure = useCallback(
+    (caught: unknown, signal: AbortSignal) => {
+      if (signal.aborted) return;
+      if (isWorkspaceSettingsConflict(caught)) {
+        const active = document.activeElement;
+        recoveryFocus.current =
+          active === document.body
+            ? settingsOwnedFocus.current
+            : (settingsContentRef.current?.contains(active) ?? false);
+        suspendSettings();
+        setMessage("");
+        setError("");
+        setLoadError(humanError(caught));
+        setLoadStatus("error");
+      } else {
+        setError(humanError(caught));
+      }
+    },
+    [suspendSettings],
+  );
 
   async function switchWorkspace(workspaceId: string) {
     if (
@@ -629,11 +632,13 @@ export default function AccountPage() {
     organizationUserWorkspace ? null : ownerAuthority,
     selectedSection === "people",
     loadWorkspaceCollaboration,
+    reportWorkspaceRequestFailure,
   );
   const ltiRegistrations = useOwnerSettingsSection(
     ownerAuthority,
     selectedSection === "security",
     loadLtiRegistrations,
+    reportWorkspaceRequestFailure,
   );
   const hasInstitutionAccess = Boolean(
     oidcStatus?.enabled ||

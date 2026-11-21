@@ -92,20 +92,23 @@ carry the expected workspace ID. The loader also checks the active workspace ret
 workspace list before presenting the snapshot. If the session switches workspaces during loading,
 the settings stay hidden until Retry reads the current workspace. If a rename, idle-policy, theme,
 embed, identity removal or audit export request detects a workspace change, Settings discards the
-stale view. Focus moves to recovery when Settings previously held it. Retry only reloads Settings.
+stale view. A workspace conflict during a People or LTI read also opens page-level recovery and
+cancels pending reads for the old workspace. Focus moves to recovery when Settings previously held
+it. Retry only reloads Settings.
 The query parameter is optional for existing clients. See the [API reference](api.md).
 
-The section messages use ten locale catalogs. Focused verification passed 92 account, 39 API and
+The section messages use ten locale catalogs. Focused verification passed 94 account, 39 API and
 19 locale tests. Ten production browser cases passed across desktop Chromium, mobile Chromium and
 mobile WebKit. They cover pending, unavailable and recovered sections, continued use of billing,
 privacy confirmation and unrelated Security controls, GET-only retries, keyboard focus, reflow and
 automated accessibility in light, dark and forced-color appearances. The cross-tab case exercises a
-switch to an editor workspace both during the required reads and before a stale rename. It checks the
-conflict, focus and retry without replaying the write. Server tests exercise all 16 guarded methods and
-check matching-workspace permissions. The business browser check verifies successful renaming and
-embed-origin saves in the current workspace and accessible landmarks in People.
+switch to an editor workspace during the required reads, before a stale rename, and during an
+independent People read. It checks the conflict, focus and retry without replaying stale requests.
+Server tests exercise all 16 guarded methods and check matching-workspace permissions. The business
+browser check verifies successful renaming and embed-origin saves in the current workspace and
+accessible landmarks in People.
 
-The full `VITEST_MAX_WORKERS=1 pnpm check` passed on rerun, including 6,503 web tests, 1,676 server tests,
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed, including 6,505 web tests, 1,676 server tests,
 529 support tests, four application builds and compiled server startup. Optional PostgreSQL suites
 were skipped in this run. Automated checks cover locale parity and browser accessibility.
 Native-language and manual accessibility review remain open.

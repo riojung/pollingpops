@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ApiClientError } from "../../lib/api";
 import type { AccountCreator } from "./load-account-settings";
+import { isWorkspaceSettingsConflict } from "./workspace-settings-request";
 
 export interface SettingsAuthority {
   creator: AccountCreator;
@@ -25,6 +27,7 @@ export function useOwnerSettingsSection<T>(
   authority: SettingsAuthority | null,
   selected: boolean,
   read: (workspaceId: string, signal: AbortSignal) => Promise<T>,
+  onWorkspaceConflict: (error: ApiClientError, authoritySignal: AbortSignal) => void,
 ) {
   const current = useRef<SectionScope<T> | null>(null);
   const [snapshot, setSnapshot] = useState<{
@@ -52,13 +55,18 @@ export function useOwnerSettingsSection<T>(
       try {
         const data = await read(scope.authority.creator.workspaceId, request.signal);
         if (acceptsResult()) publish(scope, { status: "ready", data });
-      } catch {
-        if (acceptsResult()) publish(scope, { status: "error" });
+      } catch (caught) {
+        if (!acceptsResult()) return;
+        if (isWorkspaceSettingsConflict(caught)) {
+          onWorkspaceConflict(caught, scope.authority.signal);
+        } else {
+          publish(scope, { status: "error" });
+        }
       } finally {
         if (scope.request === request) scope.request = null;
       }
     },
-    [publish, read],
+    [onWorkspaceConflict, publish, read],
   );
 
   useEffect(() => {

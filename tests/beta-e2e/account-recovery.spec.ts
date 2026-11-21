@@ -415,7 +415,7 @@ test("Workspace settings retry after a cross-tab workspace switch", async ({
     await page.bringToFront();
     const fixture = await installReads(page);
     const releaseWorkspaceList = fixture.hold(workspaceListPath);
-    const resumeSessionChecks = gate();
+    let pausedSessionChecks: ReturnType<typeof gate> | undefined;
     const releaseRenameConflict = gate();
     try {
       const scopedReads = [
@@ -479,12 +479,13 @@ test("Workspace settings retry after a cross-tab workspace switch", async ({
       await expect(rename).toBeEnabled();
       // Delay session reconciliation so the stale form encounters the settings conflict
       // before the idle-session boundary observes the switch and remounts the page.
+      pausedSessionChecks = gate();
       await page.route(
         (url) =>
           url.origin === api &&
           ["/v1/auth/session", "/v1/auth/session/activity"].includes(url.pathname),
         async (route) => {
-          await resumeSessionChecks.promise;
+          await pausedSessionChecks?.promise;
           await route.continue();
         },
       );
@@ -535,10 +536,42 @@ test("Workspace settings retry after a cross-tab workspace switch", async ({
       const after = await otherTab.request.get(`${api}${workspaceListPath}`);
       expect(after.ok()).toBe(true);
       expect(await after.json()).toEqual(workspaceSnapshot);
+
+      pausedSessionChecks.release();
+      pausedSessionChecks = undefined;
+      expect((await select(originalCreator.workspaceId)).status()).toBe(200);
+      const peopleScopes = [...fixture.scopes(membersPath), originalCreator.workspaceId];
+      const releasePeople = fixture.hold(membersPath);
+      const ltiReady = page.waitForResponse(
+        `${api}${ltiPath}?expectedWorkspaceId=${originalCreator.workspaceId}`,
+      );
+      await page.goto("/account?source=stale-people-read#people");
+      const peopleTab = page.getByRole("tab", { name: "People", exact: true });
+      await expect(peopleTab).toHaveAttribute("aria-selected", "true");
+      await expect(
+        page.locator("#account-members-section [data-account-section-content]"),
+      ).toHaveAttribute("aria-busy", "true");
+      await expect.poll(() => fixture.scopes(membersPath)).toEqual(peopleScopes);
+      expect((await ltiReady).ok()).toBe(true);
+
+      pausedSessionChecks = gate();
+      expect((await select(invitedCreator.workspaceId)).status()).toBe(200);
+      const stalePeople = page.waitForResponse(
+        `${api}${membersPath}?expectedWorkspaceId=${originalCreator.workspaceId}`,
+      );
+      releasePeople();
+      expect((await stalePeople).status()).toBe(409);
+      await expect(load.getByRole("alert")).toHaveText("The active workspace changed");
+      await expect(navigation).toHaveCount(0);
+      await expect(page.locator("#account-members-section")).toHaveCount(0);
+      await retry.click();
+      await expect(workspace).toHaveValue(invitedCreator.workspaceId);
+      await expect(peopleTab).toHaveCount(0);
+      expect(fixture.scopes(membersPath)).toEqual(peopleScopes);
       expect(fixture.mutations).toEqual([]);
     } finally {
       releaseRenameConflict.release();
-      resumeSessionChecks.release();
+      pausedSessionChecks?.release();
       fixture.releaseAll();
     }
   } finally {

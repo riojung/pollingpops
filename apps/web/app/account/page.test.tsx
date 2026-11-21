@@ -614,6 +614,71 @@ describe("account settings bootstrap recovery", () => {
 describe("owner settings section recovery", () => {
   const unavailable = "This section is unavailable.";
 
+  it.each([
+    [membersPath, ltiPath],
+    [ltiPath, membersPath],
+  ])("reloads workspace authority after %s conflicts", async (conflicting, pending) => {
+    browser.location.hash = "#people";
+    const conflict = deferred<unknown>();
+    const sibling = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) => {
+      if (path === conflicting) return conflict.promise;
+      if (path === pending) return sibling.promise;
+      return Promise.resolve(response(path));
+    });
+    const route = harness();
+    expect(await route.settle()).toContain('id="account-members-section"');
+    const originalRead = settingsReads(pending)[0]![1].signal as AbortSignal;
+    const changed = new ApiClientError("The active workspace changed", "CONFLICT", 409);
+    conflict.reject(changed);
+    let markup = await route.settle();
+    expect(markup).toContain("Workspace settings are unavailable");
+    expect(markup).toContain(changed.message);
+    expect(markup).not.toContain(unavailable);
+    expect(markup).not.toContain('id="settings-panel"');
+    expect(originalRead.aborted).toBe(true);
+
+    const workspaceId = "current-workspace";
+    const workspace = { id: workspaceId, name: "Current workspace", role: "editor" };
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/auth/me") {
+        return {
+          ...account,
+          creator: { ...account.creator, workspaceId, role: workspace.role },
+          workspace: {
+            ...account.workspace,
+            id: workspace.id,
+            name: workspace.name,
+            permissions: {
+              manageWorkspace: false,
+              managePeople: false,
+              manageBilling: false,
+              manageIntegrations: false,
+            },
+          },
+        };
+      }
+      if (path === "/v1/workspaces")
+        return { activeWorkspaceId: workspaceId, workspaces: [workspace] };
+      return response(
+        path.replace("?expectedWorkspaceId=current-workspace", "?expectedWorkspaceId=workspace"),
+      );
+    });
+    retry();
+    markup = await route.settle();
+    expect(settingsReads("/v1/auth/me")).toHaveLength(2);
+    expect(settingsReads(`/v1/account/theme?expectedWorkspaceId=${workspaceId}`)).toHaveLength(1);
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    expect(settingsWrites()).toHaveLength(0);
+    expect(markup).toContain("Current workspace");
+    expect(markup).not.toContain("Workspace settings are unavailable");
+
+    sibling.reject(changed);
+    expect(await route.settle()).toContain("Current workspace");
+    route.dispose();
+  });
+
   it("loads both sections independently and retries members alone after a local failure", async () => {
     browser.location.hash = "#people";
     const members = deferred<unknown>();

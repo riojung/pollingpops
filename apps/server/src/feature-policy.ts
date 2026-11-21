@@ -195,13 +195,26 @@ export async function applyFeatureEntitlements(
   workspaceId: string,
   entitlements: Entitlements,
 ): Promise<Entitlements> {
+  return (await resolveFeatureEntitlements(repository, config, workspaceId, entitlements))
+    .entitlements;
+}
+
+export async function resolveFeatureEntitlements(
+  repository: Repository,
+  config: PolicyConfig,
+  workspaceId: string,
+  entitlements: Entitlements,
+) {
   const resolver = await resolveWorkspaceFeatures(
     repository,
     config,
     workspaceId,
     entitlements.plan,
   );
-  return featureEntitlements(resolver, config, entitlements);
+  return {
+    entitlements: featureEntitlements(resolver, config, entitlements),
+    rules: resolver.rules,
+  };
 }
 
 function featureEntitlements(

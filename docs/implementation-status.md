@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Checkpoint-set import availability reasons
+
+Implemented locally on `codex/checkpoint-import-availability-reasons` from merged PR #297.
+Create and Dashboard use an optional server-supplied reason for unavailable checkpoint-set import.
+Preview and confirmation denials carry the current reason. The plan and operator policy messages
+are localized in all ten locale catalogs, with a generic fallback for missing or unfamiliar
+reasons. See the [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Checkpoint-set import availability, November 20, 2026
 
-Implemented locally on `codex/checkpoint-import-availability` from merged PR #296. Creator and
+Merged through PR #297 at `68d24f1`. Creator and
 legacy import use the effective portability entitlement to explain unavailable access. The ten
 locale catalogs display the same availability message if the server rejects preview or
 confirmation, and the API retains `402 ENTITLEMENT_LIMIT`. The existing import permission and
@@ -159,7 +167,8 @@ See the [conditional-page decisions](survey-branching.md) and
 [complete delivery backlog](workspace-experience-backlog-2026-11.md).
 
 WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296. Checkpoint-set import
-availability copy is the current local increment. Authoritative capability explanations remain pending.
+availability copy merged in PR #297. Plan and operator policy reasons for import are implemented
+locally. Other capability explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

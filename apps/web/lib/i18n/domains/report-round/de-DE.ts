@@ -97,6 +97,9 @@ const messages = {
   "reportRound.import.description":
     "Importe werden validiert, bevor etwas gespeichert wird. Nicht unterstützte oder unvollständige Inhalte werden ausdrücklich zur Überprüfung aufgeführt.",
   "reportRound.import.unavailable": "Importe sind in diesem Arbeitsbereich nicht verfügbar.",
+  "reportRound.import.planLimit": "Der Tarif dieses Arbeitsbereichs umfasst keine Importe.",
+  "reportRound.import.operatorPolicy":
+    "Importe sind gemäß der Funktionsrichtlinie dieser Bereitstellung nicht verfügbar.",
   "reportRound.import.format": "Importformat",
   "reportRound.import.bulkPaste": "Massenpaste",
   "reportRound.import.qtiPackage": "QTI 3-Paket",

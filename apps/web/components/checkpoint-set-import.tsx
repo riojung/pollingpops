@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ImportValidationReportSchema, QuizDraftSchema } from "@openround/contracts";
-import type { ImportValidationReport, QuestionDraft } from "@openround/contracts";
+import {
+  CheckpointSetImportCreationContextSchema,
+  CheckpointSetImportUnavailableReasonSchema,
+  ImportValidationReportSchema,
+  QuizDraftSchema,
+  type CheckpointSetImportUnavailableReason,
+  type ImportValidationReport,
+  type QuestionDraft,
+} from "@openround/contracts";
 import { API_URL, AUTH_CHANGE_EVENT } from "../lib/api";
 import { SESSION_EXPIRED_EVENT, SESSION_LOGOUT_EVENT } from "../lib/idle-session";
 import { formatNumber } from "../lib/i18n/format";
@@ -30,6 +37,7 @@ interface ImportAuthority {
 
 interface CheckpointSetImportProps {
   enabled: boolean;
+  unavailableReason?: CheckpointSetImportUnavailableReason | null;
   authority: ImportAuthority;
   onImported: (quiz: { id: string; title: string }) => Promise<void>;
   plain?: boolean;
@@ -69,7 +77,12 @@ function fileAsBase64(file: File) {
   });
 }
 
-async function importRequest(path: string, body: string, signal: AbortSignal) {
+async function importRequest(
+  path: string,
+  body: string,
+  signal: AbortSignal,
+  creationContext: StructuredImportPreview["creationContext"],
+) {
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
     credentials: "include",
@@ -78,7 +91,11 @@ async function importRequest(path: string, body: string, signal: AbortSignal) {
     signal,
   });
   const result = (await response.json().catch(() => null)) as {
-    error?: { message?: string; code?: string };
+    error?: {
+      message?: string;
+      code?: string;
+      details?: { unavailableReason?: unknown; creationContext?: unknown };
+    };
     validation?: ImportValidationReport;
     [key: string]: unknown;
   } | null;
@@ -86,11 +103,20 @@ async function importRequest(path: string, body: string, signal: AbortSignal) {
     if (response.status === 401 && result?.error?.code === "SESSION_EXPIRED")
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     const validation = ImportValidationReportSchema.safeParse(result?.validation);
+    const details = result?.error?.details;
+    const context = CheckpointSetImportCreationContextSchema.safeParse(details?.creationContext);
+    const reason =
+      context.success &&
+      context.data.actorId === creationContext.actorId &&
+      context.data.workspaceId === creationContext.workspaceId
+        ? CheckpointSetImportUnavailableReasonSchema.safeParse(details?.unavailableReason).data
+        : undefined;
     throw new StructuredImportRequestError(
       response.status,
       typeof result?.error?.message === "string" ? result.error.message : "",
       validation.success ? validation.data : undefined,
       result?.error?.code,
+      reason,
     );
   }
   if (!result) throw new Error("Invalid import response");
@@ -99,6 +125,7 @@ async function importRequest(path: string, body: string, signal: AbortSignal) {
 
 export function CheckpointSetImport({
   enabled,
+  unavailableReason,
   authority,
   onImported,
   plain = false,
@@ -133,8 +160,9 @@ export function CheckpointSetImport({
     stored.scope === scope && !invalidAuthority ? stored.state : initialStructuredImportState();
 
   useEffect(() => {
+    const actor = { actorId: authority.actorId, workspaceId: authority.workspaceId };
     const session = createStructuredImportSession({
-      actor: { actorId: authority.actorId, workspaceId: authority.workspaceId },
+      actor,
       storage: {
         getItem: (key) => window.sessionStorage.getItem(key),
         setItem: (key, value) => window.sessionStorage.setItem(key, value),
@@ -142,7 +170,7 @@ export function CheckpointSetImport({
       },
       allowed: () => scopeRef.current === scope && allowedRef.current && !invalidRef.current,
       preview: async (body, signal) => {
-        const result = await importRequest("/v1/quizzes/import/preview", body, signal);
+        const result = await importRequest("/v1/quizzes/import/preview", body, signal, actor);
         const context = result.creationContext as StructuredImportPreview["creationContext"];
         if (
           typeof result.previewFingerprint !== "string" ||
@@ -168,7 +196,7 @@ export function CheckpointSetImport({
           idempotencyKey,
         }),
       confirm: async (body, signal) => {
-        const result = await importRequest("/v1/quizzes/import/confirm", body, signal);
+        const result = await importRequest("/v1/quizzes/import/confirm", body, signal, actor);
         const quiz = result.quiz as { id?: unknown; title?: unknown } | undefined;
         if (typeof quiz?.id !== "string" || typeof quiz.title !== "string")
           throw new Error("Invalid import confirmation");
@@ -240,6 +268,8 @@ export function CheckpointSetImport({
     creation: copy.creationError,
     expired: copy.previewExpired,
     unavailable: t("reportRound.import.unavailable"),
+    plan_limit: t("reportRound.import.planLimit"),
+    operator_policy: t("reportRound.import.operatorPolicy"),
     opening: copy.openingError,
     recovery: copy.recoveryError,
   };
@@ -294,7 +324,7 @@ export function CheckpointSetImport({
         </p>
       ) : !enabled ? (
         <p className="notice" role="status">
-          {feedback.unavailable}
+          {feedback[unavailableReason ?? "unavailable"]}
         </p>
       ) : !allowed ? (
         <p className="notice" role="status">

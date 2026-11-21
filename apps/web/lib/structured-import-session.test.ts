@@ -517,23 +517,29 @@ describe("structured import session", () => {
     expect(view.confirm).not.toHaveBeenCalled();
   });
 
-  it("releases only a definitively rejected stale intent before allowing a new preview", async () => {
-    const view = harness();
-    await ready(view);
-    view.confirm.mockRejectedValueOnce(
-      new StructuredImportRequestError(409, "Preview changed", undefined, "IMPORT_PREVIEW_STALE"),
-    );
-    await view.session.create();
-    const rejectedBody = view.confirm.mock.calls[0]![0];
-    expect(view.state()).toMatchObject({ phase: "idle", preview: null, feedback: "expired" });
-    await view.session.create();
-    expect(view.confirm).toHaveBeenCalledOnce();
-    await view.session.preview();
-    await view.session.create();
-    expect(JSON.parse(view.confirm.mock.calls[1]![0]).idempotencyKey).not.toBe(
-      JSON.parse(rejectedBody).idempotencyKey,
-    );
-  });
+  it.each([
+    ["IMPORT_PREVIEW_STALE", 409, undefined, "expired"],
+    ["ENTITLEMENT_LIMIT", 402, "operator_policy", "operator_policy"],
+  ] as const)(
+    "releases only the intent definitively rejected as %s before allowing a new preview",
+    async (code, status, reason, feedback) => {
+      const view = harness();
+      await ready(view);
+      view.confirm.mockRejectedValueOnce(
+        new StructuredImportRequestError(status, "Not created", undefined, code, reason),
+      );
+      await view.session.create();
+      const rejectedBody = view.confirm.mock.calls[0]![0];
+      expect(view.state()).toMatchObject({ phase: "idle", preview: null, feedback });
+      await view.session.create();
+      expect(view.confirm).toHaveBeenCalledOnce();
+      await view.session.preview();
+      await view.session.create();
+      expect(JSON.parse(view.confirm.mock.calls[1]![0]).idempotencyKey).not.toBe(
+        JSON.parse(rejectedBody).idempotencyKey,
+      );
+    },
+  );
 
   it.each(["IMPORT_TARGET_UNAVAILABLE", "IDEMPOTENCY_CONFLICT"])(
     "retains the original intent for %s rather than recreating",

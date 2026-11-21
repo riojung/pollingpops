@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SupportedLocale } from "@openround/contracts";
+import type { CheckpointSetImportUnavailableReason, SupportedLocale } from "@openround/contracts";
 import { AUTH_CHANGE_EVENT } from "../lib/api";
 import { englishMessages, translate, type MessageKey } from "../lib/i18n/catalog";
 import englishAuthoring from "../lib/i18n/domains/delivery-authoring/en-CA";
@@ -152,6 +152,7 @@ function harness(terminology: "round" | "legacy" = "round") {
   let tree: ReactNode;
   const props = {
     enabled: true,
+    unavailableReason: undefined as CheckpointSetImportUnavailableReason | null | undefined,
     authority: { ...actor, role: "owner", canEdit: true, featureKey: "all" },
     onImported: vi.fn(async () => undefined),
     trackCreation: true,
@@ -271,26 +272,72 @@ afterEach(() => {
 });
 
 describe("structured import review UI", () => {
-  it.each(["round", "legacy"] as const)(
-    "explains denied workspace import access in the %s panel",
-    (terminology) => {
+  it.each([
+    ["round", "plan_limit", "reportRound.import.planLimit"],
+    ["legacy", "operator_policy", "reportRound.import.operatorPolicy"],
+    ["round", undefined, "reportRound.import.unavailable"],
+    ["legacy", null, "reportRound.import.unavailable"],
+  ] as const)(
+    "explains denied workspace import access in the %s panel with reason %s",
+    (terminology, reason, message) => {
       const view = harness(terminology);
       view.props.enabled = false;
+      view.props.unavailableReason = reason;
       const markup = view.render();
-      expect(markup).toContain('role="status">Import is unavailable for this workspace.');
+      expect(markup).toContain(
+        renderToStaticMarkup(
+          <p className="notice" role="status">
+            {englishReportRound[message]}
+          </p>,
+        ),
+      );
       expect(markup).not.toMatch(/Hosted Pro|Explore Pro|<form/);
       expect(mocked.fetch).not.toHaveBeenCalled();
     },
   );
 
-  it.each(["preview", "confirm"] as const)(
-    "shows workspace availability when the server denies %s after initial access",
-    async (action) => {
+  it.each([
+    ["preview", "plan_limit", actor, "reportRound.import.planLimit"],
+    ["confirm", "operator_policy", actor, "reportRound.import.operatorPolicy"],
+    ["preview", undefined, undefined, "reportRound.import.unavailable"],
+    ["confirm", "future_reason", actor, "reportRound.import.unavailable"],
+    ["confirm", ["operator_policy"], actor, "reportRound.import.unavailable"],
+    ["preview", "operator_policy", undefined, "reportRound.import.unavailable"],
+    [
+      "preview",
+      "operator_policy",
+      { ...actor, workspaceId: quiz.id },
+      "reportRound.import.unavailable",
+    ],
+    [
+      "confirm",
+      "operator_policy",
+      { ...actor, actorId: quiz.id },
+      "reportRound.import.unavailable",
+    ],
+    [
+      "preview",
+      "operator_policy",
+      { workspaceId: actor.workspaceId },
+      "reportRound.import.unavailable",
+    ],
+  ] as const)(
+    "uses scoped feedback for a denied %s with reason %j and context %j",
+    async (action, reason, creationContext, message) => {
       const denied = response(
-        { error: { code: "ENTITLEMENT_LIMIT", message: "A Pro plan is required" } },
+        {
+          error: {
+            code: "ENTITLEMENT_LIMIT",
+            message: "A Pro plan is required",
+            ...(reason !== undefined
+              ? { details: { unavailableReason: reason, creationContext } }
+              : {}),
+          },
+        },
         402,
       );
       const view = harness();
+      view.props.unavailableReason = "plan_limit";
       view.render();
       view.render();
       view.setSource("Private test source");
@@ -305,7 +352,13 @@ describe("structured import review UI", () => {
         await settle();
       }
       const markup = view.render();
-      expect(markup).toContain('role="alert"><p>Import is unavailable for this workspace.</p>');
+      expect(markup).toContain(
+        renderToStaticMarkup(
+          <div className="error" role="alert">
+            <p>{englishReportRound[message]}</p>
+          </div>,
+        ),
+      );
       expect(markup).not.toContain("A Pro plan is required");
       expect(markup).not.toContain(importPreviewCopy().previewExpired);
       expect(markup).not.toContain("data-import-preview");

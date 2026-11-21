@@ -126,7 +126,10 @@ import type { MetricsService } from "./metrics.js";
 import { reportCsv } from "./reporting.js";
 import type { StorageService } from "./storage.js";
 import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
-import { workspaceEntitlements } from "./entitlements.js";
+import {
+  workspaceEntitlements,
+  workspaceEntitlementsWithImportAvailability,
+} from "./entitlements.js";
 import {
   publicProductFeatureEnabled,
   workspaceProductFeatures as resolveWorkspaceProductFeatures,
@@ -1119,17 +1122,19 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     reply.header("cache-control", "private, no-store");
-    const entitlements = await workspaceEntitlements(
-      repository,
-      config,
-      creator.workspaceId,
-      creator.plan,
-    );
+    const { entitlements, checkpointSetImportUnavailableReason } =
+      await workspaceEntitlementsWithImportAvailability(
+        repository,
+        config,
+        creator.workspaceId,
+        creator.plan,
+      );
     return {
       creator,
       workspace: await workspaceAccountContext(repository, config, creator),
       businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
       entitlements,
+      checkpointSetImportUnavailableReason,
       productFeatures: await workspaceProductFeatures(creator.workspaceId),
       brandTheme: entitlements.brandTheme
         ? await repository.getBrandTheme(creator.workspaceId)

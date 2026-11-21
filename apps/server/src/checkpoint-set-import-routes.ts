@@ -7,6 +7,7 @@ import {
   CheckpointSetImportRequestSchema,
   requiresExtendedRoundResponses,
   type CheckpointSetImportRequest,
+  type CheckpointSetImportUnavailableReason,
   type ImportValidationReport,
 } from "@openround/contracts";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { workspaceEntitlements } from "./entitlements.js";
+import { workspaceEntitlementsWithImportAvailability } from "./entitlements.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { importCheckpointSet } from "./portability.js";
 import { importQtiPackage } from "./qti.js";
@@ -37,14 +38,25 @@ function source(input: CheckpointSetImportRequest): CheckpointSetImportRequest {
   };
 }
 
+function contextFor(creator: CreatorContext) {
+  return {
+    actorId: creator.userId.toLowerCase(),
+    workspaceId: creator.workspaceId.toLowerCase(),
+  };
+}
+
 function error(
   reply: FastifyReply,
   status: number,
   code: string,
   message: string,
   requestId: string,
+  details?: {
+    unavailableReason: CheckpointSetImportUnavailableReason;
+    creationContext: ReturnType<typeof contextFor>;
+  },
 ) {
-  return reply.code(status).send({ error: { code, message, requestId } });
+  return reply.code(status).send({ error: { code, message, requestId, details } });
 }
 
 export function registerCheckpointSetImportRoutes(
@@ -58,27 +70,41 @@ export function registerCheckpointSetImportRoutes(
     return false;
   };
   const authority = async (creator: CreatorContext) => {
-    const [entitlements, roundClientProtocol] = await Promise.all([
-      workspaceEntitlements(repository, config, creator.workspaceId, creator.plan),
-      workspaceFeatureEnabled(repository, config, creator.workspaceId, "roundClientProtocol"),
-    ]);
-    return { importEnabled: entitlements.csvExport, roundClientProtocol };
+    const [{ entitlements, checkpointSetImportUnavailableReason }, roundClientProtocol] =
+      await Promise.all([
+        workspaceEntitlementsWithImportAvailability(
+          repository,
+          config,
+          creator.workspaceId,
+          creator.plan,
+        ),
+        workspaceFeatureEnabled(repository, config, creator.workspaceId, "roundClientProtocol"),
+      ]);
+    return {
+      importEnabled: entitlements.csvExport,
+      roundClientProtocol,
+      unavailableReason: checkpointSetImportUnavailableReason,
+    };
   };
-  const requireEntitlement = (enabled: boolean, reply: FastifyReply, requestId: string) => {
-    if (enabled) return true;
+  const requireEntitlement = (
+    access: Awaited<ReturnType<typeof authority>>,
+    creator: CreatorContext,
+    reply: FastifyReply,
+    requestId: string,
+  ) => {
+    if (access.importEnabled) return true;
     error(
       reply,
       402,
       "ENTITLEMENT_LIMIT",
       "Checkpoint-set import is unavailable for this workspace",
       requestId,
+      access.unavailableReason
+        ? { unavailableReason: access.unavailableReason, creationContext: contextFor(creator) }
+        : undefined,
     );
     return false;
   };
-  const contextFor = (creator: CreatorContext) => ({
-    actorId: creator.userId.toLowerCase(),
-    workspaceId: creator.workspaceId.toLowerCase(),
-  });
   const fingerprintFor = (
     input: CheckpointSetImportRequest,
     creator: CreatorContext,
@@ -88,7 +114,10 @@ export function registerCheckpointSetImportRoutes(
       protocol: IMPORT_PREVIEW_PROTOCOL,
       source: source(input),
       creationContext: contextFor(creator),
-      authority: access,
+      authority: {
+        importEnabled: access.importEnabled,
+        roundClientProtocol: access.roundClientProtocol,
+      },
     });
 
   async function validate(
@@ -218,7 +247,7 @@ export function registerCheckpointSetImportRoutes(
     if (!creator || !requireWriter(creator, reply, request.id)) return;
     const input = CheckpointSetImportPreviewRequestSchema.parse(request.body);
     const access = await authority(creator);
-    if (!requireEntitlement(access.importEnabled, reply, request.id)) return;
+    if (!requireEntitlement(access, creator, reply, request.id)) return;
     const result = await validate(input, creator, access);
     return CheckpointSetImportPreviewResponseSchema.parse({
       ...result,
@@ -271,7 +300,7 @@ export function registerCheckpointSetImportRoutes(
         };
       if (!requireWriter(creator, reply, request.id)) return;
       const access = await authority(creator);
-      if (!requireEntitlement(access.importEnabled, reply, request.id)) return;
+      if (!requireEntitlement(access, creator, reply, request.id)) return;
       if (input.previewFingerprint !== fingerprintFor(input, creator, access))
         return error(
           reply,
@@ -309,7 +338,7 @@ export function registerCheckpointSetImportRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator || !requireWriter(creator, reply, request.id)) return;
     const access = await authority(creator);
-    if (!requireEntitlement(access.importEnabled, reply, request.id)) return;
+    if (!requireEntitlement(access, creator, reply, request.id)) return;
     const input = CheckpointSetImportRequestSchema.parse(request.body);
     const result = await validate(input, creator, access);
     if (!result.draft) return validationFailure(result.validation, reply, request.id, true);

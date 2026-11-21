@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { Entitlements, QuizDraft } from "@openround/contracts";
+import {
+  CheckpointSetImportUnavailableReasonSchema,
+  type CheckpointSetImportUnavailableReason,
+  type Entitlements,
+  type QuizDraft,
+} from "@openround/contracts";
 import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CreatorBrand } from "../../components/brand";
 import { CheckpointSetImport } from "../../components/checkpoint-set-import";
@@ -55,8 +60,13 @@ function LegacyDashboardPage() {
     startUpgrade,
   } = useWorkspace();
   const { t } = useLocale();
-  const [creator, setCreator] = useState<Creator | null>(null);
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [account, setAccount] = useState<{
+    creator: Creator;
+    entitlements: Entitlements;
+    importUnavailableReason?: CheckpointSetImportUnavailableReason;
+  } | null>(null);
+  const creator = account?.creator ?? null;
+  const entitlements = account?.entitlements ?? null;
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [title, setTitle] = useState("");
@@ -78,6 +88,7 @@ function LegacyDashboardPage() {
           apiFetch<{
             creator: Creator;
             entitlements: Entitlements;
+            checkpointSetImportUnavailableReason?: unknown;
             productFeatures?: { workspaceShell?: boolean };
           }>("/v1/auth/me"),
           apiFetch<{ quizzes: QuizRecord[] }>(
@@ -85,8 +96,13 @@ function LegacyDashboardPage() {
           ),
           apiFetch<{ folders: FolderRecord[] }>("/v1/folders?artifactType=round"),
         ]);
-        setCreator(me.creator);
-        setEntitlements(me.entitlements);
+        setAccount({
+          creator: me.creator,
+          entitlements: me.entitlements,
+          importUnavailableReason: CheckpointSetImportUnavailableReasonSchema.safeParse(
+            me.checkpointSetImportUnavailableReason,
+          ).data,
+        });
         setProductFeatures({ workspaceShell: me.productFeatures?.workspaceShell === true });
         setQuizzes(list.quizzes);
         setFolders(folderList.folders.filter((folder) => folder.artifactType === "round"));
@@ -242,6 +258,13 @@ function LegacyDashboardPage() {
   );
   const publishedQuizCount = quizzes.filter((quiz) => quiz.status === "published").length;
   const canEdit = creator?.role === "owner" || creator?.role === "editor";
+  const importUnavailableReason =
+    account?.entitlements.csvExport === false &&
+    workspaceCanEdit &&
+    account.creator.userId === workspaceCreator?.userId &&
+    account.creator.workspaceId === workspaceCreator?.workspaceId
+      ? account.importUnavailableReason
+      : undefined;
 
   return (
     <>
@@ -327,6 +350,7 @@ function LegacyDashboardPage() {
         {canEdit && entitlements ? (
           <CheckpointSetImport
             enabled={entitlements.csvExport}
+            unavailableReason={importUnavailableReason}
             authority={{
               actorId: workspaceCreator?.userId ?? "",
               workspaceId: workspaceCreator?.workspaceId ?? "",

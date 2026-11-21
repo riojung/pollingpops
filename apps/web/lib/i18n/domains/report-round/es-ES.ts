@@ -98,6 +98,9 @@ const messages = {
   "reportRound.import.description":
     "Las importaciones se validan antes de guardar algo. El contenido no compatible o incompleto se incluye explícitamente para su revisión.",
   "reportRound.import.unavailable": "La importación no está disponible en este espacio de trabajo.",
+  "reportRound.import.planLimit": "El plan de este espacio de trabajo no incluye la importación.",
+  "reportRound.import.operatorPolicy":
+    "La política de funciones de este despliegue no permite la importación.",
   "reportRound.import.format": "Formato de importación",
   "reportRound.import.bulkPaste": "pasta a granel",
   "reportRound.import.qtiPackage": "Paquete QTI 3",

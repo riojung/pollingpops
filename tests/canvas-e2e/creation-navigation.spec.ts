@@ -85,28 +85,33 @@ test("WX05 paused source assistance leaves ordinary creation and separate outlin
   await expect(page.getByRole("button", { name: "Preview import", exact: true })).toBeVisible();
 
   const accountUrl = `${api}/v1/auth/me`;
-  await page.route(accountUrl, async (route) => {
-    const response = await route.fetch();
-    const account = await response.json();
-    await route.fulfill({
-      response,
-      json: {
-        ...account,
-        creator: { ...account.creator, plan: "pro" },
-        entitlements: { ...account.entitlements, plan: "pro", csvExport: false },
-      },
-    });
-  });
-  await page.reload();
   const importPanel = page.getByRole("region", { name: "Import a Round", exact: true });
-  await expect(
-    importPanel.getByText("Import is unavailable for this workspace.", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    importPanel.getByRole("button", { name: "Preview import", exact: true }),
-  ).toHaveCount(0);
-  await expect(importPanel.getByText("Explore Pro", { exact: true })).toHaveCount(0);
-  await page.unroute(accountUrl);
+  for (const [plan, reason, notice] of [
+    ["pro", undefined, "Import is unavailable for this workspace."],
+    ["pro", "operator_policy", "Import is unavailable under this deployment’s feature policy."],
+    ["free", "plan_limit", "This workspace’s plan does not include import."],
+  ] as const) {
+    await page.route(accountUrl, async (route) => {
+      const response = await route.fetch();
+      const account = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...account,
+          creator: { ...account.creator, plan },
+          entitlements: { ...account.entitlements, plan, csvExport: false },
+          checkpointSetImportUnavailableReason: reason,
+        },
+      });
+    });
+    await page.reload();
+    await expect(importPanel.getByText(notice, { exact: true })).toBeVisible();
+    await expect(
+      importPanel.getByRole("button", { name: "Preview import", exact: true }),
+    ).toHaveCount(0);
+    await expect(importPanel.getByText("Explore Pro", { exact: true })).toHaveCount(0);
+    await page.unroute(accountUrl);
+  }
 
   await page.getByRole("tab", { name: "Templates", exact: true }).click();
   await method(page, "roundTemplate");

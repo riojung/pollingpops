@@ -11,11 +11,15 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type {
+  CheckpointSetImportUnavailableReason,
   Entitlements,
   SupportedLocale,
   WorkspaceProductFeatures as ContractWorkspaceProductFeatures,
 } from "@openround/contracts";
-import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
+import {
+  CheckpointSetImportUnavailableReasonSchema,
+  WorkspaceProductFeaturesSchema,
+} from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
 import { useLocale } from "../locale-provider";
 import { useConfirmNavigation } from "../navigation-guard";
@@ -61,6 +65,7 @@ interface WorkspaceAccountResponse {
   creator: WorkspaceCreator;
   workspace?: WorkspaceAccountContext;
   entitlements: Entitlements;
+  checkpointSetImportUnavailableReason?: unknown;
   productFeatures: WorkspaceProductFeatures;
 }
 
@@ -69,6 +74,7 @@ interface WorkspaceContextValue {
   creator: WorkspaceCreator | null;
   workspace: WorkspaceAccountContext | null;
   entitlements: Entitlements | null;
+  checkpointSetImportUnavailableReason?: CheckpointSetImportUnavailableReason;
   productFeatures: WorkspaceProductFeatures | null;
   loading: boolean;
   error: string;
@@ -91,10 +97,23 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
   localeLoadErrorRef.current = localeLoadError;
   const [creator, setCreator] = useState<WorkspaceCreator | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceAccountContext | null>(null);
-  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [access, setAccess] = useState<{
+    actorId: string;
+    workspaceId: string;
+    entitlements: Entitlements;
+    importUnavailableReason?: CheckpointSetImportUnavailableReason;
+  } | null>(null);
   const [productFeatures, setProductFeatures] = useState<WorkspaceProductFeatures | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const entitlements = access?.entitlements ?? null;
+  const checkpointSetImportUnavailableReason =
+    access &&
+    access.entitlements.csvExport === false &&
+    access.actorId === creator?.userId &&
+    access.workspaceId === creator?.workspaceId
+      ? access.importUnavailableReason
+      : undefined;
 
   const refreshAccount = useCallback(async () => {
     setError("");
@@ -109,7 +128,14 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       setCreator(account.creator);
       clearOtherCanvasCreationSetups(account.creator.userId);
       setWorkspace(account.workspace ?? null);
-      setEntitlements(account.entitlements);
+      setAccess({
+        actorId: account.creator.userId,
+        workspaceId: account.creator.workspaceId,
+        entitlements: account.entitlements,
+        importUnavailableReason: CheckpointSetImportUnavailableReasonSchema.safeParse(
+          account.checkpointSetImportUnavailableReason,
+        ).data,
+      });
       setProductFeatures(features.data);
       try {
         if (account.creator.localePreferenceSet) {
@@ -137,7 +163,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
     } catch (caught) {
       setCreator(null);
       setWorkspace(null);
-      setEntitlements(null);
+      setAccess(null);
       setProductFeatures(null);
       if ((caught as { status?: number }).status === 401) {
         // An authenticated billing-only user has no workspace context.
@@ -165,6 +191,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       creator,
       workspace,
       entitlements,
+      checkpointSetImportUnavailableReason,
       productFeatures,
       loading,
       error,
@@ -182,6 +209,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       },
     }),
     [
+      checkpointSetImportUnavailableReason,
       confirmNavigation,
       creator,
       entitlements,

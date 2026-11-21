@@ -79,7 +79,8 @@ function CreateContent() {
   const copy = workspaceDiscoveryCopy(locale);
   const goals = creationGoalMessages(locale);
   const methodCopy = creationMethodCopy(locale);
-  const { creator, canEdit, entitlements, productFeatures } = useWorkspace();
+  const { creator, canEdit, entitlements, checkpointSetImportUnavailableReason, productFeatures } =
+    useWorkspace();
   const creationOptions = workspaceCreationOptions({ canEdit, productFeatures });
   const builderEnabled = productFeatures?.builderV2 === true;
   const [legacyHash, setLegacyHash] = useState("");
@@ -385,6 +386,11 @@ function CreateContent() {
                 <div>
                   <CheckpointSetImport
                     enabled={canEdit && builderEnabled && Boolean(entitlements?.csvExport)}
+                    unavailableReason={
+                      entitlements?.csvExport === false
+                        ? checkpointSetImportUnavailableReason
+                        : undefined
+                    }
                     authority={{
                       actorId: creator?.userId ?? "",
                       workspaceId: creator?.workspaceId ?? "",

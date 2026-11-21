@@ -117,8 +117,8 @@ Native-language and manual accessibility review remain open.
 
 Library pagination and reset focus merged as WX-11D in PR #294. See the
 [scope and acceptance record](library-recovery-focus.md). WX-11E availability copy merged in
-PR #295. Checkpoint-set import availability copy is implemented locally. Detailed plan, operator,
-rollout and provider explanations need an authoritative reason projection.
+PR #295. Checkpoint-set import availability copy merged in PR #297. Plan and operator policy
+explanations for import are implemented locally. Other capability explanations remain pending.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

@@ -3,7 +3,12 @@ import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProductFeaturesSchema } from "@openround/contracts";
-import type { SupportedLocale, WorkspaceProductFeatures } from "@openround/contracts";
+import type {
+  CheckpointSetImportUnavailableReason,
+  SupportedLocale,
+  WorkspaceProductFeatures,
+} from "@openround/contracts";
+import { CheckpointSetImport } from "../../components/checkpoint-set-import";
 import { creationContent } from "../../lib/i18n/creation-content";
 import { englishMessages, translate, type MessageKey } from "../../lib/i18n/catalog";
 import { creationMethodCopy } from "../../lib/i18n/creation-method-copy";
@@ -38,6 +43,9 @@ const fixtures = vi.hoisted(() => ({
   push: vi.fn(),
   features: null as WorkspaceProductFeatures | null,
   canEdit: true,
+  entitlements: { csvExport: true } as { csvExport: boolean } | null,
+  checkpointSetImportUnavailableReason: undefined as
+    CheckpointSetImportUnavailableReason | undefined,
   hooks: null as Hooks | null,
   request: vi.fn(),
   locale: "en-CA" as SupportedLocale,
@@ -98,7 +106,8 @@ vi.mock("../../components/workspace/workspace-provider", () => ({
   WorkspaceProvider: ({ children }: { children: ReactNode }) => children,
   useWorkspace: () => ({
     canEdit: fixtures.canEdit,
-    entitlements: { csvExport: true },
+    entitlements: fixtures.entitlements,
+    checkpointSetImportUnavailableReason: fixtures.checkpointSetImportUnavailableReason,
     productFeatures: fixtures.features,
   }),
 }));
@@ -198,6 +207,8 @@ describe("Round creation launcher", () => {
     fixtures.push.mockClear();
     fixtures.features = allFeatures();
     fixtures.canEdit = true;
+    fixtures.entitlements = { csvExport: true };
+    fixtures.checkpointSetImportUnavailableReason = undefined;
     fixtures.hooks = null;
     fixtures.request.mockReset();
     fixtures.locale = "en-CA";
@@ -290,6 +301,21 @@ describe("Round creation launcher", () => {
     expect(markup).toContain(html(explanation.assistance));
     expect(markup).toContain(html(explanation.nextStep));
     expect(fixtures.request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, "operator_policy"],
+    [true, undefined],
+    [null, undefined],
+  ] as const)("passes an import reason only with a confirmed denial (%s)", (csvExport, reason) => {
+    fixtures.query = "type=quiz&start=import";
+    fixtures.entitlements = csvExport === null ? null : { csvExport };
+    fixtures.checkpointSetImportUnavailableReason = "operator_policy";
+    const panel = elements(view().render()).find((element) => element.type === CheckpointSetImport);
+    expect(panel?.props).toMatchObject({
+      enabled: csvExport === true,
+      unavailableReason: reason,
+    });
   });
 
   it("retains source deep links and explains incompatible poll imports without opening blank", () => {

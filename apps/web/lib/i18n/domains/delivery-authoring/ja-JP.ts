@@ -339,6 +339,8 @@ export default {
     "参加者に理解してほしい資料から50文字以上を貼り付けてください。",
   "delivery.assistant.privateFile": "非公開ソースファイル",
   "delivery.assistant.fileHelp": "PDF、DOCX、PPTX（最大6 MB）。任意のWeb URLは使用できません。",
+  "delivery.assistant.fileUploadUnavailable":
+    "この環境ではファイルのセキュリティスキャンが設定されていないため、ファイルをアップロードできません。代わりにテキストを貼り付けられます。",
   "delivery.assistant.uploading": "ソースをアップロード中…",
   "delivery.assistant.createProposal": "確認用の提案を作成",
   "delivery.assistant.viewerNotice": "閲覧者は提案を確認できますが、下書きは作成できません。",

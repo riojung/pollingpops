@@ -24,6 +24,7 @@ import { packSourceCopy } from "../lib/i18n/pack-source-copy";
 
 interface AuthoringStatus {
   enabled: boolean;
+  fileUploadAvailable?: boolean;
   monthlyLimit: number | null;
   used: number;
   remaining: number | null;
@@ -111,6 +112,9 @@ export function AuthoringAssistant({
   const submitting = useRef(false);
   const submissionGeneration = useRef(0);
   const refreshGeneration = useRef(0);
+  const fileUploadAllowed = useRef(false);
+  const fileUploadBlocked = status?.fileUploadAvailable === false;
+  const fileSelectionDisabled = !status || fileUploadBlocked;
   // A Pack action's temporary busy state gates new submissions, not a source
   // request already in flight. Keep permission and source-generation fences.
   const sourcePermission = useRef(canEdit);
@@ -124,16 +128,20 @@ export function AuthoringAssistant({
 
   const refresh = useCallback(async () => {
     const generation = ++refreshGeneration.current;
+    const current = () => mounted.current && generation === refreshGeneration.current;
     try {
-      const [statusResult, jobResult] = await Promise.all([
-        apiFetch<{ status: AuthoringStatus }>("/v1/authoring/status"),
+      const [, jobResult] = await Promise.all([
+        apiFetch<{ status: AuthoringStatus }>("/v1/authoring/status").then(({ status }) => {
+          if (!current()) return;
+          // Apply upload restrictions without waiting for the proposal history.
+          fileUploadAllowed.current = status.enabled && status.fileUploadAvailable !== false;
+          setStatus(status);
+        }),
         apiFetch<{ jobs: AuthoringJob[] }>("/v1/authoring/jobs"),
       ]);
-      if (!mounted.current || generation !== refreshGeneration.current) return;
-      setStatus(statusResult.status);
-      setJobs(jobResult.jobs);
+      if (current()) setJobs(jobResult.jobs);
     } catch (caught) {
-      if (mounted.current && generation === refreshGeneration.current) {
+      if (current()) {
         setError(humanError(caught));
         setErrorIsLocalized(false);
       }
@@ -163,7 +171,8 @@ export function AuthoringAssistant({
       !canEdit ||
       recoveryPackTarget?.disabled ||
       !status?.enabled ||
-      status.remaining === 0
+      status.remaining === 0 ||
+      (sourceMode === "file" && !fileUploadAllowed.current)
     )
       return;
     submitting.current = true;
@@ -198,7 +207,8 @@ export function AuthoringAssistant({
       if (
         !mounted.current ||
         !sourcePermission.current ||
-        generation !== submissionGeneration.current
+        generation !== submissionGeneration.current ||
+        (sourceMode === "file" && !fileUploadAllowed.current)
       )
         return;
       const result = await apiFetch<{ job: AuthoringJob }>("/v1/authoring/jobs", {
@@ -395,6 +405,7 @@ export function AuthoringAssistant({
               <label className="checkbox-field">
                 <input
                   checked={sourceMode === "file"}
+                  disabled={fileSelectionDisabled}
                   name="authoring-source-mode"
                   onChange={() => {
                     sourceChanged();
@@ -405,6 +416,11 @@ export function AuthoringAssistant({
                 {t("delivery.assistant.uploadPrivateFile")}
               </label>
             </div>
+            {fileUploadBlocked ? (
+              <p className="notice" role="status">
+                {t("delivery.assistant.fileUploadUnavailable")}
+              </p>
+            ) : null}
             {sourceMode === "pasted_text" ? (
               <>
                 <label className="field">
@@ -445,6 +461,7 @@ export function AuthoringAssistant({
                 <input
                   accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                   className="input"
+                  disabled={fileSelectionDisabled}
                   lang=""
                   onChange={(event) => {
                     sourceChanged();
@@ -456,7 +473,11 @@ export function AuthoringAssistant({
                 <small>{t("delivery.assistant.fileHelp")}</small>
               </label>
             )}
-            <button className="button" type="submit">
+            <button
+              className="button"
+              disabled={sourceMode === "file" && fileSelectionDisabled}
+              type="submit"
+            >
               {busy ? t("delivery.assistant.uploading") : t("delivery.assistant.createProposal")}
             </button>
           </fieldset>

@@ -335,6 +335,8 @@ export default {
   "delivery.assistant.privateFile": "비공개 출처 파일",
   "delivery.assistant.fileHelp":
     "PDF, DOCX 또는 PPTX, 최대 6MB. 임의의 웹 URL은 허용되지 않습니다.",
+  "delivery.assistant.fileUploadUnavailable":
+    "이 배포 환경에는 파일 보안 검사가 설정되어 있지 않아 파일을 업로드할 수 없습니다. 대신 텍스트를 붙여 넣을 수 있습니다.",
   "delivery.assistant.uploading": "출처 업로드 중…",
   "delivery.assistant.createProposal": "검토 제안 만들기",
   "delivery.assistant.viewerNotice":

@@ -43,7 +43,9 @@ Workspace CSV export availability reasons merged through
 [PR #300](https://github.com/riojung/pollingpops/pull/300) at `0c36c94`.
 Retained Round report export availability reasons merged through
 [PR #301](https://github.com/riojung/pollingpops/pull/301) at `77232f8`.
-The current WX-11 increment explains live Presentation launch availability.
+Live Presentation launch availability reasons merged through
+[PR #302](https://github.com/riojung/pollingpops/pull/302) at `977f074`.
+The current WX-11 increment explains file upload availability in source-assisted authoring.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -70,7 +72,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #301. Live Presentation launch reasons are verified. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #302. Source upload availability notice is verified. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
@@ -87,10 +89,10 @@ merged in PR #291, WX-11B Results recovery in PR #292, WX-11C Workspace initiali
 in PR #293, WX-11D Library recovery in PR #294, and WX-11E availability copy in PR #295.
 WX-11F independent settings-section recovery merged in PR #296. Checkpoint-set import availability
 copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299 and workspace
-CSV export reasons in PR #300. Retained Round report export reasons merged in PR #301. Live
-Presentation launch availability reasons are implemented locally. Other capability explanations,
-WX-07–10 and WX-12–14 remain pending. Additional customer-job collections and human review of
-localized copy remain open.
+CSV export reasons in PR #300. Retained Round report export reasons merged in PR #301 and live
+Presentation launch reasons in PR #302. Source upload availability is implemented locally. Other
+capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job collections
+and human review of localized copy remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -878,14 +880,31 @@ Native-language review remains open.
 deployment rollout restriction from an explicit feature-policy restriction. The message follows
 the effective decision for the selected funding option, using the workspace decision or the event
 credit preview. Missing and unfamiliar reasons use the generic setup notice. All ten locale
-catalogs include both explanations. Frontend, server and localization own this increment, which
-is implemented locally on `codex/presentation-launch-availability-reasons`.
+catalogs include both explanations. Frontend, server and localization own this increment. It
+merged through PR #302 at `977f074`.
 
 Local verification passed `VITEST_MAX_WORKERS=1 pnpm check`, including 1,141 contract, 6,566 web,
 1,682 server and 529 support tests, four application builds and compiled startup. Four browser
 cases passed across desktop Chromium and mobile WebKit. Coverage includes both denial reasons,
 the generic fallback, event credit selection, and the available workspace launch. Optional
 PostgreSQL suites were skipped. Native-language review remains open.
+
+**Source-assisted authoring upload availability.** The status read indicates whether the
+deployment has the authoring provider and file scanner needed to accept uploads. When authoring
+is enabled and scanning is unconfigured, the editor explains the restriction before file
+selection and offers pasted text. The upload restriction applies as soon as status arrives, even
+while proposal history is loading or a file read is pending.
+File selection waits for a successful status response. Older servers can still allow file
+selection by reporting that authoring is enabled.
+The notice is localized in all ten catalogs. Frontend, server and localization own this increment,
+which is implemented locally on `codex/source-upload-availability`.
+
+Formatting, lint, type checks, four application builds and compiled startup passed. The
+repository-wide run hit test timeouts. The serial run and isolated retry covered all selected
+package tests, and 529 support tests passed. Two production Chromium cases passed after review.
+They cover pending and failed status, a restriction received while proposal history is loading,
+older status responses, pasted-text submission and the Recovery Pack worker. Optional PostgreSQL
+suites were skipped. Native-language review remains open.
 
 **Remaining capability explanations.** Other rollout surfaces, administrator policy and provider
 setup messages need their own server decisions and qualification.
@@ -991,8 +1010,9 @@ writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initializat
 **WX-11F independent settings-section recovery** merged in PR #296. Checkpoint-set import
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
-PR #301. Live Presentation launch reasons are implemented locally. Other rollout, administrator
-policy and provider setup explanations remain pending.
+PR #301 and live Presentation launch reasons merged in PR #302. Source upload availability is
+implemented locally. Other rollout, administrator policy and provider setup explanations remain
+pending.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

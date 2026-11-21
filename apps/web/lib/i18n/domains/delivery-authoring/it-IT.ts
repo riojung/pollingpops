@@ -347,6 +347,8 @@ export default {
   "delivery.assistant.privateFile": "File sorgente privato",
   "delivery.assistant.fileHelp":
     "PDF, DOCX o PPTX; massimo 6 MB. Gli URL web arbitrari non sono accettati.",
+  "delivery.assistant.fileUploadUnavailable":
+    "Non puoi caricare file perché la scansione dei file non è configurata in questa installazione. Puoi incollare del testo al loro posto.",
   "delivery.assistant.uploading": "Caricamento della fonte…",
   "delivery.assistant.createProposal": "Crea proposta da rivedere",
   "delivery.assistant.viewerNotice":

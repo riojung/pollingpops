@@ -953,7 +953,12 @@ defaults and historical document meanings are unchanged. See the
 
 ## Source-grounded authoring APIs
 
-- `GET /v1/authoring/status` — configured state and current monthly usage.
+- `GET /v1/authoring/status` — authenticated workspace status with `enabled`,
+  `fileUploadAvailable`, `monthlyLimit`, `used`, and `remaining`. Responses use
+  `Cache-Control: private, no-store`. `fileUploadAvailable` is true when the authoring provider
+  and malware scanner are configured. The field reflects deployment configuration. File
+  submissions still require a successful scan, and pasted text remains available when the
+  provider is configured and the scanner is absent.
 - `GET /v1/authoring/jobs`
 - `POST /v1/authoring/jobs` — pasted text or base64 PDF/DOCX/PPTX; returns 202.
 - `GET /v1/authoring/jobs/{id}`

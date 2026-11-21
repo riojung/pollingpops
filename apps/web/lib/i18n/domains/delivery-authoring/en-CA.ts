@@ -339,6 +339,8 @@ export const deliveryAuthoringEnglishMessages = {
   "delivery.assistant.privateFile": "Private source file",
   "delivery.assistant.fileHelp":
     "PDF, DOCX, or PPTX; 6 MB maximum. Arbitrary web URLs are not accepted.",
+  "delivery.assistant.fileUploadUnavailable":
+    "File uploads are unavailable because this deployment has no file scanning configured. You can paste text instead.",
   "delivery.assistant.uploading": "Uploading source…",
   "delivery.assistant.createProposal": "Create review proposal",
   "delivery.assistant.viewerNotice":

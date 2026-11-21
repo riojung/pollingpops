@@ -79,6 +79,15 @@ test.afterEach(async ({ page }) => {
 async function sourcePackWorkflow(page: Page) {
   test.setTimeout(120_000);
   await signInBeta(page);
+  // The review regression selects a file locally and submits only pasted text.
+  await page.route(`${apiUrl}/v1/authoring/status`, async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...payload, status: { ...payload.status, fileUploadAvailable: true } },
+    });
+  });
   await page.goto("/recovery-packs");
   const assistant = page.locator("details.authoring-assistant");
   await assistant.locator("summary").click();

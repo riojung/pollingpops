@@ -90,8 +90,7 @@ export const reportRoundEnglishMessages = {
   "reportRound.import.draftOnly": "Draft only",
   "reportRound.import.description":
     "Imports are validated before anything is saved. Unsupported or incomplete content is listed explicitly for review.",
-  "reportRound.import.proRound": "Round import and export are included with Hosted Pro.",
-  "reportRound.import.proLegacy": "Import and checkpoint-set exports are included with Hosted Pro.",
+  "reportRound.import.unavailable": "Import is unavailable for this workspace.",
   "reportRound.import.format": "Import format",
   "reportRound.import.bulkPaste": "Bulk paste",
   "reportRound.import.qtiPackage": "QTI 3 package",

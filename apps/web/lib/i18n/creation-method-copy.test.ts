@@ -39,10 +39,9 @@ describe("creation method explanations", () => {
       expect(method.nextStep).toMatch(/Review.*proposals.*explicitly create a private/);
     }
     expect(methods.presentationSource.input).toContain("Original slide layouts are not preserved");
-    expect(methods.roundImport.input).toMatch(
-      /JSON, CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB/,
+    expect(methods.roundImport.input).toBe(
+      "Polling Pops JSON, CSV or bulk text up to 2 MB; QTI 3 ZIP up to 6 MB.",
     );
-    expect(methods.roundImport.input).toContain("Requires Pro");
     expect(methods.roundImport.assistance).toBe("No AI is used.");
     expect(methods.roundImport.nextStep).toMatch(
       /Preview the import.*review questions and warnings/,

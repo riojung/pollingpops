@@ -147,16 +147,15 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 const cleanups: Array<() => void> = [];
-function harness() {
+function harness(terminology: "round" | "legacy" = "round") {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [], cleanups: new Map() };
   let tree: ReactNode;
   const props = {
     enabled: true,
     authority: { ...actor, role: "owner", canEdit: true, featureKey: "all" },
     onImported: vi.fn(async () => undefined),
-    onUpgrade: vi.fn(),
     trackCreation: true,
-    terminology: "round" as const,
+    terminology,
   };
   function render() {
     hooks.cursor = 0;
@@ -272,6 +271,49 @@ afterEach(() => {
 });
 
 describe("structured import review UI", () => {
+  it.each(["round", "legacy"] as const)(
+    "explains denied workspace import access in the %s panel",
+    (terminology) => {
+      const view = harness(terminology);
+      view.props.enabled = false;
+      const markup = view.render();
+      expect(markup).toContain('role="status">Import is unavailable for this workspace.');
+      expect(markup).not.toMatch(/Hosted Pro|Explore Pro|<form/);
+      expect(mocked.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["preview", "confirm"] as const)(
+    "shows workspace availability when the server denies %s after initial access",
+    async (action) => {
+      const denied = response(
+        { error: { code: "ENTITLEMENT_LIMIT", message: "A Pro plan is required" } },
+        402,
+      );
+      const view = harness();
+      view.render();
+      view.render();
+      view.setSource("Private test source");
+      view.render();
+      if (action === "preview") mocked.fetch.mockResolvedValueOnce(denied);
+      view.submit();
+      await settle();
+      view.render();
+      if (action === "confirm") {
+        mocked.fetch.mockResolvedValueOnce(denied);
+        view.click("Create draft");
+        await settle();
+      }
+      const markup = view.render();
+      expect(markup).toContain('role="alert"><p>Import is unavailable for this workspace.</p>');
+      expect(markup).not.toContain("A Pro plan is required");
+      expect(markup).not.toContain(importPreviewCopy().previewExpired);
+      expect(markup).not.toContain("data-import-preview");
+      expect(mocked.fetch).toHaveBeenCalledTimes(action === "preview" ? 1 : 2);
+      expect(view.props.onImported).not.toHaveBeenCalled();
+    },
+  );
+
   it("renders without a WorkspaceProvider and creates only after reviewing parsed content", async () => {
     const view = harness();
     view.render();

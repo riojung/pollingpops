@@ -96,10 +96,7 @@ const messages = {
   "reportRound.import.draftOnly": "Solo bozza",
   "reportRound.import.description":
     "Le importazioni vengono convalidate prima di salvare qualsiasi cosa. I contenuti non supportati o incompleti sono elencati esplicitamente per la revisione.",
-  "reportRound.import.proRound":
-    "L'importazione e l'esportazione dei round sono incluse in Hosted Pro.",
-  "reportRound.import.proLegacy":
-    "L'importazione e l'esportazione di set di checkpoint sono incluse in Hosted Pro.",
+  "reportRound.import.unavailable": "L’importazione non è disponibile in questo spazio di lavoro.",
   "reportRound.import.format": "Formato di importazione",
   "reportRound.import.bulkPaste": "Pasta sfusa",
   "reportRound.import.qtiPackage": "Pacchetto QTI3",

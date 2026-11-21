@@ -24,6 +24,10 @@ export class StructuredImportRequestError extends Error {
   ) {
     super(diagnostic);
   }
+
+  get entitlementDenied() {
+    return this.status === 402 && this.code === "ENTITLEMENT_LIMIT";
+  }
 }
 
 export interface StructuredImportState {
@@ -48,6 +52,7 @@ export interface StructuredImportState {
     | "invalid"
     | "creation"
     | "expired"
+    | "unavailable"
     | "opening"
     | "recovery";
   diagnostic: string;
@@ -283,16 +288,17 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
       });
     } catch (caught) {
       if (!current(version)) return;
+      const error = caught instanceof StructuredImportRequestError ? caught : undefined;
       publish({
         ...state,
         phase: "idle",
-        feedback:
-          caught instanceof StructuredImportRequestError && caught.validation?.errors.length
+        feedback: error?.entitlementDenied
+          ? "unavailable"
+          : error?.validation?.errors.length
             ? "invalid"
             : "preview",
-        validation:
-          caught instanceof StructuredImportRequestError ? (caught.validation ?? null) : null,
-        diagnostic: caught instanceof StructuredImportRequestError ? caught.diagnostic : "",
+        validation: error?.validation ?? null,
+        diagnostic: error?.entitlementDenied ? "" : (error?.diagnostic ?? ""),
       });
     } finally {
       if (current(version)) request = null;
@@ -406,11 +412,11 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
       await openCreated();
     } catch (caught) {
       if (!current(version)) return;
+      const error = caught instanceof StructuredImportRequestError ? caught : undefined;
       const rejected =
-        caught instanceof StructuredImportRequestError &&
-        (caught.status === 402 ||
-          caught.code === "IMPORT_PREVIEW_STALE" ||
-          caught.code === "IMPORT_VALIDATION_FAILED");
+        error?.status === 402 ||
+        error?.code === "IMPORT_PREVIEW_STALE" ||
+        error?.code === "IMPORT_VALIDATION_FAILED";
       let recoveryReady: boolean = state.recoveryReady;
       if (rejected) {
         if (pendingIntent) {
@@ -433,18 +439,19 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
         ...state,
         phase: rejected ? "idle" : "retry",
         preview: rejected ? null : state.preview,
-        validation:
-          caught instanceof StructuredImportRequestError
-            ? (caught.validation ?? state.validation)
-            : state.validation,
-        feedback: !recoveryReady ? "recovery" : rejected ? "expired" : "creation",
+        validation: error?.validation ?? state.validation,
+        feedback: !recoveryReady
+          ? "recovery"
+          : error?.entitlementDenied
+            ? "unavailable"
+            : rejected
+              ? "expired"
+              : "creation",
         recoveryReady,
         recoveryFailed: !recoveryReady,
         recoveryCount: intents.length,
-        knownTargetUnavailable:
-          caught instanceof StructuredImportRequestError &&
-          caught.code === "IMPORT_TARGET_UNAVAILABLE",
-        diagnostic: caught instanceof StructuredImportRequestError ? caught.diagnostic : "",
+        knownTargetUnavailable: error?.code === "IMPORT_TARGET_UNAVAILABLE",
+        diagnostic: error?.entitlementDenied ? "" : (error?.diagnostic ?? ""),
       });
     } finally {
       if (current(version)) request = null;

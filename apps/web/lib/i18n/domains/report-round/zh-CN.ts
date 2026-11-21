@@ -88,8 +88,7 @@ const messages = {
   "reportRound.import.draftOnly": "仅草稿",
   "reportRound.import.description":
     "在保存任何内容之前都会验证导入。明确列出不受支持或不完整的内容以供审核。",
-  "reportRound.import.proRound": "Hosted Pro 中包含回合导入和导出。",
-  "reportRound.import.proLegacy": "Hosted Pro 中包含导入和检查点集导出。",
+  "reportRound.import.unavailable": "此工作区无法使用导入功能。",
   "reportRound.import.format": "导入格式",
   "reportRound.import.bulkPaste": "散装膏体",
   "reportRound.import.qtiPackage": "QTI 3 套餐",

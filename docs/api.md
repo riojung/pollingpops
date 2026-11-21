@@ -688,8 +688,11 @@ prefixes.
 The UI uses preview followed by confirmation. The retained legacy `POST /v1/quizzes/import`
 continues to validate and create in one action for existing clients; it does not provide the new
 confirmation retry guarantee. Source text and file contents are not stored in import receipts.
+Preview, legacy import, and new confirmations require the workspace's effective portability
+entitlement (`csvExport`). When that entitlement is disabled, these requests return
+`402 ENTITLEMENT_LIMIT` with a workspace availability message.
 Matching committed confirmation retries can recover an authorized retained draft after a writer
-feature or plan rollback; they do not authorize a fresh creation. Migration 115 must precede
+feature or entitlement rollback; they do not authorize a fresh creation. Migration 115 must precede
 deployment of the preview/confirmation workflow.
 
 ## Question Health APIs

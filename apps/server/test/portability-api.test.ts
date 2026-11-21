@@ -254,7 +254,7 @@ describe("checkpoint-set portability API", () => {
     const quizId = await createCheckpointSet(server, cookie);
     const headers = { cookie };
     const { creator } = (await server.inject({ url: "/v1/auth/me", headers })).json<{
-      creator: { workspaceId: string };
+      creator: { userId: string; workspaceId: string };
     }>();
     await repository.setPlan(creator.workspaceId, "pro");
     await createPlatformRepository(repository).saveFeaturePolicy({
@@ -284,9 +284,18 @@ describe("checkpoint-set portability API", () => {
       });
     }
 
+    const themePath = `/v1/account/theme?expectedWorkspaceId=${creator.workspaceId}`;
+    const availability = await server.inject({ url: themePath, headers });
+    expect(availability.statusCode).toBe(200);
+    expect(availability.json()).toMatchObject({
+      theme: null,
+      enabled: false,
+      unavailableReason: "operator_policy",
+    });
+
     const theme = await server.inject({
       method: "PUT",
-      url: "/v1/account/theme",
+      url: themePath,
       headers,
       payload: {
         organizationName: "Northern Learning",
@@ -295,11 +304,91 @@ describe("checkpoint-set portability API", () => {
       },
     });
     expect(theme.statusCode).toBe(402);
+    expect(theme.headers["cache-control"]).toBe("private, no-store");
     expect(theme.json()).toMatchObject({
       error: {
         code: "ENTITLEMENT_LIMIT",
         message: "Saving the live brand is unavailable for this workspace",
+        details: {
+          unavailableReason: "operator_policy",
+          actorId: creator.userId,
+          workspaceId: creator.workspaceId,
+        },
       },
+    });
+  });
+
+  it("explains the Free plan default and preserves branding management through policy changes", async () => {
+    const repository = new MemoryRepository();
+    const { app: server, cookie } = await authenticatedApp(false, repository);
+    const headers = { cookie };
+    const { creator } = (await server.inject({ url: "/v1/auth/me", headers })).json<{
+      creator: { userId: string; workspaceId: string; plan: string };
+    }>();
+    expect(creator.plan).toBe("free");
+    const url = `/v1/account/theme?expectedWorkspaceId=${creator.workspaceId}`;
+    const payload = {
+      organizationName: "Northern Learning",
+      primaryColor: "#0B2239",
+      accentColor: "#087375",
+    };
+
+    const defaultRead = await server.inject({ url, headers });
+    expect(defaultRead.statusCode).toBe(200);
+    expect(defaultRead.json()).toMatchObject({
+      theme: null,
+      enabled: false,
+      unavailableReason: "plan_limit",
+    });
+    const defaultDenied = await server.inject({
+      method: "PUT",
+      url: "/v1/account/theme",
+      headers,
+      payload,
+    });
+    expect(defaultDenied.statusCode).toBe(402);
+    expect(defaultDenied.headers["cache-control"]).toBe("private, no-store");
+    expect(defaultDenied.json()).toMatchObject({
+      error: {
+        code: "ENTITLEMENT_LIMIT",
+        details: {
+          unavailableReason: "plan_limit",
+          actorId: creator.userId,
+          workspaceId: creator.workspaceId,
+        },
+      },
+    });
+
+    const platform = createPlatformRepository(repository);
+    const grant = await platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { brandTheme: { enabled: true, plans: ["free"] } },
+    });
+    const granted = await server.inject({ url, headers });
+    expect(granted.statusCode).toBe(200);
+    expect(granted.json()).toMatchObject({ enabled: true, unavailableReason: null });
+    const saved = await server.inject({ method: "PUT", url, headers, payload });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.headers["cache-control"]).toBe("private, no-store");
+    expect(saved.json()).toMatchObject({ theme: payload });
+
+    await platform.saveFeaturePolicy({
+      expectedRevision: grant.revision,
+      features: { brandTheme: { enabled: true, plans: ["pro"] } },
+    });
+    const revoked = await server.inject({ url, headers });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json()).toMatchObject({
+      theme: payload,
+      enabled: false,
+      unavailableReason: "operator_policy",
+    });
+    const reset = await server.inject({ method: "DELETE", url, headers });
+    expect(reset.statusCode).toBe(204);
+    expect((await server.inject({ url, headers })).json()).toMatchObject({
+      theme: null,
+      enabled: false,
+      unavailableReason: "operator_policy",
     });
   });
 });

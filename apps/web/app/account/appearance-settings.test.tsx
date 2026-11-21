@@ -28,6 +28,11 @@ vi.mock("react", async (loadOriginal) => {
   const original = await loadOriginal<typeof ReactModule>();
   return {
     ...original,
+    useCallback: <T extends (...args: never[]) => unknown>(
+      callback: T,
+      dependencies: ReactModule.DependencyList,
+    ) => (hooks.capture ? callback : original.useCallback(callback, dependencies)),
+    useRef: <T,>(initial: T) => (hooks.capture ? { current: initial } : original.useRef(initial)),
     useState: <T,>(initial: T) => {
       if (!hooks.capture) return original.useState(initial);
       const index = hooks.cursor++;
@@ -299,6 +304,86 @@ describe("workspace live brand gallery", () => {
       expect(preventDefault).toHaveBeenCalledOnce();
     },
   );
+
+  it.each([
+    ["plan_limit", "brandSavePlanLimit"],
+    ["operator_policy", "brandSaveOperatorPolicy"],
+  ] as const)("announces %s while keeping previews and reset usable", (unavailableReason, key) => {
+    hooks.capture = true;
+    const copy = appearanceMessages("en-CA");
+    const onReset = vi.fn();
+    const onChange = vi.fn();
+    const nodes = elements(
+      WorkspaceBrandSettings({
+        theme: { ...brand, colorMode: "dark" },
+        savedTheme: brand,
+        canManage: true,
+        entitled: false,
+        unavailableReason,
+        busy: false,
+        onChange,
+        onSave: vi.fn(),
+        onReset,
+      }),
+    );
+    const notice = nodes.find(
+      (node) => node.props["aria-live"] === "polite" && content(node) === copy[key],
+    );
+    expect(notice).toBeDefined();
+    expect(content(nodes[0])).not.toContain(copy.brandSaveUnavailable);
+    expect(button(nodes, copy.save).props.disabled).toBe(true);
+    click(button(nodes, copy.remove));
+    expect(onReset).toHaveBeenCalledOnce();
+    click(nodes.find((node) => node.type === "button" && content(node).startsWith("Forest"))!);
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it("offers a separate permission check to managers after a live-brand save denial", () => {
+    hooks.capture = true;
+    const copy = appearanceMessages("en-CA");
+    const onRecheckAccess = vi.fn();
+    const props = {
+      theme: { ...brand, colorMode: "dark" as const },
+      savedTheme: brand,
+      canManage: true,
+      entitled: false,
+      busy: false,
+      onChange: vi.fn(),
+      onSave: vi.fn(),
+      onReset: vi.fn(),
+    };
+    const nodes = elements(WorkspaceBrandSettings({ ...props, onRecheckAccess }));
+    const recheck = button(nodes, copy.brandCheckSaveAccess);
+    expect(recheck.props.type).toBe("button");
+    expect(recheck.props.disabled).toBe(false);
+    click(recheck);
+    expect(onRecheckAccess).toHaveBeenCalledOnce();
+    expect(props.onSave).not.toHaveBeenCalled();
+
+    for (const access of [
+      {},
+      { canManage: false, onRecheckAccess },
+      { entitled: true, onRecheckAccess },
+    ]) {
+      expect(content(WorkspaceBrandSettings({ ...props, ...access }))).not.toContain(
+        copy.brandCheckSaveAccess,
+      );
+    }
+
+    const busy = elements(WorkspaceBrandSettings({ ...props, busy: true, onRecheckAccess }));
+    expect(button(busy, copy.brandCheckSaveAccess).props.disabled).toBe(true);
+
+    const checking = elements(
+      WorkspaceBrandSettings({ ...props, busy: true, checkingAccess: true, onRecheckAccess }),
+    );
+    const pending = button(checking, copy.brandCheckingSaveAccess);
+    expect(pending.props["aria-disabled"]).toBe(true);
+    expect(pending.props.disabled).toBe(false);
+    click(pending);
+    expect(onRecheckAccess).toHaveBeenCalledOnce();
+    expect(button(checking, copy.save).props.disabled).toBe(true);
+    expect(content(checking[0])).not.toContain(copy.saving);
+  });
 
   it("preserves both custom legacy colors on mode edits and requires both colors to match a palette", () => {
     const legacy = { organizationName: "Acme", primaryColor: "#183C31", accentColor: "#AC2855" };

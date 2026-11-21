@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import {
   BrandThemeSchema,
   colorContrastRatio,
   PRODUCT_BRAND,
   type BrandTheme,
+  type WorkspaceCapabilityUnavailableReason,
 } from "@openround/contracts";
 import { resolveExperienceTheme, workspaceThemePresets } from "@openround/experience";
 import { useLocale } from "../../components/locale-provider";
@@ -24,7 +32,11 @@ import {
   interfaceThemePresets,
   type InterfaceThemeId,
 } from "../../lib/interface-theme";
-import { appearanceMessages, type AppearanceMessages } from "../../lib/i18n/appearance-messages";
+import {
+  appearanceMessages,
+  brandSaveUnavailableMessage,
+  type AppearanceMessages,
+} from "../../lib/i18n/appearance-messages";
 import { experienceThemeStyle } from "../../lib/theme";
 import styles from "./appearance-settings.module.css";
 
@@ -453,22 +465,41 @@ export function WorkspaceBrandSettings({
   onChange,
   onSave,
   onReset,
+  onRecheckAccess,
   canManage,
   entitled,
+  unavailableReason,
   busy,
+  checkingAccess = false,
 }: {
   theme: BrandTheme;
   savedTheme: BrandTheme | null;
   onChange: (theme: BrandTheme) => void;
   onSave: (event: FormEvent) => void;
   onReset: () => void;
+  onRecheckAccess?: () => void;
   canManage: boolean;
   entitled: boolean;
+  unavailableReason?: WorkspaceCapabilityUnavailableReason;
   busy: boolean;
+  checkingAccess?: boolean;
 }) {
   const { locale } = useLocale();
   const copy = appearanceMessages(locale);
   const [inspection, setInspection] = useState<InspectionMode>("compare");
+  const brandHeading = useRef<HTMLHeadingElement>(null);
+  // A successful check removes the focused button. Move to the section heading if focus fell back to the page.
+  const recheckButtonRef = useCallback((button: HTMLButtonElement | null) => {
+    if (!button) return;
+    return () => {
+      if (document.activeElement !== button) return;
+      queueMicrotask(() => {
+        if (document.activeElement === document.body) {
+          brandHeading.current?.focus({ preventScroll: true });
+        }
+      });
+    };
+  }, []);
   const selectedPreset = selectedWorkspacePreset(theme);
   const modes = inspection === "compare" ? (["light", "dark"] as const) : [inspection];
   const canSave = canManage && entitled;
@@ -492,15 +523,35 @@ export function WorkspaceBrandSettings({
           02
         </span>
         <div>
-          <h2 id="workspace-appearance-title">{copy.brandTitle}</h2>
+          <h2 id="workspace-appearance-title" ref={brandHeading} tabIndex={-1}>
+            {copy.brandTitle}
+          </h2>
           <p>{copy.brandHelp}</p>
         </div>
       </div>
-      {!entitled ? (
-        <p className={styles.accessNote}>{copy.brandSaveUnavailable}</p>
-      ) : !canManage ? (
-        <p className={styles.accessNote}>{copy.readOnly}</p>
-      ) : null}
+      <div className={canSave ? undefined : `${styles.accessNote} button-row`}>
+        <div aria-live="polite">
+          {!entitled
+            ? brandSaveUnavailableMessage(copy, unavailableReason)
+            : !canManage
+              ? copy.readOnly
+              : null}
+        </div>
+        {!entitled && canManage && onRecheckAccess ? (
+          <button
+            aria-disabled={checkingAccess || undefined}
+            className="button-quiet"
+            disabled={busy && !checkingAccess}
+            onClick={() => {
+              if (!busy && !checkingAccess) onRecheckAccess();
+            }}
+            ref={recheckButtonRef}
+            type="button"
+          >
+            {checkingAccess ? copy.brandCheckingSaveAccess : copy.brandCheckSaveAccess}
+          </button>
+        ) : null}
+      </div>
       <form
         onSubmit={(event) => {
           if (!canSave || busy || !dirty || !theme.colorMode || !validBrand) {
@@ -649,7 +700,7 @@ export function WorkspaceBrandSettings({
               disabled={!canSave || busy || !dirty || !theme.colorMode || !validBrand}
               type="submit"
             >
-              {busy ? copy.saving : copy.save}
+              {busy && !checkingAccess ? copy.saving : copy.save}
             </button>
             {savedTheme && dirty ? (
               <button

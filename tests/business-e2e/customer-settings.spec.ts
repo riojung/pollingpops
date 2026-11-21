@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type Response, type TestInfo } from "@playwright/test";
 import { idleSessionCopy } from "../../apps/web/lib/i18n/idle-session-messages";
 import { signInCreator } from "../support/creator-auth";
 import { testEmail } from "../e2e/test-email";
 
 const api = "http://127.0.0.1:4300";
+const brandPolicyNotice =
+  "You can preview themes. Saving a live brand is unavailable under this deployment’s feature policy.";
 const categories = [
   "Overview",
   "People",
@@ -65,6 +67,12 @@ test("personal Free settings provide named workspaces and accessible, selectable
   expect(account.entitlements.plan).toBe("free");
   expect(account.entitlements.csvExport).toBe(false);
   expect(account.entitlements.brandTheme).toBe(false);
+  const themeAccess = await page.request.get(`${api}/v1/account/theme`);
+  expect(themeAccess.ok()).toBe(true);
+  expect(await themeAccess.json()).toMatchObject({
+    enabled: false,
+    unavailableReason: "plan_limit",
+  });
   const brandingWrites: string[] = [];
   page.on("request", (request) => {
     if (request.method() !== "GET" && new URL(request.url()).pathname === "/v1/account/theme")
@@ -149,7 +157,7 @@ test("personal Free settings provide named workspaces and accessible, selectable
   const personalAppearance = page.getByRole("region", { name: "Your interface", exact: true });
   const brandAppearance = page.getByRole("region", { name: "Workspace live brand", exact: true });
   await expect(brandAppearance).toContainText(
-    "You can preview themes. Saving a live brand is unavailable in this workspace.",
+    "You can preview themes. This workspace’s plan does not include live-brand saving.",
   );
   for (const name of ["Candy Pop", "Ocean", "Forest"]) {
     const label = new RegExp(`^${name}\\b`);
@@ -167,9 +175,11 @@ test("personal Free settings provide named workspaces and accessible, selectable
     .getByRole("group", { name: "Live appearance", exact: true })
     .getByRole("button", { name: "Light", exact: true })
     .click();
-  await expect(
-    brandAppearance.getByRole("button", { name: "Save workspace brand", exact: true }),
-  ).toBeDisabled();
+  const saveBrand = brandAppearance.getByRole("button", {
+    name: "Save workspace brand",
+    exact: true,
+  });
+  await expect(saveBrand).toBeDisabled();
   const advanced = brandAppearance
     .locator("details")
     .filter({ has: page.getByText("Custom colors", { exact: true }) });
@@ -180,6 +190,36 @@ test("personal Free settings provide named workspaces and accessible, selectable
   await expect(primaryColor).toBeVisible();
   await expect(primaryColor).toBeEnabled();
   await brandAppearance.getByText("Custom colors", { exact: true }).click();
+
+  // The theme read can see a newer policy than the account snapshot.
+  const brandAccessRead = (url: URL) =>
+    url.origin === api && ["/v1/auth/me", "/v1/account/theme"].includes(url.pathname);
+  await page.route(brandAccessRead, async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json:
+        new URL(route.request().url()).pathname === "/v1/auth/me"
+          ? { ...body, entitlements: { ...body.entitlements, brandTheme: true } }
+          : { ...body, enabled: false, unavailableReason: "operator_policy" },
+    });
+  });
+  try {
+    await page.reload();
+    await expect(brandAppearance).toContainText(brandPolicyNotice);
+    const forest = brandAppearance.getByRole("button", { name: /^Forest\b/ });
+    await forest.click();
+    await expect(forest).toHaveAttribute("aria-pressed", "true");
+    await brandAppearance
+      .getByRole("group", { name: "Live appearance", exact: true })
+      .getByRole("button", { name: "Light", exact: true })
+      .click();
+    await expect(saveBrand).toBeDisabled();
+  } finally {
+    await page.unroute(brandAccessRead);
+  }
   expect(brandingWrites).toEqual([]);
 
   await selectCategory(page, "Security and integrations");
@@ -370,27 +410,118 @@ test("licensed organization users have usable presets and role-aware settings in
   // authenticated account state before exercising the visible plan controls.
   await owner.reload();
   await selectCategory(owner, "Appearance");
-  await expect(owner.getByRole("button", { name: "Ocean", exact: true })).toBeEnabled();
-  await expect(owner.getByRole("textbox", { name: "Brand display name", exact: true })).toHaveValue(
-    "Settings Company",
-  );
-  await owner.getByRole("button", { name: "Ocean", exact: true }).click();
-  await expect(owner.getByRole("button", { name: "Ocean", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const brandAppearance = owner.getByRole("region", { name: "Workspace live brand", exact: true });
+  const ocean = brandAppearance.getByRole("button", { name: /^Ocean\b/ });
+  const brandName = brandAppearance.getByRole("textbox", {
+    name: "Brand display name",
+    exact: true,
+  });
+  const saveBrand = brandAppearance.getByRole("button", {
+    name: "Save workspace brand",
+    exact: true,
+  });
+  await expect(brandName).toHaveValue("Settings Company");
+  await ocean.click();
+  await expect(ocean).toHaveAttribute("aria-pressed", "true");
   await expect(owner.getByLabel(/^Background colour/)).toBeHidden();
-  const savedTheme = owner.waitForResponse(
-    (result) =>
-      result.request().method() === "PUT" && new URL(result.url()).pathname === "/v1/account/theme",
+
+  const { userId: actorId, workspaceId } = setup.creator;
+  const scopedTheme = (url: URL) =>
+    url.origin === api &&
+    url.pathname === "/v1/account/theme" &&
+    url.searchParams.get("expectedWorkspaceId") === workspaceId;
+  const themeSave = (result: Response) =>
+    result.request().method() === "PUT" && scopedTheme(new URL(result.url()));
+  let themeWrites = 0;
+  owner.on("request", (request) => {
+    if (request.method() === "PUT" && new URL(request.url()).pathname === "/v1/account/theme") {
+      themeWrites++;
+    }
+  });
+  const draftName = "Unpublished live brand";
+  await brandName.fill(draftName);
+  let releaseDenial!: () => void;
+  const denialGate = new Promise<void>((resolve) => {
+    releaseDenial = resolve;
+  });
+  await owner.route(scopedTheme, async (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    await denialGate;
+    return route.fulfill({
+      status: 402,
+      headers: {
+        "access-control-allow-origin": new URL(owner.url()).origin,
+        "access-control-allow-credentials": "true",
+      },
+      json: {
+        error: {
+          code: "ENTITLEMENT_LIMIT",
+          message: "Saving the live brand is unavailable for this workspace",
+          details: { unavailableReason: "operator_policy", actorId, workspaceId },
+        },
+      },
+    });
+  });
+  try {
+    const denied = owner.waitForResponse(themeSave);
+    await saveBrand.click();
+    await expect(
+      brandAppearance.getByRole("button", { name: "Saving…", exact: true }),
+    ).toBeDisabled();
+    await selectCategory(owner, "Overview");
+    const offTabNotice = owner
+      .getByRole("tabpanel")
+      .locator('[aria-live="polite"]')
+      .getByText(brandPolicyNotice, { exact: true });
+    await expect(offTabNotice).toHaveCount(0);
+    releaseDenial();
+    expect((await denied).status()).toBe(402);
+    await expect(offTabNotice).toBeVisible();
+    await selectCategory(owner, "Appearance");
+    await expect(brandAppearance).toContainText(brandPolicyNotice);
+    await expect(saveBrand).toBeDisabled();
+    await expect(brandName).toHaveValue(draftName);
+    await expect(brandAppearance.locator("[data-preview-mode]").first()).toContainText(draftName);
+    await expect(ocean).toBeEnabled();
+    await selectCategory(owner, "Overview");
+    await expect(offTabNotice).toHaveCount(0);
+    await selectCategory(owner, "Appearance");
+    await expect(brandAppearance).toContainText(brandPolicyNotice);
+  } finally {
+    releaseDenial();
+    await owner.unroute(scopedTheme);
+  }
+
+  const checkedAccess = owner.waitForResponse(
+    (result) => result.request().method() === "GET" && scopedTheme(new URL(result.url())),
   );
-  await owner.getByRole("button", { name: "Save theme", exact: true }).click();
-  expect((await savedTheme).status()).toBe(200);
-  expect((await (await owner.request.get(`${api}/v1/account/theme`)).json()).theme).toMatchObject({
-    organizationName: "Settings Company",
+  await brandAppearance.getByRole("button", { name: "Check save access", exact: true }).click();
+  const access = await checkedAccess;
+  expect(access.status()).toBe(200);
+  expect(await access.json()).toMatchObject({ enabled: true, unavailableReason: null });
+  await expect(brandAppearance).not.toContainText(brandPolicyNotice);
+  await expect(
+    brandAppearance.getByRole("heading", { name: "Workspace live brand" }),
+  ).toBeFocused();
+  await expect(saveBrand).toBeEnabled();
+  await expect(brandName).toHaveValue(draftName);
+  await expect(ocean).toHaveAttribute("aria-pressed", "true");
+  await expect(brandAppearance.locator("[data-preview-mode]").first()).toContainText(draftName);
+  expect(themeWrites).toBe(1);
+
+  const expectedTheme = {
+    organizationName: draftName,
     primaryColor: "#17334A",
     accentColor: "#006B80",
-  });
+  };
+  const savedTheme = owner.waitForResponse(themeSave);
+  await saveBrand.click();
+  const saved = await savedTheme;
+  expect(saved.status()).toBe(200);
+  expect(saved.request().postDataJSON()).toMatchObject(expectedTheme);
+  expect((await (await owner.request.get(`${api}/v1/account/theme`)).json()).theme).toMatchObject(
+    expectedTheme,
+  );
   await setAppearance(owner, "Light");
   await expectAccessibleSettings(owner);
   await capture(owner, testInfo, "organization-appearance-desktop-light");
@@ -465,7 +596,11 @@ test("licensed organization users have usable presets and role-aware settings in
       0,
     );
     await selectCategory(member, "Appearance");
-    await expect(member.getByRole("button", { name: "Forest", exact: true })).toBeEnabled();
+    await expect(
+      member
+        .getByRole("region", { name: "Workspace live brand", exact: true })
+        .getByRole("button", { name: /^Forest\b/ }),
+    ).toBeEnabled();
     await expect(
       member.getByRole("textbox", { name: "Brand display name", exact: true }),
     ).toHaveValue("Settings Company");

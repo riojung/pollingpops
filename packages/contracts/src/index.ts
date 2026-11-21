@@ -1,4 +1,7 @@
-import { ProductFeatureKeySchema } from "./feature-policy";
+import {
+  ProductFeatureKeySchema,
+  WorkspaceCapabilityUnavailableReasonSchema,
+} from "./feature-policy";
 import {
   PresentationSpatialLayoutSchema,
   PresentationSpatialSnapshotSchema,
@@ -1675,7 +1678,8 @@ export const OpenRoundCheckpointSetExportSchema = z.union([
 ]);
 export type OpenRoundCheckpointSetExport = z.infer<typeof OpenRoundCheckpointSetExportSchema>;
 
-export const CheckpointSetImportUnavailableReasonSchema = z.enum(["plan_limit", "operator_policy"]);
+export const CheckpointSetImportUnavailableReasonSchema =
+  WorkspaceCapabilityUnavailableReasonSchema;
 export type CheckpointSetImportUnavailableReason = z.infer<
   typeof CheckpointSetImportUnavailableReasonSchema
 >;

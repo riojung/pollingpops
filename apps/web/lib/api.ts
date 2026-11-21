@@ -45,6 +45,7 @@ export class ApiClientError extends Error {
     public readonly code = "INTERNAL_ERROR",
     public readonly status = 500,
     public readonly retryAfterSeconds?: number,
+    public readonly details?: Readonly<Record<string, unknown>>,
   ) {
     super(message);
   }
@@ -81,9 +82,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         code?: string;
         message?: string;
         retryAfterSeconds?: unknown;
-        details?: { retryAfterSeconds?: unknown };
+        details?: unknown;
       };
     } | null;
+    const rawDetails = body?.error?.details;
+    const details =
+      rawDetails && typeof rawDetails === "object" && !Array.isArray(rawDetails)
+        ? (rawDetails as Readonly<Record<string, unknown>>)
+        : undefined;
     if (
       response.status === 401 &&
       body?.error?.code === "SESSION_EXPIRED" &&
@@ -96,9 +102,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       body?.error?.code,
       response.status,
       retryDelaySeconds(
-        body?.error?.details?.retryAfterSeconds ?? body?.error?.retryAfterSeconds,
+        details?.retryAfterSeconds ?? body?.error?.retryAfterSeconds,
         response.headers?.get("retry-after"),
       ),
+      details,
     );
   }
   const loggedOut = path === "/v1/auth/logout" && init.method?.toUpperCase() === "POST";

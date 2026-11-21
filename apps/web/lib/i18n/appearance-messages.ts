@@ -1,4 +1,4 @@
-import type { SupportedLocale } from "@openround/contracts";
+import type { SupportedLocale, WorkspaceCapabilityUnavailableReason } from "@openround/contracts";
 
 export const appearanceEnglishMessages = {
   openGallery: "Explore themes",
@@ -37,6 +37,13 @@ export const appearanceEnglishMessages = {
   readOnly: "You can explore this preview. A workspace manager can save the live brand.",
   brandSaveUnavailable:
     "You can preview themes. Saving a live brand is unavailable in this workspace.",
+  brandSavePlanLimit:
+    "You can preview themes. This workspace’s plan does not include live-brand saving.",
+  brandSaveOperatorPolicy:
+    "You can preview themes. Saving a live brand is unavailable under this deployment’s feature policy.",
+  brandCheckSaveAccess: "Check save access",
+  brandCheckingSaveAccess: "Checking save access…",
+  brandSaveAccessRestored: "You can save the live brand for this workspace.",
   legacyHelp:
     "Your existing custom colors are preserved. Choose a light or dark appearance for your next save.",
   contrastHelp: "Choose colors with clear contrast. Saved brand colors must support readable text.",
@@ -122,6 +129,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
       "Vous pouvez explorer cet aperçu. Un gestionnaire peut enregistrer l’identité visuelle.",
     brandSaveUnavailable:
       "Vous pouvez essayer les thèmes. L’enregistrement de l’identité visuelle est indisponible dans cet espace.",
+    brandSavePlanLimit:
+      "Vous pouvez essayer les thèmes. Le forfait de cet espace n’inclut pas l’enregistrement de l’identité visuelle.",
+    brandSaveOperatorPolicy:
+      "Vous pouvez essayer les thèmes. La politique de ce déploiement ne permet pas d’enregistrer l’identité visuelle.",
+    brandCheckSaveAccess: "Vérifier le droit d’enregistrer",
+    brandCheckingSaveAccess: "Vérification du droit d’enregistrer…",
+    brandSaveAccessRestored: "Vous pouvez enregistrer l’identité visuelle de cet espace.",
     legacyHelp:
       "Vos couleurs personnalisées sont conservées. Choisissez une apparence claire ou sombre avant le prochain enregistrement.",
     contrastHelp:
@@ -202,6 +216,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     readOnly: "Du kannst die Vorschau erkunden. Die Verwaltung kann das Live-Branding speichern.",
     brandSaveUnavailable:
       "Du kannst die Themes ausprobieren. Das Live-Branding kann in diesem Arbeitsbereich nicht gespeichert werden.",
+    brandSavePlanLimit:
+      "Du kannst die Themes ausprobieren. Der Tarif dieses Arbeitsbereichs umfasst das Speichern des Live-Brandings nicht.",
+    brandSaveOperatorPolicy:
+      "Du kannst die Themes ausprobieren. Die Funktionsrichtlinie dieser Bereitstellung erlaubt das Speichern des Live-Brandings nicht.",
+    brandCheckSaveAccess: "Speicherberechtigung prüfen",
+    brandCheckingSaveAccess: "Speicherberechtigung wird geprüft…",
+    brandSaveAccessRestored: "Du kannst das Live-Branding für diesen Arbeitsbereich speichern.",
     legacyHelp:
       "Deine bisherigen Farben bleiben erhalten. Wähle beim nächsten Speichern eine helle oder dunkle Darstellung.",
     contrastHelp:
@@ -280,6 +301,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "Usar marca predeterminada",
     readOnly: "Puedes explorar esta vista previa. Un gestor puede guardar la marca del espacio.",
     brandSaveUnavailable: "Puedes probar los temas. En este espacio no se puede guardar la marca.",
+    brandSavePlanLimit:
+      "Puedes probar los temas. El plan de este espacio no incluye guardar la marca.",
+    brandSaveOperatorPolicy:
+      "Puedes probar los temas. La política de funciones de este despliegue no permite guardar la marca.",
+    brandCheckSaveAccess: "Comprobar el permiso para guardar",
+    brandCheckingSaveAccess: "Comprobando el permiso para guardar…",
+    brandSaveAccessRestored: "Puedes guardar la marca de este espacio.",
     legacyHelp:
       "Se conservan tus colores personalizados. Elige una apariencia clara u oscura antes de volver a guardar.",
     contrastHelp:
@@ -359,6 +387,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "Usa il brand predefinito",
     readOnly: "Puoi esplorare questa anteprima. Un gestore può salvare il brand dello spazio.",
     brandSaveUnavailable: "Puoi provare i temi. In questo spazio non è possibile salvare il brand.",
+    brandSavePlanLimit:
+      "Puoi provare i temi. Il piano di questo spazio non consente di salvare il brand.",
+    brandSaveOperatorPolicy:
+      "Puoi provare i temi. I criteri sulle funzionalità di questa distribuzione non consentono di salvare il brand.",
+    brandCheckSaveAccess: "Verifica il permesso di salvataggio",
+    brandCheckingSaveAccess: "Verifica del permesso di salvataggio in corso…",
+    brandSaveAccessRestored: "Puoi salvare il brand di questo spazio.",
     legacyHelp:
       "I tuoi colori personalizzati sono conservati. Scegli un aspetto chiaro o scuro al prossimo salvataggio.",
     contrastHelp:
@@ -438,6 +473,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     readOnly: "Pode explorar esta pré-visualização. Um gestor pode guardar a marca do espaço.",
     brandSaveUnavailable:
       "Pode experimentar os temas. Neste espaço, não é possível guardar a marca.",
+    brandSavePlanLimit:
+      "Pode experimentar os temas. O plano deste espaço não inclui a opção de guardar a marca.",
+    brandSaveOperatorPolicy:
+      "Pode experimentar os temas. A política de funcionalidades desta implementação não permite guardar a marca.",
+    brandCheckSaveAccess: "Verificar a permissão para guardar",
+    brandCheckingSaveAccess: "A verificar a permissão para guardar…",
+    brandSaveAccessRestored: "Pode guardar a marca deste espaço.",
     legacyHelp:
       "As suas cores personalizadas são preservadas. Escolha uma aparência clara ou escura na próxima gravação.",
     contrastHelp:
@@ -517,6 +559,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     readOnly: "プレビューを試せます。ライブブランドの保存はワークスペース管理者が行えます。",
     brandSaveUnavailable:
       "テーマはプレビューできます。このワークスペースではライブブランドを保存できません。",
+    brandSavePlanLimit:
+      "テーマはプレビューできます。このワークスペースのプランにはライブブランドの保存機能が含まれていません。",
+    brandSaveOperatorPolicy:
+      "テーマはプレビューできます。この導入環境の機能ポリシーにより、ライブブランドを保存できません。",
+    brandCheckSaveAccess: "保存権限を確認",
+    brandCheckingSaveAccess: "保存権限を確認中…",
+    brandSaveAccessRestored: "このワークスペースのライブブランドを保存できます。",
     legacyHelp:
       "既存のカスタムカラーは維持されます。次に保存するときにライトまたはダークを選んでください。",
     contrastHelp:
@@ -598,6 +647,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
       "미리보기를 자유롭게 살펴볼 수 있습니다. 라이브 브랜드 저장은 워크스페이스 관리자가 할 수 있습니다.",
     brandSaveUnavailable:
       "테마를 미리 볼 수 있습니다. 이 워크스페이스에서는 라이브 브랜드를 저장할 수 없습니다.",
+    brandSavePlanLimit:
+      "테마를 미리 볼 수 있습니다. 이 워크스페이스의 요금제에는 라이브 브랜드 저장 기능이 포함되어 있지 않습니다.",
+    brandSaveOperatorPolicy:
+      "테마를 미리 볼 수 있습니다. 이 배포 환경의 기능 정책에 따라 라이브 브랜드를 저장할 수 없습니다.",
+    brandCheckSaveAccess: "저장 권한 확인",
+    brandCheckingSaveAccess: "저장 권한 확인 중…",
+    brandSaveAccessRestored: "이 워크스페이스의 라이브 브랜드를 저장할 수 있습니다.",
     legacyHelp:
       "기존 사용자 지정 색상은 유지됩니다. 다음에 저장할 때 라이트 또는 다크 모드를 선택하세요.",
     contrastHelp:
@@ -674,6 +730,11 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "使用默认直播品牌",
     readOnly: "你可以自由预览。工作区管理员可以保存直播品牌。",
     brandSaveUnavailable: "你可以预览主题。此工作区无法保存直播品牌。",
+    brandSavePlanLimit: "你可以预览主题。此工作区的套餐不包含保存直播品牌的功能。",
+    brandSaveOperatorPolicy: "你可以预览主题。此部署环境的功能策略不允许保存直播品牌。",
+    brandCheckSaveAccess: "检查保存权限",
+    brandCheckingSaveAccess: "正在检查保存权限…",
+    brandSaveAccessRestored: "你可以保存此工作区的直播品牌。",
     legacyHelp: "现有的自定义颜色会保留。下次保存时请选择浅色或深色外观。",
     contrastHelp: "请选择对比清晰的颜色。保存的品牌颜色必须确保文字可读。",
     custom: "自定义配色",
@@ -748,6 +809,11 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
     remove: "使用預設即時品牌",
     readOnly: "你可以自由預覽。工作區管理員可以儲存即時品牌。",
     brandSaveUnavailable: "你可以預覽主題。這個工作區無法儲存即時品牌。",
+    brandSavePlanLimit: "你可以預覽主題。這個工作區的方案不包含儲存即時品牌的功能。",
+    brandSaveOperatorPolicy: "你可以預覽主題。此部署環境的功能政策不允許儲存即時品牌。",
+    brandCheckSaveAccess: "檢查儲存權限",
+    brandCheckingSaveAccess: "正在檢查儲存權限…",
+    brandSaveAccessRestored: "你可以儲存這個工作區的即時品牌。",
     legacyHelp: "現有的自訂色彩會保留。下次儲存時請選擇淺色或深色外觀。",
     contrastHelp: "請選擇對比清晰的色彩。儲存的品牌色彩必須確保文字可讀。",
     custom: "自訂配色",
@@ -792,4 +858,13 @@ const translations: Record<SupportedLocale, AppearanceMessages> = {
 
 export function appearanceMessages(locale: SupportedLocale): AppearanceMessages {
   return translations[locale] ?? appearanceEnglishMessages;
+}
+
+export function brandSaveUnavailableMessage(
+  copy: AppearanceMessages,
+  reason?: WorkspaceCapabilityUnavailableReason,
+) {
+  if (reason === "plan_limit") return copy.brandSavePlanLimit;
+  if (reason === "operator_policy") return copy.brandSaveOperatorPolicy;
+  return copy.brandSaveUnavailable;
 }

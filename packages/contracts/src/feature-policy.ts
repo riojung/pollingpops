@@ -41,6 +41,10 @@ export const productFeatureKeys = [
 ] as const;
 export const ProductFeatureKeySchema = z.enum(productFeatureKeys);
 export type ProductFeatureKey = z.infer<typeof ProductFeatureKeySchema>;
+export const WorkspaceCapabilityUnavailableReasonSchema = z.enum(["plan_limit", "operator_policy"]);
+export type WorkspaceCapabilityUnavailableReason = z.infer<
+  typeof WorkspaceCapabilityUnavailableReasonSchema
+>;
 export const ProductFeatureRuleSchema = z
   .object({
     enabled: z.boolean(),

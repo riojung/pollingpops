@@ -669,6 +669,10 @@ describe("customer account ownership and workspace setup", () => {
       const legacy = await f.app.inject({ url: path, headers });
       expect(scoped.statusCode, scoped.body).toBe(200);
       expect(legacy.statusCode, legacy.body).toBe(200);
+      if (path === "/v1/account/theme") {
+        expect(scoped.headers["cache-control"]).toBe("private, no-store");
+        expect(legacy.headers["cache-control"]).toBe("private, no-store");
+      }
       expect(scoped.json()).toEqual(legacy.json());
     }
   });
@@ -704,6 +708,11 @@ describe("customer account ownership and workspace setup", () => {
       { method: "GET", url: "/v1/workspace/lti-registrations" },
       { method: "PATCH", url: "/v1/workspace/settings", payload: { name: "Editor rename" } },
       { method: "PUT", url: "/v1/account/embed-origins", payload: { origins: [] } },
+      {
+        method: "PUT",
+        url: "/v1/account/theme",
+        payload: { organizationName: "Workshop", primaryColor: "#39243C", accentColor: "#AC2855" },
+      },
     ] as const) {
       const stale = await f.app.inject({
         ...request,

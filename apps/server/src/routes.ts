@@ -126,10 +126,7 @@ import type { MetricsService } from "./metrics.js";
 import { reportCsv } from "./reporting.js";
 import type { StorageService } from "./storage.js";
 import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
-import {
-  workspaceEntitlements,
-  workspaceEntitlementsWithImportAvailability,
-} from "./entitlements.js";
+import { workspaceEntitlements, workspaceEntitlementsWithAvailability } from "./entitlements.js";
 import {
   publicProductFeatureEnabled,
   workspaceProductFeatures as resolveWorkspaceProductFeatures,
@@ -318,8 +315,9 @@ function apiError(
   code: string,
   message: string,
   requestId: string,
+  details?: Record<string, unknown>,
 ) {
-  return reply.code(status).send({ error: { code, message, requestId } });
+  return reply.code(status).send({ error: { code, message, requestId, details } });
 }
 
 function draftEtag(revision: number | undefined) {
@@ -1122,12 +1120,13 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     reply.header("cache-control", "private, no-store");
-    const { entitlements, checkpointSetImportUnavailableReason } =
-      await workspaceEntitlementsWithImportAvailability(
+    const { entitlements, unavailableReason: checkpointSetImportUnavailableReason } =
+      await workspaceEntitlementsWithAvailability(
         repository,
         config,
         creator.workspaceId,
         creator.plan,
+        "csvExport",
       );
     return {
       creator,
@@ -1651,29 +1650,34 @@ export async function registerRoutes(
   app.get("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    reply.header("cache-control", "private, no-store");
     requireExpectedWorkspace(request.query, creator.workspaceId);
-    const entitlements = await workspaceEntitlements(
+    const { entitlements, unavailableReason } = await workspaceEntitlementsWithAvailability(
       repository,
       config,
       creator.workspaceId,
       creator.plan,
+      "brandTheme",
     );
     return {
       theme: await repository.getBrandTheme(creator.workspaceId),
       enabled: entitlements.brandTheme,
+      unavailableReason,
     };
   });
 
   app.put("/v1/account/theme", async (request, reply) => {
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    reply.header("cache-control", "private, no-store");
     requireExpectedWorkspace(request.query, creator.workspaceId);
     if ((await requireWorkspaceManagement(creator, reply, request.id)) !== true) return;
-    const entitlements = await workspaceEntitlements(
+    const { entitlements, unavailableReason } = await workspaceEntitlementsWithAvailability(
       repository,
       config,
       creator.workspaceId,
       creator.plan,
+      "brandTheme",
     );
     if (!entitlements.brandTheme) {
       return apiError(
@@ -1682,6 +1686,7 @@ export async function registerRoutes(
         "ENTITLEMENT_LIMIT",
         "Saving the live brand is unavailable for this workspace",
         request.id,
+        { unavailableReason, actorId: creator.userId, workspaceId: creator.workspaceId },
       );
     }
     const input = BrandThemeSchema.parse(request.body);

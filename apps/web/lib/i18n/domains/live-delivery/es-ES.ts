@@ -363,6 +363,10 @@ const messages = {
     "Las diapositivas de contenido y las preguntas interactivas se ejecutarán en su orden autorizado. Los participantes se unen sin cuentas del espacio de trabajo, y sólo las respuestas a preguntas se convierten en pruebas de aprendizaje.",
   "live.presentationHost.creationPaused":
     "El inicio de nuevas sesiones de presentación en directo está pausado para este espacio de trabajo. El contenido publicado y las sesiones existentes siguen disponibles.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "La configuración de disponibilidad de este despliegue no permite iniciar nuevas sesiones de presentación en directo.",
+  "live.presentationHost.creationOperatorPolicy":
+    "La política de funciones de este despliegue no permite iniciar esta presentación en directo.",
   "live.presentationHost.history": "Historia del período de sesiones",
   "live.presentationHost.interactiveQuestions": "Cuestiones interactivas",
   "live.presentationHost.live": "Presentación en vivo",

@@ -161,6 +161,7 @@ describe("live event credit integration", () => {
         productFeatures: {
           presentations: true,
           presentationRealtime: false,
+          presentationRealtimeUnavailableReason: "operator_policy",
           liveFlexMode: false,
           roundExperiences: false,
           audiencePulse: true,
@@ -189,6 +190,9 @@ describe("live event credit integration", () => {
       expect(
         WorkspaceProductFeaturesSchema.safeParse(funded.json().eventProductFeatures).success,
       ).toBe(true);
+      expect(funded.json().eventProductFeatures).not.toHaveProperty(
+        "presentationRealtimeUnavailableReason",
+      );
       expect(await f.repository.getPlan(f.creator.workspaceId)).toBe("free");
       await f.repository.updateOperationalFeatures({ roundExperiences: false }, randomUUID());
       expect((await preview()).json().eventProductFeatures).toMatchObject({
@@ -202,7 +206,10 @@ describe("live event credit integration", () => {
           presentationRealtime: { enabled: false, plans: [] },
         },
       });
-      expect((await preview()).json().eventProductFeatures.presentationRealtime).toBe(false);
+      expect((await preview()).json().eventProductFeatures).toMatchObject({
+        presentationRealtime: false,
+        presentationRealtimeUnavailableReason: "operator_policy",
+      });
     } finally {
       await built.app.close();
     }

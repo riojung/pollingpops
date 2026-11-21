@@ -354,6 +354,10 @@ const liveDeliveryEnglishMessages = {
     "Content slides and interactive questions will run in their authored order. Participants join without workspace accounts, and only question responses become learning evidence.",
   "live.presentationHost.creationPaused":
     "Starting new live Presentation sessions is paused for this workspace. Published content and existing sessions remain available.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "New live Presentation sessions are unavailable under this deployment’s rollout settings.",
+  "live.presentationHost.creationOperatorPolicy":
+    "The deployment’s feature policy does not allow this live Presentation launch.",
   "live.presentationHost.history": "Session history",
   "live.presentationHost.interactiveQuestions": "Interactive questions",
   "live.presentationHost.live": "Live Presentation",

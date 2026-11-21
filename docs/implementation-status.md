@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Live Presentation launch availability reasons
+
+Implemented locally on `codex/presentation-launch-availability-reasons` after PR #301. Live
+Presentation setup explains whether deployment rollout settings or explicit feature policy
+blocks a launch under the selected funding option. The current workspace and event credit reads
+provide the respective decisions. Both messages are localized in all ten catalogs. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Retained Round report export availability reasons
 
-Implemented locally on `codex/round-report-export-availability` from merged PR #300. Manage data
+Merged through PR #301 at `77232f8`. Manage data
 and Conversation explain export restrictions using the applicable saved room coverage or current
 workspace decision. The report and transcript download routes resolve the same grant. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -191,8 +199,9 @@ See the [conditional-page decisions](survey-branching.md) and
 
 WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296. Checkpoint-set import
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
-and workspace CSV export reasons in PR #300. Retained Round report export reasons are implemented
-locally. Other capability explanations remain pending.
+and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
+PR #301. Live Presentation launch availability reasons are implemented locally. Other capability
+explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

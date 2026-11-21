@@ -362,6 +362,10 @@ const messages = {
     "Le slide dei contenuti e le domande interattive verranno eseguite nel loro ordine autorizzato. I partecipanti si uniscono senza account workspace, e solo le risposte alle domande diventano prove di apprendimento.",
   "live.presentationHost.creationPaused":
     "L'avvio di nuove sessioni di presentazione dal vivo è sospeso per questo spazio di lavoro. I contenuti pubblicati e le sessioni esistenti restano disponibili.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "Le impostazioni di rilascio di questa distribuzione non consentono di avviare nuove sessioni di presentazione dal vivo.",
+  "live.presentationHost.creationOperatorPolicy":
+    "I criteri sulle funzionalità di questa distribuzione non consentono di avviare questa presentazione dal vivo.",
   "live.presentationHost.history": "Storia della sessione",
   "live.presentationHost.interactiveQuestions": "Domande interattive",
   "live.presentationHost.live": "Presentazione dal vivo",

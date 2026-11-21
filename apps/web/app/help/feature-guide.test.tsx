@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkspaceProductFeatures } from "@openround/contracts";
 import { findHelpGuide } from "../../lib/help-feature-guides";
 
 const fixtures = vi.hoisted(() => ({
@@ -21,7 +20,7 @@ const fixtures = vi.hoisted(() => ({
     recoveryPacks: true,
     groups: true,
     discover: true,
-  } as WorkspaceProductFeatures,
+  },
 }));
 vi.mock("../../components/workspace/workspace-provider", () => ({ useWorkspace: () => fixtures }));
 import { FeatureGuideContent } from "./feature-guide";
@@ -31,7 +30,7 @@ describe("feature guide reading page", () => {
     fixtures.canEdit = true;
     for (const feature of Object.keys(
       fixtures.productFeatures,
-    ) as (keyof WorkspaceProductFeatures)[])
+    ) as (keyof typeof fixtures.productFeatures)[])
       fixtures.productFeatures[feature] = true;
   });
 

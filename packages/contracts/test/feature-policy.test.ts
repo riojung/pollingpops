@@ -17,6 +17,41 @@ describe("operator product feature policy", () => {
       ProductFeatureRulesSchema.parse({ surveyPages: { enabled: true, plans: ["free"] } }),
     ).toEqual({ surveyPages: { enabled: true, plans: ["free"] } });
   });
+  it("accepts known live Presentation reasons and handles mixed-version workspace responses", () => {
+    const features = {
+      roundExperiences: true,
+      audiencePulse: true,
+      roomChat: true,
+      uxBeta: true,
+      recoveryRehearsal: false,
+      practiceAssignments: false,
+      workspaceShell: true,
+      builderV2: true,
+      presentations: true,
+      presentationRealtime: false,
+      groups: true,
+      discover: false,
+    };
+    expect(WorkspaceProductFeaturesSchema.parse(features)).not.toHaveProperty(
+      "presentationRealtimeUnavailableReason",
+    );
+    for (const reason of ["rollout_unavailable", "operator_policy"]) {
+      expect(
+        WorkspaceProductFeaturesSchema.parse({
+          ...features,
+          presentationRealtimeUnavailableReason: reason,
+        }).presentationRealtimeUnavailableReason,
+      ).toBe(reason);
+    }
+    for (const reason of ["future_reason", 42, null]) {
+      expect(
+        WorkspaceProductFeaturesSchema.parse({
+          ...features,
+          presentationRealtimeUnavailableReason: reason,
+        }).presentationRealtimeUnavailableReason,
+      ).toBeUndefined();
+    }
+  });
   it("preserves inherited entries and explicit plan assignments independently", () => {
     expect(ProductFeatureRulesSchema.parse({})).toEqual({});
     expect(

@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CreatorBrand } from "../../../../components/brand";
-import type { Entitlements, WorkspaceProductFeatures } from "@openround/contracts";
+import {
+  PresentationRealtimeUnavailableReasonSchema,
+  type Entitlements,
+  type PresentationRealtimeUnavailableReason,
+  type WorkspaceProductFeatures,
+} from "@openround/contracts";
 import { RoomPasswordOption } from "../../../../components/room-password";
 import {
   canProtectRoom,
@@ -40,8 +45,14 @@ interface PresentationSessionCreationControlsProps {
   error: string;
   errorIsRaw?: boolean;
   liveCreationAvailable: boolean;
+  unavailableReason?: unknown;
   onStart: () => void;
 }
+
+const launchUnavailableMessageKeys = {
+  rollout_unavailable: "live.presentationHost.creationRolloutUnavailable",
+  operator_policy: "live.presentationHost.creationOperatorPolicy",
+} as const satisfies Record<PresentationRealtimeUnavailableReason, string>;
 
 export function PresentationSessionCreationControls({
   busy,
@@ -49,15 +60,19 @@ export function PresentationSessionCreationControls({
   error,
   errorIsRaw = true,
   liveCreationAvailable,
+  unavailableReason,
   onStart,
 }: PresentationSessionCreationControlsProps) {
   const { t } = useLocale();
+  const reason = PresentationRealtimeUnavailableReasonSchema.safeParse(unavailableReason).data;
 
   return (
     <>
       {!liveCreationAvailable ? (
         <p className="notice" role="status">
-          {t("live.presentationHost.creationPaused")}
+          {t(
+            reason ? launchUnavailableMessageKeys[reason] : "live.presentationHost.creationPaused",
+          )}
         </p>
       ) : null}
       {error ? (
@@ -101,9 +116,8 @@ function PresentationHostSetupContent() {
   const [joinPassword, setJoinPassword] = useState("");
   const passwordAvailable = canProtectRoom(useEventCredit ? eventEntitlements : entitlements);
   const creationIntent = useRef<{ body: string; key: string } | null>(null);
-  const launchFeatures = useEventCredit
-    ? (eventProductFeatures ?? productFeatures)
-    : productFeatures;
+  const selectedFundingFeatures = useEventCredit ? eventProductFeatures : productFeatures;
+  const launchFeatures = selectedFundingFeatures ?? productFeatures;
   const liveCreationAvailable = launchFeatures?.presentationRealtime === true;
 
   useEffect(() => {
@@ -240,6 +254,7 @@ function PresentationHostSetupContent() {
           error={error}
           errorIsRaw={errorIsRaw}
           liveCreationAvailable={liveCreationAvailable}
+          unavailableReason={selectedFundingFeatures?.presentationRealtimeUnavailableReason}
           onStart={() => void startSession()}
         />
       </section>

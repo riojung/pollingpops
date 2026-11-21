@@ -342,6 +342,9 @@ const messages = {
     "內容幻燈片和交互式問題將按其作者順序運行。 參與者加入時沒有工作空間賬戶,只有提問答覆成爲學習證據。",
   "live.presentationHost.creationPaused":
     "此工作區已暫停開始新的現場簡報工作階段。已發佈的內容和現有工作階段仍可使用。",
+  "live.presentationHost.creationRolloutUnavailable":
+    "依照此部署環境的推出設定，無法啟動新的現場簡報工作階段。",
+  "live.presentationHost.creationOperatorPolicy": "此部署環境的功能政策不允許啟動這場現場簡報。",
   "live.presentationHost.history": "會話歷史",
   "live.presentationHost.interactiveQuestions": "交互式問題",
   "live.presentationHost.live": "現場演示",

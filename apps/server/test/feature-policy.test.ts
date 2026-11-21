@@ -29,6 +29,78 @@ function fixture(community = false) {
 }
 
 describe("operator product feature policy", () => {
+  it("explains inherited live Presentation flags, allowlists, and prerequisite rollout", async () => {
+    const f = fixture();
+    const productFeatures = () => workspaceProductFeatures(f.repository, f.config, f.workspaceId);
+    f.config.FEATURE_UX_BETA = true;
+    f.config.FEATURE_PRESENTATIONS = true;
+    f.config.UX_BETA_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    f.config.EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    expect(await productFeatures()).toMatchObject({
+      presentations: true,
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "rollout_unavailable",
+    });
+
+    f.config.FEATURE_PRESENTATION_REALTIME = true;
+    f.config.EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST = [];
+    expect(await productFeatures()).toMatchObject({
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "rollout_unavailable",
+    });
+
+    f.config.EVIDENCE_FEATURES_WORKSPACE_ALLOWLIST = [f.workspaceId];
+    const enabled = await productFeatures();
+    expect(enabled.presentationRealtime).toBe(true);
+    expect(enabled).not.toHaveProperty("presentationRealtimeUnavailableReason");
+
+    f.config.UX_BETA_WORKSPACE_ALLOWLIST = [];
+    expect(await productFeatures()).toMatchObject({
+      presentations: false,
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "rollout_unavailable",
+    });
+  });
+
+  it("explains a saved prerequisite rule using the effective launch plan", async () => {
+    const f = fixture();
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: {
+        uxBeta: { enabled: true, plans: ["free", "pro"] },
+        presentations: { enabled: true, plans: ["pro"] },
+      },
+    });
+    expect(await workspaceProductFeatures(f.repository, f.config, f.workspaceId)).toMatchObject({
+      presentations: false,
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "operator_policy",
+    });
+    expect(
+      await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "pro"),
+    ).toMatchObject({
+      presentations: true,
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "rollout_unavailable",
+    });
+
+    await f.platform.saveFeaturePolicy({
+      expectedRevision: 1,
+      features: {
+        uxBeta: { enabled: false, plans: [] },
+        presentations: { enabled: true, plans: ["free", "pro"] },
+        presentationRealtime: { enabled: true, plans: ["free", "pro"] },
+      },
+    });
+    expect(
+      await workspaceProductFeatures(f.repository, f.config, f.workspaceId, "pro"),
+    ).toMatchObject({
+      presentations: false,
+      presentationRealtime: false,
+      presentationRealtimeUnavailableReason: "operator_policy",
+    });
+  });
+
   it("requires an explicit Survey pages rule, its Survey dependency and the current assigned plan", async () => {
     const f = fixture();
     const parents = {

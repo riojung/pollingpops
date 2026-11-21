@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 
 import { PresentationSessionCreationControls } from "./page";
 
-function renderCreationControls(liveCreationAvailable: boolean) {
+function renderCreationControls(liveCreationAvailable: boolean, unavailableReason?: unknown) {
   return renderToStaticMarkup(
     withEnglishLocale(
       <PresentationSessionCreationControls
@@ -18,6 +18,7 @@ function renderCreationControls(liveCreationAvailable: boolean) {
         currentVersionId="presentation-version-1"
         error=""
         liveCreationAvailable={liveCreationAvailable}
+        unavailableReason={unavailableReason}
         onStart={vi.fn()}
       />,
     ),
@@ -25,21 +26,29 @@ function renderCreationControls(liveCreationAvailable: boolean) {
 }
 
 describe("Presentation host live-session creation controls", () => {
-  it("disables Start and explains the pause when realtime creation is unavailable", () => {
-    const markup = renderCreationControls(false);
+  it.each([
+    [
+      "rollout_unavailable",
+      "New live Presentation sessions are unavailable under this deployment’s rollout settings.",
+    ],
+    [
+      "operator_policy",
+      "The deployment’s feature policy does not allow this live Presentation launch.",
+    ],
+    ["future_reason", "Starting new live Presentation sessions is paused for this workspace."],
+    [undefined, "Starting new live Presentation sessions is paused for this workspace."],
+  ])("disables Start and explains why launch is unavailable for %s", (reason, notice) => {
+    const markup = renderCreationControls(false, reason);
 
-    expect(markup).toContain(
-      "Starting new live Presentation sessions is paused for this workspace.",
-    );
+    expect(markup).toContain(notice);
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Start live session<\/button>/);
+    expect(markup).toContain('href="/sessions"');
   });
 
   it("allows Start when realtime creation is available and content is published", () => {
-    const markup = renderCreationControls(true);
+    const markup = renderCreationControls(true, "operator_policy");
 
-    expect(markup).not.toContain(
-      "Starting new live Presentation sessions is paused for this workspace.",
-    );
+    expect(markup).not.toContain('role="status"');
     expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Start live session<\/button>/);
   });
 });

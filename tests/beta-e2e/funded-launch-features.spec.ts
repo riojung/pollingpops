@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { PresentationDraft, QuizDraft, WorkspaceProductFeatures } from "@openround/contracts";
+import type {
+  PresentationDraft,
+  PresentationRealtimeUnavailableReason,
+  QuizDraft,
+  WorkspaceProductFeatures,
+} from "@openround/contracts";
 import { signInBeta } from "./sign-in";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
@@ -8,14 +13,30 @@ const submissionMessage = "Synthetic funded launch submission received.";
 
 type LaunchFeatures = Pick<
   WorkspaceProductFeatures,
-  "presentationRealtime" | "liveFlexMode" | "roundExperiences"
+  | "presentationRealtime"
+  | "presentationRealtimeUnavailableReason"
+  | "liveFlexMode"
+  | "roundExperiences"
 >;
 
-function launchFeatures(enabled: boolean): LaunchFeatures {
-  return { presentationRealtime: enabled, liveFlexMode: enabled, roundExperiences: enabled };
+function launchFeatures(
+  enabled: boolean,
+  unavailableReason?: PresentationRealtimeUnavailableReason,
+): LaunchFeatures {
+  return {
+    presentationRealtime: enabled,
+    presentationRealtimeUnavailableReason: enabled ? undefined : unavailableReason,
+    liveFlexMode: enabled,
+    roundExperiences: enabled,
+  };
 }
 
-async function fundingFixture(page: Page, workspaceLive: boolean, fundedLive: boolean) {
+async function fundingFixture(
+  page: Page,
+  workspaceLive: boolean,
+  fundedLive: boolean,
+  unavailableReason?: PresentationRealtimeUnavailableReason,
+) {
   await signInBeta(page);
   const response = await page.request.get(`${api}/v1/auth/me`);
   expect(response.ok()).toBeTruthy();
@@ -27,7 +48,7 @@ async function fundingFixture(page: Page, workspaceLive: boolean, fundedLive: bo
     workspaceShell: true,
     builderV2: true,
     presentations: true,
-    ...launchFeatures(workspaceLive),
+    ...launchFeatures(workspaceLive, unavailableReason),
   };
   await page.route(`${api}/v1/auth/me`, (route) =>
     route.fulfill({
@@ -45,7 +66,10 @@ async function fundingFixture(page: Page, workspaceLive: boolean, fundedLive: bo
         coveredBySubscription: false,
         availableCredits: 1,
         eventEntitlements: { ...account.entitlements, plan: "pro", maxParticipants: 100 },
-        eventProductFeatures: { ...workspaceFeatures, ...launchFeatures(fundedLive) },
+        eventProductFeatures: {
+          ...workspaceFeatures,
+          ...launchFeatures(fundedLive, unavailableReason),
+        },
       },
     }),
   );
@@ -121,6 +145,7 @@ async function openPresentation(page: Page) {
   );
   await page.goto(`/presentation/${id}/host`);
   await expect(page.getByRole("heading", { name: draft.title, exact: true })).toBeVisible();
+  return id;
 }
 
 interface LaunchSubmission {
@@ -187,6 +212,11 @@ for (const suffix of ["desktop", "@mobile"]) {
     const start = page.getByRole("button", { name: "Start live session", exact: true });
 
     await expect(start).toBeDisabled();
+    await expect(
+      page.getByText("Starting new live Presentation sessions is paused for this workspace.", {
+        exact: false,
+      }),
+    ).toBeVisible();
     await expect(timing).toHaveCount(0);
     await credit.check();
     await expect(start).toBeEnabled();
@@ -245,22 +275,57 @@ for (const suffix of ["desktop", "@mobile"]) {
   });
 }
 
+test("Presentation launch explains a rollout restriction without a pricing link", async ({
+  page,
+}) => {
+  await fundingFixture(page, false, false, "rollout_unavailable");
+  const id = await openPresentation(page);
+  const { credit } = launchControls(page);
+  const start = page.getByRole("button", { name: "Start live session", exact: true });
+  const notice = page.getByText(
+    "New live Presentation sessions are unavailable under this deployment’s rollout settings.",
+    { exact: true },
+  );
+
+  await expect(notice).toBeVisible();
+  await expect(start).toBeDisabled();
+  await credit.check();
+  await expect(notice).toBeVisible();
+  await expect(start).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Back to editor", exact: true })).toHaveAttribute(
+    "href",
+    `/presentation/${id}`,
+  );
+  await expect(page.getByRole("link", { name: "Session history", exact: true })).toHaveAttribute(
+    "href",
+    "/sessions",
+  );
+  await expect(page.locator('a[href="/pricing"]')).toHaveCount(0);
+});
+
 test("Presentation launch respects a restrictive funded preview and restores workspace live features", async ({
   page,
 }) => {
-  await fundingFixture(page, true, false);
+  await fundingFixture(page, true, false, "operator_policy");
   const launch = await interceptLaunch(page, "/v1/presentation-sessions");
   await openPresentation(page);
   const { credit, timing } = launchControls(page);
   const start = page.getByRole("button", { name: "Start live session", exact: true });
+  const notice = page.getByText(
+    "The deployment’s feature policy does not allow this live Presentation launch.",
+    { exact: true },
+  );
 
   await expect(start).toBeEnabled();
+  await expect(notice).toHaveCount(0);
   await timing.selectOption("flex");
   await credit.check();
   await expect(start).toBeDisabled();
+  await expect(notice).toBeVisible();
   await expect(timing).toHaveCount(0);
   await credit.uncheck();
   await expect(start).toBeEnabled();
+  await expect(notice).toHaveCount(0);
   await expect(timing).toBeVisible();
   await timing.selectOption("flex");
   expect(await launch.submit(start)).toMatchObject({ useEventCredit: false, timeMode: "flex" });

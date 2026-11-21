@@ -8,7 +8,7 @@ import {
   createPlatformRepository,
   PlatformError,
 } from "@openround/db";
-import { roomEntitlements } from "./room-entitlements.js";
+import { roomEntitlementsWithExportAvailability } from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
   SessionActivitySchema,
@@ -659,6 +659,15 @@ export async function registerRoutes(
       },
     };
   };
+  const reportEntitlements = (report: { sessionId: string }, workspaceId: string) =>
+    roomEntitlementsWithExportAvailability(
+      repository,
+      config,
+      "round",
+      report.sessionId,
+      workspaceId,
+    );
+
   const reportContext = async (report: { sessionId: string }) => {
     const session = await repository.getSessionById(report.sessionId);
     if (!session) return null;
@@ -3100,24 +3109,23 @@ export async function registerRoutes(
         events: [{ name: "report_viewed" }],
       });
     }
+    const { entitlements, csvExportUnavailableReason, fromCoverage } = await reportEntitlements(
+      report,
+      creator.workspaceId,
+    );
+    const currentWorkspaceEntitlements =
+      !fromCoverage && entitlements.plan === creator.plan
+        ? entitlements
+        : await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan);
     return {
       report,
       context: await reportContext(report),
       entitlements: {
-        ...(await roomEntitlements(
-          repository,
-          config,
-          "round",
-          report.sessionId,
-          creator.workspaceId,
-        )),
-        followups: (
-          await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan)
-        ).followups,
-        maxPracticePersonalLinks: (
-          await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan)
-        ).maxPracticePersonalLinks,
+        ...entitlements,
+        followups: currentWorkspaceEntitlements.followups,
+        maxPracticePersonalLinks: currentWorkspaceEntitlements.maxPracticePersonalLinks,
       },
+      csvExportUnavailableReason,
       followup: await followups.getForReport(creator.workspaceId, id),
     };
   });
@@ -3146,16 +3154,18 @@ export async function registerRoutes(
     const query = InteractionTranscriptQuerySchema.parse(request.query);
     const report = await repository.getReport(creator.workspaceId, id);
     if (!report) return apiError(reply, 404, "NOT_FOUND", "Report not found", request.id);
-    if (
-      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
-        .csvExport
-    ) {
+    const { entitlements, csvExportUnavailableReason } = await reportEntitlements(
+      report,
+      creator.workspaceId,
+    );
+    if (!entitlements.csvExport) {
       return apiError(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
         "Interaction transcript export is unavailable for this room",
         request.id,
+        { unavailableReason: csvExportUnavailableReason },
       );
     }
     if (
@@ -3191,16 +3201,18 @@ export async function registerRoutes(
         request.id,
       );
     }
-    if (
-      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
-        .csvExport
-    ) {
+    const { entitlements, csvExportUnavailableReason } = await reportEntitlements(
+      report,
+      creator.workspaceId,
+    );
+    if (!entitlements.csvExport) {
       return apiError(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
         "CSV export is unavailable for this room",
         request.id,
+        { unavailableReason: csvExportUnavailableReason },
       );
     }
     return reply
@@ -3226,16 +3238,18 @@ export async function registerRoutes(
         request.id,
       );
     }
-    if (
-      !(await roomEntitlements(repository, config, "round", report.sessionId, creator.workspaceId))
-        .csvExport
-    ) {
+    const { entitlements, csvExportUnavailableReason } = await reportEntitlements(
+      report,
+      creator.workspaceId,
+    );
+    if (!entitlements.csvExport) {
       return apiError(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
         "Report export is unavailable for this room",
         request.id,
+        { unavailableReason: csvExportUnavailableReason },
       );
     }
     return reply

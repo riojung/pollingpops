@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Entitlements } from "@openround/contracts";
+import type { Entitlements, RoundReportExportUnavailableReason } from "@openround/contracts";
 import {
   createPlatformRepository,
   PlatformError,
@@ -8,7 +8,7 @@ import {
   type PlatformRoomCoverageInput,
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
-import { entitlementsFor, workspaceEntitlements } from "./entitlements.js";
+import { entitlementsFor, workspaceEntitlementsWithAvailability } from "./entitlements.js";
 import { grantRoomFeatures } from "./feature-policy.js";
 
 export type RoomEntitlementConfig = Parameters<typeof entitlementsFor>[1] &
@@ -80,6 +80,34 @@ export function coverageRequest(
 }
 
 /** Retained coverage remains authoritative even when new commercial writers are disabled. */
+export async function roomEntitlementsWithExportAvailability(
+  repository: Repository,
+  config: RoomEntitlementConfig,
+  artifactType: PlatformRoomType,
+  roomId: string,
+  workspaceId: string,
+): Promise<{
+  entitlements: Entitlements;
+  csvExportUnavailableReason: RoundReportExportUnavailableReason | null;
+  fromCoverage: boolean;
+}> {
+  const coverage = await createPlatformRepository(repository).getRoomCoverage(artifactType, roomId);
+  if (coverage && !(config.COMMUNITY_MODE && coverage.funding === "legacy"))
+    return {
+      entitlements: coverage.snapshot,
+      csvExportUnavailableReason: coverage.snapshot.csvExport ? null : "room_coverage",
+      fromCoverage: true,
+    };
+  const { entitlements, unavailableReason } = await workspaceEntitlementsWithAvailability(
+    repository,
+    config,
+    workspaceId,
+    config.COMMUNITY_MODE ? "team" : await repository.getPlan(workspaceId),
+    "csvExport",
+  );
+  return { entitlements, csvExportUnavailableReason: unavailableReason, fromCoverage: false };
+}
+
 export async function roomEntitlements(
   repository: Repository,
   config: RoomEntitlementConfig,
@@ -87,15 +115,14 @@ export async function roomEntitlements(
   roomId: string,
   workspaceId: string,
 ): Promise<Entitlements> {
-  const coverage = await createPlatformRepository(repository).getRoomCoverage(artifactType, roomId);
-  if (coverage && !(config.COMMUNITY_MODE && coverage.funding === "legacy"))
-    return coverage.snapshot;
-  return workspaceEntitlements(
+  const { entitlements } = await roomEntitlementsWithExportAvailability(
     repository,
     config,
+    artifactType,
+    roomId,
     workspaceId,
-    config.COMMUNITY_MODE ? "team" : await repository.getPlan(workspaceId),
   );
+  return entitlements;
 }
 
 function canonical(value: unknown): unknown {

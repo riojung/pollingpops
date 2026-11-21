@@ -471,13 +471,24 @@ describe("Live Round opinion report compatibility", () => {
 });
 
 describe("Round report workspace", () => {
-  async function load(report: Report, uxBeta = true) {
+  async function load(
+    report: Report,
+    uxBeta = true,
+    {
+      csvExport = true,
+      csvExportUnavailableReason,
+    }: {
+      csvExport?: boolean;
+      csvExportUnavailableReason?: unknown;
+    } = {},
+  ) {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path === "/v1/auth/me"
         ? { productFeatures: { uxBeta, workspaceShell: false }, creator: { role: "owner" } }
         : {
             report,
-            entitlements: { followups: true, csvExport: true, reportRetentionDays: 30 },
+            entitlements: { followups: true, csvExport, reportRetentionDays: 30 },
+            csvExportUnavailableReason,
             followup: null,
           },
     );
@@ -491,6 +502,48 @@ describe("Round report workspace", () => {
     findElement(tree, (node) => node.props.id === `report-panel-${id}`)!;
   const tab = (tree: ReactModule.ReactNode, id: string) =>
     findElement(tree, (node) => node.props.id === `report-tab-${id}`)!;
+
+  it.each([
+    ["room_coverage", "This room’s saved access does not include exports."],
+    ["plan_limit", "The workspace’s current plan does not include report exports."],
+    ["operator_policy", "The deployment’s feature policy disables report exports for this room."],
+    [undefined, "Report exports are unavailable for this room."],
+    ["future_reason", "Report exports are unavailable for this room."],
+  ])("explains denied report exports for reason %s", async (csvExportUnavailableReason, notice) => {
+    const source = ReportV7Schema.parse(opinionReport());
+    const report = {
+      ...source,
+      conversation: { ...source.conversation, transcriptAvailable: true },
+    };
+    const view = await load(report, true, { csvExport: false, csvExportUnavailableReason });
+    const tree = view.page.render();
+    const manage = markup(panel(tree, "manage"));
+    expect(manage).toContain(notice);
+    expect(manage).not.toContain('href="/pricing"');
+    expect(manage).not.toContain("Download CSV");
+    expect(manage).not.toContain("Download JSON");
+    const conversation = markup(panel(tree, "interactions"));
+    expect(conversation).toContain(notice);
+    expect(conversation).toContain("Open authorized transcript");
+    expect(conversation).not.toContain("Download interaction CSV");
+    view.cleanup();
+  });
+
+  it("shows both report formats and the transcript CSV when room exports are allowed", async () => {
+    const source = ReportV7Schema.parse(opinionReport());
+    const report = {
+      ...source,
+      conversation: { ...source.conversation, transcriptAvailable: true },
+    };
+    const view = await load(report, false, { csvExportUnavailableReason: "room_coverage" });
+    const tree = view.page.render();
+    const manage = markup(panel(tree, "manage"));
+    expect(manage).toContain("Download CSV");
+    expect(manage).toContain("Download JSON");
+    expect(manage).not.toContain("This room’s saved access does not include exports.");
+    expect(markup(panel(tree, "interactions"))).toContain("Download interaction CSV");
+    view.cleanup();
+  });
 
   it.each(supportedLocales)("starts with a useful no-response overview in %s", async (locale) => {
     fixtures.locale = locale;

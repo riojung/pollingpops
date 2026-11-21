@@ -42,7 +42,9 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await expect(creator.getByRole("status")).toContainText("Saved", { timeout: 10_000 });
   await creator.getByRole("button", { name: "Preview" }).click();
   await expect(creator).toHaveURL(/\/quiz\/[^/]+\/preview/);
-  await expect(creator.getByText("Edmonton is the capital of Alberta.")).toBeVisible();
+  await expect(
+    creator.getByRole("heading", { name: "Edmonton is the capital of Alberta.", exact: true }),
+  ).toBeVisible();
   await creator.getByRole("button", { name: "Reveal answer" }).click();
   await expect(creator.locator('.answer-button[data-correct="true"]')).toContainText("True");
   await creator.getByRole("link", { name: "Back to editor" }).click();
@@ -78,6 +80,7 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await creator.getByRole("button", { name: "Create live session" }).click();
   await expect(creator).toHaveURL(/\/host\/(?!setup\/)[^/]+$/);
   await expect(creator.locator(".live-shell")).toHaveAttribute("data-pattern", "grid");
+  await expect(creator).toHaveTitle(/Polling Pops/);
   expect((await new AxeBuilder({ page: creator }).analyze()).violations).toEqual([]);
   const code = (await creator.locator(".session-code").textContent())!.trim();
   const expectedJoinUrl = `${new URL(creator.url()).origin}/join?code=${code}`;
@@ -124,7 +127,7 @@ test("creator and participant complete a live round", async ({ browser }, testIn
   await participant.getByRole("button", { name: "Join round" }).click();
   await expect(participant).toHaveURL(/\/play\//);
   await expect(participant.locator(".live-shell")).toHaveAttribute("data-pattern", "grid");
-  await expect(participant.getByRole("img", { name: "Comet avatar" })).toBeVisible();
+  await expect(participant.getByRole("img", { name: "Comet avatar" }).first()).toBeVisible();
   const roster = creator.getByRole("list", { name: "Participant roster" });
   await expect(roster.getByText(/Bright|Calm|Curious|Kind|Quick|Sunny/)).toBeVisible();
   await expect(roster.getByRole("img", { name: "Comet avatar" })).toBeVisible();
@@ -212,21 +215,28 @@ test("creator and participant complete a live round", async ({ browser }, testIn
     }),
   ).toBeVisible();
   await creator.getByRole("tab", { name: "Manage data", exact: true }).click();
-  const exportNotice = creator.getByRole("link", { name: "CSV was not included for this room" });
-  await expect(exportNotice).toBeVisible();
-  await expect(exportNotice).toHaveAttribute("href", "/pricing");
-  await expect(creator.getByRole("link", { name: /^Download (CSV|JSON)$/ })).toHaveCount(0);
+  const managePanel = creator.getByRole("tabpanel", { name: "Manage data", exact: true });
+  await expect(
+    managePanel.getByText("This room’s saved access does not include exports.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(managePanel.getByRole("link")).toHaveCount(0);
   const reportId = new URL(creator.url()).pathname.split("/").at(-1)!;
-  for (const format of ["csv", "json"]) {
-    const response = await creator.request.get(
-      `http://127.0.0.1:4100/v1/reports/${reportId}.${format}`,
-    );
+  const reportUrl = `http://127.0.0.1:4100/v1/reports/${reportId}`;
+  for (const suffix of [".csv", ".json", "/interactions.csv"]) {
+    const response = await creator.request.get(`${reportUrl}${suffix}`);
     expect(response.status()).toBe(402);
     expect(await response.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
   }
-  const retainedReport = await creator.request.get(`http://127.0.0.1:4100/v1/reports/${reportId}`);
+  const retainedReport = await creator.request.get(reportUrl);
   expect(retainedReport.ok()).toBeTruthy();
-  const { report: retained } = await retainedReport.json();
+  const retainedData = await retainedReport.json();
+  expect(retainedData).toMatchObject({
+    entitlements: { csvExport: false },
+    csvExportUnavailableReason: "room_coverage",
+  });
+  const { report: retained } = retainedData;
   const expiry = new Date(retained.expiresAt).toLocaleDateString("en-CA", { dateStyle: "medium" });
   await expect(
     creator.getByText(`Report retained until ${expiry}. Current plan default: 30 days.`, {
@@ -234,6 +244,13 @@ test("creator and participant complete a live round", async ({ browser }, testIn
     }),
   ).toBeVisible();
   expect((await new AxeBuilder({ page: creator }).analyze()).violations).toEqual([]);
+
+  await creator.getByRole("tab", { name: "Conversation", exact: true }).click();
+  const conversation = creator.getByRole("tabpanel", { name: "Conversation", exact: true });
+  await expect(
+    conversation.getByRole("link", { name: "Open authorized transcript" }),
+  ).toHaveAttribute("href", `${reportUrl}/interactions`);
+  await expect(conversation.getByRole("link", { name: "Download interaction CSV" })).toHaveCount(0);
 
   await participantContext.close();
   await creatorContext.close();

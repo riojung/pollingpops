@@ -25,6 +25,25 @@ describe("primary delivery localization", () => {
     },
   );
 
+  it.each(supportedLocales.filter((locale) => locale !== "en-CA"))(
+    "provides distinct translations for report export availability in %s",
+    (locale) => {
+      const copy = deliveryPrimaryCopy(locale);
+      const keys = [
+        "Report exports are unavailable for this room.",
+        "This room’s saved access does not include exports.",
+        "The workspace’s current plan does not include report exports.",
+        "The deployment’s feature policy disables report exports for this room.",
+      ] as const;
+      const translations = keys.map((key) => {
+        const translation = copy(key);
+        expect(translation, key).not.toBe(key);
+        return translation;
+      });
+      expect(new Set(translations).size).toBe(keys.length);
+    },
+  );
+
   it("keeps retry semantics localized without changing controller message identities", () => {
     expect(localizeDeliveryMessage("fr-FR", HOST_ACK_TIMEOUT_MESSAGE)).toMatchObject({
       known: true,

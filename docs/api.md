@@ -1484,6 +1484,13 @@ Report v1–v3 remain renderable; sessions without capture retain v3 output. The
 raw chat and participant-level signals; the transcript requires report access, CSV follows the export
 entitlement, and revealing removed bodies additionally requires owner/editor audit access.
 
+`GET /v1/reports/{id}` includes `csvExportUnavailableReason` alongside `entitlements.csvExport`.
+It is `null` when exports are available and `room_coverage` when the Round's saved coverage excludes
+export. If current workspace entitlements apply, `plan_limit` means the plan does not include
+export and `operator_policy` means a configured policy prevents it. CSV, JSON, and interaction CSV
+downloads use the same entitlement decision and include the reason in `error.details.unavailableReason`
+when they return `402 ENTITLEMENT_LIMIT`.
+
 Decision capture is server-resolved at Round creation and never backfilled into older sessions.
 The durable timeline records accepted insight/reveal, intervention, recheck/revote, question-advance,
 and finish decisions with server timestamps and sequence numbers, without prompt text, raw answer

@@ -274,12 +274,112 @@ describe("live event credit integration", () => {
     ).toBe(false);
   });
 
-  it("reports unavailable exports for a retained Round even after workspace exports become available", async () => {
+  it.each([
+    { roomExports: false, workspaceExports: true },
+    { roomExports: true, workspaceExports: false },
+  ])(
+    "keeps Round export access at $roomExports when workspace access becomes $workspaceExports",
+    async ({ roomExports, workspaceExports }) => {
+      const f = await fixture();
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 0,
+        features: { csvExport: { enabled: roomExports, plans: roomExports ? ["pro"] : [] } },
+      });
+      const built = await buildApp(f.config, {
+        repository: f.repository,
+        cache: new MemorySessionCache(),
+      });
+      try {
+        const verified = await requestPinAndSignIn(built.app, f.creator.email);
+        const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
+        const headers = { cookie };
+        const launch = await built.app.inject({
+          method: "POST",
+          url: "/v1/sessions",
+          headers: { ...headers, "x-idempotency-key": randomUUID() },
+          payload: { quizId: f.quizId, settings, useEventCredit: true },
+        });
+        expect(launch.statusCode).toBe(201);
+        const room = launch.json<{
+          sessionId: string;
+          hostToken: string;
+          snapshot: { version: number };
+        }>();
+        await built.sessions.hostCommand({
+          sessionId: room.sessionId,
+          hostToken: room.hostToken,
+          commandId: randomUUID(),
+          expectedVersion: room.snapshot.version,
+          action: "end",
+        });
+        await built.reportWorker.runUntilIdle();
+        const report = await f.repository.getReportBySession(f.creator.workspaceId, room.sessionId);
+        expect(report?.status).toBe("ready");
+
+        await f.platform.saveFeaturePolicy({
+          expectedRevision: 1,
+          features: {
+            csvExport: {
+              enabled: workspaceExports,
+              plans: workspaceExports ? ["free", "pro"] : [],
+            },
+          },
+        });
+        const account = await built.app.inject({ url: "/v1/auth/me", headers });
+        expect(account.statusCode).toBe(200);
+        expect(account.json()).toMatchObject({
+          entitlements: { plan: "free", csvExport: workspaceExports },
+        });
+        const reportUrl = `/v1/reports/${report!.id}`;
+        const retained = await built.app.inject({ url: reportUrl, headers });
+        expect(retained.statusCode).toBe(200);
+        expect(retained.json()).toMatchObject({
+          entitlements: { plan: "pro", csvExport: roomExports },
+          csvExportUnavailableReason: roomExports ? null : "room_coverage",
+        });
+
+        for (const [suffix, message] of [
+          [".csv", "CSV export is unavailable for this room"],
+          [".json", "Report export is unavailable for this room"],
+          ["/interactions.csv", "Interaction transcript export is unavailable for this room"],
+        ]) {
+          const exported = await built.app.inject({ url: `${reportUrl}${suffix}`, headers });
+          expect(exported.statusCode).toBe(roomExports ? 200 : 402);
+          if (!roomExports) {
+            expect(exported.json()).toMatchObject({
+              error: {
+                code: "ENTITLEMENT_LIMIT",
+                message,
+                details: { unavailableReason: "room_coverage" },
+              },
+            });
+          }
+        }
+      } finally {
+        await built.app.close();
+      }
+    },
+  );
+
+  it("evaluates an uncovered Round report against current workspace plan and policy", async () => {
     const f = await fixture();
-    await f.platform.saveFeaturePolicy({
-      expectedRevision: 0,
-      features: { csvExport: { enabled: false, plans: [] } },
+    const communitySessions = new SessionService(
+      f.repository,
+      new MemorySessionCache(),
+      { ...f.config, COMMUNITY_MODE: true },
+      new MetricsService(),
+    );
+    services.push(communitySessions);
+    const room = await communitySessions.createSession(f.creator, f.quizId, settings);
+    expect(await f.platform.getRoomCoverage("round", room.sessionId)).toBeNull();
+    await communitySessions.hostCommand({
+      sessionId: room.sessionId,
+      hostToken: room.hostToken,
+      commandId: randomUUID(),
+      expectedVersion: room.snapshot.version,
+      action: "end",
     });
+
     const built = await buildApp(f.config, {
       repository: f.repository,
       cache: new MemorySessionCache(),
@@ -287,51 +387,48 @@ describe("live event credit integration", () => {
     try {
       const verified = await requestPinAndSignIn(built.app, f.creator.email);
       const cookie = String(verified.headers["set-cookie"]).split(";")[0]!;
-      const headers = { cookie };
-      const launch = await built.app.inject({
-        method: "POST",
-        url: "/v1/sessions",
-        headers: { ...headers, "x-idempotency-key": randomUUID() },
-        payload: { quizId: f.quizId, settings, useEventCredit: true },
-      });
-      expect(launch.statusCode).toBe(201);
-      const room = launch.json<{
-        sessionId: string;
-        hostToken: string;
-        snapshot: { version: number };
-      }>();
-      await built.sessions.hostCommand({
-        sessionId: room.sessionId,
-        hostToken: room.hostToken,
-        commandId: randomUUID(),
-        expectedVersion: room.snapshot.version,
-        action: "end",
-      });
-      await built.reportWorker.runUntilIdle();
       const report = await f.repository.getReportBySession(f.creator.workspaceId, room.sessionId);
-      expect(report?.status).toBe("ready");
+      expect(report?.status).toBe("pending");
+      const reportUrl = `/v1/reports/${report!.id}`;
+      const get = (suffix = "") =>
+        built.app.inject({ url: `${reportUrl}${suffix}`, headers: { cookie } });
+      for (const suffix of [".csv", ".json"]) {
+        const pending = await get(suffix);
+        expect(pending.statusCode).toBe(409);
+        expect(pending.json().error.details).toBeUndefined();
+      }
+      await built.reportWorker.runUntilIdle();
 
+      const expectAccess = async (unavailableReason: "plan_limit" | "operator_policy" | null) => {
+        const detail = await get();
+        expect(detail.statusCode).toBe(200);
+        expect(detail.json()).toMatchObject({
+          report: { status: "ready" },
+          entitlements: { csvExport: unavailableReason === null },
+          csvExportUnavailableReason: unavailableReason,
+        });
+        for (const suffix of [".csv", ".json", "/interactions.csv"]) {
+          const exported = await get(suffix);
+          expect(exported.statusCode).toBe(unavailableReason === null ? 200 : 402);
+          if (unavailableReason) {
+            expect(exported.json()).toMatchObject({
+              error: { code: "ENTITLEMENT_LIMIT", details: { unavailableReason } },
+            });
+          }
+        }
+      };
+
+      await expectAccess("plan_limit");
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 0,
+        features: { csvExport: { enabled: true, plans: ["pro"] } },
+      });
+      await expectAccess("operator_policy");
       await f.platform.saveFeaturePolicy({
         expectedRevision: 1,
         features: { csvExport: { enabled: true, plans: ["free", "pro"] } },
       });
-      const account = await built.app.inject({ url: "/v1/auth/me", headers });
-      expect(account.statusCode).toBe(200);
-      expect(account.json()).toMatchObject({ entitlements: { plan: "free", csvExport: true } });
-      const reportUrl = `/v1/reports/${report!.id}`;
-      const retained = await built.app.inject({ url: reportUrl, headers });
-      expect(retained.statusCode).toBe(200);
-      expect(retained.json()).toMatchObject({ entitlements: { plan: "pro", csvExport: false } });
-
-      for (const [suffix, message] of [
-        [".csv", "CSV export is unavailable for this room"],
-        [".json", "Report export is unavailable for this room"],
-        ["/interactions.csv", "Interaction transcript export is unavailable for this room"],
-      ]) {
-        const exported = await built.app.inject({ url: `${reportUrl}${suffix}`, headers });
-        expect(exported.statusCode).toBe(402);
-        expect(exported.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT", message } });
-      }
+      await expectAccess(null);
     } finally {
       await built.app.close();
     }

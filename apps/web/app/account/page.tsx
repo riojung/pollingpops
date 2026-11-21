@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type {
-  BrandTheme,
-  Entitlements,
-  FederatedIdentity,
-  OidcStatus,
-  WorkspaceInstitutionPolicy,
-  WorkspaceInvitation,
-  WorkspaceMember,
-  WorkspaceSummary,
+import {
+  WorkspaceCapabilityUnavailableReasonSchema,
+  type BrandTheme,
+  type Entitlements,
+  type FederatedIdentity,
+  type OidcStatus,
+  type WorkspaceCapabilityUnavailableReason,
+  type WorkspaceInstitutionPolicy,
+  type WorkspaceInvitation,
+  type WorkspaceMember,
+  type WorkspaceSummary,
 } from "@openround/contracts";
 import { CreatorBrand } from "../../components/brand";
 import { SiteHeader } from "../../components/site-header";
@@ -29,7 +31,11 @@ import { IdleTimeoutSettings } from "./idle-timeout-settings";
 import { PersonalInstitutionIdentities } from "./personal-institution-identities";
 import { PersonalSubscriptionOptions } from "./personal-subscription-options";
 import { PersonalBillingNotice } from "./personal-billing-notice";
-import { loadAccountSettings, type AccountCreator as Creator } from "./load-account-settings";
+import {
+  loadAccountSettings,
+  loadWorkspaceBrandSettings,
+  type AccountCreator as Creator,
+} from "./load-account-settings";
 import { loadLtiRegistrations, loadWorkspaceCollaboration } from "./load-owner-settings";
 import { SettingsSectionRead } from "./settings-section-read";
 import { useOwnerSettingsSection, type SettingsAuthority } from "./use-owner-settings-section";
@@ -46,10 +52,16 @@ import {
   type PersonalBillingState,
 } from "./account-settings-model";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
-import { AUTH_CHANGE_EVENT, apiFetch, humanError } from "../../lib/api";
+import { AUTH_CHANGE_EVENT, ApiClientError, apiFetch, humanError } from "../../lib/api";
+import {
+  appearanceMessages,
+  brandSaveUnavailableMessage,
+} from "../../lib/i18n/appearance-messages";
 import { formatDate, formatList, formatNumber } from "../../lib/i18n/format";
 import { PersonalInterfaceSettings, WorkspaceBrandSettings } from "./appearance-settings";
 import styles from "./account.module.css";
+
+type SettingsError = string | { brandSaveUnavailableReason?: WorkspaceCapabilityUnavailableReason };
 
 export default function AccountPage() {
   const { locale, t } = useLocale();
@@ -61,6 +73,8 @@ export default function AccountPage() {
   const workspaceSelection = useRef<AbortController | null>(null);
   const localWorkspaceUpdate = useRef(false);
   const collaborationMutation = useRef<object | null>(null);
+  const brandAccessRequest = useRef<AbortSignal | null>(null);
+  const appearanceSelected = useRef(false);
   const membersRegion = useRef<HTMLElement | null>(null);
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
   const loadRegionRef = useRef<HTMLElement | null>(null);
@@ -90,12 +104,26 @@ export default function AccountPage() {
     accentColor: "#AC2855",
   }));
   const [savedTheme, setSavedTheme] = useState<BrandTheme | null>(null);
+  const [brandAvailability, setBrandAvailability] = useState<{
+    enabled: boolean;
+    unavailableReason?: WorkspaceCapabilityUnavailableReason;
+    recheckNeeded?: boolean;
+  }>({ enabled: false });
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState<
-    "" | "audit" | "billing" | "export" | "theme" | "embed" | "federation" | "delete" | "workspace"
+    | ""
+    | "audit"
+    | "billing"
+    | "export"
+    | "theme"
+    | "brandAccess"
+    | "embed"
+    | "federation"
+    | "delete"
+    | "workspace"
   >("");
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<SettingsError>("");
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
@@ -156,6 +184,12 @@ export default function AccountPage() {
         setBusinessManagementEnabled(account.businessManagementEnabled === true);
         setEntitlements(account.entitlements);
         setProductFeatures({ workspaceShell: account.productFeatures?.workspaceShell === true });
+        setBrandAvailability({
+          enabled: branding.enabled === true,
+          unavailableReason: WorkspaceCapabilityUnavailableReasonSchema.safeParse(
+            branding.unavailableReason,
+          ).data,
+        });
         setSavedTheme(branding.theme);
         setTheme(
           branding.theme ?? {
@@ -393,7 +427,7 @@ export default function AccountPage() {
 
   async function saveTheme(event: FormEvent) {
     event.preventDefault();
-    if (!settingsAuthority || !entitlements?.brandTheme || !permissions.manageWorkspace) return;
+    if (!settingsAuthority || !brandAvailability.enabled || !permissions.manageWorkspace) return;
     const { creator, signal } = settingsAuthority;
     if (signal.aborted) return;
     setBusy("theme");
@@ -409,8 +443,58 @@ export default function AccountPage() {
       setSavedTheme(response.theme);
       setMessage(t("account.feedback.themeSaved"));
     } catch (caught) {
+      if (signal.aborted) return;
+      if (
+        caught instanceof ApiClientError &&
+        caught.status === 402 &&
+        caught.code === "ENTITLEMENT_LIMIT"
+      ) {
+        const { details } = caught;
+        const unavailableReason =
+          details?.actorId === creator.userId && details.workspaceId === creator.workspaceId
+            ? WorkspaceCapabilityUnavailableReasonSchema.safeParse(details.unavailableReason).data
+            : undefined;
+        setBrandAvailability({ enabled: false, unavailableReason, recheckNeeded: true });
+        if (!appearanceSelected.current)
+          setError({ brandSaveUnavailableReason: unavailableReason });
+      } else {
+        reportWorkspaceRequestFailure(caught, signal);
+      }
+    } finally {
+      if (!signal.aborted) setBusy("");
+    }
+  }
+
+  async function recheckBrandAccess() {
+    if (
+      !settingsAuthority ||
+      !brandAvailability.recheckNeeded ||
+      !permissions.manageWorkspace ||
+      busy
+    )
+      return;
+    const { creator, signal } = settingsAuthority;
+    if (signal.aborted || brandAccessRequest.current === signal) return;
+    brandAccessRequest.current = signal;
+    setBusy("brandAccess");
+    setError("");
+    setMessage("");
+    try {
+      const branding = await loadWorkspaceBrandSettings(creator.workspaceId, signal);
+      if (signal.aborted) return;
+      const enabled = branding.enabled === true;
+      setBrandAvailability({
+        enabled,
+        unavailableReason: WorkspaceCapabilityUnavailableReasonSchema.safeParse(
+          branding.unavailableReason,
+        ).data,
+        recheckNeeded: !enabled,
+      });
+      if (enabled) setMessage(appearanceMessages(locale).brandSaveAccessRestored);
+    } catch (caught) {
       reportWorkspaceRequestFailure(caught, signal);
     } finally {
+      if (brandAccessRequest.current === signal) brandAccessRequest.current = null;
       if (!signal.aborted) setBusy("");
     }
   }
@@ -648,15 +732,23 @@ export default function AccountPage() {
         Object.values(institutionPolicy.capabilities).some(Boolean))),
   );
 
+  const requestSettingsSection = useCallback((section: string) => {
+    appearanceSelected.current = section === "appearance" || section === "#appearance";
+    setRequestedSection(section);
+    if (appearanceSelected.current) {
+      setError((current) => (typeof current === "string" ? current : ""));
+    }
+  }, []);
+
   useEffect(() => {
-    const selectFromHash = () => setRequestedSection(window.location.hash);
+    const selectFromHash = () => requestSettingsSection(window.location.hash);
     selectFromHash();
     window.addEventListener("hashchange", selectFromHash);
     return () => window.removeEventListener("hashchange", selectFromHash);
-  }, []);
+  }, [requestSettingsSection]);
 
   function selectSection(section: SettingsSection) {
-    setRequestedSection(section);
+    requestSettingsSection(section);
     window.history.replaceState(
       null,
       "",
@@ -825,7 +917,7 @@ export default function AccountPage() {
                   Organization content and financial records are retained. Transfer ownership or
                   close any organization you own before deleting your sign-in.
                 </p>
-                {error ? (
+                {typeof error === "string" && error ? (
                   <p className="error" role="alert">
                     {error}
                   </p>
@@ -889,7 +981,7 @@ export default function AccountPage() {
       id="account-settings-content"
       ref={settingsContentRef}
     >
-      {error ? (
+      {typeof error === "string" && error ? (
         <p className="error" lang="en-CA" role="alert">
           {error}
         </p>
@@ -908,6 +1000,16 @@ export default function AccountPage() {
         tabIndex={-1}
         aria-labelledby={`settings-tab-${selectedSection}`}
       >
+        <div aria-live="polite">
+          {typeof error !== "string" && selectedSection !== "appearance" ? (
+            <p className="error">
+              {brandSaveUnavailableMessage(
+                appearanceMessages(locale),
+                error.brandSaveUnavailableReason,
+              )}
+            </p>
+          ) : null}
+        </div>
         <div className="settings-grid">
           {selectedSection === "overview" &&
           businessManagementEnabled &&
@@ -1440,8 +1542,15 @@ export default function AccountPage() {
                 onChange={setTheme}
                 onSave={saveTheme}
                 onReset={() => void resetTheme()}
+                onRecheckAccess={
+                  brandAvailability.recheckNeeded && permissions.manageWorkspace
+                    ? () => void recheckBrandAccess()
+                    : undefined
+                }
+                checkingAccess={busy === "brandAccess"}
                 canManage={permissions.manageWorkspace}
-                entitled={entitlements?.brandTheme === true}
+                entitled={brandAvailability.enabled}
+                unavailableReason={brandAvailability.unavailableReason}
                 busy={busy !== ""}
               />
             </div>

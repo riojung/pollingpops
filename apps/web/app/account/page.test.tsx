@@ -1,4 +1,10 @@
-import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import {
+  isValidElement,
+  type ComponentProps,
+  type FormEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -138,6 +144,8 @@ vi.mock("./personal-subscription-options", () => ({
 
 import AccountPage from "./page";
 import { AUTH_CHANGE_EVENT, ApiClientError } from "../../lib/api";
+import { appearanceMessages } from "../../lib/i18n/appearance-messages";
+import { WorkspaceBrandSettings } from "./appearance-settings";
 import { SettingsSectionRead } from "./settings-section-read";
 
 const account = {
@@ -177,19 +185,17 @@ const account = {
 const membersPath = "/v1/workspace/members?expectedWorkspaceId=workspace";
 const ltiPath = "/v1/workspace/lti-registrations?expectedWorkspaceId=workspace";
 const invitationPath = "/v1/workspace/invitations?expectedWorkspaceId=workspace";
+const themePath = "/v1/account/theme?expectedWorkspaceId=workspace";
+const brand = {
+  organizationName: "Trusted live brand",
+  primaryColor: "#39243C",
+  accentColor: "#AC2855",
+  colorMode: "dark",
+} satisfies BrandTheme;
 
 function response(path: string): unknown {
   if (path === "/v1/auth/me") return account;
-  if (path === "/v1/account/theme?expectedWorkspaceId=workspace")
-    return {
-      theme: {
-        organizationName: "Trusted live brand",
-        primaryColor: "#39243C",
-        accentColor: "#AC2855",
-        colorMode: "dark",
-      },
-      enabled: true,
-    };
+  if (path === themePath) return { theme: brand, enabled: true };
   if (path === "/v1/workspaces")
     return {
       activeWorkspaceId: "workspace",
@@ -314,6 +320,11 @@ function settingsReads(path: string) {
 function settingsWrites() {
   return fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method && init.method !== "GET");
 }
+function brandSettings() {
+  const node = elements(fixtures.tree).find((node) => node.type === WorkspaceBrandSettings);
+  if (!node) throw new Error("Workspace brand settings were not rendered");
+  return node.props as unknown as ComponentProps<typeof WorkspaceBrandSettings>;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -333,6 +344,269 @@ function attachLoadRegion() {
   (byId("account-load-state").props.ref as (node: unknown) => void)(node);
   return node;
 }
+
+describe("workspace live brand availability", () => {
+  it.each([
+    { enabled: false, reason: "operator_policy", expected: "operator_policy" },
+    { enabled: false, reason: "future_reason", expected: undefined },
+    { enabled: false, reason: undefined, expected: undefined },
+    { enabled: true, reason: undefined, expected: undefined },
+  ])("uses the scoped theme grant and reason when the account grant differs %o", async (test) => {
+    browser.location.hash = "#appearance";
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/v1/auth/me") {
+        return { ...account, entitlements: { ...account.entitlements, brandTheme: !test.enabled } };
+      }
+      if (path === themePath) {
+        if (init?.method === "PUT") return { theme: JSON.parse(String(init.body)) };
+        return { theme: brand, enabled: test.enabled, unavailableReason: test.reason };
+      }
+      return response(path);
+    });
+    const route = harness();
+    await route.settle();
+    expect(brandSettings()).toMatchObject({
+      entitled: test.enabled,
+      unavailableReason: test.expected,
+    });
+    const draft = { ...brand, organizationName: "Draft brand" };
+    brandSettings().onChange(draft);
+    route.render();
+    brandSettings().onSave({ preventDefault: vi.fn() } as unknown as FormEvent);
+    await route.settle();
+    expect(settingsWrites()).toHaveLength(test.enabled ? 1 : 0);
+    if (test.enabled) expect(brandSettings().savedTheme).toEqual(draft);
+    route.dispose();
+  });
+
+  it.each([
+    { actorId: "user", workspaceId: "workspace", reason: "plan_limit", expected: "plan_limit" },
+    {
+      actorId: "user",
+      workspaceId: "workspace",
+      reason: "operator_policy",
+      expected: "operator_policy",
+    },
+    { actorId: "other", workspaceId: "workspace", reason: "plan_limit", expected: undefined },
+    { actorId: "user", workspaceId: "other", reason: "plan_limit", expected: undefined },
+    { actorId: "user", workspaceId: "workspace", reason: "future_reason", expected: undefined },
+    { actorId: undefined, workspaceId: undefined, reason: undefined, expected: undefined },
+  ])("preserves a draft and reset after the current save is denied %o", async (test) => {
+    browser.location.hash = "#appearance";
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === themePath && init?.method === "PUT") {
+        throw new ApiClientError(
+          "The server denied the save",
+          "ENTITLEMENT_LIMIT",
+          402,
+          undefined,
+          {
+            actorId: test.actorId,
+            workspaceId: test.workspaceId,
+            unavailableReason: test.reason,
+          },
+        );
+      }
+      if (path === themePath && init?.method === "DELETE") return undefined;
+      return response(path);
+    });
+    const route = harness();
+    await route.settle();
+    const original = brandSettings().savedTheme;
+    const draft = { ...brand, organizationName: "Unsaved brand" };
+    brandSettings().onChange(draft);
+    route.render();
+    const event = { preventDefault: vi.fn() } as unknown as FormEvent;
+    brandSettings().onSave(event);
+    const markup = await route.settle();
+    expect(markup).not.toContain("The server denied the save");
+    navigateTo("#overview");
+    expect(await route.settle()).not.toContain('class="error"');
+    navigateTo("#appearance");
+    await route.settle();
+    expect(brandSettings()).toMatchObject({
+      entitled: false,
+      unavailableReason: test.expected,
+      busy: false,
+      theme: draft,
+      savedTheme: original,
+    });
+    brandSettings().onSave(event);
+    await route.settle();
+    expect(settingsWrites()).toHaveLength(1);
+    expect(settingsWrites()[0]).toEqual([
+      themePath,
+      { method: "PUT", body: JSON.stringify(draft), signal: expect.any(AbortSignal) },
+    ]);
+    brandSettings().onReset();
+    await route.settle();
+    expect(settingsWrites()).toHaveLength(2);
+    expect(settingsWrites()[1]).toEqual([
+      themePath,
+      { method: "DELETE", signal: expect.any(AbortSignal) },
+    ]);
+    expect(brandSettings().savedTheme).toBeNull();
+    expect(brandSettings().entitled).toBe(false);
+    expect(brandSettings().onRecheckAccess).toBeTypeOf("function");
+    route.dispose();
+  });
+
+  it("announces a delayed save denial on the selected tab and retains the Appearance draft", async () => {
+    browser.location.hash = "#appearance";
+    const save = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string, init?: RequestInit) =>
+      path === themePath && init?.method === "PUT" ? save.promise : Promise.resolve(response(path)),
+    );
+    const route = harness();
+    const draft = { ...brand, organizationName: "Pending draft" };
+    const { brandSaveOperatorPolicy: denial } = appearanceMessages("en-CA");
+    await route.settle();
+    brandSettings().onChange(draft);
+    route.render();
+    brandSettings().onSave({ preventDefault: vi.fn() } as unknown as FormEvent);
+    navigateTo("#plan");
+    expect(await route.settle()).not.toContain(denial);
+
+    save.reject(
+      new ApiClientError("The server denied the save", "ENTITLEMENT_LIMIT", 402, undefined, {
+        actorId: "user",
+        workspaceId: "workspace",
+        unavailableReason: "operator_policy",
+      }),
+    );
+    expect(await route.settle()).toContain(denial);
+    const panel = byId("settings-panel");
+    expect(panel.props["aria-labelledby"]).toBe("settings-tab-plan");
+    const announcement = elements(panel).find((node) => node.props["aria-live"] === "polite");
+    expect(elements(announcement).some((node) => node.props.children === denial)).toBe(true);
+
+    navigateTo("#appearance");
+    // The mock renders only the draft name. The real panel renders its own notice.
+    expect(await route.settle()).not.toContain(denial);
+    expect(brandSettings()).toMatchObject({
+      entitled: false,
+      unavailableReason: "operator_policy",
+      theme: draft,
+      savedTheme: brand,
+    });
+    navigateTo("#plan");
+    expect(await route.settle()).not.toContain(denial);
+    expect(settingsWrites()).toHaveLength(1);
+    route.dispose();
+  });
+
+  it("rechecks only the scoped save access and preserves the draft until an explicit save", async () => {
+    browser.location.hash = "#appearance";
+    const restored = deferred<unknown>();
+    const draft = { ...brand, organizationName: "Unsaved brand" };
+    const serverTheme = { ...brand, organizationName: "Another saved theme" };
+    const event = { preventDefault: vi.fn() } as unknown as FormEvent;
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path !== themePath) return response(path);
+      if (init?.method === "PUT") {
+        if (settingsWrites().length > 1) return { theme: JSON.parse(String(init.body)) };
+        throw new ApiClientError("Save denied", "ENTITLEMENT_LIMIT", 402, undefined, {
+          actorId: "user",
+          workspaceId: "workspace",
+          unavailableReason: "plan_limit",
+        });
+      }
+      const reads = settingsReads(themePath).length;
+      if (reads === 1) return response(path);
+      if (reads === 2) throw new Error("Unable to check right now");
+      if (reads === 3)
+        return { theme: serverTheme, enabled: false, unavailableReason: "operator_policy" };
+      return restored.promise;
+    });
+    const route = harness();
+    await route.settle();
+    brandSettings().onChange(draft);
+    route.render();
+    brandSettings().onSave(event);
+    await route.settle();
+    const originalRead = settingsReads(themePath)[0];
+
+    brandSettings().onRecheckAccess!();
+    expect(await route.settle()).toContain("Unable to check right now");
+    expect(brandSettings()).toMatchObject({
+      theme: draft,
+      savedTheme: brand,
+      entitled: false,
+      unavailableReason: "plan_limit",
+    });
+    brandSettings().onRecheckAccess!();
+    expect(await route.settle()).not.toContain("Unable to check right now");
+    expect(brandSettings()).toMatchObject({
+      theme: draft,
+      savedTheme: brand,
+      entitled: false,
+      unavailableReason: "operator_policy",
+    });
+
+    const recheck = brandSettings().onRecheckAccess!;
+    recheck();
+    recheck();
+    await route.settle();
+    expect(settingsReads(themePath)).toEqual(Array(4).fill(originalRead));
+    expect(brandSettings().checkingAccess).toBe(true);
+    expect(settingsWrites()).toHaveLength(1);
+    restored.resolve({ theme: serverTheme, enabled: true });
+    expect(await route.settle()).toContain(appearanceMessages("en-CA").brandSaveAccessRestored);
+    expect(brandSettings()).toMatchObject({
+      theme: draft,
+      savedTheme: brand,
+      entitled: true,
+      checkingAccess: false,
+    });
+    expect(brandSettings().onRecheckAccess).toBeUndefined();
+    expect(settingsWrites()).toHaveLength(1);
+    brandSettings().onSave(event);
+    await route.settle();
+    expect(settingsWrites()).toHaveLength(2);
+    expect(settingsWrites()[1]).toEqual([
+      themePath,
+      { method: "PUT", body: JSON.stringify(draft), signal: expect.any(AbortSignal) },
+    ]);
+    expect(brandSettings().savedTheme).toEqual(draft);
+    route.dispose();
+  });
+
+  it("ignores a pending brand access check when settings authority changes", async () => {
+    browser.location.hash = "#appearance";
+    const oldAccess = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === themePath && init?.method === "PUT") {
+        throw new ApiClientError("Save denied", "ENTITLEMENT_LIMIT", 402);
+      }
+      if (path === themePath && settingsReads(themePath).length > 1) return oldAccess.promise;
+      return response(path);
+    });
+    const route = harness();
+    await route.settle();
+    brandSettings().onSave({ preventDefault: vi.fn() } as unknown as FormEvent);
+    await route.settle();
+    brandSettings().onRecheckAccess!();
+    await route.settle();
+    const oldSignal = settingsReads(themePath)[1]?.[1]?.signal as AbortSignal;
+    const currentBrand = { ...brand, organizationName: "Current workspace brand" };
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === themePath ? { theme: currentBrand, enabled: true } : response(path),
+    );
+    browser.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+    expect(oldSignal.aborted).toBe(true);
+    await route.settle();
+    oldAccess.resolve({ enabled: false, unavailableReason: "operator_policy" });
+    await route.settle();
+    expect(brandSettings()).toMatchObject({
+      theme: currentBrand,
+      savedTheme: currentBrand,
+      entitled: true,
+      checkingAccess: false,
+    });
+    expect(brandSettings().onRecheckAccess).toBeUndefined();
+    route.dispose();
+  });
+});
 
 describe("account settings bootstrap recovery", () => {
   it("withholds account details and owner reads until all required reads finish", async () => {

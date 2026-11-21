@@ -1,4 +1,4 @@
-import type { CheckpointSetImportUnavailableReason, Entitlements } from "@openround/contracts";
+import type { Entitlements, WorkspaceCapabilityUnavailableReason } from "@openround/contracts";
 import type { Plan, Repository } from "@openround/db";
 import { applyFeatureEntitlements, resolveFeatureEntitlements } from "./feature-policy.js";
 import type { AppConfig } from "./config.js";
@@ -93,11 +93,12 @@ export async function workspaceEntitlements(
   return applyFeatureEntitlements(repository, config, workspaceId, entitlementsFor(plan, config));
 }
 
-export async function workspaceEntitlementsWithImportAvailability(
+export async function workspaceEntitlementsWithAvailability(
   repository: Repository,
   config: Parameters<typeof entitlementsFor>[1],
   workspaceId: string,
   plan: Plan,
+  capability: "csvExport" | "brandTheme",
 ) {
   const { entitlements, rules } = await resolveFeatureEntitlements(
     repository,
@@ -105,9 +106,12 @@ export async function workspaceEntitlementsWithImportAvailability(
     workspaceId,
     entitlementsFor(plan, config),
   );
-  const checkpointSetImportUnavailableReason: CheckpointSetImportUnavailableReason | null =
-    entitlements.csvExport ? null : rules.csvExport ? "operator_policy" : "plan_limit";
-  return { entitlements, checkpointSetImportUnavailableReason };
+  const unavailableReason: WorkspaceCapabilityUnavailableReason | null = entitlements[capability]
+    ? null
+    : rules[capability]
+      ? "operator_policy"
+      : "plan_limit";
+  return { entitlements, unavailableReason };
 }
 
 export function passwordProtectionAllowed(entitlements: Entitlements) {

@@ -32,6 +32,13 @@ interface UserResponse {
   businessManagementEnabled: boolean;
 }
 
+export function loadWorkspaceBrandSettings(workspaceId: string, signal: AbortSignal) {
+  return apiFetch<{ theme: BrandTheme | null; enabled: boolean; unavailableReason?: unknown }>(
+    workspaceSettingsPath("/v1/account/theme", workspaceId),
+    { signal },
+  );
+}
+
 export async function loadAccountSettings(signal: AbortSignal) {
   signal.throwIfAborted();
   let account: AccountResponse;
@@ -56,10 +63,7 @@ export async function loadAccountSettings(signal: AbortSignal) {
   signal.throwIfAborted();
   const { workspaceId } = account.creator;
   const [branding, workspaceList, embedPolicy, policy, identities, oidcStatus] = await Promise.all([
-    apiFetch<{ theme: BrandTheme | null; enabled: boolean }>(
-      workspaceSettingsPath("/v1/account/theme", workspaceId),
-      { signal },
-    ),
+    loadWorkspaceBrandSettings(workspaceId, signal),
     apiFetch<{ activeWorkspaceId: string | null; workspaces: WorkspaceSummary[] }>(
       "/v1/workspaces",
       {

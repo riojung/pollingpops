@@ -35,8 +35,10 @@ privacy acceptance remains open. **WX-11A** Sessions recovery and action hierarc
 [PR #296](https://github.com/riojung/pollingpops/pull/296) at `68b8716`.
 Checkpoint-set import availability copy merged through
 [PR #297](https://github.com/riojung/pollingpops/pull/297) at `68d24f1`.
-The current WX-11 increment on `codex/checkpoint-import-availability-reasons` adds server-backed
-plan and operator policy explanations for checkpoint-set import.
+Checkpoint-set import availability reasons merged through
+[PR #298](https://github.com/riojung/pollingpops/pull/298) at `9d4706d`.
+The current WX-11 increment on `codex/live-brand-availability-reasons` explains live-brand
+save availability in Appearance.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -51,22 +53,22 @@ follow its smaller checkpoints below; do not combine every checkpoint into one p
 Each delivery needs an assigned owner, tests, documentation and an explicit disposition of its
 remaining work. Candidate priorities indicate evaluation order, not a release promise.
 
-| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                              | Responsible role                |
-| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                       | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                       | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                        | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                                | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                          | Authoring + frontend            |
-| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open               | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                         | Async delivery + privacy        |
-| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                         | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                         | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | A–F and import copy merged. Import reasons implemented locally. | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                               | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                  | Library + organization access   |
+| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                                     | Responsible role                |
+| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------- |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                              | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                              | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                               | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                                       | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                 | Authoring + frontend            |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                      | Surveys + contracts + reporting |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                                | Async delivery + privacy        |
+| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | A–F and import reasons merged. Live-brand reasons implemented locally. | Design system + frontend        |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
 
 ## Selected first delivery
 
@@ -79,7 +81,7 @@ The public product website is merged in PR #288. WX-11A's Sessions recovery/acti
 merged in PR #291, WX-11B Results recovery in PR #292, WX-11C Workspace initialization and recovery
 in PR #293, WX-11D Library recovery in PR #294, and WX-11E availability copy in PR #295.
 WX-11F independent settings-section recovery merged in PR #296. Checkpoint-set import availability
-copy merged in PR #297. Plan and operator policy reasons for import are implemented locally.
+copy merged in PR #297 and import reasons in PR #298. Live-brand save reasons are implemented locally.
 Other capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job
 collections and human review of localized copy remain open.
 
@@ -815,8 +817,7 @@ grant and on current preview or creation denials. The default plan limit applies
 explicit rule. An explicit rule that denies access supplies the operator policy reason. The
 existing generic notice handles missing or unfamiliar reasons and responses from a different
 workspace or actor. Both explanations are localized across ten catalogs. The frontend, server and
-localization teams own this increment. Implemented locally on
-`codex/checkpoint-import-availability-reasons`.
+localization teams own this increment. Merged through PR #298 at `9d4706d`.
 
 Local verification passed `VITEST_MAX_WORKERS=1 pnpm check`, including 1,140 contract, 6,528 web,
 1,677 server and 529 support tests, four application builds and compiled startup. All 147 focused
@@ -824,8 +825,25 @@ web tests, 22 focused server tests and 15 creation/import browser cases passed. 
 includes plan, operator policy and generic copy. Optional PostgreSQL suites were skipped.
 Native-language acceptance remains open.
 
-**Remaining capability explanations.** Extend this work to other capability surfaces. Rollout,
-administrator policy and provider details require their own server decisions and qualification.
+**Live-brand save availability reasons.** Appearance reads theme availability and its reason
+together from the workspace-scoped theme response. If availability changes before a save, a
+current entitlement denial updates the notice and disables Save. If the denial arrives on another
+Settings tab, that tab's notice clears when the user returns to Appearance. Workspace managers
+can recheck access with a workspace-scoped read that keeps the draft intact. If access returns,
+the user can save the draft explicitly. Preview and reset remain available. When a reason is
+missing, unfamiliar or scoped to another actor or workspace, the UI uses the generic message.
+The availability and recovery messages are localized across ten catalogs. Implemented locally
+on `codex/live-brand-availability-reasons`.
+
+Local verification passed `VITEST_MAX_WORKERS=1 pnpm check`, including 1,140 contract, 6,545 web,
+1,678 server and 529 support tests, four application builds and compiled startup. All ten
+Settings recovery browser cases and both business Appearance cases passed. The browser tests
+cover plan limits, operator policy, and an explicit save after access returns with the draft
+preserved. Optional PostgreSQL suites were skipped. Native-language acceptance remains open.
+
+**Remaining capability explanations.** A follow-up can explain workspace CSV export availability
+in Plan and usage. Retained room report coverage requires separate checks. Rollout, administrator
+policy and provider details require their own server decisions and qualification.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -926,8 +944,8 @@ its human privacy acceptance remains open. The next Survey implementation checkp
 writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initialization and recovery**,
 **WX-11D Library recovery**, and **WX-11E availability copy** are merged in PRs #291–295.
 **WX-11F independent settings-section recovery** merged in PR #296. Checkpoint-set import
-availability copy merged in PR #297. Import plan and operator policy reasons are implemented
-locally. Other capability explanations remain pending.
+availability copy merged in PR #297 and import reasons in PR #298. Live-brand save reasons are
+implemented locally. Other capability explanations remain pending.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

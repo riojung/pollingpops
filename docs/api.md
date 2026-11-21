@@ -532,9 +532,16 @@ directly.
 
 - `GET|PUT|DELETE /v1/account/theme` — workspace Round branding. The existing
   `{organizationName, primaryColor, accentColor}` object accepts optional
-  `colorMode: "light" | "dark"`; omitted mode preserves legacy rendering. PUT retains
-  workspace-management and branding-entitlement checks. New rooms freeze the resolved
-  mode/palette, while existing room snapshots remain unchanged. Interface theme preferences
+  `colorMode: "light" | "dark"`; omitted mode preserves legacy rendering. GET returns
+  `{theme, enabled, unavailableReason}`. A disabled grant has reason `operator_policy` when an
+  explicit rule denies access, or `plan_limit` when the default plan entitlement denies access.
+  An enabled grant has a null reason. PUT retains workspace-management and branding-entitlement
+  checks. Its `402 ENTITLEMENT_LIMIT` response includes
+  `error.details.{unavailableReason, actorId, workspaceId}` for the authorized request. Clients
+  can use the reason when both identifiers match the request and use generic wording otherwise.
+  Theme reads and saves use `Cache-Control: private, no-store`. Workspace managers can still
+  remove the saved brand when saving a new one is unavailable. New rooms freeze the resolved
+  mode and palette. Interface theme preferences
   are browser-local and do not use this endpoint.
 - `GET|PUT /v1/account/embed-origins`
 - `GET /v1/account/export`

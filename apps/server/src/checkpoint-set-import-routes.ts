@@ -19,7 +19,7 @@ import {
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import type { AppConfig } from "./config.js";
-import { workspaceEntitlementsWithImportAvailability } from "./entitlements.js";
+import { workspaceEntitlementsWithAvailability } from "./entitlements.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { importCheckpointSet } from "./portability.js";
 import { importQtiPackage } from "./qti.js";
@@ -70,20 +70,20 @@ export function registerCheckpointSetImportRoutes(
     return false;
   };
   const authority = async (creator: CreatorContext) => {
-    const [{ entitlements, checkpointSetImportUnavailableReason }, roundClientProtocol] =
-      await Promise.all([
-        workspaceEntitlementsWithImportAvailability(
-          repository,
-          config,
-          creator.workspaceId,
-          creator.plan,
-        ),
-        workspaceFeatureEnabled(repository, config, creator.workspaceId, "roundClientProtocol"),
-      ]);
+    const [{ entitlements, unavailableReason }, roundClientProtocol] = await Promise.all([
+      workspaceEntitlementsWithAvailability(
+        repository,
+        config,
+        creator.workspaceId,
+        creator.plan,
+        "csvExport",
+      ),
+      workspaceFeatureEnabled(repository, config, creator.workspaceId, "roundClientProtocol"),
+    ]);
     return {
       importEnabled: entitlements.csvExport,
       roundClientProtocol,
-      unavailableReason: checkpointSetImportUnavailableReason,
+      unavailableReason,
     };
   };
   const requireEntitlement = (

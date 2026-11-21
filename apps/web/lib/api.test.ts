@@ -337,6 +337,25 @@ describe("product logout and admin session revocation", () => {
 });
 
 describe("API retry timing", () => {
+  it("keeps structured error details and uses the nested retry timing", async () => {
+    const details = { retryAfterSeconds: 35, reason: "maintenance" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: "RATE_LIMITED", message: "Try again later", details } },
+          { status: 429 },
+        ),
+      ),
+    );
+    await expect(apiFetch("/v1/auth/pin/request")).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      status: 429,
+      retryAfterSeconds: 35,
+      details,
+    });
+  });
+
   it("retains structured server timing on throttled requests", async () => {
     vi.stubGlobal(
       "fetch",

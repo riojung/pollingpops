@@ -61,10 +61,15 @@ const workspace: WorkspaceAccountContext = {
     manageIntegrations: true,
   },
 };
+const callbacks = {
+  signal: new AbortController().signal,
+  onSaved: () => {},
+  onWorkspaceConflict: () => {},
+};
 describe("workspace idle policy permissions", () => {
   it("shows the server policy to viewers without offering a write control", () => {
     const html = renderToStaticMarkup(
-      <IdleTimeoutSettings workspace={workspace} canManage={false} onSaved={() => {}} />,
+      <IdleTimeoutSettings workspace={workspace} canManage={false} {...callbacks} />,
     );
     expect(html).toMatch(/<input[^>]*disabled=""[^>]*value="7"/);
     expect(html).toContain("Only a workspace owner or organization administrator");
@@ -72,7 +77,7 @@ describe("workspace idle policy permissions", () => {
   });
   it("exposes an accessible bounded integer field and explicit save action to workspace managers", () => {
     const html = renderToStaticMarkup(
-      <IdleTimeoutSettings workspace={workspace} canManage onSaved={() => {}} />,
+      <IdleTimeoutSettings workspace={workspace} canManage {...callbacks} />,
     );
     expect(html).toContain('for="workspace-idle-timeout"');
     expect(html).toContain('aria-describedby="workspace-idle-timeout-help"');
@@ -99,7 +104,7 @@ describe("workspace idle policy permissions", () => {
     const onSaved = vi.fn();
     const render = () => {
       mocked.cursor = 0;
-      return elements(IdleTimeoutSettings({ workspace, canManage: true, onSaved }));
+      return elements(IdleTimeoutSettings({ ...callbacks, workspace, canManage: true, onSaved }));
     };
     (render().find((node) => node.type === "input")!.props.onChange as (event: unknown) => void)({
       target: { value: "12" },
@@ -108,12 +113,16 @@ describe("workspace idle policy permissions", () => {
       preventDefault() {},
     });
     for (let index = 0; index < 6; index++) await Promise.resolve();
-    expect(mocked.apiFetch).toHaveBeenCalledWith("/v1/workspace/settings", {
-      method: "PATCH",
-      body: JSON.stringify({
-        sessionPolicy: { idleTimeoutMinutes: 12, warningDurationSeconds: 60 },
-      }),
-    });
+    expect(mocked.apiFetch).toHaveBeenCalledWith(
+      "/v1/workspace/settings?expectedWorkspaceId=workspace",
+      {
+        method: "PATCH",
+        signal: callbacks.signal,
+        body: JSON.stringify({
+          sessionPolicy: { idleTimeoutMinutes: 12, warningDurationSeconds: 60 },
+        }),
+      },
+    );
     expect(onSaved).toHaveBeenCalledWith(updated);
     expect(policyUpdated).toHaveBeenCalledOnce();
     expect(workspaceRefresh).not.toHaveBeenCalled();

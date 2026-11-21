@@ -75,7 +75,8 @@ production cases passed after rebuilding with these fixes; no visibility asserti
 ## Remaining work
 
 Sessions, Results, Workspace initialization and Library recovery merged in PRs #291–294.
-WX-11E availability copy is implemented locally. Independent settings-section recovery is next.
+WX-11E availability copy merged in PR #295. Independent settings-section recovery is the current
+local increment.
 Detailed plan, operator, rollout and provider reasons require an authoritative projection.
 
 Survey C3/C4 runtime reports/exports and B3 authoring remain pending the recorded privacy acceptance.

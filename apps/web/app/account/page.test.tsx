@@ -137,7 +137,8 @@ vi.mock("./personal-subscription-options", () => ({
 }));
 
 import AccountPage from "./page";
-import { ApiClientError } from "../../lib/api";
+import { AUTH_CHANGE_EVENT, ApiClientError } from "../../lib/api";
+import { SettingsSectionRead } from "./settings-section-read";
 
 const account = {
   creator: {
@@ -173,9 +174,13 @@ const account = {
   businessManagementEnabled: false,
   productFeatures: { workspaceShell: false },
 };
+const membersPath = "/v1/workspace/members?expectedWorkspaceId=workspace";
+const ltiPath = "/v1/workspace/lti-registrations?expectedWorkspaceId=workspace";
+const invitationPath = "/v1/workspace/invitations?expectedWorkspaceId=workspace";
+
 function response(path: string): unknown {
   if (path === "/v1/auth/me") return account;
-  if (path === "/v1/account/theme")
+  if (path === "/v1/account/theme?expectedWorkspaceId=workspace")
     return {
       theme: {
         organizationName: "Trusted live brand",
@@ -190,23 +195,25 @@ function response(path: string): unknown {
       activeWorkspaceId: "workspace",
       workspaces: [{ id: "workspace", name: "Trusted workspace", role: "owner", homeRegion: "ca" }],
     };
-  if (path === "/v1/account/embed-origins") return { origins: ["https://trusted.example.org"] };
-  if (path === "/v1/workspace/institution-policy")
+  if (path === "/v1/account/embed-origins?expectedWorkspaceId=workspace")
+    return { origins: ["https://trusted.example.org"] };
+  if (path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace")
     return {
       contractStatus: "active",
       identityRequirement: "institution",
       capabilities: { lti: true },
       k12Enabled: false,
     };
-  if (path === "/v1/auth/federated-identities") return { identities: [] };
+  if (path === "/v1/auth/federated-identities?expectedWorkspaceId=workspace")
+    return { identities: [] };
   if (path.startsWith("/v1/auth/oidc/status?"))
     return { enabled: true, providerName: "Trusted institution" };
-  if (path === "/v1/workspace/members")
+  if (path === membersPath)
     return {
       members: [{ userId: "user", email: "creator@example.org", role: "owner" }],
       invitations: [],
     };
-  if (path === "/v1/workspace/lti-registrations")
+  if (path === ltiPath)
     return {
       registrations: [
         {
@@ -224,7 +231,7 @@ function response(path: string): unknown {
 }
 
 let browser: EventTarget & {
-  location: { pathname: string; search: string; hash: string };
+  location: { pathname: string; search: string; hash: string; reload: ReturnType<typeof vi.fn> };
   history: { replaceState: ReturnType<typeof vi.fn> };
 };
 let browserDocument: EventTarget & { body: object; activeElement: object };
@@ -235,7 +242,12 @@ beforeEach(() => {
   fixtures.router = { replace: vi.fn() };
   fixtures.apiFetch.mockReset().mockImplementation(async (path: string) => response(path));
   browser = Object.assign(new EventTarget(), {
-    location: { pathname: "/account", search: "?from=settings", hash: "#overview" },
+    location: {
+      pathname: "/account",
+      search: "?from=settings",
+      hash: "#overview",
+      reload: vi.fn(),
+    },
     history: { replaceState: vi.fn() },
   });
   const body = {};
@@ -286,6 +298,22 @@ function retry() {
   )!;
   (button.props.onClick as () => void)();
 }
+function retrySection(id: string) {
+  const boundary = elements(byId(id)).find((node) => node.type === SettingsSectionRead)!;
+  (boundary.props.onRetry as () => void)();
+}
+function navigateTo(hash: string) {
+  browser.location.hash = hash;
+  browser.dispatchEvent(new Event("hashchange"));
+}
+function settingsReads(path: string) {
+  return fixtures.apiFetch.mock.calls.filter(
+    ([url, init]) => url === path && (!init?.method || init.method === "GET"),
+  );
+}
+function settingsWrites() {
+  return fixtures.apiFetch.mock.calls.filter(([, init]) => init?.method && init.method !== "GET");
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -302,15 +330,17 @@ function attachLoadRegion() {
       browserDocument.activeElement = node;
     }),
   };
-  (byId("account-load-state").props.ref as { current: unknown }).current = node;
+  (byId("account-load-state").props.ref as (node: unknown) => void)(node);
   return node;
 }
 
 describe("account settings bootstrap recovery", () => {
-  it("renders loading without default account details, tabs, or editable settings before all reads finish", async () => {
+  it("withholds account details and owner reads until all required reads finish", async () => {
     const held = deferred<unknown>();
     fixtures.apiFetch.mockImplementation((path: string) =>
-      path === "/v1/workspace/lti-registrations" ? held.promise : Promise.resolve(response(path)),
+      path === "/v1/account/embed-origins?expectedWorkspaceId=workspace"
+        ? held.promise
+        : Promise.resolve(response(path)),
     );
     const route = harness();
     const markup = await route.settle();
@@ -320,48 +350,108 @@ describe("account settings bootstrap recovery", () => {
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain("<form");
     expect(markup).not.toContain("Personal account");
-    expect(markup).not.toContain("No LMS registrations");
-    held.resolve(response("/v1/workspace/lti-registrations"));
+    expect(settingsReads(membersPath)).toHaveLength(0);
+    expect(settingsReads(ltiPath)).toHaveLength(0);
+
+    held.resolve(response("/v1/account/embed-origins?expectedWorkspaceId=workspace"));
     expect(await route.settle()).toContain('value="Trusted workspace"');
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
     route.dispose();
   });
 
-  it.each(["/v1/account/embed-origins", "/v1/workspace/lti-registrations"])(
-    "makes %s failure recoverable with GET-only Retry and preserves the selected hash",
-    async (failed) => {
-      browser.location.hash = "#appearance";
-      fixtures.apiFetch.mockImplementation(async (path: string) => {
-        if (path === failed) throw new Error("Read unavailable");
+  it("makes a required read failure recoverable with GET-only Retry and preserves the selected hash", async () => {
+    const failed = "/v1/account/embed-origins?expectedWorkspaceId=workspace";
+    browser.location.hash = "#appearance";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === failed) throw new Error("Read unavailable");
+      return response(path);
+    });
+    const route = harness();
+    let markup = await route.settle();
+    expect(markup).toContain("Workspace settings are unavailable");
+    expect(markup).not.toContain('role="tablist"');
+    expect(markup).not.toContain("<form");
+    expect(markup).not.toContain("Trusted live brand");
+    expect(settingsReads(membersPath)).toHaveLength(0);
+    expect(settingsReads(ltiPath)).toHaveLength(0);
+    const region = attachLoadRegion();
+    const held = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === failed ? held.promise : Promise.resolve(response(path)),
+    );
+    retry();
+    expect(region.focus).toHaveBeenCalledOnce();
+    markup = await route.settle();
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).not.toContain("Try again");
+    held.resolve(response(failed));
+    markup = await route.settle();
+    expect(markup).toContain('value="Trusted live brand"');
+    expect(markup).toContain('aria-labelledby="settings-tab-appearance"');
+    expect(browser.location.hash).toBe("#appearance");
+    const panel = { focus: vi.fn() };
+    browserDocument.activeElement = browserDocument.body;
+    (byId("settings-panel").props.ref as (node: unknown) => void)(panel);
+    expect(panel.focus).toHaveBeenCalledOnce();
+    expect(settingsWrites()).toHaveLength(0);
+    route.dispose();
+  });
+
+  it.each([true, false])(
+    "withdraws the rename form on workspace conflict, focus inside: %s",
+    async (inside) => {
+      browser.location.hash = "#overview";
+      const conflict = new ApiClientError("The active workspace changed", "CONFLICT", 409);
+      const held = deferred<unknown>();
+      fixtures.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (init?.method === "PATCH") return held.promise;
         return response(path);
       });
       const route = harness();
-      let markup = await route.settle();
-      expect(markup).toContain("Workspace settings are unavailable");
-      expect(markup).not.toContain('role="tablist"');
-      expect(markup).not.toContain("<form");
-      expect(markup).not.toContain("Trusted live brand");
+      expect(await route.settle()).toContain('id="workspace-name"');
+      const focusedControl = {};
+      const movedFocus = {};
+      (byId("account-settings-content").props.ref as { current: unknown }).current = {
+        contains: (target: unknown) => target === focusedControl,
+      };
+      browserDocument.activeElement = focusedControl;
+      const focus = new Event("focusin");
+      Object.defineProperty(focus, "target", { value: focusedControl });
+      browserDocument.dispatchEvent(focus);
+      const form = elements(fixtures.tree).find(
+        (node) =>
+          node.type === "form" &&
+          elements(node).some((element) => element.props.id === "workspace-name"),
+      )!;
+      const pending = (
+        form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>
+      )({
+        preventDefault() {},
+      });
+      await route.settle();
+      browserDocument.activeElement = inside ? browserDocument.body : movedFocus;
+      held.reject(conflict);
+      await pending;
+      const markup = await route.settle();
+      expect(markup).toContain("The active workspace changed");
+      expect(markup).not.toContain('id="workspace-name"');
       const region = attachLoadRegion();
-      const held = deferred<unknown>();
-      fixtures.apiFetch.mockImplementation((path: string) =>
-        path === failed ? held.promise : Promise.resolve(response(path)),
-      );
+      expect(region.focus).toHaveBeenCalledTimes(inside ? 1 : 0);
+      if (!inside) expect(browserDocument.activeElement).toBe(movedFocus);
+      expect(settingsWrites()).toEqual([
+        [
+          "/v1/workspace/settings?expectedWorkspaceId=workspace",
+          {
+            method: "PATCH",
+            body: JSON.stringify({ name: "Trusted workspace" }),
+            signal: expect.objectContaining({ aborted: true }),
+          },
+        ],
+      ]);
       retry();
-      expect(region.focus).toHaveBeenCalledOnce();
-      markup = await route.settle();
-      expect(markup).toContain('aria-busy="true"');
-      expect(markup).not.toContain("Try again");
-      held.resolve(response(failed));
-      markup = await route.settle();
-      expect(markup).toContain('value="Trusted live brand"');
-      expect(markup).toContain('aria-labelledby="settings-tab-appearance"');
-      expect(browser.location.hash).toBe("#appearance");
-      const panel = { focus: vi.fn() };
-      browserDocument.activeElement = browserDocument.body;
-      (byId("settings-panel").props.ref as (node: unknown) => void)(panel);
-      expect(panel.focus).toHaveBeenCalledOnce();
-      expect(
-        fixtures.apiFetch.mock.calls.every(([, init]) => !init?.method || init.method === "GET"),
-      ).toBe(true);
+      expect(await route.settle()).toContain('id="workspace-name"');
+      expect(settingsWrites()).toHaveLength(1);
       route.dispose();
     },
   );
@@ -460,9 +550,9 @@ describe("account settings bootstrap recovery", () => {
     },
   );
 
-  it("does not reclassify a peripheral authentication error as successful billing-only settings", async () => {
+  it("does not reclassify a required settings authentication error as successful billing-only settings", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) => {
-      if (path === "/v1/workspace/lti-registrations")
+      if (path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace")
         throw new ApiClientError("Session changed", "UNAUTHORIZED", 401);
       return response(path);
     });
@@ -470,7 +560,7 @@ describe("account settings bootstrap recovery", () => {
     const markup = await route.settle();
     expect(markup).toContain("Workspace settings are unavailable");
     expect(markup).not.toContain("Personal account");
-    expect(fixtures.apiFetch.mock.calls.some(([path]) => path === "/v1/auth/user")).toBe(false);
+    expect(settingsReads("/v1/auth/user")).toHaveLength(0);
     expect(fixtures.router.replace).not.toHaveBeenCalled();
     route.dispose();
   });
@@ -517,6 +607,446 @@ describe("account settings bootstrap recovery", () => {
     stale.resolve({ ...account, workspace: { ...account.workspace, name: "Obsolete workspace" } });
     expect(await route.settle()).not.toContain("Obsolete workspace");
     expect(fixtures.apiFetch.mock.calls.filter(([path]) => path === "/v1/auth/me")).toHaveLength(2);
+    route.dispose();
+  });
+});
+
+describe("owner settings section recovery", () => {
+  const unavailable = "This section is unavailable.";
+
+  it.each([
+    [membersPath, ltiPath],
+    [ltiPath, membersPath],
+  ])("reloads workspace authority after %s conflicts", async (conflicting, pending) => {
+    browser.location.hash = "#people";
+    const conflict = deferred<unknown>();
+    const sibling = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) => {
+      if (path === conflicting) return conflict.promise;
+      if (path === pending) return sibling.promise;
+      return Promise.resolve(response(path));
+    });
+    const route = harness();
+    expect(await route.settle()).toContain('id="account-members-section"');
+    const originalRead = settingsReads(pending)[0]![1].signal as AbortSignal;
+    const changed = new ApiClientError("The active workspace changed", "CONFLICT", 409);
+    conflict.reject(changed);
+    let markup = await route.settle();
+    expect(markup).toContain("Workspace settings are unavailable");
+    expect(markup).toContain(changed.message);
+    expect(markup).not.toContain(unavailable);
+    expect(markup).not.toContain('id="settings-panel"');
+    expect(originalRead.aborted).toBe(true);
+
+    const workspaceId = "current-workspace";
+    const workspace = { id: workspaceId, name: "Current workspace", role: "editor" };
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/v1/auth/me") {
+        return {
+          ...account,
+          creator: { ...account.creator, workspaceId, role: workspace.role },
+          workspace: {
+            ...account.workspace,
+            id: workspace.id,
+            name: workspace.name,
+            permissions: {
+              manageWorkspace: false,
+              managePeople: false,
+              manageBilling: false,
+              manageIntegrations: false,
+            },
+          },
+        };
+      }
+      if (path === "/v1/workspaces")
+        return { activeWorkspaceId: workspaceId, workspaces: [workspace] };
+      return response(
+        path.replace("?expectedWorkspaceId=current-workspace", "?expectedWorkspaceId=workspace"),
+      );
+    });
+    retry();
+    markup = await route.settle();
+    expect(settingsReads("/v1/auth/me")).toHaveLength(2);
+    expect(settingsReads(`/v1/account/theme?expectedWorkspaceId=${workspaceId}`)).toHaveLength(1);
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    expect(settingsWrites()).toHaveLength(0);
+    expect(markup).toContain("Current workspace");
+    expect(markup).not.toContain("Workspace settings are unavailable");
+
+    sibling.reject(changed);
+    expect(await route.settle()).toContain("Current workspace");
+    route.dispose();
+  });
+
+  it("loads both sections independently and retries members alone after a local failure", async () => {
+    browser.location.hash = "#people";
+    const members = deferred<unknown>();
+    const lti = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === membersPath
+        ? members.promise
+        : path === ltiPath
+          ? lti.promise
+          : Promise.resolve(response(path)),
+    );
+    const route = harness();
+    let markup = await route.settle();
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('id="account-members-section"');
+    expect(markup).toContain("Loading this section");
+    expect(markup).not.toContain("Invite member");
+    expect(markup).not.toContain("<table");
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+
+    members.reject(new ApiClientError("Session changed", "UNAUTHORIZED", 401));
+    markup = await route.settle();
+    expect(markup).toContain(unavailable);
+    expect(markup).not.toContain("Workspace settings are unavailable");
+    expect(markup).not.toContain("Invite member");
+    expect(settingsReads("/v1/auth/user")).toHaveLength(0);
+    expect(fixtures.router.replace).not.toHaveBeenCalled();
+
+    const retry = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === membersPath ? retry.promise : Promise.resolve(response(path)),
+    );
+    retrySection("account-members-section");
+    expect(await route.settle()).toContain("Loading this section");
+    retry.resolve(response(membersPath));
+    markup = await route.settle();
+    expect(markup).toContain("Invite member");
+    expect(markup).toContain("<td>creator@example.org</td>");
+    expect(settingsReads(membersPath)).toHaveLength(2);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    expect(settingsReads("/v1/auth/me")).toHaveLength(1);
+    expect(settingsWrites()).toHaveLength(0);
+
+    lti.resolve(response(ltiPath));
+    navigateTo("#security");
+    expect(await route.settle()).toContain("Trusted LMS");
+    route.dispose();
+  });
+
+  it("keeps security, billing, and Privacy usable after LTI fails and distinguishes a confirmed empty retry", async () => {
+    browser.location.hash = "#security";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === ltiPath) throw new ApiClientError("Unavailable", "UNAVAILABLE", 503);
+      return response(path);
+    });
+    const route = harness();
+    let markup = await route.settle();
+    expect(markup).toContain("Idle timeout");
+    expect(markup).toContain("Secure embed origins");
+    expect(markup).toContain("https://trusted.example.org");
+    expect(markup).toContain(unavailable);
+    expect(markup).not.toContain("no platform is registered");
+
+    navigateTo("#plan");
+    expect(await route.settle()).toContain("Explore Pro");
+    navigateTo("#data");
+    markup = await route.settle();
+    expect(markup).toContain("Institution identities");
+    expect(markup).toContain("delete-confirmation");
+    expect(markup).toMatch(/<button class="button-danger" disabled="" type="submit"/);
+    navigateTo("#security");
+    expect(await route.settle()).toContain(unavailable);
+
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === ltiPath ? { registrations: [] } : response(path),
+    );
+    retrySection("account-lti-section");
+    markup = await route.settle();
+    expect(markup).toContain("no platform is registered");
+    expect(markup).not.toContain(unavailable);
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(2);
+    expect(settingsReads("/v1/auth/me")).toHaveLength(1);
+    expect(settingsWrites()).toHaveLength(0);
+    route.dispose();
+  });
+
+  it("aborts a pending section retry on tab leave and ignores a late response after returning", async () => {
+    browser.location.hash = "#security";
+    const retry = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === ltiPath) throw new Error("Unavailable");
+      return response(path);
+    });
+    const route = harness();
+    expect(await route.settle()).toContain(unavailable);
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === ltiPath ? retry.promise : Promise.resolve(response(path)),
+    );
+    retrySection("account-lti-section");
+    expect(await route.settle()).toContain("Loading this section");
+    const signal = settingsReads(ltiPath)[1]![1].signal as AbortSignal;
+
+    navigateTo("#people");
+    expect(await route.settle()).toContain("Invite member");
+    expect(signal.aborted).toBe(true);
+    fixtures.apiFetch.mockImplementation(async (path: string) => response(path));
+    navigateTo("#security");
+    expect(await route.settle()).toContain("Trusted LMS");
+
+    retry.resolve({ registrations: [{ id: "old", name: "Obsolete LMS" }] });
+    expect(await route.settle()).not.toContain("Obsolete LMS");
+    expect(settingsReads(ltiPath)).toHaveLength(3);
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    route.dispose();
+  });
+
+  it.each(["editor", "viewer"] as const)(
+    "never reads owner endpoints for an organization %s with organization member-management permission",
+    async (role) => {
+      browser.location.hash = "#people";
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        path === "/v1/auth/me"
+          ? {
+              ...account,
+              creator: { ...account.creator, role },
+              workspace: {
+                ...account.workspace,
+                accountType: "organization",
+                organization: { id: "org", name: "Trusted organization", role: "admin" },
+              },
+            }
+          : response(path),
+      );
+      const route = harness();
+      const markup = await route.settle();
+      expect(markup).toContain("/organization?organizationId=org#members");
+      expect(markup).not.toContain("Invite member");
+      navigateTo("#security");
+      expect(await route.settle()).not.toContain("account-lti-section");
+      expect(settingsReads(membersPath)).toHaveLength(0);
+      expect(settingsReads(ltiPath)).toHaveLength(0);
+      route.dispose();
+    },
+  );
+
+  it("excludes member reads for user-license organizations without withholding owner LTI", async () => {
+    browser.location.hash = "#people";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === "/v1/auth/me"
+        ? {
+            ...account,
+            workspace: {
+              ...account.workspace,
+              accountType: "organization",
+              licenseUnit: "user",
+              organization: { id: "org", name: "Trusted organization", role: "owner" },
+            },
+          }
+        : response(path),
+    );
+    const route = harness();
+    expect(await route.settle()).toContain("/organization?organizationId=org#members");
+    navigateTo("#security");
+    expect(await route.settle()).toContain("Trusted LMS");
+    expect(settingsReads(membersPath)).toHaveLength(0);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    route.dispose();
+  });
+
+  it("retains the owner LTI read when the trusted policy keeps its section hidden", async () => {
+    browser.location.hash = "#security";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace"
+        ? { contractStatus: "active", capabilities: { lti: false } }
+        : response(path),
+    );
+    const route = harness();
+    expect(await route.settle()).not.toContain("account-lti-section");
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    route.dispose();
+  });
+
+  it("retries a failed post-invitation refresh without sending another invitation", async () => {
+    browser.location.hash = "#people";
+    const route = harness();
+    expect(await route.settle()).toContain("Invite member");
+    const first = elements(byId("account-members-section")).find(
+      (node) => node.type === "input" && node.props.type === "email",
+    )!;
+    (first.props.onChange as (event: unknown) => void)({
+      target: { value: "invitee@example.org" },
+    });
+    await route.settle();
+
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path === membersPath) throw new Error("Refresh unavailable");
+      if (path === invitationPath)
+        return {
+          invitation: { email: "invitee@example.org" },
+          debugUrl: "https://trusted.example.org/invite",
+        };
+      return response(path);
+    });
+    const form = elements(byId("account-members-section")).find((node) => node.type === "form")!;
+    const focusedField = {};
+    browserDocument.activeElement = focusedField;
+    const region = {
+      focus: vi.fn(),
+      querySelector: () => ({ contains: (node: unknown) => node === focusedField }),
+    };
+    (byId("account-members-section").props.ref as { current: unknown }).current = region;
+    (form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() });
+    let markup = await route.settle();
+    expect(region.focus).toHaveBeenCalledOnce();
+    expect(markup).toContain("invitee@example.org");
+    expect(markup).toContain('href="https://trusted.example.org/invite"');
+    expect(markup).toContain(unavailable);
+    expect(markup).not.toContain("Invite member");
+    expect(settingsReads(membersPath)).toHaveLength(2);
+
+    fixtures.apiFetch.mockImplementation(async (path: string) => response(path));
+    retrySection("account-members-section");
+    markup = await route.settle();
+    expect(markup).toContain("Invite member");
+    expect(markup).not.toContain(unavailable);
+    expect(settingsReads(membersPath)).toHaveLength(3);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    expect(settingsWrites()).toEqual([
+      [invitationPath, { method: "POST", body: '{"email":"invitee@example.org","role":"editor"}' }],
+    ]);
+    route.dispose();
+  });
+
+  it("defers a committed invitation refresh while People is closed", async () => {
+    browser.location.hash = "#people";
+    const invitation = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === invitationPath ? invitation.promise : Promise.resolve(response(path)),
+    );
+    const route = harness();
+    expect(await route.settle()).toContain("Invite member");
+    const form = elements(byId("account-members-section")).find((node) => node.type === "form")!;
+    (form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() });
+    navigateTo("#data");
+    await route.settle();
+    invitation.resolve({ invitation: { email: "invitee@example.org" } });
+    expect(await route.settle()).toContain("invitee@example.org");
+    expect(settingsReads(membersPath)).toHaveLength(1);
+
+    navigateTo("#people");
+    expect(await route.settle()).toContain("Invite member");
+    expect(settingsReads(membersPath)).toHaveLength(2);
+    expect(settingsWrites()).toHaveLength(1);
+    route.dispose();
+  });
+
+  it("aborts both owner requests at workspace selection and rechecks authority after a failed selection", async () => {
+    const members = deferred<unknown>();
+    const lti = deferred<unknown>();
+    const selection = deferred<unknown>();
+    const workspaceList = {
+      activeWorkspaceId: "workspace",
+      workspaces: [
+        { id: "workspace", name: "Trusted workspace", role: "owner" },
+        { id: "other", name: "Other workspace", role: "viewer" },
+      ],
+    };
+    fixtures.apiFetch.mockImplementation((path: string) => {
+      if (path === "/v1/workspaces") return Promise.resolve(workspaceList);
+      if (path === membersPath) return members.promise;
+      if (path === ltiPath) return lti.promise;
+      if (path === "/v1/workspaces/other/select") return selection.promise;
+      return Promise.resolve(response(path));
+    });
+    const route = harness();
+    await route.settle();
+    const signals = [membersPath, ltiPath].map(
+      (path) => settingsReads(path)[0]![1].signal as AbortSignal,
+    );
+    (byId("active-workspace").props.onChange as (event: unknown) => void)({
+      target: { value: "other" },
+    });
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    const pending = await route.settle();
+    expect(pending).toContain("account-load-state");
+    expect(pending).not.toContain("Trusted workspace");
+
+    members.resolve({ members: [{ userId: "old", email: "old@example.org" }], invitations: [] });
+    lti.resolve({ registrations: [{ id: "old", name: "Obsolete LMS" }] });
+    fixtures.apiFetch.mockImplementation(async (path: string) => response(path));
+    selection.reject(new Error("Workspace selection failed"));
+    expect(await route.settle()).toContain("Workspace selection failed");
+    expect(settingsReads("/v1/auth/me")).toHaveLength(2);
+    expect(browser.location.reload).not.toHaveBeenCalled();
+
+    navigateTo("#people");
+    const markup = await route.settle();
+    expect(markup).toContain("<td>creator@example.org</td>");
+    expect(markup).not.toContain("old@example.org");
+    navigateTo("#security");
+    expect(await route.settle()).not.toContain("Obsolete LMS");
+    route.dispose();
+  });
+
+  it("does not publish a late invitation result or refresh after authority changes", async () => {
+    browser.location.hash = "#people";
+    const invitation = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === invitationPath ? invitation.promise : Promise.resolve(response(path)),
+    );
+    const route = harness();
+    expect(await route.settle()).toContain("Invite member");
+    const form = elements(byId("account-members-section")).find((node) => node.type === "form")!;
+    (form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() });
+
+    browser.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+    expect(await route.settle()).toContain("Invite member");
+    invitation.resolve({
+      invitation: { email: "old-invitee@example.org" },
+      debugUrl: "https://obsolete.example.org/invite",
+    });
+    const markup = await route.settle();
+    expect(markup).not.toContain("old-invitee@example.org");
+    expect(markup).not.toContain("https://obsolete.example.org/invite");
+    expect(settingsReads(membersPath)).toHaveLength(2);
+    expect(settingsWrites()).toHaveLength(1);
+    route.dispose();
+  });
+
+  it("aborts section reads when a new identity changes owner authority", async () => {
+    browser.location.hash = "#security";
+    const members = deferred<unknown>();
+    const lti = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation((path: string) =>
+      path === membersPath
+        ? members.promise
+        : path === ltiPath
+          ? lti.promise
+          : Promise.resolve(response(path)),
+    );
+    const route = harness();
+    expect(await route.settle()).toContain("Loading this section");
+    const signals = [membersPath, ltiPath].map(
+      (path) => settingsReads(path)[0]![1].signal as AbortSignal,
+    );
+
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path === "/v1/auth/me"
+        ? {
+            ...account,
+            creator: { ...account.creator, userId: "different", role: "viewer" },
+            workspace: {
+              ...account.workspace,
+              permissions: { ...account.workspace.permissions, managePeople: false },
+            },
+          }
+        : response(path),
+    );
+    browser.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    members.resolve(response(membersPath));
+    lti.resolve(response(ltiPath));
+    expect(await route.settle()).not.toContain("account-lti-section");
+    expect(settingsReads(membersPath)).toHaveLength(1);
+    expect(settingsReads(ltiPath)).toHaveLength(1);
+    expect(settingsReads("/v1/auth/me")).toHaveLength(2);
     route.dispose();
   });
 });

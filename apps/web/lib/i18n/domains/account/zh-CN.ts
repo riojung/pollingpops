@@ -2,6 +2,8 @@ import type { AccountMessages } from "./en-CA";
 
 const messages = {
   "account.load.unavailable": "无法加载工作区设置",
+  "account.section.loading": "正在加载此部分…",
+  "account.section.unavailable": "此部分不可用。",
   "account.common.none": "无",
   "account.common.saving": "正在保存…",
   "account.confirm.removeMember": "要从工作区移除此成员吗？",

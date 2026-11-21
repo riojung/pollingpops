@@ -534,6 +534,191 @@ describe("customer account ownership and workspace setup", () => {
     expect(await f.repository.listWorkspaces(owner.creator.userId)).toHaveLength(2);
   });
 
+  it("rejects stale Settings reads and writes after selecting another workspace", async () => {
+    const f = await fixture();
+    const owner = await signIn(f.app, "settings-workspace-owner@example.com");
+    const organization = await f.platform.createOrganization({
+      name: "Workshop company",
+      actorId: owner.creator.userId,
+      accountType: "organization",
+      licenseUnit: "workspace",
+    });
+    const workspace = await f.platform.createOrganizationWorkspace({
+      organizationId: organization.id,
+      actorId: owner.creator.userId,
+      name: "Workshop workspace",
+      segment: "workplace",
+    });
+    const headers = { cookie: owner.cookie };
+    const staleQuery = `?expectedWorkspaceId=${owner.creator.workspaceId}`;
+    const people = await f.app.inject({ url: `/v1/workspace/members${staleQuery}`, headers });
+    expect(people.statusCode, people.body).toBe(200);
+
+    const selected = await f.app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${workspace.id}/select`,
+      headers,
+    });
+    expect(selected.statusCode, selected.body).toBe(200);
+    expect(selected.json()).toEqual({ activeWorkspaceId: workspace.id });
+
+    const storageCalls = [
+      vi.spyOn(f.repository, "listWorkspaceMembers"),
+      vi.spyOn(f.repository, "listWorkspaceInvitations"),
+      vi.spyOn(f.repository, "listLtiRegistrations"),
+      vi.spyOn(f.repository, "createWorkspaceInvitation"),
+      vi.spyOn(f.repository, "updateWorkspaceMemberRole"),
+      vi.spyOn(f.repository, "removeWorkspaceMember"),
+      vi.spyOn(f.repository, "revokeWorkspaceInvitation"),
+      vi.spyOn(f.repository, "getBrandTheme"),
+      vi.spyOn(f.repository, "getEmbedAllowedOrigins"),
+      vi.spyOn(f.repository, "getInstitutionPolicy"),
+      vi.spyOn(f.repository, "getWorkspaceSessionPolicy"),
+      vi.spyOn(f.repository, "listAuditEvents"),
+      vi.spyOn(f.repository, "listExternalIdentities"),
+      vi.spyOn(f.repository, "unlinkExternalIdentity"),
+      vi.spyOn(f.repository, "updateBrandTheme"),
+      vi.spyOn(f.repository, "updateEmbedAllowedOrigins"),
+      vi.spyOn(f.repository, "updateWorkspaceSessionPolicy"),
+      vi.spyOn(f.repository, "recordAudit"),
+    ];
+    const invitation = { email: "settings-workspace-invitee@example.com", role: "editor" };
+    const memberUrl = `/v1/workspace/members/${randomUUID()}`;
+    const workspaceChanges = {
+      name: "Renamed workspace",
+      sessionPolicy: { idleTimeoutMinutes: 30, warningDurationSeconds: 60 },
+    };
+    const requests = [
+      { method: "GET", url: "/v1/workspace/members" },
+      { method: "GET", url: "/v1/workspace/lti-registrations" },
+      { method: "POST", url: "/v1/workspace/invitations", payload: invitation },
+      { method: "PATCH", url: memberUrl, payload: { role: "viewer" } },
+      { method: "DELETE", url: memberUrl },
+      { method: "DELETE", url: `/v1/workspace/invitations/${randomUUID()}` },
+      { method: "GET", url: "/v1/account/theme" },
+      { method: "GET", url: "/v1/account/embed-origins" },
+      { method: "GET", url: "/v1/workspace/institution-policy" },
+      { method: "GET", url: "/v1/workspace/audit-export" },
+      { method: "GET", url: "/v1/auth/federated-identities" },
+      { method: "DELETE", url: `/v1/auth/federated-identities/${randomUUID()}` },
+      { method: "PATCH", url: "/v1/workspace/settings", payload: workspaceChanges },
+      {
+        method: "PUT",
+        url: "/v1/account/theme",
+        payload: { organizationName: "Workshop", primaryColor: "#39243C", accentColor: "#AC2855" },
+      },
+      { method: "DELETE", url: "/v1/account/theme" },
+      {
+        method: "PUT",
+        url: "/v1/account/embed-origins",
+        payload: { origins: ["https://workshop.example.com"] },
+      },
+    ] as const;
+    for (const { url, ...request } of requests) {
+      const stale = await f.app.inject({ ...request, url: `${url}${staleQuery}`, headers });
+      expect(stale.statusCode, `${request.method} ${url} ${stale.body}`).toBe(409);
+      expect(stale.json()).toMatchObject({
+        error: { code: "CONFLICT", message: "The active workspace changed" },
+      });
+    }
+    for (const storageCall of storageCalls) {
+      expect(storageCall).not.toHaveBeenCalled();
+    }
+    expect(f.repository.workspaces.get(workspace.id)?.name).toBe("Workshop workspace");
+    expect(f.repository.workspaces.get(owner.creator.workspaceId)?.name).toBe(owner.workspace.name);
+
+    const malformed = await f.app.inject({
+      url: "/v1/workspace/lti-registrations?expectedWorkspaceId=invalid",
+      headers,
+    });
+    expect(malformed.statusCode, malformed.body).toBe(400);
+    expect(malformed.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+
+    const currentQuery = `?expectedWorkspaceId=${workspace.id}`;
+    const invited = await f.app.inject({
+      method: "POST",
+      url: `/v1/workspace/invitations${currentQuery}`,
+      headers,
+      payload: invitation,
+    });
+    expect(invited.statusCode, invited.body).toBe(201);
+    const legacyPeople = await f.app.inject({ url: "/v1/workspace/members", headers });
+    expect(legacyPeople.statusCode, legacyPeople.body).toBe(200);
+    expect(legacyPeople.json()).toMatchObject({ invitations: [invitation] });
+    const currentLti = await f.app.inject({
+      url: `/v1/workspace/lti-registrations${currentQuery}`,
+      headers,
+    });
+    expect(currentLti.statusCode, currentLti.body).toBe(200);
+    expect(currentLti.json()).toEqual({ registrations: [] });
+    const saved = await f.app.inject({
+      method: "PATCH",
+      url: `/v1/workspace/settings${currentQuery}`,
+      headers,
+      payload: workspaceChanges,
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({ workspace: { id: workspace.id, ...workspaceChanges } });
+    for (const path of [
+      "/v1/account/theme",
+      "/v1/account/embed-origins",
+      "/v1/workspace/institution-policy",
+      "/v1/auth/federated-identities",
+    ]) {
+      const scoped = await f.app.inject({ url: `${path}${currentQuery}`, headers });
+      const legacy = await f.app.inject({ url: path, headers });
+      expect(scoped.statusCode, scoped.body).toBe(200);
+      expect(legacy.statusCode, legacy.body).toBe(200);
+      expect(scoped.json()).toEqual(legacy.json());
+    }
+  });
+
+  it("reports a stale Settings scope before role checks in the newly selected workspace", async () => {
+    const f = await fixture();
+    const owner = await signIn(f.app, "settings-role-owner@example.com");
+    const editorEmail = "settings-role-editor@example.com";
+    const editor = await signIn(f.app, editorEmail);
+    const invited = await f.app.inject({
+      method: "POST",
+      url: "/v1/workspace/invitations",
+      headers: { cookie: owner.cookie },
+      payload: { email: editorEmail, role: "editor" },
+    });
+    expect(invited.statusCode, invited.body).toBe(201);
+    const token = new URL(invited.json<{ debugUrl: string }>().debugUrl).searchParams.get("token");
+    const headers = { cookie: editor.cookie };
+    const accepted = await f.app.inject({
+      method: "POST",
+      url: "/v1/invitations/accept",
+      headers,
+      payload: { token, acceptPolicies: true },
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      creator: { role: "editor", workspaceId: owner.creator.workspaceId },
+      requiresSignIn: false,
+    });
+
+    for (const { url, ...request } of [
+      { method: "GET", url: "/v1/workspace/members" },
+      { method: "GET", url: "/v1/workspace/lti-registrations" },
+      { method: "PATCH", url: "/v1/workspace/settings", payload: { name: "Editor rename" } },
+      { method: "PUT", url: "/v1/account/embed-origins", payload: { origins: [] } },
+    ] as const) {
+      const stale = await f.app.inject({
+        ...request,
+        url: `${url}?expectedWorkspaceId=${editor.creator.workspaceId}`,
+        headers,
+      });
+      expect(stale.statusCode, stale.body).toBe(409);
+      expect(stale.json()).toMatchObject({ error: { message: "The active workspace changed" } });
+      for (const query of ["", `?expectedWorkspaceId=${owner.creator.workspaceId}`]) {
+        const denied = await f.app.inject({ ...request, url: `${url}${query}`, headers });
+        expect(denied.statusCode, denied.body).toBe(403);
+      }
+    }
+  });
+
   it("requires a stable setup key and deployment support for organization accounts", async () => {
     const f = await fixture({ BUSINESS_PLATFORM_ENABLED: "false" });
     const owner = await signIn(f.app, "setup-disabled@example.com");

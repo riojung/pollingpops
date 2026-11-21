@@ -91,6 +91,9 @@ export const reportRoundEnglishMessages = {
   "reportRound.import.description":
     "Imports are validated before anything is saved. Unsupported or incomplete content is listed explicitly for review.",
   "reportRound.import.unavailable": "Import is unavailable for this workspace.",
+  "reportRound.import.planLimit": "This workspace’s plan does not include import.",
+  "reportRound.import.operatorPolicy":
+    "Import is unavailable under this deployment’s feature policy.",
   "reportRound.import.format": "Import format",
   "reportRound.import.bulkPaste": "Bulk paste",
   "reportRound.import.qtiPackage": "QTI 3 package",

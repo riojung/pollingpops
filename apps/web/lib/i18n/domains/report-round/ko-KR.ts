@@ -92,6 +92,10 @@ const messages = {
   "reportRound.import.description":
     "가져오기는 저장되기 전에 검증됩니다. 지원되지 않거나 불완전한 콘텐츠는 검토를 위해 명시적으로 나열됩니다.",
   "reportRound.import.unavailable": "이 워크스페이스에서는 가져오기를 사용할 수 없습니다.",
+  "reportRound.import.planLimit":
+    "이 워크스페이스의 요금제에는 가져오기 기능이 포함되어 있지 않습니다.",
+  "reportRound.import.operatorPolicy":
+    "이 배포 환경의 기능 정책에 따라 가져오기를 사용할 수 없습니다.",
   "reportRound.import.format": "가져오기 형식",
   "reportRound.import.bulkPaste": "대량 붙여넣기",
   "reportRound.import.qtiPackage": "QTI 3 패키지",

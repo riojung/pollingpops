@@ -90,6 +90,8 @@ const messages = {
   "reportRound.import.description":
     "匯入在儲存任何內容之前都會進行驗證。 未支援或不完整的內容被明確列出以供審查。",
   "reportRound.import.unavailable": "此工作區無法使用匯入功能。",
+  "reportRound.import.planLimit": "此工作區的方案不包含匯入功能。",
+  "reportRound.import.operatorPolicy": "此部署環境的功能政策不允許使用匯入功能。",
   "reportRound.import.format": "匯入格式",
   "reportRound.import.bulkPaste": "批次貼上",
   "reportRound.import.qtiPackage": "QTI 3 套件",

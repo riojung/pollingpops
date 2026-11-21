@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -6,6 +6,7 @@ import {
   recoveryPackContentHash,
   type CheckpointSetImportPreviewResponse,
   type CheckpointSetImportRequest,
+  type CheckpointSetImportUnavailableReason,
   type QuizDraft,
 } from "@openround/contracts";
 import { createPlatformRepository, MemoryRepository } from "@openround/db";
@@ -26,6 +27,24 @@ const bulk: CheckpointSetImportRequest = {
   data: "Review the procedure\n* Complete the check\n- Skip the check",
   title: "Structured import",
 };
+
+function expectUnavailable(
+  response: { statusCode: number; json: () => unknown },
+  unavailableReason: CheckpointSetImportUnavailableReason,
+  actor: { userId: string; workspaceId: string },
+) {
+  expect(response.statusCode).toBe(402);
+  expect(response.json()).toMatchObject({
+    error: {
+      code: "ENTITLEMENT_LIMIT",
+      message: "Checkpoint-set import is unavailable for this workspace",
+      details: {
+        unavailableReason,
+        creationContext: { actorId: actor.userId, workspaceId: actor.workspaceId },
+      },
+    },
+  });
+}
 
 async function fixture(community = true) {
   const workspaceId = randomUUID(),
@@ -88,7 +107,12 @@ async function fixture(community = true) {
         idempotencyKey,
       },
     });
-  return { app, repository, actor, config, headers, preview, confirm };
+  const account = async () => {
+    const response = await app.inject({ url: "/v1/auth/me", headers });
+    expect(response.statusCode, response.body).toBe(200);
+    return response.json();
+  };
+  return { app, repository, actor, config, headers, preview, confirm, account };
 }
 
 function completeDraft(): QuizDraft {
@@ -225,6 +249,10 @@ describe("structured Round import preview and confirmation", () => {
     const f = await fixture(),
       review = await f.preview(),
       key = randomUUID();
+    expect(await f.account()).toMatchObject({
+      entitlements: { plan: "team", csvExport: true },
+      checkpointSetImportUnavailableReason: null,
+    });
     const results = await Promise.all(
       Array.from({ length: 4 }, () => f.confirm(review, bulk, key)),
     );
@@ -305,25 +333,72 @@ describe("structured Round import preview and confirmation", () => {
     expect((await f.confirm(review, bulk, key)).statusCode).toBe(200);
     f.config.COMMUNITY_MODE = false;
     expect((await f.confirm(review, bulk, key)).statusCode).toBe(200);
-    expect((await f.confirm(newer)).statusCode).toBe(402);
+    expectUnavailable(await f.confirm(newer), "plan_limit", f.actor);
     expect(await f.repository.listQuizzes(f.actor.workspaceId)).toHaveLength(2);
   });
 
   it("uses effective workspace availability for import when it differs from the plan", async () => {
     const f = await fixture(false);
-    await createPlatformRepository(f.repository).saveFeaturePolicy({
+    const policy = createPlatformRepository(f.repository);
+    expect(await f.account()).toMatchObject({
+      entitlements: { plan: "free", csvExport: false },
+      checkpointSetImportUnavailableReason: "plan_limit",
+    });
+    const deniedPolicy = await policy.saveFeaturePolicy({
       expectedRevision: 0,
+      features: { csvExport: { enabled: false, plans: ["free"] } },
+    });
+    expect(await f.account()).toMatchObject({
+      entitlements: { plan: "free", csvExport: false },
+      checkpointSetImportUnavailableReason: "operator_policy",
+    });
+    expectUnavailable(
+      await f.app.inject({
+        method: "POST",
+        url: "/v1/quizzes/import/preview",
+        headers: f.headers,
+        payload: bulk,
+      }),
+      "operator_policy",
+      f.actor,
+    );
+    await policy.saveFeaturePolicy({
+      expectedRevision: deniedPolicy.revision,
       features: { csvExport: { enabled: true, plans: ["free"] } },
     });
+    expect(await f.account()).toMatchObject({
+      entitlements: { plan: "free", csvExport: true },
+      checkpointSetImportUnavailableReason: null,
+    });
     const review = await f.preview();
+    // Existing clients can still confirm a preview issued before denial reasons were added.
+    expect(review.previewFingerprint).toBe(
+      createHash("sha256")
+        .update(
+          JSON.stringify({
+            protocol: "round-structured-import-preview-v1",
+            source: {
+              format: bulk.format,
+              data: bulk.data,
+              encoding: bulk.encoding,
+              title: bulk.title,
+            },
+            creationContext: review.creationContext,
+            authority: { importEnabled: true, roundClientProtocol: true },
+          }),
+        )
+        .digest("hex"),
+    );
     const key = randomUUID();
     const created = await f.confirm(review, bulk, key);
     expect(created.statusCode, created.body).toBe(201);
     const { quiz } = created.json<{ quiz: { id: string } }>();
 
     await f.repository.setPlan(f.actor.workspaceId, "pro");
-    const account = await f.app.inject({ url: "/v1/auth/me", headers: f.headers });
-    expect(account.json()).toMatchObject({ entitlements: { plan: "pro", csvExport: false } });
+    expect(await f.account()).toMatchObject({
+      entitlements: { plan: "pro", csvExport: false },
+      checkpointSetImportUnavailableReason: "operator_policy",
+    });
     for (const denied of [
       await f.app.inject({
         method: "POST",
@@ -339,13 +414,7 @@ describe("structured Round import preview and confirmation", () => {
         payload: bulk,
       }),
     ]) {
-      expect(denied.statusCode).toBe(402);
-      expect(denied.json()).toMatchObject({
-        error: {
-          code: "ENTITLEMENT_LIMIT",
-          message: "Checkpoint-set import is unavailable for this workspace",
-        },
-      });
+      expectUnavailable(denied, "operator_policy", f.actor);
     }
 
     const recovered = await f.confirm(review, bulk, key);
@@ -454,6 +523,6 @@ describe("structured Round import preview and confirmation", () => {
       headers: hosted.headers,
       payload: bulk,
     });
-    expect(denied.statusCode).toBe(402);
+    expectUnavailable(denied, "plan_limit", hosted.actor);
   });
 });

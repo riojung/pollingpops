@@ -1,4 +1,8 @@
-import type { ImportValidationReport, QuizDraft } from "@openround/contracts";
+import type {
+  CheckpointSetImportUnavailableReason,
+  ImportValidationReport,
+  QuizDraft,
+} from "@openround/contracts";
 import { clientUuid } from "./uuid";
 
 export type StructuredImportFormat = ImportValidationReport["format"];
@@ -21,12 +25,14 @@ export class StructuredImportRequestError extends Error {
     public readonly diagnostic = "",
     public readonly validation?: ImportValidationReport,
     public readonly code?: string,
+    public readonly unavailableReason?: CheckpointSetImportUnavailableReason,
   ) {
     super(diagnostic);
   }
 
-  get entitlementDenied() {
-    return this.status === 402 && this.code === "ENTITLEMENT_LIMIT";
+  get unavailableFeedback(): CheckpointSetImportUnavailableReason | "unavailable" | undefined {
+    if (this.status === 402 && this.code === "ENTITLEMENT_LIMIT")
+      return this.unavailableReason ?? "unavailable";
   }
 }
 
@@ -53,6 +59,7 @@ export interface StructuredImportState {
     | "creation"
     | "expired"
     | "unavailable"
+    | CheckpointSetImportUnavailableReason
     | "opening"
     | "recovery";
   diagnostic: string;
@@ -289,16 +296,13 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
     } catch (caught) {
       if (!current(version)) return;
       const error = caught instanceof StructuredImportRequestError ? caught : undefined;
+      const unavailable = error?.unavailableFeedback;
       publish({
         ...state,
         phase: "idle",
-        feedback: error?.entitlementDenied
-          ? "unavailable"
-          : error?.validation?.errors.length
-            ? "invalid"
-            : "preview",
+        feedback: unavailable ?? (error?.validation?.errors.length ? "invalid" : "preview"),
         validation: error?.validation ?? null,
-        diagnostic: error?.entitlementDenied ? "" : (error?.diagnostic ?? ""),
+        diagnostic: unavailable ? "" : (error?.diagnostic ?? ""),
       });
     } finally {
       if (current(version)) request = null;
@@ -413,6 +417,7 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
     } catch (caught) {
       if (!current(version)) return;
       const error = caught instanceof StructuredImportRequestError ? caught : undefined;
+      const unavailable = error?.unavailableFeedback;
       const rejected =
         error?.status === 402 ||
         error?.code === "IMPORT_PREVIEW_STALE" ||
@@ -440,18 +445,12 @@ export function createStructuredImportSession(options: StructuredImportSessionOp
         phase: rejected ? "idle" : "retry",
         preview: rejected ? null : state.preview,
         validation: error?.validation ?? state.validation,
-        feedback: !recoveryReady
-          ? "recovery"
-          : error?.entitlementDenied
-            ? "unavailable"
-            : rejected
-              ? "expired"
-              : "creation",
+        feedback: recoveryReady ? (unavailable ?? (rejected ? "expired" : "creation")) : "recovery",
         recoveryReady,
         recoveryFailed: !recoveryReady,
         recoveryCount: intents.length,
         knownTargetUnavailable: error?.code === "IMPORT_TARGET_UNAVAILABLE",
-        diagnostic: error?.entitlementDenied ? "" : (error?.diagnostic ?? ""),
+        diagnostic: unavailable ? "" : (error?.diagnostic ?? ""),
       });
     } finally {
       if (current(version)) request = null;

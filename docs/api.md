@@ -498,6 +498,11 @@ counts under the bounded `product_event` resource label.
   is applied. The `workspace` object carries the actual name, explicit personal/organization
   account type, organization identity and assigned role, license unit, plan source, and settings
   permissions. Community feature access is distinct from a paid organization subscription.
+  `checkpointSetImportUnavailableReason` is `null` when the effective portability grant is enabled.
+  A disabled grant projects `operator_policy` when an explicit rule denies access and `plan_limit`
+  when the deployment's default plan entitlement denies access. This field explains the grant.
+  Role checks still apply separately. Clients can show a generic availability message for a
+  missing or unfamiliar reason.
 - `POST /v1/auth/logout`
 - `GET /v1/workspaces` — authenticated identity's accessible workspaces with account/organization
   metadata. `activeWorkspaceId` is null after selected workspace access has been revoked.
@@ -690,7 +695,10 @@ continues to validate and create in one action for existing clients; it does not
 confirmation retry guarantee. Source text and file contents are not stored in import receipts.
 Preview, legacy import, and new confirmations require the workspace's effective portability
 entitlement (`csvExport`). When that entitlement is disabled, these requests return
-`402 ENTITLEMENT_LIMIT` with a workspace availability message.
+`402 ENTITLEMENT_LIMIT` with a workspace availability message. The response includes the current
+`error.details.unavailableReason` (`plan_limit` or `operator_policy`) and
+`error.details.creationContext` (`{actorId, workspaceId}`). Clients use the current request's reason
+only when that context matches the import panel. An earlier account reason can become stale.
 Matching committed confirmation retries can recover an authorized retained draft after a writer
 feature or entitlement rollback; they do not authorize a fresh creation. Migration 115 must precede
 deployment of the preview/confirmation workflow.

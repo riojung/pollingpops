@@ -97,6 +97,9 @@ const messages = {
   "reportRound.import.description":
     "Le importazioni vengono convalidate prima di salvare qualsiasi cosa. I contenuti non supportati o incompleti sono elencati esplicitamente per la revisione.",
   "reportRound.import.unavailable": "L’importazione non è disponibile in questo spazio di lavoro.",
+  "reportRound.import.planLimit": "Il piano di questo spazio di lavoro non include l’importazione.",
+  "reportRound.import.operatorPolicy":
+    "I criteri sulle funzionalità di questa distribuzione non consentono l’importazione.",
   "reportRound.import.format": "Formato di importazione",
   "reportRound.import.bulkPaste": "Pasta sfusa",
   "reportRound.import.qtiPackage": "Pacchetto QTI3",

@@ -94,6 +94,10 @@ const messages = {
   "reportRound.import.description":
     "インポートは、何かが保存される前に検証されます。 サポートされていない、または不完全なコンテンツは、レビューのために明示的にリストされています。",
   "reportRound.import.unavailable": "このワークスペースではインポートを利用できません。",
+  "reportRound.import.planLimit":
+    "このワークスペースのプランにはインポート機能が含まれていません。",
+  "reportRound.import.operatorPolicy":
+    "この導入環境の機能ポリシーにより、インポートを利用できません。",
   "reportRound.import.format": "インポート形式",
   "reportRound.import.bulkPaste": "一括貼り付け",
   "reportRound.import.qtiPackage": "QTI 3 パッケージ",

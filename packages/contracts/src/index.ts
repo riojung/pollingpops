@@ -1675,6 +1675,11 @@ export const OpenRoundCheckpointSetExportSchema = z.union([
 ]);
 export type OpenRoundCheckpointSetExport = z.infer<typeof OpenRoundCheckpointSetExportSchema>;
 
+export const CheckpointSetImportUnavailableReasonSchema = z.enum(["plan_limit", "operator_policy"]);
+export type CheckpointSetImportUnavailableReason = z.infer<
+  typeof CheckpointSetImportUnavailableReasonSchema
+>;
+
 export const CheckpointSetImportRequestSchema = z
   .object({
     format: z.enum(["openround_json", "csv", "bulk", "qti3"]),

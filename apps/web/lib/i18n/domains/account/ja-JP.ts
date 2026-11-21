@@ -83,6 +83,10 @@ const messages = {
   "account.subscription.retention": "レポートを{count}日間保存",
   "account.subscription.csvAvailable": "CSVエクスポートを利用できます",
   "account.subscription.csvUnavailable": "CSVエクスポートを利用できません",
+  "account.subscription.csvUnavailablePlanLimit":
+    "このワークスペースのプランにはCSVエクスポートが含まれていません。",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "この導入環境の機能ポリシーにより、このワークスペースではCSVエクスポートが無効になっています。",
   "account.subscription.openingPortal": "ポータルを開いています…",
   "account.subscription.manageBilling": "請求を管理",
   "account.subscription.comparePlans": "プランを比較",

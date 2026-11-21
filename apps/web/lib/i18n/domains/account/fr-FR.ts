@@ -84,6 +84,10 @@ const messages = {
   "account.subscription.retention": "Conservation des rapports pendant {count} jours",
   "account.subscription.csvAvailable": "Export CSV disponible",
   "account.subscription.csvUnavailable": "Export CSV indisponible",
+  "account.subscription.csvUnavailablePlanLimit":
+    "Le forfait de cet espace de travail n’inclut pas l’export CSV.",
+  "account.subscription.csvUnavailableOperatorPolicy":
+    "La politique de ce déploiement désactive l’export CSV pour cet espace de travail.",
   "account.subscription.openingPortal": "Ouverture du portail…",
   "account.subscription.manageBilling": "Gérer la facturation",
   "account.subscription.comparePlans": "Comparer les forfaits",

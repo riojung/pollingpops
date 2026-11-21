@@ -37,8 +37,9 @@ Checkpoint-set import availability copy merged through
 [PR #297](https://github.com/riojung/pollingpops/pull/297) at `68d24f1`.
 Checkpoint-set import availability reasons merged through
 [PR #298](https://github.com/riojung/pollingpops/pull/298) at `9d4706d`.
-The current WX-11 increment on `codex/live-brand-availability-reasons` explains live-brand
-save availability in Appearance.
+Live-brand save availability reasons merged through
+[PR #299](https://github.com/riojung/pollingpops/pull/299) at `23c74a5`.
+The current WX-11 increment explains workspace CSV export availability in Plan and usage.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -65,14 +66,14 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | A–F and import reasons merged. Live-brand reasons implemented locally. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #299. Workspace CSV export reasons ready for review. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
 
 ## Selected first delivery
 
-As of 2026-11-20, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
+As of 2026-11-21, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
 in progress: ordered-page readers and authoring are merged, while conditional pages have not
 been enabled in the product. C1's internal counting and withheld-only contract are merged.
 C2's candidate whole-report policy is merged; human privacy acceptance, C3/C4 runtime
@@ -81,9 +82,10 @@ The public product website is merged in PR #288. WX-11A's Sessions recovery/acti
 merged in PR #291, WX-11B Results recovery in PR #292, WX-11C Workspace initialization and recovery
 in PR #293, WX-11D Library recovery in PR #294, and WX-11E availability copy in PR #295.
 WX-11F independent settings-section recovery merged in PR #296. Checkpoint-set import availability
-copy merged in PR #297 and import reasons in PR #298. Live-brand save reasons are implemented locally.
-Other capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job
-collections and human review of localized copy remain open.
+copy merged in PR #297, import reasons in PR #298, and live-brand save reasons in PR #299.
+Workspace CSV export reasons are implemented locally. Other capability explanations, WX-07–10 and
+WX-12–14 remain pending. Additional customer-job collections and human review of localized copy
+remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -832,8 +834,8 @@ Settings tab, that tab's notice clears when the user returns to Appearance. Work
 can recheck access with a workspace-scoped read that keeps the draft intact. If access returns,
 the user can save the draft explicitly. Preview and reset remain available. When a reason is
 missing, unfamiliar or scoped to another actor or workspace, the UI uses the generic message.
-The availability and recovery messages are localized across ten catalogs. Implemented locally
-on `codex/live-brand-availability-reasons`.
+The availability and recovery messages are localized across ten catalogs. Merged through PR #299
+at `23c74a5`.
 
 Local verification passed `VITEST_MAX_WORKERS=1 pnpm check`, including 1,140 contract, 6,545 web,
 1,678 server and 529 support tests, four application builds and compiled startup. All ten
@@ -841,9 +843,22 @@ Settings recovery browser cases and both business Appearance cases passed. The b
 cover plan limits, operator policy, and an explicit save after access returns with the draft
 preserved. Optional PostgreSQL suites were skipped. Native-language acceptance remains open.
 
-**Remaining capability explanations.** A follow-up can explain workspace CSV export availability
-in Plan and usage. Retained room report coverage requires separate checks. Rollout, administrator
-policy and provider details require their own server decisions and qualification.
+**Workspace CSV export availability reasons.** Plan and usage lists the workspace's effective CSV
+export status separately from participant, publication and retention limits. It explains plan or
+operator policy restrictions when the account response supplies a known reason. An enabled grant
+always shows availability, and older responses and unfamiliar reasons use the generic unavailable
+message. Both reasons are localized in all ten account catalogs. The frontend, server and
+localization teams own this increment. Implemented locally on `codex/workspace-csv-availability-reasons`.
+
+Local verification passed `VITEST_MAX_WORKERS=1 pnpm check`, including 6,548 web, 1,678 server
+and 529 support tests, four application builds and compiled startup. Two business settings and
+ten Settings recovery browser cases passed. The business coverage checks the plan and policy
+messages, billing controls, and 320px accessibility and reflow. Optional PostgreSQL suites were
+skipped. Native-language review remains open.
+
+**Remaining capability explanations.** Retained Round report CSV availability needs a separate
+evaluation of the room and current workspace. Rollout, administrator policy and provider details
+require their own server decisions and qualification.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -944,8 +959,9 @@ its human privacy acceptance remains open. The next Survey implementation checkp
 writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initialization and recovery**,
 **WX-11D Library recovery**, and **WX-11E availability copy** are merged in PRs #291–295.
 **WX-11F independent settings-section recovery** merged in PR #296. Checkpoint-set import
-availability copy merged in PR #297 and import reasons in PR #298. Live-brand save reasons are
-implemented locally. Other capability explanations remain pending.
+availability copy merged in PR #297, import reasons in PR #298, and live-brand save reasons in
+PR #299. Workspace CSV export reasons are implemented locally. Retained report eligibility and
+other capability explanations remain pending.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

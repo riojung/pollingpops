@@ -110,6 +110,7 @@ async function fixture(community = true) {
   const account = async () => {
     const response = await app.inject({ url: "/v1/auth/me", headers });
     expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
     return response.json();
   };
   return { app, repository, actor, config, headers, preview, confirm, account };
@@ -251,6 +252,7 @@ describe("structured Round import preview and confirmation", () => {
       key = randomUUID();
     expect(await f.account()).toMatchObject({
       entitlements: { plan: "team", csvExport: true },
+      csvExportUnavailableReason: null,
       checkpointSetImportUnavailableReason: null,
     });
     const results = await Promise.all(
@@ -342,6 +344,7 @@ describe("structured Round import preview and confirmation", () => {
     const policy = createPlatformRepository(f.repository);
     expect(await f.account()).toMatchObject({
       entitlements: { plan: "free", csvExport: false },
+      csvExportUnavailableReason: "plan_limit",
       checkpointSetImportUnavailableReason: "plan_limit",
     });
     const deniedPolicy = await policy.saveFeaturePolicy({
@@ -350,6 +353,7 @@ describe("structured Round import preview and confirmation", () => {
     });
     expect(await f.account()).toMatchObject({
       entitlements: { plan: "free", csvExport: false },
+      csvExportUnavailableReason: "operator_policy",
       checkpointSetImportUnavailableReason: "operator_policy",
     });
     expectUnavailable(
@@ -368,6 +372,7 @@ describe("structured Round import preview and confirmation", () => {
     });
     expect(await f.account()).toMatchObject({
       entitlements: { plan: "free", csvExport: true },
+      csvExportUnavailableReason: null,
       checkpointSetImportUnavailableReason: null,
     });
     const review = await f.preview();
@@ -397,6 +402,7 @@ describe("structured Round import preview and confirmation", () => {
     await f.repository.setPlan(f.actor.workspaceId, "pro");
     expect(await f.account()).toMatchObject({
       entitlements: { plan: "pro", csvExport: false },
+      csvExportUnavailableReason: "operator_policy",
       checkpointSetImportUnavailableReason: "operator_policy",
     });
     for (const denied of [

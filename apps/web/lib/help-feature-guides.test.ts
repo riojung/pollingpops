@@ -11,7 +11,7 @@ import {
   helpGuideVideoLink,
 } from "./help-feature-guides";
 
-const enabled: WorkspaceProductFeatures = {
+const enabled = {
   multiSelectPolls: true,
   rankingPolls: true,
   openTextPolls: true,
@@ -34,10 +34,11 @@ const enabled: WorkspaceProductFeatures = {
   surveyPages: true,
   groups: true,
   discover: true,
-};
-const classic = Object.fromEntries(
-  Object.keys(enabled).map((key) => [key, false]),
-) as WorkspaceProductFeatures;
+} satisfies WorkspaceProductFeatures;
+const classic = Object.fromEntries(Object.keys(enabled).map((key) => [key, false])) as Record<
+  keyof typeof enabled,
+  boolean
+>;
 
 describe("written Help guides", () => {
   it("has stable unique routes and useful written coverage for every topic", () => {

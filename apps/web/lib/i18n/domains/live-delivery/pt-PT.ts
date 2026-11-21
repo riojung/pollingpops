@@ -360,6 +360,10 @@ const messages = {
     "slides de conteúdo e perguntas interativas serão executadas em sua ordem de autoria. Os participantes se juntam sem contas de espaço de trabalho, e apenas as respostas de perguntas se tornam evidências de aprendizagem.",
   "live.presentationHost.creationPaused":
     "O início de novas sessões de apresentação em direto está em pausa neste espaço de trabalho. O conteúdo publicado e as sessões existentes continuam disponíveis.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "As definições de disponibilização desta implementação não permitem iniciar novas sessões de apresentação em direto.",
+  "live.presentationHost.creationOperatorPolicy":
+    "A política de funcionalidades desta implementação não permite iniciar esta apresentação em direto.",
   "live.presentationHost.history": "Histórico da sessão",
   "live.presentationHost.interactiveQuestions": "Questões interactivas",
   "live.presentationHost.live": "Apresentação ao vivo",

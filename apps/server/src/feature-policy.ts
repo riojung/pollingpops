@@ -2,6 +2,7 @@ import {
   productFeatureCatalog,
   type Entitlements,
   type Plan,
+  type PresentationRealtimeUnavailableReason,
   type ProductFeatureKey,
   type ProductFeatureRules,
   type WorkspaceProductFeatures,
@@ -125,14 +126,23 @@ export function featureResolver(
     const allowed = config.THEMED_INTERACTIONS_WORKSPACE_ALLOWLIST ?? [];
     return allowed.length === 0 || allowed.includes(workspaceId);
   };
-  const enabled = (key: ProductFeatureKey): boolean => {
+  const unavailableReason = (
+    key: ProductFeatureKey,
+  ): PresentationRealtimeUnavailableReason | undefined => {
     const rule = rules[key];
-    return (
-      (rule ? rule.enabled && rule.plans.includes(plan) : legacy(key)) &&
-      (dependencies.get(key) ?? []).every(enabled)
-    );
+    if (rule && (!rule.enabled || !rule.plans.includes(plan))) return "operator_policy";
+
+    let reason: PresentationRealtimeUnavailableReason | undefined =
+      !rule && !legacy(key) ? "rollout_unavailable" : undefined;
+    for (const dependency of dependencies.get(key) ?? []) {
+      const dependencyReason = unavailableReason(dependency);
+      if (dependencyReason === "operator_policy") return dependencyReason;
+      reason ??= dependencyReason;
+    }
+    return reason;
   };
-  return { plan, enabled, rules };
+  const enabled = (key: ProductFeatureKey) => unavailableReason(key) === undefined;
+  return { plan, enabled, rules, unavailableReason };
 }
 
 export async function workspaceFeatureEnabled(
@@ -158,6 +168,7 @@ export async function workspaceProductFeatures(
     resolveWorkspaceFeatures(repository, config, workspaceId, planOverride),
     repository.getOperationalFeatures(),
   ]);
+  const presentationRealtimeUnavailableReason = features.unavailableReason("presentationRealtime");
   return {
     ideaBoards: features.enabled("ideaBoards"),
     canvasBoards: features.enabled("canvasBoards"),
@@ -176,7 +187,8 @@ export async function workspaceProductFeatures(
     workspaceShell: features.enabled("workspaceShell"),
     builderV2: features.enabled("builderV2"),
     presentations: features.enabled("presentations"),
-    presentationRealtime: features.enabled("presentationRealtime"),
+    presentationRealtime: presentationRealtimeUnavailableReason === undefined,
+    ...(presentationRealtimeUnavailableReason && { presentationRealtimeUnavailableReason }),
     presentationCompanion: features.enabled("presentationCompanion"),
     liveFlexMode: features.enabled("liveFlexMode"),
     questionHealth: features.enabled("questionHealth"),

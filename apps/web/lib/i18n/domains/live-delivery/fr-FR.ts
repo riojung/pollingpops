@@ -364,6 +364,10 @@ const messages = {
     "Les diapositives de contenu et les questions interactives seront exécutées dans leur ordre d'auteur. Les participants se joignent sans comptes d'espace de travail, et seules les réponses aux questions deviennent des preuves d'apprentissage.",
   "live.presentationHost.creationPaused":
     "Le démarrage de nouvelles sessions de présentation en direct est suspendu pour cet espace de travail. Le contenu publié et les sessions existantes restent disponibles.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "Les paramètres de déploiement de cet environnement ne permettent pas de démarrer de nouvelles sessions de présentation en direct.",
+  "live.presentationHost.creationOperatorPolicy":
+    "La politique de ce déploiement en matière de fonctionnalités ne permet pas de lancer cette présentation en direct.",
   "live.presentationHost.history": "Historique de la session",
   "live.presentationHost.interactiveQuestions": "Questions interactives",
   "live.presentationHost.live": "Présentation en direct",

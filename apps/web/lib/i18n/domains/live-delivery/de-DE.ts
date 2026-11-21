@@ -362,6 +362,10 @@ const messages = {
     "Inhaltsfolien und interaktive Fragen werden in ihrer ursprünglichen Reihenfolge ausgeführt. Teilnehmer treten ohne Workspace-Konten bei, und nur Fragenantworten werden zu Lernbeweisen.",
   "live.presentationHost.creationPaused":
     "Das Starten neuer Live-Präsentationen ist für diesen Arbeitsbereich pausiert. Veröffentlichte Inhalte und bestehende Sitzungen bleiben verfügbar.",
+  "live.presentationHost.creationRolloutUnavailable":
+    "Aufgrund der Rollout-Einstellungen dieser Bereitstellung können keine neuen Live-Präsentationen gestartet werden.",
+  "live.presentationHost.creationOperatorPolicy":
+    "Die Funktionsrichtlinie dieser Bereitstellung erlaubt den Start dieser Live-Präsentation nicht.",
   "live.presentationHost.history": "Sitzungsgeschichte",
   "live.presentationHost.interactiveQuestions": "Interaktive Fragen",
   "live.presentationHost.live": "Live Präsentation",

@@ -1,4 +1,5 @@
 import {
+  PresentationRealtimeUnavailableReasonSchema,
   ProductFeatureKeySchema,
   WorkspaceCapabilityUnavailableReasonSchema,
 } from "./feature-policy";
@@ -230,6 +231,8 @@ export const WorkspaceProductFeaturesSchema = z.object({
   builderV2: z.boolean(),
   presentations: z.boolean(),
   presentationRealtime: z.boolean(),
+  presentationRealtimeUnavailableReason:
+    PresentationRealtimeUnavailableReasonSchema.optional().catch(undefined),
   presentationCompanion: z.boolean().default(false),
   liveFlexMode: z.boolean().default(false),
   questionHealth: z.boolean().default(false),

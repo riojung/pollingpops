@@ -616,8 +616,8 @@ temporary and is removed by the bucket lifecycle even if the account row no long
 
 ## Institution identity and LTI APIs
 
-These routes are disabled by default and require an operator-granted workspace policy. Enabling a
-creator integration does not change anonymous guest participation.
+Institution identity and LTI integrations are disabled by default and require an operator-granted
+workspace policy. Enabling a creator integration does not change anonymous guest participation.
 
 - `GET /v1/workspace/institution-policy` — authenticated read-only capability policy; owners
   cannot self-enable it. `GET /v1/workspaces` carries the home-region assignment.
@@ -632,7 +632,16 @@ creator integration does not change anonymous guest participation.
 - `POST /v1/lti/link` — explicit link of a verified LMS subject to the current creator.
 - `GET /v1/lti/launches/{launchId}`
 - `POST /v1/lti/launches/{launchId}/deep-link`
-- `GET /v1/workspace/lti-registrations` — owner-visible, read-only registration inventory.
+- `GET /v1/workspace/lti-registrations` — owner-only, read-only `{ availability, registrations }`
+  for the active workspace. The inventory includes both active and disabled registrations.
+
+The registration inventory accepts `expectedWorkspaceId` and returns `Cache-Control: private, no-store`.
+Its `availability` reflects local configuration and reports the first applicable state below.
+
+1. `workspace_policy` if the institution contract is disabled or the workspace lacks an LTI grant.
+2. `deployment_disabled` if the deployment has LTI disabled.
+3. `registration_required` if the inventory has no active registration.
+4. `available` if all configuration prerequisites are met.
 
 OIDC login accepts only a previously linked workspace/issuer/subject identity; email hints never
 create a link. LTI validates issuer, audience/authorized party, nonce, deployment, version, message

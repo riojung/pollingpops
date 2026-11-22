@@ -54,6 +54,11 @@ const messages = {
   "account.institution.notEnabled":
     "此工作區未啟用機構登入。工作區擁有者無法自行啟用受合約限制的身分控制。",
   "account.institution.ltiTitle": "LTI 1.3 註冊",
+  "account.institution.ltiWorkspacePolicy":
+    "依此工作區的機構政策，無法使用 LTI。請聯絡您的 Polling Pops 營運者。",
+  "account.institution.ltiDeploymentDisabled": "此部署已停用 LTI。請聯絡您的 Polling Pops 營運者。",
+  "account.institution.ltiRegistrationRequired":
+    "LTI 需要有效的學習平台註冊。請聯絡您的 Polling Pops 營運者。",
   "account.institution.ltiEmpty":
     "LTI 已獲核准，但尚未註冊平台。Polling Pops 營運者必須新增 LMS 簽發者、用戶端、部署、JWKS 與返回來源值。",
   "account.institution.auditTitle": "機構稽核匯出",

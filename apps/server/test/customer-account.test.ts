@@ -561,6 +561,11 @@ describe("customer account ownership and workspace setup", () => {
     });
     expect(selected.statusCode, selected.body).toBe(200);
     expect(selected.json()).toEqual({ activeWorkspaceId: workspace.id });
+    const policy = await f.repository.getInstitutionPolicy(workspace.id);
+    await f.repository.updateInstitutionPolicy(
+      { ...policy, contractStatus: "pilot", capabilities: { ...policy.capabilities, lti: true } },
+      "test-approve-settings-workspace",
+    );
 
     const storageCalls = [
       vi.spyOn(f.repository, "listWorkspaceMembers"),
@@ -650,7 +655,7 @@ describe("customer account ownership and workspace setup", () => {
       headers,
     });
     expect(currentLti.statusCode, currentLti.body).toBe(200);
-    expect(currentLti.json()).toEqual({ registrations: [] });
+    expect(currentLti.json()).toEqual({ availability: "deployment_disabled", registrations: [] });
     const saved = await f.app.inject({
       method: "PATCH",
       url: `/v1/workspace/settings${currentQuery}`,

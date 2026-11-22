@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import type { LtiRegistrationAvailability } from "../../packages/contracts/src/index.ts";
 import { testEmail } from "../e2e/test-email";
 import { signInBeta } from "./sign-in";
 import { specialistLocale } from "./option-b-specialist-support";
@@ -62,7 +63,7 @@ async function installReads(page: Page) {
         },
       });
     }
-    return route.continue();
+    return route.fallback();
   });
   return {
     count: (path: string) => reads.filter((read) => read.pathname === path).length,
@@ -245,21 +246,50 @@ for (const phone of [false, true]) {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await signInBeta(page, undefined, { returnTo: "/home" });
     await specialistLocale(page, "en-CA");
+    let availability: LtiRegistrationAvailability | undefined = phone
+      ? "registration_required"
+      : "deployment_disabled";
+    const availabilityMessage = phone
+      ? "LTI needs an active learning platform registration. Contact your Polling Pops operator."
+      : "LTI is disabled on this deployment. Contact your Polling Pops operator.";
+    await page.route(
+      (url) => url.origin === api && url.pathname === ltiPath,
+      async (route) => {
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        const { registrations } = await response.json();
+        await route.fulfill({
+          response,
+          json: availability ? { registrations, availability } : { registrations },
+        });
+      },
+    );
     const fixture = await installReads(page);
     const account = await page.request.get(`${api}/v1/auth/me`);
     expect(account.ok()).toBe(true);
-    const { creator } = (await account.json()) as { creator: { workspaceId: string } };
+    const { creator } = (await account.json()) as {
+      creator: { role: string; workspaceId: string };
+    };
+    expect(creator.role).toBe("owner");
     const failMembers = fixture.hold(membersPath, true);
     const failLti = fixture.hold(ltiPath, true);
-    // Display the existing LTI section while routing registration GETs to the actual API.
+    // Change the policy snapshot without editing the real owner's workspace.
     await page.route(
       (url) => url.origin === api && url.pathname === institutionPath,
       async (route) => {
         const response = await route.fetch();
         const policy = await response.json();
+        const contractDisabled = availability === "workspace_policy";
         await route.fulfill({
           response,
-          json: { ...policy, capabilities: { ...policy.capabilities, lti: true } },
+          json: {
+            ...policy,
+            contractStatus: contractDisabled ? "disabled" : "active",
+            capabilities: contractDisabled
+              ? Object.fromEntries(Object.keys(policy.capabilities).map((key) => [key, false]))
+              : { ...policy.capabilities, lti: true },
+            updatedAt: "2026-11-22T00:00:00.000Z",
+          },
         });
       },
     );
@@ -278,8 +308,10 @@ for (const phone of [false, true]) {
       const lti = page.getByRole("region", { name: "LTI 1.3 registrations", exact: true });
       const ltiContent = lti.locator("[data-account-section-content]");
       const noLti = lti.getByText(/no platform is registered/);
+      const ltiAvailability = lti.getByText(availabilityMessage, { exact: true });
 
       await expect(tab("People")).toHaveAttribute("aria-selected", "true");
+      await expect(lti).toHaveCount(0);
       await expect(membersContent).toHaveAttribute("aria-busy", "true");
       await expect(members.getByRole("status")).toContainText("Loading this section");
       await expect(memberTable).toHaveCount(0);
@@ -308,11 +340,16 @@ for (const phone of [false, true]) {
       await confirmation.clear();
       await expect(deleteButton).toBeDisabled();
       await tab("Security and integrations").click();
+      await expect(
+        page.getByRole("heading", { name: "Workspace settings", level: 1, exact: true }),
+      ).toBeVisible();
       await expect(ltiContent).toHaveAttribute("aria-busy", "true");
       await expect(noLti).toHaveCount(0);
+      await expect(ltiAvailability).toHaveCount(0);
       failLti();
       await expect(lti.getByRole("alert")).toHaveText("This section is unavailable.");
       await expect(noLti).toHaveCount(0);
+      await expect(ltiAvailability).toHaveCount(0);
       await expect(panel.getByRole("spinbutton")).toBeVisible();
       await expect(
         panel.getByRole("button", { name: "Save embed origins", exact: true }),
@@ -350,10 +387,15 @@ for (const phone of [false, true]) {
       await expect(lti).toBeFocused();
       await expect(ltiContent).toHaveAttribute("aria-busy", "true");
       await expect(noLti).toHaveCount(0);
+      await expect(ltiAvailability).toHaveCount(0);
       const embedSave = panel.getByRole("button", { name: "Save embed origins", exact: true });
       await embedSave.focus();
       recoverLti();
-      await expect(noLti).toBeVisible();
+      await expect(ltiAvailability).toBeVisible();
+      await expect(ltiContent).toHaveAttribute("aria-busy", "false");
+      await expect(lti.getByRole("alert")).toHaveCount(0);
+      await expect(retryLti).toHaveCount(0);
+      await expect(noLti).toHaveCount(0);
       await expect(embedSave).toBeFocused();
       await expect.poll(() => fixture.count(ltiPath)).toBe(2);
       expect(fixture.count(membersPath)).toBe(2);
@@ -362,8 +404,31 @@ for (const phone of [false, true]) {
       expect(fixture.scopes(ltiPath)).toEqual([creator.workspaceId, creator.workspaceId]);
       expect(new URL(page.url()).searchParams.get("source")).toBe("section-recovery");
       expect(new URL(page.url()).hash).toBe("#security");
-      expect(fixture.mutations).toEqual([]);
       await quality(page);
+
+      availability = undefined;
+      await page.reload();
+      await expect(tab("Security and integrations")).toHaveAttribute("aria-selected", "true");
+      await expect(noLti).toBeVisible();
+      await expect(ltiAvailability).toHaveCount(0);
+
+      availability = "workspace_policy";
+      await page.reload();
+      await expect(
+        lti.getByText(
+          "LTI is unavailable under this workspace’s institution policy. Contact your Polling Pops operator.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(noLti).toHaveCount(0);
+      await expect(embedSave).toBeEnabled();
+      expect(fixture.scopes(ltiPath)).toEqual([
+        creator.workspaceId,
+        creator.workspaceId,
+        creator.workspaceId,
+        creator.workspaceId,
+      ]);
+      expect(fixture.mutations).toEqual([]);
     } finally {
       fixture.releaseAll();
     }

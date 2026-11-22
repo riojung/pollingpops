@@ -22,13 +22,31 @@ describe("workspace owner settings readers", () => {
 
   it("reads LTI alone and supplies its cancellation signal", async () => {
     const { signal } = new AbortController();
-    vi.mocked(apiFetch).mockResolvedValueOnce({ registrations: [registration] });
-    expect(await loadLtiRegistrations("trusted-workspace", signal)).toEqual([registration]);
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      registrations: [registration],
+      availability: "available",
+    });
+    expect(await loadLtiRegistrations("trusted-workspace", signal)).toEqual({
+      registrations: [registration],
+      availability: "available",
+    });
     expect(apiFetch).toHaveBeenCalledExactlyOnceWith(
       "/v1/workspace/lti-registrations?expectedWorkspaceId=trusted-workspace",
       { signal },
     );
   });
+
+  it.each([undefined, "unknown_status"])(
+    "keeps registrations when availability is %s",
+    async (availability) => {
+      const { signal } = new AbortController();
+      vi.mocked(apiFetch).mockResolvedValueOnce({ registrations: [registration], availability });
+      expect(await loadLtiRegistrations("trusted-workspace", signal)).toEqual({
+        registrations: [registration],
+        availability: undefined,
+      });
+    },
+  );
 
   it("rejects incomplete sections so a malformed response cannot look like confirmed empty data", async () => {
     const { signal } = new AbortController();

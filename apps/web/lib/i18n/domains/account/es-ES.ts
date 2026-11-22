@@ -60,6 +60,12 @@ const messages = {
   "account.institution.notEnabled":
     "El inicio de sesión institucional no está activado en este espacio. Los propietarios no pueden activar por sí mismos controles de identidad sujetos a contrato.",
   "account.institution.ltiTitle": "Registros LTI 1.3",
+  "account.institution.ltiWorkspacePolicy":
+    "La política institucional de este espacio no permite usar LTI. Ponte en contacto con tu operador de Polling Pops.",
+  "account.institution.ltiDeploymentDisabled":
+    "LTI está desactivado en este despliegue. Ponte en contacto con tu operador de Polling Pops.",
+  "account.institution.ltiRegistrationRequired":
+    "LTI requiere un registro activo de una plataforma de aprendizaje. Ponte en contacto con tu operador de Polling Pops.",
   "account.institution.ltiEmpty":
     "LTI está aprobado, pero no hay ninguna plataforma registrada. Tu operador de Polling Pops debe añadir el emisor del LMS, el cliente, el despliegue, JWKS y los orígenes de retorno.",
   "account.institution.auditTitle": "Exportación de auditoría institucional",

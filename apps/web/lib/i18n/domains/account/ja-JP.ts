@@ -58,6 +58,12 @@ const messages = {
   "account.institution.notEnabled":
     "このワークスペースでは機関ログインが有効ではありません。所有者が契約対象のID制御を自分で有効にすることはできません。",
   "account.institution.ltiTitle": "LTI 1.3登録",
+  "account.institution.ltiWorkspacePolicy":
+    "このワークスペースの機関ポリシーにより、LTIは利用できません。Polling Popsの運営者にお問い合わせください。",
+  "account.institution.ltiDeploymentDisabled":
+    "このデプロイではLTIが無効です。Polling Popsの運営者にお問い合わせください。",
+  "account.institution.ltiRegistrationRequired":
+    "LTIを利用するには、学習プラットフォームの有効な登録が必要です。Polling Popsの運営者にお問い合わせください。",
   "account.institution.ltiEmpty":
     "LTIは承認されていますが、プラットフォームが登録されていません。Polling Popsの運営者がLMS発行者、クライアント、デプロイ、JWKS、戻り元を追加する必要があります。",
   "account.institution.auditTitle": "機関監査エクスポート",

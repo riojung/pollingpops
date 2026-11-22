@@ -58,6 +58,12 @@ const messages = {
   "account.institution.notEnabled":
     "이 워크스페이스에는 기관 로그인이 활성화되어 있지 않습니다. 워크스페이스 소유자가 계약 기반 ID 제어를 직접 활성화할 수는 없습니다.",
   "account.institution.ltiTitle": "LTI 1.3 등록",
+  "account.institution.ltiWorkspacePolicy":
+    "이 워크스페이스의 기관 정책에 따라 LTI를 사용할 수 없습니다. Polling Pops 운영자에게 문의하세요.",
+  "account.institution.ltiDeploymentDisabled":
+    "이 배포에서는 LTI가 비활성화되어 있습니다. Polling Pops 운영자에게 문의하세요.",
+  "account.institution.ltiRegistrationRequired":
+    "LTI를 사용하려면 활성 상태인 학습 플랫폼 등록이 필요합니다. Polling Pops 운영자에게 문의하세요.",
   "account.institution.ltiEmpty":
     "LTI가 승인되었지만 등록된 플랫폼이 없습니다. Polling Pops 운영자가 LMS 발급자, 클라이언트, 배포, JWKS 및 반환 출처 값을 추가해야 합니다.",
   "account.institution.auditTitle": "기관 감사 내보내기",

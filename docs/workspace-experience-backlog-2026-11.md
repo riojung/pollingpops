@@ -45,7 +45,9 @@ Retained Round report export availability reasons merged through
 [PR #301](https://github.com/riojung/pollingpops/pull/301) at `77232f8`.
 Live Presentation launch availability reasons merged through
 [PR #302](https://github.com/riojung/pollingpops/pull/302) at `977f074`.
-The current WX-11 increment explains file upload availability in source-assisted authoring.
+Source-assisted authoring upload availability merged through
+[PR #303](https://github.com/riojung/pollingpops/pull/303) at `362be9b`.
+The current WX-11 increment explains LTI registration availability in Workspace Settings.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -72,14 +74,14 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #302. Source upload availability notice is verified. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #303. LTI availability explanations in local review. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
 
 ## Selected first delivery
 
-As of 2026-11-21, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
+As of 2026-11-22, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
 in progress: ordered-page readers and authoring are merged, while conditional pages have not
 been enabled in the product. C1's internal counting and withheld-only contract are merged.
 C2's candidate whole-report policy is merged; human privacy acceptance, C3/C4 runtime
@@ -90,9 +92,10 @@ in PR #293, WX-11D Library recovery in PR #294, and WX-11E availability copy in 
 WX-11F independent settings-section recovery merged in PR #296. Checkpoint-set import availability
 copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299 and workspace
 CSV export reasons in PR #300. Retained Round report export reasons merged in PR #301 and live
-Presentation launch reasons in PR #302. Source upload availability is implemented locally. Other
-capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job collections
-and human review of localized copy remain open.
+Presentation launch reasons in PR #302. Source upload availability merged in PR #303. LTI
+availability explanations are implemented locally. Other capability explanations, WX-07–10 and
+WX-12–14 remain pending. Additional customer-job collections and human review of localized copy
+remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -896,8 +899,8 @@ selection and offers pasted text. The upload restriction applies as soon as stat
 while proposal history is loading or a file read is pending.
 File selection waits for a successful status response. Older servers can still allow file
 selection by reporting that authoring is enabled.
-The notice is localized in all ten catalogs. Frontend, server and localization own this increment,
-which is implemented locally on `codex/source-upload-availability`.
+The notice is localized in all ten catalogs. Frontend, server and localization own this increment.
+It merged through PR #303 at `362be9b`.
 
 Formatting, lint, type checks, four application builds and compiled startup passed. The
 repository-wide run hit test timeouts. The serial run and isolated retry covered all selected
@@ -905,6 +908,23 @@ package tests, and 529 support tests passed. Two production Chromium cases passe
 They cover pending and failed status, a restriction received while proposal history is loading,
 older status responses, pasted-text submission and the Recovery Pack worker. Optional PostgreSQL
 suites were skipped. Native-language review remains open.
+
+**LTI registration availability explanations.** Owners of institution workspaces can distinguish
+a policy restriction, a disabled deployment, and the need for an active learning platform
+registration. The registration response supplies the status and inventory for the same workspace.
+Previously configured workspaces keep the policy explanation after the contract is disabled.
+In deployments where the API omits the status, Settings uses the workspace institution policy
+and the existing confirmed-empty notice. The independent read still offers a retry when it fails.
+All ten locale catalogs include the explanations. Frontend, server and localization own this
+increment, implemented locally on `codex/lti-availability-explanations`.
+
+**Local verification — 2026-11-22.** The focused web and server suites passed 146 tests. All
+14 production browser cases passed across desktop Chromium and Firefox, mobile Chromium and
+mobile WebKit. They cover Settings navigation and independent retry, the disabled-contract notice,
+owner permissions and workspace switching. Formatting, lint, type checks and 10,486 package tests
+passed. The full check stopped on five timing-sensitive support cases. All five passed in isolation
+with a 30-second Vitest limit. Four builds and compiled server startup passed separately. Optional
+integration tests were skipped. Native-language review remains open.
 
 **Remaining capability explanations.** Other rollout surfaces, administrator policy and provider
 setup messages need their own server decisions and qualification.
@@ -1010,9 +1030,9 @@ writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initializat
 **WX-11F independent settings-section recovery** merged in PR #296. Checkpoint-set import
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
-PR #301 and live Presentation launch reasons merged in PR #302. Source upload availability is
-implemented locally. Other rollout, administrator policy and provider setup explanations remain
-pending.
+PR #301, live Presentation launch reasons in PR #302 and source upload availability in PR #303.
+LTI availability explanations are implemented locally. Other rollout, administrator policy and
+provider setup explanations remain pending.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

@@ -56,6 +56,12 @@ export const accountEnglishMessages = {
   "account.institution.notEnabled":
     "Institution sign-in is not enabled for this workspace. Workspace owners cannot self-enable contract-gated identity controls.",
   "account.institution.ltiTitle": "LTI 1.3 registrations",
+  "account.institution.ltiWorkspacePolicy":
+    "LTI is unavailable under this workspace’s institution policy. Contact your Polling Pops operator.",
+  "account.institution.ltiDeploymentDisabled":
+    "LTI is disabled on this deployment. Contact your Polling Pops operator.",
+  "account.institution.ltiRegistrationRequired":
+    "LTI needs an active learning platform registration. Contact your Polling Pops operator.",
   "account.institution.ltiEmpty":
     "LTI is approved but no platform is registered. Your Polling Pops operator must add the LMS issuer, client, deployment, JWKS, and return-origin values.",
   "account.institution.auditTitle": "Institution audit export",

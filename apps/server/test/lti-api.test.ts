@@ -1,7 +1,7 @@
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { QuizDraft } from "@openround/contracts";
+import type { LtiRegistrationAvailability, QuizDraft } from "@openround/contracts";
 import type { JWTPayload } from "jose";
 import type { FastifyInstance } from "fastify";
 import type { LtiRegistrationRecord } from "@openround/db";
@@ -13,6 +13,16 @@ import type { LtiJwtAdapter } from "../src/lti-service.js";
 
 const CLAIM = "https://purl.imsglobal.org/spec/lti/claim";
 const DL_CLAIM = "https://purl.imsglobal.org/spec/lti-dl/claim";
+const registrationInput = {
+  name: "Example LMS",
+  issuer: "https://lms.example.edu",
+  clientId: "openround-client",
+  deploymentId: "deployment-1",
+  authorizationEndpoint: "https://lms.example.edu/oidc/auth",
+  tokenEndpoint: "https://lms.example.edu/oauth/token",
+  jwksUrl: "https://lms.example.edu/.well-known/jwks.json",
+  deepLinkReturnOrigins: ["https://lms.example.edu"],
+};
 
 class FakeLtiJwtAdapter implements LtiJwtAdapter {
   payload: JWTPayload = {};
@@ -99,6 +109,100 @@ async function publishedQuiz(repository: MemoryRepository, workspaceId: string, 
 }
 
 describe("LTI HTTP protocol", () => {
+  it.each([
+    {
+      mode: "tool",
+      adapter: new FakeLtiJwtAdapter(),
+      withoutActive: "registration_required",
+      withActive: "available",
+    },
+    {
+      mode: "disabled",
+      adapter: null,
+      withoutActive: "deployment_disabled",
+      withActive: "deployment_disabled",
+    },
+    {
+      mode: "tool",
+      adapter: null,
+      withoutActive: "deployment_disabled",
+      withActive: "deployment_disabled",
+    },
+  ] as const)(
+    "reports configured registration availability in $mode mode ($withActive with an active registration)",
+    async ({ mode, adapter, withoutActive, withActive }) => {
+      const repository = new MemoryRepository();
+      const { app } = await buildApp(
+        ConfigSchema.parse({
+          NODE_ENV: "test",
+          ALLOW_IN_MEMORY: "true",
+          LOG_LEVEL: "silent",
+          LTI_MODE: mode,
+          LTI_TOOL_PRIVATE_JWK: "{}",
+        }),
+        { repository, cache: new MemorySessionCache(), ltiJwtAdapter: adapter },
+      );
+      try {
+        const cookie = await signIn(app);
+        const me = await app.inject({ url: "/v1/auth/me", headers: { cookie } });
+        const workspaceId = me.json<{ creator: { workspaceId: string } }>().creator.workspaceId;
+        const url = `/v1/workspace/lti-registrations?expectedWorkspaceId=${workspaceId}`;
+        const expectInventory = async (
+          availability: LtiRegistrationAvailability,
+          registrations: LtiRegistrationRecord[] = [],
+        ) => {
+          const response = await app.inject({ url, headers: { cookie } });
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.headers["cache-control"]).toBe("private, no-store");
+          expect(response.json()).toEqual({
+            availability,
+            registrations: registrations.map((registration) => ({
+              ...registration,
+              createdAt: registration.createdAt.toISOString(),
+              updatedAt: registration.updatedAt.toISOString(),
+            })),
+          });
+        };
+
+        await expectInventory("workspace_policy");
+        const defaultPolicy = await repository.getInstitutionPolicy(workspaceId);
+        const approvedPolicy = {
+          ...defaultPolicy,
+          contractStatus: "pilot" as const,
+          capabilities: { ...defaultPolicy.capabilities, lti: true },
+        };
+        await repository.updateInstitutionPolicy(approvedPolicy, "test-approved");
+        await expectInventory(withoutActive);
+
+        const now = new Date();
+        const disabled = await repository.upsertLtiRegistration({
+          ...registrationInput,
+          id: randomUUID(),
+          workspaceId,
+          status: "disabled",
+          createdAt: now,
+          updatedAt: now,
+        });
+        await expectInventory(withoutActive, [disabled]);
+        const active = await repository.upsertLtiRegistration({ ...disabled, status: "active" });
+        await expectInventory(withActive, [active]);
+
+        await repository.updateInstitutionPolicy(
+          { ...approvedPolicy, capabilities: defaultPolicy.capabilities },
+          "test-revoked-grant",
+        );
+        await expectInventory("workspace_policy", [active]);
+        await repository.updateInstitutionPolicy(
+          { ...defaultPolicy, updatedAt: now },
+          "test-disabled-contract",
+        );
+        await expectInventory("workspace_policy", [active]);
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
   it("accepts cross-origin form posts only through one-time state and verified launch claims", async () => {
     const repository = new MemoryRepository();
     const jwt = new FakeLtiJwtAdapter();
@@ -151,14 +255,7 @@ describe("LTI HTTP protocol", () => {
         url: `/v1/admin/workspaces/${workspaceId}/lti-registrations`,
         headers: { authorization: `Bearer ${adminToken}` },
         payload: {
-          name: "Example LMS",
-          issuer: "https://lms.example.edu",
-          clientId: "openround-client",
-          deploymentId: "deployment-1",
-          authorizationEndpoint: "https://lms.example.edu/oidc/auth",
-          tokenEndpoint: "https://lms.example.edu/oauth/token",
-          jwksUrl: "https://lms.example.edu/.well-known/jwks.json",
-          deepLinkReturnOrigins: ["https://lms.example.edu"],
+          ...registrationInput,
           status: "active",
         },
       });

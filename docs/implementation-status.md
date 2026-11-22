@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### LTI registration availability explanations, November 22, 2026
+
+Implemented locally on `codex/lti-availability-explanations` after PR #303. Workspace Settings
+explains whether institution policy, deployment configuration, or the absence of an active
+learning-platform registration blocks LTI. The matched owner-only registration read supplies
+the status. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Source-assisted authoring upload availability
 
-Implemented locally on `codex/source-upload-availability` after PR #302. The authoring form
+Merged through PR #303 at `362be9b`. The authoring form
 identifies deployments where the provider is enabled but file scanning is unconfigured. It
 explains the unavailable upload option and keeps pasted text available. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -181,7 +189,7 @@ navigation reuse existing controls. New long-form editorial copy is explicitly E
 See the [research, claim matrix and follow-up scope](public-product-experience-2026-11.md).
 Commercial/legal qualification, native-language acceptance and observed usability remain open.
 
-### Workspace experience: current position, November 21, 2026
+### Workspace experience: current position, November 22, 2026
 
 The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
 preview/use, All content Library, the Team meetings collection, and creation navigation/import
@@ -207,8 +215,9 @@ See the [conditional-page decisions](survey-branching.md) and
 WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296. Checkpoint-set import
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
-PR #301 and live Presentation launch availability reasons merged in PR #302. Source upload
-availability is implemented locally. Other capability explanations remain pending.
+PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
+in PR #303. LTI availability explanations are implemented locally. Other capability explanations
+remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT, createRemoteJWKSet, importJWK, jwtVerify, type JWK, type JWTPayload } from "jose";
 import { z } from "zod";
-import type { CreatorContext, LtiRegistrationRecord, Repository } from "@openround/db";
+import type { LtiRegistrationAvailability } from "@openround/contracts";
+import type {
+  CreatorContext,
+  InstitutionPolicyRecord,
+  LtiRegistrationRecord,
+  Repository,
+} from "@openround/db";
 import type { AppConfig } from "./config.js";
 import { hashToken, opaqueToken } from "./security.js";
 
@@ -146,6 +152,10 @@ function stringClaim(payload: JWTPayload, name: string): string {
   throw new LtiError("LTI_LAUNCH_INVALID", `LTI launch is missing ${name}`);
 }
 
+function workspacePolicyAllowsLti(policy: InstitutionPolicyRecord) {
+  return policy.contractStatus !== "disabled" && policy.capabilities.lti;
+}
+
 export class LtiService {
   constructor(
     private readonly repository: Repository,
@@ -164,10 +174,26 @@ export class LtiService {
 
   private async requireWorkspaceCapability(workspaceId: string) {
     const policy = await this.repository.getInstitutionPolicy(workspaceId);
-    if (policy.contractStatus === "disabled" || !policy.capabilities.lti) {
+    if (!workspacePolicyAllowsLti(policy)) {
       throw new LtiError("INSTITUTION_NOT_ENABLED", "LTI is not approved for this workspace");
     }
     return policy;
+  }
+
+  async listRegistrations(workspaceId: string) {
+    const [policy, registrations] = await Promise.all([
+      this.repository.getInstitutionPolicy(workspaceId),
+      this.repository.listLtiRegistrations(workspaceId),
+    ]);
+    let availability: LtiRegistrationAvailability = "available";
+    if (!workspacePolicyAllowsLti(policy)) {
+      availability = "workspace_policy";
+    } else if (!this.enabled) {
+      availability = "deployment_disabled";
+    } else if (!registrations.some((registration) => registration.status === "active")) {
+      availability = "registration_required";
+    }
+    return { availability, registrations };
   }
 
   private validateRegistrationUrl(value: string, label: string) {

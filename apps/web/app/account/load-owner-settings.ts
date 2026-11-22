@@ -1,4 +1,9 @@
-import type { LtiRegistration, WorkspaceInvitation, WorkspaceMember } from "@openround/contracts";
+import {
+  LtiRegistrationAvailabilitySchema,
+  type LtiRegistration,
+  type WorkspaceInvitation,
+  type WorkspaceMember,
+} from "@openround/contracts";
 import { apiFetch } from "../../lib/api";
 import { workspaceSettingsPath } from "./workspace-settings-request";
 
@@ -19,10 +24,13 @@ export async function loadWorkspaceCollaboration(workspaceId: string, signal: Ab
 }
 
 export async function loadLtiRegistrations(workspaceId: string, signal: AbortSignal) {
-  const lti = await apiFetch<{ registrations: LtiRegistration[] }>(
+  const lti = await apiFetch<{ registrations: LtiRegistration[]; availability?: unknown }>(
     workspaceSettingsPath("/v1/workspace/lti-registrations", workspaceId),
     { signal },
   );
   if (!Array.isArray(lti?.registrations)) throw new Error("Invalid LTI registrations response");
-  return lti.registrations;
+  return {
+    registrations: lti.registrations,
+    availability: LtiRegistrationAvailabilitySchema.safeParse(lti.availability).data,
+  };
 }

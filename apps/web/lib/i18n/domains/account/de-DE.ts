@@ -58,6 +58,12 @@ const messages = {
   "account.institution.notEnabled":
     "Die institutionelle Anmeldung ist für diesen Arbeitsbereich nicht aktiviert. Eigentümer können vertragsgebundene Identitätskontrollen nicht selbst aktivieren.",
   "account.institution.ltiTitle": "LTI-1.3-Registrierungen",
+  "account.institution.ltiWorkspacePolicy":
+    "Gemäß den institutionellen Richtlinien für diesen Arbeitsbereich ist LTI nicht verfügbar. Wenden Sie sich an Ihren Polling Pops-Betreiber.",
+  "account.institution.ltiDeploymentDisabled":
+    "In dieser Bereitstellung ist LTI deaktiviert. Wenden Sie sich an Ihren Polling Pops-Betreiber.",
+  "account.institution.ltiRegistrationRequired":
+    "Für LTI ist eine aktive Registrierung einer Lernplattform erforderlich. Wenden Sie sich an Ihren Polling Pops-Betreiber.",
   "account.institution.ltiEmpty":
     "LTI ist genehmigt, aber keine Plattform registriert. Ihr Polling Pops-Betreiber muss LMS-Aussteller, Client, Bereitstellung, JWKS und Rückkehrursprünge hinzufügen.",
   "account.institution.auditTitle": "Institutioneller Prüfexport",

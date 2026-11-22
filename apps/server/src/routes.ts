@@ -1513,12 +1513,14 @@ export async function registerRoutes(
   });
 
   app.get("/v1/workspace/lti-registrations", async (request, reply) => {
+    reply.header("cache-control", "private, no-store");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     requireExpectedWorkspace(request.query, creator.workspaceId);
     if (requireWorkspaceRole(creator, ["owner"], reply, request.id) !== true) return;
-    const registrations = await repository.listLtiRegistrations(creator.workspaceId);
+    const { availability, registrations } = await lti.listRegistrations(creator.workspaceId);
     return {
+      availability,
       registrations: registrations.map((registration) =>
         LtiRegistrationSchema.parse({
           ...registration,

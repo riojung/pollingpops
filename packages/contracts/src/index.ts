@@ -2649,6 +2649,14 @@ export const OidcStatusSchema = z.object({
 });
 export type OidcStatus = z.infer<typeof OidcStatusSchema>;
 
+export const LtiRegistrationAvailabilitySchema = z.enum([
+  "available",
+  "workspace_policy",
+  "deployment_disabled",
+  "registration_required",
+]);
+export type LtiRegistrationAvailability = z.infer<typeof LtiRegistrationAvailabilitySchema>;
+
 export const LtiRegistrationStatusSchema = z.enum(["disabled", "active"]);
 export const LtiRegistrationSchema = z.object({
   id: z.string().uuid(),

@@ -1124,7 +1124,7 @@ describe("owner settings section recovery", () => {
     route.dispose();
   });
 
-  it("retains the owner LTI read when the trusted policy keeps its section hidden", async () => {
+  it("explains that the workspace institution policy blocks LTI without showing retained registration details", async () => {
     browser.location.hash = "#security";
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace"
@@ -1132,10 +1132,111 @@ describe("owner settings section recovery", () => {
         : response(path),
     );
     const route = harness();
-    expect(await route.settle()).not.toContain("account-lti-section");
+    const markup = await route.settle();
+    expect(markup).toContain("LTI is unavailable under this workspace’s institution policy.");
+    expect(markup).not.toContain("Trusted LMS");
+    expect(markup).not.toContain("no platform is registered");
     expect(settingsReads(ltiPath)).toHaveLength(1);
     route.dispose();
   });
+
+  it.each([
+    { updatedAt: "2026-11-22T20:00:00.000Z", hasRegistrations: false, showLti: true },
+    { updatedAt: null, hasRegistrations: true, showLti: true },
+    { updatedAt: null, hasRegistrations: false, showLti: false },
+  ])(
+    "displays the owner LTI section for a disabled policy with prior setup $showLti",
+    async (test) => {
+      browser.location.hash = "#security";
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace") {
+          return {
+            contractStatus: "disabled",
+            identityRequirement: "guest",
+            capabilities: { lti: false },
+            updatedAt: test.updatedAt,
+          };
+        }
+        if (path.startsWith("/v1/auth/oidc/status?")) return { enabled: false };
+        if (path === ltiPath)
+          return {
+            registrations: test.hasRegistrations ? [{ id: "lti", name: "Retained LMS" }] : [],
+            availability: "workspace_policy",
+          };
+        return response(path);
+      });
+      const route = harness();
+      const markup = await route.settle();
+      expect(markup.includes('id="account-lti-section"')).toBe(test.showLti);
+      expect(markup.includes("LTI is unavailable under this workspace’s institution policy.")).toBe(
+        test.showLti,
+      );
+      expect(markup).not.toContain("Retained LMS");
+      expect(settingsReads(ltiPath)).toHaveLength(1);
+      route.dispose();
+    },
+  );
+
+  it.each([
+    ["deployment_disabled", "LTI is disabled on this deployment."],
+    ["registration_required", "LTI needs an active learning platform registration."],
+  ])(
+    "shows LTI availability %s when the initial policy predates approval",
+    async (availability, notice) => {
+      browser.location.hash = "#security";
+      const registrations = deferred<unknown>();
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (path === "/v1/workspace/institution-policy?expectedWorkspaceId=workspace") {
+          return {
+            contractStatus: "disabled",
+            identityRequirement: "guest",
+            capabilities: { lti: false },
+            updatedAt: null,
+          };
+        }
+        if (path.startsWith("/v1/auth/oidc/status?")) return { enabled: false };
+        if (path === ltiPath) return registrations.promise;
+        return response(path);
+      });
+      const route = harness();
+      try {
+        expect(await route.settle()).not.toContain('id="account-lti-section"');
+        expect(settingsReads(ltiPath)).toHaveLength(1);
+
+        registrations.resolve({ registrations: [], availability });
+        const markup = await route.settle();
+        expect(markup).toContain('id="account-lti-section"');
+        expect(markup).toContain(notice);
+        expect(browser.location.reload).not.toHaveBeenCalled();
+      } finally {
+        route.dispose();
+      }
+    },
+  );
+
+  it.each([
+    ["deployment_disabled", "LTI is disabled on this deployment."],
+    ["registration_required", "LTI needs an active learning platform registration."],
+  ])(
+    "explains LTI availability %s and keeps the registration inventory",
+    async (availability, notice) => {
+      browser.location.hash = "#security";
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (path !== ltiPath) return response(path);
+        return {
+          registrations: [{ id: "lti", name: "Disabled LMS", status: "disabled" }],
+          availability,
+        };
+      });
+      const route = harness();
+      const markup = await route.settle();
+      expect(markup).toContain(notice);
+      expect(markup).toContain("Disabled LMS");
+      expect(markup).not.toContain("no platform is registered");
+      expect(settingsWrites()).toHaveLength(0);
+      route.dispose();
+    },
+  );
 
   it("retries a failed post-invitation refresh without sending another invitation", async () => {
     browser.location.hash = "#people";

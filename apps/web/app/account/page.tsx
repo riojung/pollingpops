@@ -8,6 +8,7 @@ import {
   type BrandTheme,
   type Entitlements,
   type FederatedIdentity,
+  type LtiRegistrationAvailability,
   type OidcStatus,
   type WorkspaceCapabilityUnavailableReason,
   type WorkspaceInstitutionPolicy,
@@ -67,6 +68,12 @@ const csvUnavailableMessageKeys = {
   plan_limit: "account.subscription.csvUnavailablePlanLimit",
   operator_policy: "account.subscription.csvUnavailableOperatorPolicy",
 } as const satisfies Record<WorkspaceCapabilityUnavailableReason, string>;
+
+const ltiUnavailableMessageKeys = {
+  workspace_policy: "account.institution.ltiWorkspacePolicy",
+  deployment_disabled: "account.institution.ltiDeploymentDisabled",
+  registration_required: "account.institution.ltiRegistrationRequired",
+} as const satisfies Record<Exclude<LtiRegistrationAvailability, "available">, string>;
 
 export default function AccountPage() {
   const { locale, t } = useLocale();
@@ -737,9 +744,32 @@ export default function AccountPage() {
     loadLtiRegistrations,
     reportWorkspaceRequestFailure,
   );
+  const ltiDetails = ltiRegistrations.state.status === "ready" ? ltiRegistrations.state.data : null;
+  const ltiAvailability =
+    ltiDetails?.availability ??
+    (ltiDetails &&
+    institutionPolicy &&
+    (institutionPolicy.contractStatus === "disabled" || !institutionPolicy.capabilities.lti)
+      ? "workspace_policy"
+      : undefined);
+  const ltiInScope = Boolean(
+    (ltiAvailability && ltiAvailability !== "workspace_policy") ||
+    (institutionPolicy &&
+      (institutionPolicy.contractStatus !== "disabled" ||
+        institutionPolicy.capabilities.lti ||
+        institutionPolicy.updatedAt ||
+        ltiDetails?.registrations.length)),
+  );
+  const ltiUnavailableMessage =
+    ltiAvailability && ltiAvailability !== "available"
+      ? ltiUnavailableMessageKeys[ltiAvailability]
+      : ltiDetails?.registrations.length === 0 && !ltiAvailability
+        ? "account.institution.ltiEmpty"
+        : null;
   const hasInstitutionAccess = Boolean(
     oidcStatus?.enabled ||
     federatedIdentities.length ||
+    (ownerAuthority && ltiInScope) ||
     (institutionPolicy &&
       (institutionPolicy.contractStatus !== "disabled" ||
         Object.values(institutionPolicy.capabilities).some(Boolean))),
@@ -1170,7 +1200,7 @@ export default function AccountPage() {
               ) : (
                 <p className="muted">{t("account.institution.loading")}</p>
               )}
-              {institutionPolicy?.capabilities.lti && ownerAuthority ? (
+              {ltiInScope && ownerAuthority ? (
                 <div
                   aria-labelledby="account-lti-title"
                   className={`stack-sm institution-registration-list ${styles.sectionReadRegion}`}
@@ -1184,24 +1214,24 @@ export default function AccountPage() {
                     status={ltiRegistrations.state.status}
                     onRetry={ltiRegistrations.retry}
                   >
-                    {ltiRegistrations.state.status === "ready" &&
-                      (ltiRegistrations.state.data.length ? (
-                        <ul>
-                          {ltiRegistrations.state.data.map((registration) => (
-                            <li key={registration.id}>
-                              <strong>{registration.name}</strong>
-                              <span>
-                                {registration.issuer} · {registration.deploymentId} ·{" "}
-                                {registration.status === "active"
-                                  ? t("account.status.active")
-                                  : t("account.status.disabled")}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="notice">{t("account.institution.ltiEmpty")}</p>
-                      ))}
+                    {ltiUnavailableMessage ? (
+                      <p className="notice">{t(ltiUnavailableMessage)}</p>
+                    ) : null}
+                    {ltiDetails?.registrations.length && ltiAvailability !== "workspace_policy" ? (
+                      <ul>
+                        {ltiDetails.registrations.map((registration) => (
+                          <li key={registration.id}>
+                            <strong>{registration.name}</strong>
+                            <span>
+                              {registration.issuer} · {registration.deploymentId} ·{" "}
+                              {registration.status === "active"
+                                ? t("account.status.active")
+                                : t("account.status.disabled")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </SettingsSectionRead>
                 </div>
               ) : null}

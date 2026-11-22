@@ -120,8 +120,8 @@ Library pagination and reset focus merged as WX-11D in PR #294. See the
 PR #295. Checkpoint-set import availability copy merged in PR #297 and import reasons merged in
 PR #298. Live-brand save reasons merged in PR #299 and workspace CSV export reasons merged in
 PR #300. Retained Round report export reasons merged in PR #301 and live Presentation launch
-reasons merged in PR #302. Source upload availability is implemented locally. Other capability
-explanations remain pending.
+reasons merged in PR #302. Source upload availability merged in PR #303. LTI availability
+explanations are implemented locally. Other capability explanations remain pending.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

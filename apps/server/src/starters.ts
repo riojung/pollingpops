@@ -16,6 +16,7 @@ import {
 import { localizedStarter, localizedStarterDescription } from "./starter-localization.js";
 import { SurveyDraftSchema, type SurveyDraft } from "@openround/contracts/surveys";
 import { surveyCreationCopy } from "./starter-localization.js";
+import { eventStarterGuide } from "./starter-event-guides.js";
 import {
   LAUNCH_STARTER_IDS,
   launchStarter,
@@ -1250,6 +1251,7 @@ export function starterGuideForLocale(
   survey = false,
 ): StarterGuide | undefined {
   return (
+    eventStarterGuide(id, locale, survey) ??
     workshopStarterGuide(id, locale, survey) ??
     trainingStarterGuide(id, locale, survey) ??
     meetingStarterGuide(id, locale, survey) ??
@@ -1276,7 +1278,14 @@ export function surveyStarterSummariesForLocale(
   ];
   return starterSummariesForLocale(locale)
     .filter((starter) => ids.includes(starter.id))
-    .map((starter) => ({ ...starter, guide: starterGuideForLocale(starter.id, locale, true) }));
+    .map((starter) => ({
+      ...starter,
+      description:
+        starter.id === "event-feedback"
+          ? launchSurveyOptions(starter.id, locale)!.description
+          : starter.description,
+      guide: starterGuideForLocale(starter.id, locale, true),
+    }));
 }
 
 /** Pure preview projection. Creation assigns stable per-request IDs before persisting. */

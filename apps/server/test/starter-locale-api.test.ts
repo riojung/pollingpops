@@ -136,6 +136,8 @@ describe("explicit starter creation languages", () => {
     ["new-hire-knowledge-check", 5],
     ["workshop-expectations", 5],
     ["exit-ticket", 8],
+    ["training-feedback", 3],
+    ["event-feedback", 10],
   ] as const)(
     "shows the localized %s Round guide in the list and preview without saving it in the copy",
     async (id, minutes) => {
@@ -166,6 +168,8 @@ describe("explicit starter creation languages", () => {
         expect(created.statusCode, created.body).toBe(201);
         const { draft } = created.json().quiz;
         expect(draft.title).toBe(summary.title);
+        expect(draft.description).toBe(preview.json().draft.description);
+        if (id === "event-feedback") expect(draft.description).toBe(summary.description);
         expect(draft.questions[0].prompt).toBe(summary.previewPrompt);
         expect(draft.questions[0].id).not.toBe(preview.json().draft.questions[0].id);
         expect(draft.guide).toBeUndefined();
@@ -196,12 +200,17 @@ describe("explicit starter creation languages", () => {
         "service-experience",
         "team-collaboration",
       ]);
-      for (const id of ["onboarding-experience", "learning-needs"] as const) {
+      for (const id of ["onboarding-experience", "learning-needs", "event-feedback"] as const) {
         expect(
           listed.json<{ templates: StarterSummary[] }>().templates.find((entry) => entry.id === id)
             ?.guide,
         ).toEqual(starterGuideForLocale(id, locale, true));
       }
+      const event = listed
+        .json<{ templates: StarterSummary[] }>()
+        .templates.find((entry) => entry.id === "event-feedback")!;
+      expect(event.description).toBe(instantiateSurveyStarter(event.id, locale)!.description);
+      expect(event.guide).not.toEqual(starterGuideForLocale(event.id, locale));
       const payload = { idempotencyKey: randomUUID(), templateId: "team-collaboration", locale };
       const created = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
       expect(created.statusCode, created.body).toBe(201);

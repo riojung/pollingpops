@@ -452,7 +452,9 @@ export function launchStarter(id: StarterId, locale: SupportedLocale): QuizDraft
   }
   return {
     title: t(`${entry.prefix}.title`),
-    description: t(`${entry.prefix}.description`),
+    description: t(
+      id === "event-feedback" ? "event.roundDescription" : `${entry.prefix}.description`,
+    ),
     category: entry.category,
     experiencePreset: { id: entry.preset, version: 1 },
     questions,

@@ -171,6 +171,18 @@ const rows = {
     "活动体验",
     "活動體驗",
   ],
+  "event.roundDescription": [
+    "Share what was useful and what to improve while the group is still together. This live feedback is unscored.",
+    "Pendant que le groupe est encore réuni, dites ce qui vous a été utile et ce qui pourrait être amélioré. Ces réponses ne sont pas notées.",
+    "Sagt, solange ihr noch zusammen seid, was euch geholfen hat und was wir verbessern sollten. Eure Rückmeldung wird nicht bewertet.",
+    "Mientras el grupo sigue reunido, compartid qué os resultó útil y qué mejoraríais. Las respuestas no se puntúan.",
+    "Finché il gruppo è ancora riunito, dite cosa è stato utile e cosa si potrebbe migliorare. Le risposte non ricevono un punteggio.",
+    "Enquanto o grupo ainda está reunido, digam o que foi útil e o que pode melhorar. As respostas não são pontuadas.",
+    "参加者がまだ集まっているうちに、役立った点と改善してほしい点を共有してください。回答は採点しません。",
+    "모두가 함께 있을 때 도움이 된 점과 개선할 점을 나눠 주세요. 응답은 채점하지 않습니다.",
+    "趁大家还在一起，说说哪些有用、哪些可以改进。现场反馈不计分。",
+    "趁大家還在一起，說說哪些有用、哪些可以改善。現場回饋不計分。",
+  ],
   "event.description": [
     "Tell us what was useful and what to improve next time. This is unscored feedback; skip optional questions that do not apply.",
     "Dites-nous ce qui a été utile et ce qu'il faut améliorer. Ce retour n'est pas noté ; passez les questions facultatives sans objet.",

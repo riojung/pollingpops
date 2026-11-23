@@ -32,7 +32,10 @@ Choose **Collections → Team meetings** to narrow the formats to two short Roun
 Presentations and one follow-up Survey. Choose **Training and onboarding** for knowledge checks,
 facilitated practice, a first-steps Presentation or a first-month feedback Survey. Choose
 **Workshops** to set expectations, run a practice exercise, teach with a worked example or plan
-a later session. Each template works on its own. The collection stays selected when you switch
+a later session. Choose **Event feedback** for live feedback, a guided demo, an event talk or
+a self-paced follow-up Survey. **Event experience** appears under both **Rounds** and
+**Surveys**. Choose the Round to collect answers together or the Survey to let attendees respond
+on their own schedule. Each template works on its own. The collection stays selected when you switch
 between those formats and survives reload and back/forward navigation. Choose **All templates**
 to browse the complete catalog. Choosing **Designs** clears the collection.
 Open the template guide for audience, estimated time, preparation and a concrete follow-up.

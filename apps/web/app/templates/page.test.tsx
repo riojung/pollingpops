@@ -206,6 +206,7 @@ describe("Template library sections", () => {
   it.each([
     ["training-onboarding", "Training and onboarding"],
     ["workshops", "Workshops"],
+    ["event-feedback", "Event feedback"],
   ])("opens and retains the %s collection on format links", (id, title) => {
     mocked.search = `?type=rounds&collection=${id}`;
     const view = harness();

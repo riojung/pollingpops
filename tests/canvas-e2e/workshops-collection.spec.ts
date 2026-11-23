@@ -131,8 +131,15 @@ test("Workshops fits with all collection choices at 320px @mobile", async ({ pag
   await page.goto("/templates?type=rounds");
 
   const selector = page.getByRole("group", { name: "Collection", exact: true });
-  await expect(selector.getByRole("button")).toHaveCount(4);
-  for (const name of ["All templates", "Team meetings", "Training and onboarding", "Workshops"]) {
+  const choices = [
+    "All templates",
+    "Team meetings",
+    "Training and onboarding",
+    "Workshops",
+    "Event feedback",
+  ];
+  await expect(selector.getByRole("button")).toHaveCount(choices.length);
+  for (const name of choices) {
     const button = selector.getByRole("button", { name, exact: true });
     await expect(button).toBeVisible();
     const box = (await button.boundingBox())!;

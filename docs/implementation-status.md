@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-04 Event feedback template collection, November 23, 2026
+
+Implemented locally on `codex/event-feedback-collection` after PR #312. Templates groups five
+existing originals for live and self-paced feedback, a facilitated demo, and a content-only
+event talk. The Event experience Round and Survey show distinct facilitator guides and use
+their existing type-specific copy workflows. The [editorial record](evidence/event-feedback-editorial-review-2026-11.md)
+tracks verification and pending human editorial and native-language acceptance.
+
 ### WX-04 Workshops template collection, November 23, 2026
 
-Implemented locally on `codex/workshops-collection` after PR #311. The Templates collection groups
+Merged through PR #312 at `61d1094`. The Templates collection groups
 five existing originals for setting expectations, practising a skill, or planning a later session.
 It includes two Rounds, a facilitated Presentation, a worked-example Presentation, and a
 learning-needs Survey. Preview and independent draft creation use the existing workflows.
@@ -251,10 +259,10 @@ Commercial/legal qualification, native-language acceptance and observed usabilit
 
 ### Workspace experience: current position, November 23, 2026
 
-The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
-preview/use, All content Library, the Team meetings and Training and onboarding collections, and
-creation navigation/import preview/durable Round starter-copy recovery. Workshops is implemented
-locally. Event feedback remains a candidate. Survey ordered-page readers (WX-06A1, PR #284) and
+The selected P1 deliveries in WX-01–05 are merged, including Home/start/resume, template discovery
+and preview/use, All content Library, the first three curated collections, and creation navigation,
+import preview and durable Round starter-copy recovery. Event feedback is implemented locally.
+Survey ordered-page readers (WX-06A1, PR #284) and
 opt-in page authoring (WX-06A2, PR #285 at `4dcefcc`) are also merged. The default-off `surveyPages`
 capability preserves existing v2 creation and published links; enabling it remains an explicit
 operator policy decision.

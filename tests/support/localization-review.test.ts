@@ -465,6 +465,17 @@ describe("native-language review preparation", () => {
         target: templateCollectionGuide("presentation", id, "ko-KR"),
       });
     }
+    const eventRound = bundle.items.find(({ id }) => id === "round/event-feedback/metadata");
+    const eventSurvey = bundle.items.find(({ id }) => id === "survey/event-feedback/context");
+    expect(eventRound?.target).toMatchObject({
+      guide: starterGuideForLocale("event-feedback", "ko-KR"),
+    });
+    expect(eventSurvey?.target).toMatchObject({
+      guide: starterGuideForLocale("event-feedback", "ko-KR", true),
+    });
+    expect(starterGuideForLocale("event-feedback", "ko-KR")).not.toEqual(
+      starterGuideForLocale("event-feedback", "ko-KR", true),
+    );
     const decisions = createReviewDecisions(bundle);
     expect(
       decisions.entries.every(
@@ -477,10 +488,12 @@ describe("native-language review preparation", () => {
         expect.objectContaining({ path: "apps/web/lib/i18n/template-collection-copy.ts" }),
         expect.objectContaining({ path: "apps/web/lib/training-onboarding-guides.ts" }),
         expect.objectContaining({ path: "apps/web/lib/workshop-collection-guides.ts" }),
+        expect.objectContaining({ path: "apps/web/lib/event-feedback-guides.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-collection.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-copy.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-training-guides.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-workshop-guides.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-event-guides.ts" }),
       ]),
     );
   });

@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRepository } from "@openround/db";
+import { MemoryRepository, createPlatformRepository } from "@openround/db";
 import {
   PresentationContentSchema,
   resolvePresentationSpatialFrames,
   type PresentationVisualImportJob,
+  type PresentationVisualImportUnavailableReason,
 } from "@openround/contracts";
 import { buildApp } from "../src/app.js";
 import { ConfigSchema } from "../src/config.js";
@@ -28,32 +29,33 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  vi.spyOn(converter, "presentationVisualConversionAvailable").mockReturnValue(true);
+  const conversionAvailable = vi
+    .spyOn(converter, "presentationVisualConversionAvailable")
+    .mockReturnValue(true);
   const repository = new MemoryRepository({ initialWorkspaceId: workspaceId });
-  const built = await buildApp(
-    ConfigSchema.parse({
-      NODE_ENV: "test",
-      ALLOW_IN_MEMORY: "true",
-      COMMUNITY_MODE: "false",
-      WEB_ORIGIN: "http://localhost:3000",
-      PUBLIC_API_URL: "http://localhost:4000",
-      FEATURE_UX_BETA: "true",
-      UX_BETA_WORKSPACE_ALLOWLIST: workspaceId,
-      FEATURE_PRESENTATIONS: "true",
-      FEATURE_MEDIA_UPLOADS: "true",
-      S3_ENDPOINT: "http://127.0.0.1:9000",
-      S3_PUBLIC_ENDPOINT: "http://127.0.0.1:9000",
-      S3_BUCKET: "test-imports",
-      S3_ACCESS_KEY_ID: "test-access",
-      S3_SECRET_ACCESS_KEY: "test-secret",
-      LOG_LEVEL: "silent",
-    }),
-    {
-      repository,
-      cache: new MemorySessionCache(),
-      scanner: { scan: async () => ({ clean: true, signature: null }) },
-    },
-  );
+  const config = ConfigSchema.parse({
+    NODE_ENV: "test",
+    ALLOW_IN_MEMORY: "true",
+    COMMUNITY_MODE: "false",
+    WEB_ORIGIN: "http://localhost:3000",
+    PUBLIC_API_URL: "http://localhost:4000",
+    FEATURE_UX_BETA: "true",
+    UX_BETA_WORKSPACE_ALLOWLIST: workspaceId,
+    FEATURE_PRESENTATIONS: "true",
+    FEATURE_MEDIA_UPLOADS: "true",
+    S3_ENDPOINT: "http://127.0.0.1:9000",
+    S3_PUBLIC_ENDPOINT: "http://127.0.0.1:9000",
+    S3_BUCKET: "test-imports",
+    S3_ACCESS_KEY_ID: "test-access",
+    S3_SECRET_ACCESS_KEY: "test-secret",
+    LOG_LEVEL: "silent",
+  });
+  const scan = vi.fn(async () => ({ clean: true, signature: null }));
+  const built = await buildApp(config, {
+    repository,
+    cache: new MemorySessionCache(),
+    scanner: { scan },
+  });
   app = built.app;
   const magic = await app.inject({
     method: "POST",
@@ -110,7 +112,21 @@ async function fixture() {
     render,
   );
   const create = () => app!.inject({ method: "POST", url: base, headers: { cookie }, payload });
-  return { ...built, repository, id, base, payload, cookie, worker, write, render, create };
+  return {
+    ...built,
+    repository,
+    config,
+    conversionAvailable,
+    scan,
+    id,
+    base,
+    payload,
+    cookie,
+    worker,
+    write,
+    render,
+    create,
+  };
 }
 
 describe("Presentation visual import", () => {
@@ -312,6 +328,7 @@ describe("Presentation visual import", () => {
     expect(job).toMatchObject({ status: "ready", pageCount: 2, retainOriginal: false });
     expect(ready.body).not.toContain(f.payload.files[0]!.base64);
     expect(ready.body).not.toContain("objectKey");
+    await f.repository.updateOperationalFeatures({ mediaUploads: false }, "test-pause-media");
     const preview = await f.app.inject({
       url: `${f.base}/${jobId}/pages/2`,
       headers: { cookie: f.cookie },
@@ -399,6 +416,7 @@ describe("Presentation visual import", () => {
       editorId: owner.userId,
       draftHash: "f".repeat(64),
     });
+    f.config.FEATURE_PRESENTATIONS = false;
     const recovered = await insert();
     expect(recovered.statusCode, recovered.body).toBe(200);
     expect(
@@ -412,17 +430,27 @@ describe("Presentation visual import", () => {
     });
     expect((await f.presentations.getPresentation(workspaceId, f.id))?.draftRevision).toBe(2);
     expect((await f.presentations.getPresentation(workspaceId, f.id))?.draft.blocks).toEqual([]);
+    const freshInsert = await f.app.inject({
+      method: "POST",
+      url: `${f.base}/${jobId}/insert`,
+      headers: { cookie: f.cookie },
+      payload: { ...input, expectedRevision: 2, mutationId: randomUUID() },
+    });
+    expect(freshInsert.statusCode).toBe(403);
+    expect(freshInsert.json()).toMatchObject({ error: { code: "FEATURE_UNAVAILABLE" } });
+    expect(freshInsert.json().error).not.toHaveProperty("details");
   });
 
   it("requires fidelity/reading review, fences canceled jobs, and rejects viewers and foreign presentation scopes", async () => {
     const f = await fixture();
     const created = await f.create();
     const id = created.json<{ job: PresentationVisualImportJob }>().job.id;
-    const wrongScope = await f.app.inject({
-      url: `/v1/presentations/${randomUUID()}/visual-imports/${id}`,
-      headers: { cookie: f.cookie },
-    });
-    expect(wrongScope.statusCode).toBe(404);
+    const headers = { cookie: f.cookie };
+    const otherPresentation = `/v1/presentations/${randomUUID()}/visual-imports`;
+    expect((await f.app.inject({ url: otherPresentation, headers })).statusCode).toBe(404);
+    expect((await f.app.inject({ url: `${otherPresentation}/${id}`, headers })).statusCode).toBe(
+      404,
+    );
     expect(
       (
         await f.app.inject({
@@ -460,7 +488,12 @@ describe("Presentation visual import", () => {
     )!;
     owner.role = "viewer";
     f.repository.users.get(owner.userId)!.role = "viewer";
-    expect((await f.create()).statusCode).toBe(403);
+    const viewerRead = await f.app.inject({ url: f.base, headers });
+    expect(viewerRead.statusCode).toBe(200);
+    const viewerCreate = await f.create();
+    expect(viewerCreate.statusCode).toBe(403);
+    expect(viewerCreate.json()).toMatchObject({ error: { code: "UNAUTHORIZED" } });
+    expect(viewerCreate.json().error).not.toHaveProperty("details");
     expect(
       (
         await f.app.inject({
@@ -533,6 +566,9 @@ describe("Presentation visual import", () => {
       payload: { ...f.payload, requestId: randomUUID() },
     });
     expect(fresh.statusCode).toBe(503);
+    expect(fresh.json()).toMatchObject({
+      error: { details: { unavailableReason: "deployment_unavailable" } },
+    });
     const mismatch = await f.app.inject({
       method: "POST",
       url: f.base,
@@ -540,6 +576,87 @@ describe("Presentation visual import", () => {
       payload: { ...f.payload, files: [{ ...f.payload.files[0]!, name: "different.png" }] },
     });
     expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().error).not.toHaveProperty("details");
+  });
+
+  it("reports the first unavailable reason for new uploads and retains private jobs", async () => {
+    const f = await fixture();
+    const headers = { cookie: f.cookie };
+    const read = () => f.app.inject({ url: f.base, headers });
+    const fresh = () =>
+      f.app.inject({
+        method: "POST",
+        url: f.base,
+        headers,
+        payload: { ...f.payload, requestId: randomUUID() },
+      });
+    const initial = await read();
+    expect(initial.statusCode).toBe(200);
+    expect(initial.headers["cache-control"]).toBe("private, no-store");
+    const initialStatus = initial.json();
+    expect(initialStatus).toMatchObject({ available: true, jobs: [], limits: { maxPages: 40 } });
+    expect(initialStatus).not.toHaveProperty("unavailableReason");
+
+    const accepted = await f.create();
+    expect(accepted.statusCode).toBe(202);
+    const { job } = accepted.json<{ job: PresentationVisualImportJob }>();
+    const expectUnavailable = async (
+      unavailableReason: PresentationVisualImportUnavailableReason,
+      status: number,
+      code: string,
+    ) => {
+      const listed = await read();
+      expect(listed.statusCode).toBe(200);
+      expect(listed.headers["cache-control"]).toBe("private, no-store");
+      expect(listed.json()).toEqual({
+        ...initialStatus,
+        available: false,
+        unavailableReason,
+        jobs: [job],
+      });
+      const rejected = await fresh();
+      expect(rejected.statusCode).toBe(status);
+      expect(rejected.json()).toMatchObject({ error: { code, details: { unavailableReason } } });
+    };
+
+    const platform = createPlatformRepository(f.repository);
+    const denied = await platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { presentations: { enabled: false, plans: [] } },
+    });
+    f.config.FEATURE_PRESENTATIONS = false;
+    await f.presentations.archivePresentation(workspaceId, f.id, true);
+    f.conversionAvailable.mockReturnValue(false);
+    await f.repository.updateOperationalFeatures({ mediaUploads: false }, "test-pause-media");
+
+    await expectUnavailable("operator_policy", 403, "FEATURE_UNAVAILABLE");
+    const replay = await f.create();
+    expect(replay.statusCode).toBe(202);
+    expect(replay.json()).toEqual({ job });
+
+    await platform.saveFeaturePolicy({ expectedRevision: denied.revision, features: {} });
+    await expectUnavailable("rollout_unavailable", 403, "FEATURE_UNAVAILABLE");
+    f.config.FEATURE_PRESENTATIONS = true;
+    await expectUnavailable("presentation_archived", 409, "CONFLICT");
+    await f.presentations.archivePresentation(workspaceId, f.id, false);
+    await expectUnavailable("deployment_unavailable", 503, "DEPENDENCY_UNAVAILABLE");
+    f.conversionAvailable.mockReturnValue(true);
+    await expectUnavailable("media_uploads_paused", 503, "DEPENDENCY_UNAVAILABLE");
+    expect(f.scan).toHaveBeenCalledTimes(1);
+
+    await f.repository.updateOperationalFeatures({ mediaUploads: true }, "test-resume-media");
+    expect((await read()).json()).toEqual({ ...initialStatus, jobs: [job] });
+    f.scan.mockRejectedValueOnce(new Error("temporary scanner failure"));
+    const scanFailure = await fresh();
+    expect(scanFailure.statusCode).toBe(503);
+    expect(scanFailure.json()).toMatchObject({
+      error: {
+        code: "DEPENDENCY_UNAVAILABLE",
+        message: "The source security scan is temporarily unavailable",
+      },
+    });
+    expect(scanFailure.json().error).not.toHaveProperty("details");
+    expect((await read()).json()).toEqual({ ...initialStatus, jobs: [job] });
   });
 
   it("accepts the full review-envelope byte budget before validating selected page ownership", async () => {

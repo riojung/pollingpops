@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import {
   CreatePresentationVisualImportSchema,
   InsertPresentationVisualImportSchema,
+  PresentationVisualImportUnavailableReasonSchema,
   type PresentationVisualImportJob,
   type PresentationVisualImportPage,
+  type PresentationVisualImportUnavailableReason,
   type SupportedLocale,
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
@@ -51,6 +53,35 @@ interface Recovery {
   reviews: Record<number, VisualPageReview>;
   fidelity: boolean;
 }
+type Availability =
+  | { status: "checking" | "available" | "failed" }
+  | { status: "unavailable"; reason?: PresentationVisualImportUnavailableReason };
+
+const unavailableCopy = {
+  operator_policy: "Visual import is disabled for this workspace by your Polling Pops operator.",
+  rollout_unavailable: "This workspace is not in the current Presentation authoring rollout.",
+  presentation_archived: "Restore this presentation before importing slides",
+  deployment_unavailable:
+    "Visual import requires media storage, file scanning, and slide conversion on this deployment. Ask your Polling Pops operator to check setup.",
+  media_uploads_paused:
+    "Media uploads are paused on this deployment. Try again later or continue editing native slides.",
+} as const satisfies Record<PresentationVisualImportUnavailableReason, VisualImportCopyKey>;
+
+function availabilityCopy(
+  availability: Availability,
+  receiptPending: boolean,
+): VisualImportCopyKey {
+  if (availability.status === "failed")
+    return "Visual import availability could not be checked. Try again.";
+  if (availability.status !== "unavailable") return "Checking visual import availability…";
+  if (availability.reason === "media_uploads_paused" && receiptPending)
+    return "Media uploads are paused on this deployment.";
+  if (availability.reason) return unavailableCopy[availability.reason];
+  return receiptPending
+    ? "Visual import is currently unavailable. Ask a workspace operator to check availability."
+    : "Visual import is currently unavailable. Ask a workspace operator to check availability, or continue editing native slides.";
+}
+
 const emptyRecovery: Recovery = {
   createBody: null,
   insertBody: null,
@@ -229,7 +260,8 @@ export function PresentationVisualImport({
   const base = `/v1/presentations/${presentationId}/visual-imports`;
   const recoveryKey = `visual-import:${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}:${presentationId}`;
   const [loaded, setLoaded] = useState(false);
-  const [available, setAvailable] = useState(false);
+  const [availability, setAvailability] = useState<Availability>({ status: "checking" });
+  const availabilityRevision = useRef(0);
   const [limits, setLimits] = useState<VisualImportLimits>(defaultVisualImportLimits);
   const [jobs, setJobs] = useState<PresentationVisualImportJob[]>([]);
   const [state, setState] = useState<Recovery>(emptyRecovery);
@@ -320,25 +352,41 @@ export function PresentationVisualImport({
   }, [loaded, persist, state]);
 
   useEffect(() => {
+    setAvailability({ status: "checking" });
     if (!open || !loaded) return;
     let active = true;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
+      const revision = availabilityRevision.current;
       try {
         const result = await apiFetch<{
           available: boolean;
+          unavailableReason?: unknown;
           jobs: PresentationVisualImportJob[];
           limits: VisualImportLimits;
         }>(base, { signal: controller.signal });
         if (!active) return;
-        setAvailable(result.available);
+        if (revision === availabilityRevision.current) {
+          setAvailability(
+            result.available === true
+              ? { status: "available" }
+              : {
+                  status: "unavailable",
+                  reason: PresentationVisualImportUnavailableReasonSchema.safeParse(
+                    result.unavailableReason,
+                  ).data,
+                },
+          );
+        }
         setLimits(result.limits);
         setJobs(result.jobs);
         if (result.jobs.some((job) => job.status === "pending" || job.status === "processing"))
           timer = setTimeout(() => void refresh(), 2000);
-      } catch (caught) {
-        if (active) setError(humanError(caught));
+      } catch {
+        if (active && revision === availabilityRevision.current) {
+          setAvailability({ status: "failed" });
+        }
       }
     }
     void refresh();
@@ -347,7 +395,7 @@ export function PresentationVisualImport({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [base, open, loaded, refreshKey]);
+  }, [base, open, loaded, recoveryKey, refreshKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -364,6 +412,7 @@ export function PresentationVisualImport({
   }, [receiptPending]);
 
   const job = jobs.find((item) => item.id === state.jobId);
+  const available = availability.status === "available";
   const locked = busy || receiptPending;
   const selectedReady =
     job?.status === "ready" &&
@@ -420,8 +469,14 @@ export function PresentationVisualImport({
     }));
   }, [job, state.reviews, receiptPending]);
 
+  function checkAvailability() {
+    availabilityRevision.current += 1;
+    setAvailability({ status: "checking" });
+    setRefreshKey((value) => value + 1);
+  }
+
   async function create() {
-    if (flight.current || !loaded) return;
+    if (flight.current || !loaded || (!createRequest.current.body && !available)) return;
     flight.current = true;
     setBusy(true);
     setError("");
@@ -472,7 +527,17 @@ export function PresentationVisualImport({
           pending(false);
         }
       }
-      if (mounted.current) setError(humanError(caught));
+      if (mounted.current) {
+        const reason = PresentationVisualImportUnavailableReasonSchema.safeParse(
+          (caught as { details?: { unavailableReason?: unknown } } | null)?.details
+            ?.unavailableReason,
+        ).data;
+        if (reason) {
+          // A list request started before this upload denial must not restore the stale grant.
+          availabilityRevision.current += 1;
+          setAvailability({ status: "unavailable", reason });
+        } else setError(humanError(caught));
+      }
     } finally {
       flight.current = false;
       if (mounted.current) setBusy(false);
@@ -710,14 +775,10 @@ export function PresentationVisualImport({
             </button>
           </section>
         ) : null}
-        {!available && loaded ? (
-          <p role="status">
-            {copy(
-              "Visual import is currently unavailable. Ask a workspace operator to check availability, or continue editing native slides.",
-            )}
-          </p>
-        ) : null}
         <section aria-label={copy("Upload visual slides")} className={styles.upload}>
+          {!available && loaded ? (
+            <p role="status">{copy(availabilityCopy(availability, receiptPending))}</p>
+          ) : null}
           <label>
             {copy("PDF or images")}
             <input
@@ -753,12 +814,12 @@ export function PresentationVisualImport({
         </section>
         <section aria-label={copy("Visual import jobs")} className={styles.jobs}>
           <h3>{copy("Resume a conversion")}</h3>
-          <button
-            type="button"
-            disabled={locked}
-            onClick={() => setRefreshKey((value) => value + 1)}
-          >
-            {copy("Refresh conversions")}
+          <button type="button" disabled={!loaded || busy} onClick={checkAvailability}>
+            {copy(
+              availability.status === "unavailable" || availability.status === "failed"
+                ? "Check availability again"
+                : "Refresh conversions",
+            )}
           </button>
           {!jobs.length ? (
             <p>{copy("No conversions available.")}</p>

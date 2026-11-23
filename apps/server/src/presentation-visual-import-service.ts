@@ -3,11 +3,13 @@ import {
   type CreatePresentationVisualImport,
   type InsertPresentationVisualImport,
   type PresentationBlockDraft,
+  type PresentationVisualImportUnavailableReason,
   PresentationDraftSchema,
 } from "@openround/contracts";
 import {
   createPresentationVisualImportRepository,
   type CreatorContext,
+  type PresentationRecord,
   type PresentationRepository,
   type Repository,
 } from "@openround/db";
@@ -20,11 +22,42 @@ export class PresentationVisualImportError extends Error {
     readonly code: string,
     readonly status: number,
     message: string,
+    readonly unavailableReason?: PresentationVisualImportUnavailableReason,
   ) {
     super(message);
     this.name = "PresentationVisualImportError";
   }
 }
+
+const workspaceUnavailable = {
+  code: "FEATURE_UNAVAILABLE",
+  status: 403,
+  message: "Presentation authoring is unavailable for this workspace",
+};
+
+const sourceAvailabilityErrors = {
+  operator_policy: workspaceUnavailable,
+  rollout_unavailable: workspaceUnavailable,
+  presentation_archived: {
+    code: "CONFLICT",
+    status: 409,
+    message: "Restore this presentation before importing slides",
+  },
+  deployment_unavailable: {
+    code: "DEPENDENCY_UNAVAILABLE",
+    status: 503,
+    message: "Visual import is temporarily unavailable. Try again later.",
+  },
+  media_uploads_paused: {
+    code: "DEPENDENCY_UNAVAILABLE",
+    status: 503,
+    message: "Media uploads are temporarily unavailable",
+  },
+} satisfies Record<PresentationVisualImportUnavailableReason, typeof workspaceUnavailable>;
+
+type SourceAvailability =
+  | { scanner: MalwareScanner; unavailableReason?: undefined }
+  | { unavailableReason: PresentationVisualImportUnavailableReason };
 
 function hash(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -45,23 +78,38 @@ export class PresentationVisualImportService {
     private readonly presentations: PresentationRepository,
     private readonly storage: StorageService,
     private readonly scanner: MalwareScanner | null,
+    private readonly workspaceUnavailableReason: (
+      workspaceId: string,
+    ) => Promise<
+      | Extract<
+          PresentationVisualImportUnavailableReason,
+          "operator_policy" | "rollout_unavailable"
+        >
+      | undefined
+    >,
   ) {
     this.imports = createPresentationVisualImportRepository(repository);
   }
 
-  get available() {
-    return (
-      this.storage.mediaUploadsEnabled &&
-      this.scanner !== null &&
-      presentationVisualConversionAvailable()
-    );
+  async sourceAvailability(
+    workspaceId: string,
+    status: PresentationRecord["status"],
+  ): Promise<SourceAvailability> {
+    const unavailableReason = await this.workspaceUnavailableReason(workspaceId);
+    if (unavailableReason) return { unavailableReason };
+    if (status === "archived") return { unavailableReason: "presentation_archived" };
+    const scanner = this.scanner;
+    if (!this.storage.mediaUploadsEnabled || !scanner || !presentationVisualConversionAvailable())
+      return { unavailableReason: "deployment_unavailable" };
+    if (!(await this.repository.getOperationalFeatures()).mediaUploads)
+      return { unavailableReason: "media_uploads_paused" };
+    return { scanner };
   }
 
   async create(
     creator: CreatorContext,
     presentationId: string,
     input: CreatePresentationVisualImport,
-    allowNewWrites = true,
   ) {
     const presentation = await this.presentations.getPresentation(
       creator.workspaceId,
@@ -95,36 +143,22 @@ export class PresentationVisualImportService {
         );
       return prior.job;
     }
-    if (!allowNewWrites)
+    const availability = await this.sourceAvailability(creator.workspaceId, presentation.status);
+    if (availability.unavailableReason) {
+      const { code, status, message } = sourceAvailabilityErrors[availability.unavailableReason];
       throw new PresentationVisualImportError(
-        "FEATURE_UNAVAILABLE",
-        403,
-        "Presentation authoring is unavailable for this workspace",
+        code,
+        status,
+        message,
+        availability.unavailableReason,
       );
-    if (presentation.status === "archived")
-      throw new PresentationVisualImportError(
-        "CONFLICT",
-        409,
-        "Restore this presentation before importing slides",
-      );
-    if (!this.available || !this.scanner)
-      throw new PresentationVisualImportError(
-        "DEPENDENCY_UNAVAILABLE",
-        503,
-        "Visual import is temporarily unavailable. Try again later.",
-      );
-    if (!(await this.repository.getOperationalFeatures()).mediaUploads)
-      throw new PresentationVisualImportError(
-        "DEPENDENCY_UNAVAILABLE",
-        503,
-        "Media uploads are temporarily unavailable",
-      );
+    }
 
     // Scan the bounded source before retaining any original, independently of AI authoring.
     for (const file of files) {
       let clean: boolean;
       try {
-        clean = (await this.scanner.scan(file.bytes)).clean;
+        clean = (await availability.scanner.scan(file.bytes)).clean;
       } catch {
         throw new PresentationVisualImportError(
           "DEPENDENCY_UNAVAILABLE",

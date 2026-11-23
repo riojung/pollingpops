@@ -9,6 +9,17 @@ export const PRESENTATION_VISUAL_IMPORT_RETENTION_MS = 24 * 60 * 60_000;
 export const PRESENTATION_VISUAL_IMPORT_MAX_ACTIVE_JOBS = 3;
 export const PRESENTATION_VISUAL_IMPORT_MAX_DAILY_JOBS = 10;
 
+export const PresentationVisualImportUnavailableReasonSchema = z.enum([
+  "operator_policy",
+  "rollout_unavailable",
+  "presentation_archived",
+  "deployment_unavailable",
+  "media_uploads_paused",
+]);
+export type PresentationVisualImportUnavailableReason = z.infer<
+  typeof PresentationVisualImportUnavailableReasonSchema
+>;
+
 export const PresentationVisualImportMimeTypeSchema = z.enum([
   "application/pdf",
   "image/jpeg",

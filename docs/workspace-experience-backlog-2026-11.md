@@ -49,7 +49,9 @@ Source-assisted authoring upload availability merged through
 [PR #303](https://github.com/riojung/pollingpops/pull/303) at `362be9b`.
 LTI registration availability explanations merged through
 [PR #304](https://github.com/riojung/pollingpops/pull/304) at `b2f3b31`.
-The current WX-11 increment explains checkpoint-set export availability on the Rounds dashboard.
+Checkpoint-set export availability explanations merged through
+[PR #305](https://github.com/riojung/pollingpops/pull/305) at `00a8932`.
+The current WX-11 increment explains Presentation visual import availability in the editor.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -76,7 +78,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #304. Checkpoint-set export reasons in local review. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #305. Visual import availability is in local review. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
@@ -95,9 +97,10 @@ WX-11F independent settings-section recovery merged in PR #296. Checkpoint-set i
 copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299 and workspace
 CSV export reasons in PR #300. Retained Round report export reasons merged in PR #301 and live
 Presentation launch reasons in PR #302. Source upload availability merged in PR #303 and LTI
-availability explanations in PR #304. Checkpoint-set export reasons are implemented locally.
-Other capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job
-collections and human review of localized copy remain open.
+availability explanations in PR #304. Checkpoint-set export reasons merged in PR #305. Visual
+import explanations are implemented locally. Other capability explanations, WX-07–10 and
+WX-12–14 remain pending. Additional customer-job collections and human review of localized copy
+remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -932,20 +935,37 @@ one notice above the loaded Round list when the workspace plan or operator polic
 and QTI downloads. The notice uses the same effective grant as the export routes and uses a generic
 message when the reason is missing or unfamiliar. Downloads are scoped to the active workspace and
 show a localized explanation if access changes after the list loads. Existing reader roles and
-per-format validation still apply. Frontend, server and localization own this increment on
-`codex/checkpoint-export-availability`.
+per-format validation still apply. Frontend, server and localization owned this increment, merged
+through PR #305 at `00a8932`.
 
 **Checkpoint-set export local verification — 2026-11-22.** The focused Dashboard, portability API,
 and locale suites passed 40 tests. All four production browser cases passed across desktop
 Chromium and Firefox, mobile Chromium, and mobile WebKit. They cover the plan notice before a
 request, a scoped policy denial without a download, continued Round actions, and a successful
 download after access returns. The full `VITEST_MAX_WORKERS=1 pnpm check` passed, including 10,510
-package tests, 529 support tests, four builds, and compiled server startup. Optional integration
-tests were skipped. Native-language review remains open.
+package tests, 529 support tests, four builds, and compiled server startup. The review follow-up
+passed 35 focused tests and all four production browser cases with a language change while a denial
+was visible. Optional integration tests were skipped. Native-language review remains open.
 
-**Remaining capability explanations.** Presentation visual imports still need explanations for
-media pauses and deployment setup. Board creation and Round staff actions have separate rollout and
-operator-policy decisions to qualify. Other provider setup messages remain candidates.
+**Presentation visual import availability explanations.** The editor explains a workspace policy
+restriction, inherited rollout, archived Presentation, missing deployment setup, or paused media
+uploads before an author picks files. A failed status check offers a retry in the dialog. Existing
+conversion jobs stay available for review, and a pending request can still recover its exact
+acknowledgement. A denial during upload uses the same reason as a status check. Frontend, server,
+and localization own this increment on `codex/visual-import-availability`.
+
+**Visual import local verification — 2026-11-22.** All 64 focused API, dialog, and locale tests
+passed. Four production availability cases passed across desktop Chromium and Firefox, mobile
+Chromium, and mobile WebKit. They cover loading, paused and failed checks, keyboard focus during
+retry, and upload access returning. The existing PDF review and exact insertion cases passed on
+both mobile browsers. On desktop they reached the final accessibility audit, which flagged the
+slide navigator resize control outside a landmark. The Chromium failure also reproduced on the
+unchanged PR #305 baseline. That editor issue and native-language review remain open.
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed, including 10,518 package tests, 529 support
+tests, four builds, and compiled server startup. Optional integration tests were skipped.
+
+**Remaining capability explanations.** Board creation and Round staff actions have separate rollout
+and operator-policy decisions to qualify. Other provider setup messages remain candidates.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -1049,9 +1069,9 @@ writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initializat
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch reasons in PR #302 and source upload availability in PR #303.
-LTI availability explanations merged in PR #304. Checkpoint-set export reasons are implemented
-locally. Presentation visual import, Board creation and Round staff availability remain candidates
-for subsequent WX-11 slices.
+LTI availability explanations merged in PR #304. Checkpoint-set export reasons merged in PR #305.
+Presentation visual import reasons are implemented locally. Board creation and Round staff
+availability remain candidates for subsequent WX-11 slices.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

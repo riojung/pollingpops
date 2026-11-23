@@ -2,7 +2,7 @@ import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
 import { registerPresentationInsightsRoutes } from "./presentation-insights-routes.js";
 import type { Plan } from "@openround/contracts";
 import type { Socket } from "node:net";
-import { workspaceFeatureEnabled } from "./feature-policy.js";
+import { resolveWorkspaceFeatures, workspaceFeatureEnabled } from "./feature-policy.js";
 import Fastify from "fastify";
 import { trace } from "@opentelemetry/api";
 import cookie from "@fastify/cookie";
@@ -271,8 +271,12 @@ export async function buildApp(
     workspaceFeatureEnabled(repository, config, workspaceId, "uxBeta");
   const workspaceShellEnabled = (workspaceId: string) =>
     workspaceFeatureEnabled(repository, config, workspaceId, "workspaceShell");
-  const presentationsEnabled = (workspaceId: string) =>
-    workspaceFeatureEnabled(repository, config, workspaceId, "presentations");
+  const presentationsUnavailableReason = async (workspaceId: string) =>
+    (await resolveWorkspaceFeatures(repository, config, workspaceId)).unavailableReason(
+      "presentations",
+    );
+  const presentationsEnabled = async (workspaceId: string) =>
+    (await presentationsUnavailableReason(workspaceId)) === undefined;
   const presentationRealtimeCreationEnabled = (workspaceId: string, planOverride?: Plan) =>
     workspaceFeatureEnabled(repository, config, workspaceId, "presentationRealtime", planOverride);
   const groupsEnabled = (workspaceId: string) =>
@@ -528,6 +532,7 @@ export async function buildApp(
     presentations,
     storage,
     scanner,
+    presentationsUnavailableReason,
   );
   const presentationVisualImportWorker = new PresentationVisualImportWorker(
     repository,

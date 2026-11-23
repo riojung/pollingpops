@@ -21,6 +21,18 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Quadros de ideias",
   "boards.description": "Recolha ideias, agrupe-as e escolha prioridades comuns.",
   "boards.create": "Criar quadro",
+  "boards.creation.teamOperatorPolicy":
+    "O seu operador Polling Pops desativou a criação de telas de equipa neste espaço de trabalho.",
+  "boards.creation.teamRolloutUnavailable":
+    "A criação de telas de equipa não faz parte da fase atual de disponibilização neste espaço de trabalho.",
+  "boards.creation.teamUnavailable":
+    "A criação de telas de equipa não está disponível neste espaço de trabalho.",
+  "boards.creation.workshopOperatorPolicy":
+    "O seu operador Polling Pops desativou a criação de oficinas neste espaço de trabalho.",
+  "boards.creation.workshopRolloutUnavailable":
+    "A criação de oficinas não faz parte da fase atual de disponibilização neste espaço de trabalho.",
+  "boards.creation.workshopUnavailable":
+    "A criação de oficinas não está disponível neste espaço de trabalho.",
   "boards.boardTitle": "Título do quadro",
   "boards.prompt": "Proposta",
   "boards.identity": "Identidade dos participantes",

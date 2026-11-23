@@ -21,6 +21,18 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Bacheche delle idee",
   "boards.description": "Raccogli idee, raggruppale e scegli le priorità comuni.",
   "boards.create": "Crea bacheca",
+  "boards.creation.teamOperatorPolicy":
+    "Il tuo operatore Polling Pops ha disattivato la creazione di tele del team per questo spazio di lavoro.",
+  "boards.creation.teamRolloutUnavailable":
+    "La creazione di tele del team non rientra nell’attuale fase di rilascio per questo spazio di lavoro.",
+  "boards.creation.teamUnavailable":
+    "La creazione di tele del team non è disponibile per questo spazio di lavoro.",
+  "boards.creation.workshopOperatorPolicy":
+    "Il tuo operatore Polling Pops ha disattivato la creazione di laboratori per questo spazio di lavoro.",
+  "boards.creation.workshopRolloutUnavailable":
+    "La creazione di laboratori non rientra nell’attuale fase di rilascio per questo spazio di lavoro.",
+  "boards.creation.workshopUnavailable":
+    "La creazione di laboratori non è disponibile per questo spazio di lavoro.",
   "boards.boardTitle": "Titolo della bacheca",
   "boards.prompt": "Spunto",
   "boards.identity": "Identità dei partecipanti",

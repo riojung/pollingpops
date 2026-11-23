@@ -21,6 +21,16 @@ const messages: IdeaBoardMessages = {
   "boards.title": "아이디어 보드",
   "boards.description": "아이디어를 모으고 그룹으로 정리하여 함께 우선순위를 정하세요.",
   "boards.create": "보드 만들기",
+  "boards.creation.teamOperatorPolicy":
+    "Polling Pops 운영자가 이 워크스페이스의 팀 캔버스 만들기 기능을 비활성화했습니다.",
+  "boards.creation.teamRolloutUnavailable":
+    "팀 캔버스 만들기는 이 워크스페이스의 현재 배포 범위에 포함되지 않습니다.",
+  "boards.creation.teamUnavailable": "이 워크스페이스에서는 팀 캔버스를 만들 수 없습니다.",
+  "boards.creation.workshopOperatorPolicy":
+    "Polling Pops 운영자가 이 워크스페이스의 워크숍 만들기 기능을 비활성화했습니다.",
+  "boards.creation.workshopRolloutUnavailable":
+    "워크숍 만들기는 이 워크스페이스의 현재 배포 범위에 포함되지 않습니다.",
+  "boards.creation.workshopUnavailable": "이 워크스페이스에서는 워크숍을 만들 수 없습니다.",
   "boards.boardTitle": "보드 제목",
   "boards.prompt": "주제",
   "boards.identity": "참가자 표시 방식",

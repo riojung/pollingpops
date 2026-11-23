@@ -56,6 +56,18 @@ const defaults: IdeaBoardCreate = {
   windowDays: 7,
   ideasVisible: false,
 };
+const creationNoticeKeys = {
+  team: {
+    operator_policy: "boards.creation.teamOperatorPolicy",
+    rollout_unavailable: "boards.creation.teamRolloutUnavailable",
+    fallback: "boards.creation.teamUnavailable",
+  },
+  workshop: {
+    operator_policy: "boards.creation.workshopOperatorPolicy",
+    rollout_unavailable: "boards.creation.workshopRolloutUnavailable",
+    fallback: "boards.creation.workshopUnavailable",
+  },
+} as const;
 
 function BoardKindIcon({ workshop = false }: { workshop?: boolean }) {
   return (
@@ -109,7 +121,28 @@ export function BoardLibrary() {
   const createButton = useRef<HTMLButtonElement>(null);
   const handledCreateRequest = useRef(false);
   const createRequested = searchParams.get("create") === "1";
-  const canCreate = canEdit && (productFeatures?.canvasBoards || productFeatures?.ideaBoards);
+  const teamEnabled = productFeatures?.canvasBoards === true;
+  const workshopEnabled = productFeatures?.ideaBoards === true;
+  const canCreate = canEdit && (teamEnabled || workshopEnabled);
+  const canCreateSelection =
+    canEdit && (kind === "team" ? teamEnabled : workshopEnabled && (!templateId || teamEnabled));
+  const creationFeatures = !accountLoading && canEdit ? productFeatures : null;
+  const teamNotice =
+    creationFeatures && !teamEnabled
+      ? t(
+          creationNoticeKeys.team[
+            creationFeatures.canvasBoardsCreationUnavailableReason ?? "fallback"
+          ],
+        )
+      : null;
+  const workshopNotice =
+    creationFeatures && !workshopEnabled
+      ? t(
+          creationNoticeKeys.workshop[
+            creationFeatures.ideaBoardsCreationUnavailableReason ?? "fallback"
+          ],
+        )
+      : null;
   const library = useBoardLibrary({
     workspaceId,
     scope,
@@ -199,17 +232,19 @@ export function BoardLibrary() {
     if (!canCreate || !productFeatures?.canvasBoards) setBrowsing(false);
   }, [canCreate, productFeatures?.canvasBoards]);
   useEffect(() => {
-    if (!creating || formContext !== contextKey) return;
-    const previous = templateOpener.current ?? document.activeElement;
+    // WorkspaceShell withholds the dialog while the account and its locale load.
+    if (accountLoading || !creating || formContext !== contextKey) return;
     const node = dialog.current;
-    node?.showModal();
+    if (!node) return;
+    const previous = templateOpener.current ?? document.activeElement;
+    node.showModal();
     title.current?.focus();
     return () => {
-      node?.close();
+      node.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
       templateOpener.current = null;
     };
-  }, [creating, formContext, contextKey]);
+  }, [accountLoading, creating, formContext, contextKey]);
   const current = library.data;
   const canvases = current?.canvases ?? [];
   const attachedSources = new Set(canvases.map((board) => board.sourceBoardId).filter(Boolean));
@@ -278,10 +313,7 @@ export function BoardLibrary() {
       !workspaceId ||
       !userId ||
       setupError === "invalid" ||
-      (!pending.current &&
-        (!canCreate ||
-          (kind === "team" ? !productFeatures?.canvasBoards : !productFeatures?.ideaBoards) ||
-          (kind === "workshop" && templateId && !productFeatures?.canvasBoards)))
+      (!pending.current && !canCreateSelection)
     )
       return;
     const newlyPrepared = pending.current === null;
@@ -419,13 +451,19 @@ export function BoardLibrary() {
         onSearchChange={setSearch}
         onScopeChange={setScope}
         disabled={busy}
-        canCreate={Boolean(canCreate)}
+        canCreate={canCreate}
         createButtonRef={createButton}
         onCreate={() => {
           if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
           setCreating(true);
         }}
       />
+      {teamNotice || workshopNotice ? (
+        <div className={`stack-sm ${creationStyles.libraryAvailability}`}>
+          {teamNotice ? <p className={styles.muted}>{teamNotice}</p> : null}
+          {workshopNotice ? <p className={styles.muted}>{workshopNotice}</p> : null}
+        </div>
+      ) : null}
       {templatePending && !creating ? (
         <aside className={templateStyles.recovery} role="status">
           <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
@@ -513,9 +551,6 @@ export function BoardLibrary() {
         >
           {t("boards.more")}
         </button>
-      ) : null}
-      {!productFeatures?.canvasBoards ? (
-        <p className={styles.muted}>{t("canvas.creationPaused")}</p>
       ) : null}
       {browsing && formContext === contextKey && canCreate && productFeatures?.canvasBoards ? (
         <CanvasTemplateBrowserDialog
@@ -639,11 +674,11 @@ export function BoardLibrary() {
                   aria-label={t("canvas.team")}
                   aria-pressed={kind === "team"}
                   aria-describedby={
-                    !productFeatures?.canvasBoards
+                    teamNotice
                       ? "canvas-team-description canvas-team-availability"
                       : "canvas-team-description"
                   }
-                  disabled={!productFeatures?.canvasBoards}
+                  disabled={!teamEnabled}
                   onClick={() => setKind("team")}
                 >
                   <span className={creationStyles.typeIcon}>
@@ -663,8 +698,12 @@ export function BoardLibrary() {
                   type="button"
                   aria-label={t("canvas.workshop")}
                   aria-pressed={kind === "workshop"}
-                  aria-describedby="canvas-workshop-description"
-                  disabled={!productFeatures?.ideaBoards}
+                  aria-describedby={
+                    workshopNotice
+                      ? "canvas-workshop-description canvas-workshop-availability"
+                      : "canvas-workshop-description"
+                  }
+                  disabled={!workshopEnabled}
                   onClick={() => setKind("workshop")}
                 >
                   <span className={creationStyles.typeIcon}>
@@ -681,9 +720,14 @@ export function BoardLibrary() {
                   </span>
                 </button>
               </div>
-              {!productFeatures?.canvasBoards ? (
+              {teamNotice ? (
                 <p id="canvas-team-availability" className={creationStyles.availability}>
-                  {t("canvas.creationPaused")}
+                  {teamNotice}
+                </p>
+              ) : null}
+              {workshopNotice ? (
+                <p id="canvas-workshop-availability" className={creationStyles.availability}>
+                  {workshopNotice}
                 </p>
               ) : null}
               <div
@@ -813,7 +857,12 @@ export function BoardLibrary() {
               <button
                 className={`button ${creationStyles.create}`}
                 type="submit"
-                disabled={busy || !input.title.trim() || setupError === "invalid"}
+                disabled={
+                  busy ||
+                  !input.title.trim() ||
+                  setupError === "invalid" ||
+                  (!pending.current && !canCreateSelection)
+                }
               >
                 {t(pending.current ? "boards.retry" : "boards.create")}
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">

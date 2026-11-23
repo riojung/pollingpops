@@ -21,6 +21,18 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Tableaux d’idées",
   "boards.description": "Recueillez des idées, regroupez-les et choisissez des priorités communes.",
   "boards.create": "Créer un tableau",
+  "boards.creation.teamOperatorPolicy":
+    "Votre opérateur Polling Pops a désactivé la création de canevas d’équipe pour cet espace de travail.",
+  "boards.creation.teamRolloutUnavailable":
+    "La création de canevas d’équipe ne fait pas partie du déploiement actuel pour cet espace de travail.",
+  "boards.creation.teamUnavailable":
+    "La création de canevas d’équipe est indisponible pour cet espace de travail.",
+  "boards.creation.workshopOperatorPolicy":
+    "Votre opérateur Polling Pops a désactivé la création d’ateliers pour cet espace de travail.",
+  "boards.creation.workshopRolloutUnavailable":
+    "La création d’ateliers ne fait pas partie du déploiement actuel pour cet espace de travail.",
+  "boards.creation.workshopUnavailable":
+    "La création d’ateliers est indisponible pour cet espace de travail.",
   "boards.boardTitle": "Titre du tableau",
   "boards.prompt": "Consigne",
   "boards.identity": "Identité des participants",

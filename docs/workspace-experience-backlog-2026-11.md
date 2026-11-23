@@ -53,7 +53,9 @@ Checkpoint-set export availability explanations merged through
 [PR #305](https://github.com/riojung/pollingpops/pull/305) at `00a8932`.
 Presentation visual import availability explanations merged through
 [PR #306](https://github.com/riojung/pollingpops/pull/306) at `9e045a1`.
-The current WX-11 increment brings the resize control into the Presentation map landmark.
+The Presentation navigator resize landmark fix merged through
+[PR #307](https://github.com/riojung/pollingpops/pull/307) at `c1aa6c4`.
+The current WX-11 increment explains feature-policy restrictions on Board creation.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -80,7 +82,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #306. Navigator resize landmark is ready for review. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #307. Board creation explanations are ready locally. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
@@ -100,9 +102,10 @@ copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR
 CSV export reasons in PR #300. Retained Round report export reasons merged in PR #301 and live
 Presentation launch reasons in PR #302. Source upload availability merged in PR #303 and LTI
 availability explanations in PR #304. Checkpoint-set export reasons merged in PR #305 and visual
-import explanations in PR #306. The Presentation navigator resize landmark fix is implemented
-locally. Other capability explanations, WX-07–10 and WX-12–14 remain pending. Additional
-customer-job collections and human review of localized copy remain open.
+import explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307.
+Board creation explanations are implemented locally. Other capability explanations, WX-07–10
+and WX-12–14 remain pending. Additional customer-job collections and human review of localized
+copy remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -971,8 +974,8 @@ tests, four builds, and compiled server startup. Optional integration tests were
 **Presentation navigator resize landmark.** The existing Presentation map landmark now contains
 its resize separator. The gutter retains its desktop position and changes the local navigator width
 with pointer or keyboard input. The slide canvas remains the main landmark, and compact layouts
-hide the separator. Frontend and accessibility own this increment on
-`codex/presentation-navigator-landmark`. [WAI landmark guidance](https://www.w3.org/WAI/ARIA/apg/practices/landmark-regions/)
+hide the separator. Frontend and accessibility owned this increment, merged through PR #307 at
+`c1aa6c4`. [WAI landmark guidance](https://www.w3.org/WAI/ARIA/apg/practices/landmark-regions/)
 
 **Navigator landmark local verification — 2026-11-22.** All 42 focused editor, slide-section, and
 navigator-width tests passed. All 12 production browser cases passed across desktop Chromium and
@@ -982,8 +985,27 @@ The unchanged whole-page PDF import accessibility audit passes in both desktop b
 The full `VITEST_MAX_WORKERS=1 pnpm check` passed, including 10,518 package tests, 529 support
 tests, four builds, and compiled server startup. Optional integration tests were skipped.
 
-**Remaining capability explanations.** Board creation and Round staff actions have separate rollout
-and operator-policy decisions to qualify. Other provider setup messages remain candidates.
+**Board creation availability explanations.** Team Canvas and Workshop creation show their
+operator-policy or rollout explanation in the Boards library and alongside disabled choices in
+the creation dialog. Owners and editors can see the reason even when both choices are unavailable.
+An older or unfamiliar response uses a generic unavailable message. The existing feature decisions
+and role checks control fresh creation, and saved Workshop setup retries can recover their exact
+requests. The explanations are localized in all ten catalogs. Frontend, server and localization own
+this increment on `codex/board-creation-availability`.
+
+**Board creation local verification — 2026-11-22.** All 44 focused web tests and 76 focused server
+tests passed, covering reason precedence, older responses, editor and viewer access, and capability
+changes while the dialog is open. All four production browser cases passed across desktop Chromium
+and Firefox, mobile Chromium, and mobile WebKit. They cover both choices unavailable, opening a
+saved Workshop, and an accessible chooser with Team Canvas unavailable. Native-language review
+remains open.
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed on rerun with 10,523 package tests, 529 support
+tests, four builds, and compiled server startup. An existing Round ranking test timed out on the
+first attempt and passed in both subsequent runs. Optional integration tests were skipped.
+
+**Remaining capability explanations.** Operational and organization Board launch restrictions and
+Round staff actions have separate decisions to qualify. Other provider setup messages remain
+candidates.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -1088,8 +1110,9 @@ availability copy merged in PR #297, import reasons in PR #298, live-brand save 
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch reasons in PR #302 and source upload availability in PR #303.
 LTI availability explanations merged in PR #304. Checkpoint-set export reasons merged in PR #305
-and Presentation visual import reasons in PR #306. The navigator resize landmark fix is implemented
-locally. Board creation and Round staff availability remain candidates for subsequent WX-11 slices.
+and Presentation visual import reasons in PR #306. The navigator resize landmark fix merged in
+PR #307. Board creation feature-policy explanations are implemented locally. Operational Board
+launch restrictions and Round staff availability remain candidates for subsequent WX-11 slices.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

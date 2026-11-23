@@ -508,8 +508,12 @@ counts under the bounded `product_event` resource label.
   or a prerequisite, or excludes the effective plan. `rollout_unavailable` means the workspace
   is blocked by inherited rollout flags or allowlists. A blocking saved rule takes precedence
   when both apply. The reason is omitted when live Presentations are enabled.
-  Role checks still apply separately. Clients can show a generic availability message for a
-  missing or unfamiliar reason.
+  `productFeatures.canvasBoardsCreationUnavailableReason` and
+  `productFeatures.ideaBoardsCreationUnavailableReason` use the same reason values and precedence
+  for Board creation in the active workspace. Canvas creation depends on the Brainstorming Board
+  feature. Each reason is omitted when its feature is enabled.
+  Role and workspace permissions apply separately. Clients can show a generic availability message
+  for a missing or unfamiliar reason.
 - `POST /v1/auth/logout`
 - `GET /v1/workspaces` — authenticated identity's accessible workspaces with account/organization
   metadata. `activeWorkspaceId` is null after selected workspace access has been revoked.

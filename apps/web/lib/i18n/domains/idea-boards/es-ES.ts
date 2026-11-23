@@ -21,6 +21,18 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Tableros de ideas",
   "boards.description": "Recopila ideas, agrúpalas y elige prioridades compartidas.",
   "boards.create": "Crear tablero",
+  "boards.creation.teamOperatorPolicy":
+    "Tu operador de Polling Pops ha desactivado la creación de lienzos de equipo para este espacio de trabajo.",
+  "boards.creation.teamRolloutUnavailable":
+    "La creación de lienzos de equipo no está incluida en la fase actual de despliegue para este espacio de trabajo.",
+  "boards.creation.teamUnavailable":
+    "La creación de lienzos de equipo no está disponible para este espacio de trabajo.",
+  "boards.creation.workshopOperatorPolicy":
+    "Tu operador de Polling Pops ha desactivado la creación de talleres para este espacio de trabajo.",
+  "boards.creation.workshopRolloutUnavailable":
+    "La creación de talleres no está incluida en la fase actual de despliegue para este espacio de trabajo.",
+  "boards.creation.workshopUnavailable":
+    "La creación de talleres no está disponible para este espacio de trabajo.",
   "boards.boardTitle": "Título del tablero",
   "boards.prompt": "Consigna",
   "boards.identity": "Identidad de los participantes",

@@ -8,11 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Board creation availability explanations, November 22, 2026
+
+Implemented locally on `codex/board-creation-availability` after PR #307. Board creation displays
+workspace feature-policy reasons for Team Canvas and Workshop options in the library and chooser
+using the effective decisions already enforced by the creation routes. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Presentation navigator resize landmark, November 22, 2026
 
-Implemented locally on `codex/presentation-navigator-landmark` after PR #306. The desktop resize
-control sits within the existing Presentation map landmark and retains pointer, keyboard, and local
-width preference behavior. See the
+Merged through PR #307 at `c1aa6c4`. The desktop resize control sits within the existing
+Presentation map landmark and retains pointer, keyboard, and local width preference behavior. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
 
 ### Presentation visual import availability explanations, November 22, 2026
@@ -238,8 +244,9 @@ availability copy merged in PR #297, import reasons in PR #298, live-brand save 
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
 in PR #303. LTI availability explanations merged in PR #304 and checkpoint-set export reasons in
-PR #305. Visual import explanations merged in PR #306. The navigator resize landmark fix is
-implemented locally. Other capability explanations remain pending.
+PR #305. Visual import explanations merged in PR #306 and the navigator resize landmark fix in
+PR #307. Board creation explanations are implemented locally. Other capability explanations
+remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

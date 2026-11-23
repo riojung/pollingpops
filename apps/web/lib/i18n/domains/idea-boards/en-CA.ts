@@ -18,6 +18,16 @@ const messages = {
   "boards.title": "Idea boards",
   "boards.description": "Collect ideas, group them together, and choose shared priorities.",
   "boards.create": "Create board",
+  "boards.creation.teamOperatorPolicy":
+    "Team Canvas creation is disabled for this workspace by your Polling Pops operator.",
+  "boards.creation.teamRolloutUnavailable":
+    "Team Canvas creation is not part of this workspace’s current rollout.",
+  "boards.creation.teamUnavailable": "Team Canvas creation is unavailable for this workspace.",
+  "boards.creation.workshopOperatorPolicy":
+    "Workshop creation is disabled for this workspace by your Polling Pops operator.",
+  "boards.creation.workshopRolloutUnavailable":
+    "Workshop creation is not part of this workspace’s current rollout.",
+  "boards.creation.workshopUnavailable": "Workshop creation is unavailable for this workspace.",
   "boards.boardTitle": "Board title",
   "boards.prompt": "Prompt",
   "boards.identity": "Participant identity",

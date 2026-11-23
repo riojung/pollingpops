@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { devices, expect, test, type Page } from "@playwright/test";
+import type { WorkshopTemplateIntent } from "../../apps/web/components/idea-boards/canvas-template-creation";
+import {
+  CANVAS_SCHEMA_VERSION,
+  IdeaBoardCreateSchema,
+} from "../../packages/contracts/src/index.ts";
+import { specialistLocale } from "./option-b-specialist-support";
 import { signInBeta } from "./sign-in";
 
 async function openWorkshopCreate(page: Page) {
@@ -51,6 +57,169 @@ async function visualEvidence(page: Page, label: string) {
 }
 
 for (const mobile of [false, true]) {
+  test(`${mobile ? "@mobile " : ""}Boards explains creation availability and keeps saved Workshops accessible`, async ({
+    page,
+  }) => {
+    test.skip(process.env.BETA_E2E_IDEA_BOARDS !== "true", "Opt-in idea board writer journey");
+    await signInBeta(page, undefined, { returnTo: "/home" });
+    await specialistLocale(page, "en-CA");
+    const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
+    const title = `Retained Workshop ${randomUUID().slice(0, 8)}`;
+    const created = await page.request.post(`${api}/v1/idea-boards`, {
+      data: { title, idempotencyKey: randomUUID() },
+    });
+    expect(created.status()).toBe(201);
+    const { board } = (await created.json()) as { board: { id: string } };
+
+    const accountUrl = `${api}/v1/auth/me`;
+    let allowWorkshopCreation = false;
+    let initializeLocale = false;
+    await page.route(accountUrl, async (route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      const account = await response.json();
+      expect(account.creator.role).toBe("owner");
+      await route.fulfill({
+        response,
+        json: {
+          ...account,
+          creator: {
+            ...account.creator,
+            localePreferenceSet: !initializeLocale && account.creator.localePreferenceSet,
+          },
+          productFeatures: {
+            ...account.productFeatures,
+            canvasBoards: false,
+            canvasBoardsCreationUnavailableReason: "operator_policy",
+            ideaBoards: allowWorkshopCreation,
+            ideaBoardsCreationUnavailableReason: allowWorkshopCreation
+              ? undefined
+              : "rollout_unavailable",
+          },
+        },
+      });
+    });
+
+    const boardsPath = `/boards?q=${encodeURIComponent(title)}`;
+    await page.goto(boardsPath);
+    const main = page.getByRole("main");
+    const createTrigger = main.getByRole("button", { name: "New board", exact: true });
+    const savedWorkshop = main.getByRole("link", { name: title, exact: true });
+    const canvasReason =
+      "Team Canvas creation is disabled for this workspace by your Polling Pops operator.";
+    const workshopReason = "Workshop creation is not part of this workspace’s current rollout.";
+    await expect(main.getByText(canvasReason, { exact: true })).toBeVisible();
+    await expect(main.getByText(workshopReason, { exact: true })).toBeVisible();
+    await expect(createTrigger).toHaveCount(0);
+    await expect(main.getByRole("button", { name: "Create board", exact: true })).toHaveCount(0);
+    await expect(savedWorkshop).toHaveAttribute("href", `/boards/${board.id}`);
+    await savedWorkshop.click();
+    await expect(main.getByRole("heading", { name: title, level: 1, exact: true })).toBeVisible();
+
+    allowWorkshopCreation = true;
+    await page.goto(boardsPath);
+    await expect(savedWorkshop).toBeVisible();
+    await expect(main.getByText(workshopReason, { exact: true })).toHaveCount(0);
+    await createTrigger.click();
+    const dialog = page.getByRole("dialog", { name: "New board", exact: true });
+    const teamCanvas = dialog.getByRole("button", { name: "Team canvas", exact: true });
+    const workshop = dialog.getByRole("button", { name: "Guided workshop", exact: true });
+    await expect(teamCanvas).toBeDisabled();
+    await expect(dialog.getByText(canvasReason, { exact: true })).toBeVisible();
+    await expect(teamCanvas).toHaveAccessibleDescription(new RegExp(canvasReason));
+    await expect(workshop).toBeEnabled();
+    await workshop.click();
+    await expect(workshop).toHaveAttribute("aria-pressed", "true");
+    await dialog.getByLabel("Board title", { exact: true }).fill("Next Workshop");
+    await expect(dialog.getByRole("button", { name: "Create board", exact: true })).toBeEnabled();
+
+    const account = await page.request.get(accountUrl);
+    expect(account.ok()).toBe(true);
+    const {
+      creator: { userId, workspaceId },
+    } = (await account.json()) as { creator: { userId: string; workspaceId: string } };
+    const pendingTitle = "Unfinished Workshop setup";
+    const setup = {
+      version: 1,
+      canvasSchemaVersion: CANVAS_SCHEMA_VERSION,
+      userId,
+      workspaceId,
+      source: {
+        ...IdeaBoardCreateSchema.parse({ title: pendingTitle }),
+        idempotencyKey: randomUUID(),
+      },
+      canvasOperationId: randomUUID(),
+      templateId: "project-kickoff",
+    } satisfies WorkshopTemplateIntent;
+    await page.evaluate((value) => {
+      sessionStorage.setItem(
+        `pollingpops:canvas-setup:v1:${value.userId}:${value.workspaceId}`,
+        JSON.stringify(value),
+      );
+    }, setup);
+
+    const creationRequests: string[] = [];
+    await page.route(`${api}/v1/{idea-boards,canvas-boards}`, (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      creationRequests.push(new URL(route.request().url()).pathname);
+      return route.abort();
+    });
+    const localeUrl = `${api}/v1/account/locale`;
+    let releaseLocale!: () => void;
+    const localeGate = new Promise<void>((resolve) => {
+      releaseLocale = resolve;
+    });
+    await page.route(localeUrl, async (route) => {
+      if (route.request().method() === "PUT") await localeGate;
+      await route.continue();
+    });
+    allowWorkshopCreation = false;
+    initializeLocale = true;
+    try {
+      await Promise.all([
+        page.waitForRequest((request) => request.url() === localeUrl && request.method() === "PUT"),
+        // The library starts reading once the actor is known, while the shell still waits for locale.
+        page.waitForRequest((request) => {
+          const url = new URL(request.url());
+          return (
+            request.method() === "GET" &&
+            url.origin === api &&
+            url.pathname === "/v1/idea-boards" &&
+            url.searchParams.get("search") === title
+          );
+        }),
+        page.reload({ waitUntil: "domcontentloaded" }),
+      ]);
+      await expect(main.getByText("Loading your workspace…", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("board-creation-dialog")).toHaveCount(0);
+    } finally {
+      releaseLocale();
+    }
+
+    await expect(dialog).toBeVisible();
+    const savedTitle = dialog.getByLabel("Board title", { exact: true });
+    await expect(savedTitle).toHaveValue(pendingTitle);
+    await expect(savedTitle).toBeDisabled();
+    await expect(teamCanvas).toBeDisabled();
+    await expect(workshop).toBeDisabled();
+    await expect(dialog.getByText(canvasReason, { exact: true })).toBeVisible();
+    await expect(dialog.getByText(workshopReason, { exact: true })).toBeVisible();
+    await dialog
+      .getByRole("status")
+      .getByRole("button", { name: "Close and resume later", exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    await expect(main.getByText(canvasReason, { exact: true })).toBeVisible();
+    await expect(main.getByText(workshopReason, { exact: true })).toBeVisible();
+    await expect(createTrigger).toHaveCount(0);
+    const retrySetup = main.getByRole("button", { name: "Retry this setup", exact: true });
+    await expect(retrySetup).toBeVisible();
+    await retrySetup.click();
+    await expect(dialog).toBeVisible();
+    await expect(savedTitle).toHaveValue(pendingTitle);
+    expect(creationRequests).toEqual([]);
+  });
+
   test(`${mobile ? "@mobile " : ""}rich ideas preserve drawings and link cards through moderation`, async ({
     page,
     browser,

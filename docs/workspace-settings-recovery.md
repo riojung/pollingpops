@@ -122,7 +122,8 @@ PR #298. Live-brand save reasons merged in PR #299 and workspace CSV export reas
 PR #300. Retained Round report export reasons merged in PR #301 and live Presentation launch
 reasons merged in PR #302. Source upload availability merged in PR #303. LTI availability
 explanations merged in PR #304, checkpoint-set export reasons in PR #305, and visual import
-explanations in PR #306. Other capability explanations remain pending.
+explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307. Board
+creation explanations are implemented locally. Other capability explanations remain pending.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

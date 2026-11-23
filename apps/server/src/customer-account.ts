@@ -39,6 +39,14 @@ export async function workspaceAccountContext(
   config: AppConfig,
   creator: CreatorContext,
 ): Promise<WorkspaceAccountContext> {
+  return (await resolveWorkspaceAccountContext(repository, config, creator)).workspace;
+}
+
+export async function resolveWorkspaceAccountContext(
+  repository: Repository,
+  config: AppConfig,
+  creator: CreatorContext,
+) {
   const platform = createPlatformRepository(repository);
   const [workspaces, organization, organizations, sessionPolicy] = await Promise.all([
     repository.listWorkspaces(creator.userId),
@@ -55,7 +63,7 @@ export async function workspaceAccountContext(
   const active = !organization || organization.status === "active";
   const administerOrganization = active && (role === "owner" || role === "admin");
   const ownsWorkspace = active && creator.role === "owner";
-  return WorkspaceAccountContextSchema.parse({
+  const context = WorkspaceAccountContextSchema.parse({
     id: workspace.id,
     name: workspace.name,
     accountType,
@@ -77,6 +85,7 @@ export async function workspaceAccountContext(
       manageIntegrations: accountType === "organization" ? administerOrganization : ownsWorkspace,
     },
   });
+  return { workspace: context, organization };
 }
 
 export function registerCustomerAccountRoutes(

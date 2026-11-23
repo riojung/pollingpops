@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "アイデアボード",
   "boards.description": "アイデアを集めてグループに分け、共通の優先事項を選びます。",
   "boards.create": "ボードを作成",
+  "boards.launch.operationalPause":
+    "Polling Popsの運営者が、新しいボードの開始を一時停止しています。",
+  "boards.launch.organizationRestricted":
+    "この組織またはワークスペースがアクティブではないため、新しいボードを開始できません。",
   "boards.creation.teamOperatorPolicy":
     "Polling Popsの運営者が、このワークスペースでのチームキャンバスの作成を無効にしています。",
   "boards.creation.teamRolloutUnavailable":

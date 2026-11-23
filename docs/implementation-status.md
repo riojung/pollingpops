@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Board launch availability explanations, November 23, 2026
+
+Implemented locally on `codex/board-launch-availability` after PR #308. The Boards library, creation
+chooser and Workshop controls explain an operational launch pause or an inactive organization or
+workspace using the existing authorization and launch policy. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Board creation availability explanations, November 22, 2026
 
-Implemented locally on `codex/board-creation-availability` after PR #307. Board creation displays
+Merged through PR #308 at `db9c48a`. Board creation displays
 workspace feature-policy reasons for Team Canvas and Workshop options in the library and chooser
 using the effective decisions already enforced by the creation routes. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -245,8 +252,8 @@ and workspace CSV export reasons in PR #300. Retained Round report export reason
 PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
 in PR #303. LTI availability explanations merged in PR #304 and checkpoint-set export reasons in
 PR #305. Visual import explanations merged in PR #306 and the navigator resize landmark fix in
-PR #307. Board creation explanations are implemented locally. Other capability explanations
-remain pending.
+PR #307. Board creation feature-policy explanations merged in PR #308. Operational and organization
+Board launch explanations are implemented locally. Round staff availability remains pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

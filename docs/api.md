@@ -512,6 +512,13 @@ counts under the bounded `product_event` resource label.
   `productFeatures.ideaBoardsCreationUnavailableReason` use the same reason values and precedence
   for Board creation in the active workspace. Canvas creation depends on the Brainstorming Board
   feature. Each reason is omitted when its feature is enabled.
+  For active-workspace owners and editors, `productFeatures.ideaBoardsLaunchUnavailableReason`
+  and `productFeatures.canvasBoardsLaunchUnavailableReason` explain a separate launch denial
+  when the corresponding Board feature is enabled. `operational_pause` means the runtime
+  session-creation control is paused. `organization_restricted` means the required active
+  organization or workspace is unavailable. The runtime pause takes precedence. The organization
+  and workspace gate applies to Brainstorming Boards in hosted business mode and to Canvas creation
+  in all modes. These fields are omitted when there is no applicable launch denial.
   Role and workspace permissions apply separately. Clients can show a generic availability message
   for a missing or unfamiliar reason.
 - `POST /v1/auth/logout`
@@ -1878,6 +1885,15 @@ also clips to that canvas's expiry. Expiry is never extended, and workshops supp
 View fields `roundNumber` (legacy default 1), `roundHistory` and `roundHistoryIdeas` (default
 empty arrays) expose scalar prior counts plus one deduplicated, currently redacted idea-text
 map. Public admission metadata contains the round number, without history or participant data.
+
+An operational pause or organization restriction on authorized Idea Board creation or a fresh
+`collect` or `reopen` returns the existing `409 ROOM_CLOSED` with
+`error.details.boardLaunchUnavailableReason`. Canvas creation returns the existing `403 FORBIDDEN`
+for an operational pause or `404 NOT_FOUND` for an organization or workspace restriction. Canvas
+creation includes the detail only for the authenticated user's active workspace and editing role.
+An operational pause on a fresh Canvas workshop `collect` or `reopen` returns the existing
+`403 FORBIDDEN` with the detail for authorized facilitators. Authorized reads and accepted retries
+retain their existing access rules.
 
 Deploy web and API readers together and reload already-open browsers: older strict readers do
 not recognize the additive round fields. Host commands and guest idea/ballot writes send the

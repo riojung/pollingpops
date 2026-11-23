@@ -21,6 +21,8 @@ const messages: IdeaBoardMessages = {
   "boards.title": "創意看板",
   "boards.description": "收集創意、手動分組，共同決定優先事項。",
   "boards.create": "建立看板",
+  "boards.launch.operationalPause": "Polling Pops 營運者已暫停啟動新看板。",
+  "boards.launch.organizationRestricted": "此組織或工作區未處於啟用狀態，無法啟動新看板。",
   "boards.creation.teamOperatorPolicy":
     "您的 Polling Pops 營運者已停用此工作區的團隊畫布建立功能。",
   "boards.creation.teamRolloutUnavailable": "建立團隊畫布不在此工作區目前開放的功能範圍內。",

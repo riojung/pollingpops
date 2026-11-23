@@ -1,5 +1,6 @@
 import {
   productFeatureCatalog,
+  type BoardLaunchUnavailableReason,
   type Entitlements,
   type Plan,
   type ProductFeatureKey,
@@ -8,8 +9,18 @@ import {
   type WorkspaceProductFeatures,
   productFeatureKeys,
 } from "@openround/contracts";
-import { createPlatformRepository, type Repository, type PlatformRoomType } from "@openround/db";
+import {
+  createPlatformRepository,
+  type CreatorContext,
+  type OrganizationRecord,
+  type Repository,
+  type PlatformRoomType,
+} from "@openround/db";
 import type { AppConfig } from "./config.js";
+import {
+  boardLaunchOrganizationRestricted,
+  ideaBoardLaunchRequiresActiveOrganization,
+} from "./board-launch-availability.js";
 
 type PolicyConfig = Partial<AppConfig> & Pick<AppConfig, "COMMUNITY_MODE">;
 const entitlementFeatures = [
@@ -163,6 +174,7 @@ export async function workspaceProductFeatures(
   config: PolicyConfig,
   workspaceId: string,
   planOverride?: Plan,
+  boardLaunchContext?: { role: CreatorContext["role"]; organization: OrganizationRecord | null },
 ): Promise<WorkspaceProductFeatures> {
   const [features, runtime] = await Promise.all([
     resolveWorkspaceFeatures(repository, config, workspaceId, planOverride),
@@ -170,12 +182,35 @@ export async function workspaceProductFeatures(
   ]);
   const ideaBoardsCreationUnavailableReason = features.unavailableReason("ideaBoards");
   const canvasBoardsCreationUnavailableReason = features.unavailableReason("canvasBoards");
+  const ideaBoards = ideaBoardsCreationUnavailableReason === undefined;
+  const canvasBoards = canvasBoardsCreationUnavailableReason === undefined;
+  const ideaBoardOrganizationGate = ideaBoardLaunchRequiresActiveOrganization(config);
+  let boardLaunchReason: BoardLaunchUnavailableReason | undefined;
+  if (boardLaunchContext && boardLaunchContext.role !== "viewer" && (ideaBoards || canvasBoards)) {
+    if (!runtime.sessionCreation) boardLaunchReason = "operational_pause";
+    else if (
+      (canvasBoards || (ideaBoards && ideaBoardOrganizationGate)) &&
+      (await boardLaunchOrganizationRestricted(
+        repository,
+        workspaceId,
+        boardLaunchContext.organization,
+      ))
+    )
+      boardLaunchReason = "organization_restricted";
+  }
   const presentationRealtimeUnavailableReason = features.unavailableReason("presentationRealtime");
   return {
-    ideaBoards: ideaBoardsCreationUnavailableReason === undefined,
+    ideaBoards,
     ...(ideaBoardsCreationUnavailableReason && { ideaBoardsCreationUnavailableReason }),
-    canvasBoards: canvasBoardsCreationUnavailableReason === undefined,
+    ...(ideaBoards &&
+      boardLaunchReason &&
+      (boardLaunchReason === "operational_pause" || ideaBoardOrganizationGate) && {
+        ideaBoardsLaunchUnavailableReason: boardLaunchReason,
+      }),
+    canvasBoards,
     ...(canvasBoardsCreationUnavailableReason && { canvasBoardsCreationUnavailableReason }),
+    ...(canvasBoards &&
+      boardLaunchReason && { canvasBoardsLaunchUnavailableReason: boardLaunchReason }),
     canvasBoardSharing: features.enabled("canvasBoardSharing"),
     canvasBoardRealtime: features.enabled("canvasBoardRealtime"),
     multiSelectPolls: features.enabled("roundClientProtocol"),

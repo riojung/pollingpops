@@ -212,13 +212,22 @@ export const PublicFeaturesSchema = z.object({
 });
 export type PublicFeatures = z.infer<typeof PublicFeaturesSchema>;
 
+export const BoardLaunchUnavailableReasonSchema = z.enum([
+  "operational_pause",
+  "organization_restricted",
+]);
+export type BoardLaunchUnavailableReason = z.infer<typeof BoardLaunchUnavailableReasonSchema>;
+
 export const WorkspaceProductFeaturesSchema = z.object({
   ideaBoards: z.boolean().optional(),
   ideaBoardsCreationUnavailableReason:
     ProductFeatureUnavailableReasonSchema.optional().catch(undefined),
+  ideaBoardsLaunchUnavailableReason: BoardLaunchUnavailableReasonSchema.optional().catch(undefined),
   canvasBoards: z.boolean().optional(),
   canvasBoardsCreationUnavailableReason:
     ProductFeatureUnavailableReasonSchema.optional().catch(undefined),
+  canvasBoardsLaunchUnavailableReason:
+    BoardLaunchUnavailableReasonSchema.optional().catch(undefined),
   canvasBoardSharing: z.boolean().optional(),
   canvasBoardRealtime: z.boolean().optional(),
   multiSelectPolls: z.boolean().default(false),

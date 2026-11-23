@@ -51,6 +51,7 @@ describe("professional workspace rollout flags", () => {
       COMMUNITY_MODE: "false",
       FEATURE_IDEA_BOARDS: "true",
       FEATURE_CANVAS_BOARDS: "true",
+      FEATURE_SESSION_CREATION: "false",
       LOG_LEVEL: "silent",
     });
     const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
@@ -75,17 +76,23 @@ describe("professional workspace rollout flags", () => {
     const legacyParsed = WorkspaceProductFeaturesSchema.parse(legacy);
     expect(legacyParsed).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
     expect(legacyParsed).not.toHaveProperty("canvasBoardsCreationUnavailableReason");
+    expect(legacyParsed).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+    expect(legacyParsed).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
     expect(
       WorkspaceProductFeaturesSchema.parse({
         ...legacy,
         ideaBoardsCreationUnavailableReason: "future_reason",
         canvasBoardsCreationUnavailableReason: null,
+        ideaBoardsLaunchUnavailableReason: "future_reason",
+        canvasBoardsLaunchUnavailableReason: null,
       }),
     ).toMatchObject({
       ideaBoards: false,
       ideaBoardsCreationUnavailableReason: undefined,
       canvasBoards: false,
       canvasBoardsCreationUnavailableReason: undefined,
+      ideaBoardsLaunchUnavailableReason: undefined,
+      canvasBoardsLaunchUnavailableReason: undefined,
     });
 
     config.CORE_PARITY_WORKSPACE_ALLOWLIST = [workspaceId];
@@ -93,8 +100,21 @@ describe("professional workspace rollout flags", () => {
     expect(enabled).toMatchObject({ ideaBoards: true, canvasBoards: true });
     expect(enabled).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
     expect(enabled).not.toHaveProperty("canvasBoardsCreationUnavailableReason");
+    expect(enabled).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+    expect(enabled).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
+    const publicFeatures = await app.inject({ url: "/v1/features" });
+    expect(publicFeatures.statusCode).toBe(200);
+    expect(publicFeatures.json()).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+    expect(publicFeatures.json()).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
 
     const platform = createPlatformRepository(repository);
+    await repository.updateOperationalFeatures({ sessionCreation: false }, randomUUID());
+    expect(WorkspaceProductFeaturesSchema.parse(await productFeatures())).toMatchObject({
+      ideaBoards: true,
+      canvasBoards: true,
+      ideaBoardsLaunchUnavailableReason: "operational_pause",
+      canvasBoardsLaunchUnavailableReason: "operational_pause",
+    });
     const canvasRule = await platform.saveFeaturePolicy({
       expectedRevision: 0,
       features: { canvasBoards: { enabled: true, plans: ["pro"] } },
@@ -102,22 +122,27 @@ describe("professional workspace rollout flags", () => {
     const canvasDenied = await productFeatures();
     expect(canvasDenied).toMatchObject({
       ideaBoards: true,
+      ideaBoardsLaunchUnavailableReason: "operational_pause",
       canvasBoards: false,
       canvasBoardsCreationUnavailableReason: "operator_policy",
     });
     expect(canvasDenied).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
+    expect(canvasDenied).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
 
     config.CORE_PARITY_WORKSPACE_ALLOWLIST = [];
     await platform.saveFeaturePolicy({
       expectedRevision: canvasRule.revision,
       features: { ideaBoards: { enabled: false, plans: [] } },
     });
-    expect(WorkspaceProductFeaturesSchema.parse(await productFeatures())).toMatchObject({
+    const bothDenied = WorkspaceProductFeaturesSchema.parse(await productFeatures());
+    expect(bothDenied).toMatchObject({
       ideaBoards: false,
       ideaBoardsCreationUnavailableReason: "operator_policy",
       canvasBoards: false,
       canvasBoardsCreationUnavailableReason: "operator_policy",
     });
+    expect(bothDenied).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+    expect(bothDenied).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
   });
 
   it("fails closed for new Presentation creation while keeping recovery reads registered", async () => {

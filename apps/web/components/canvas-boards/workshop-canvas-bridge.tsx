@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { CanvasBoardGuestView, IdeaBoardView, CanvasExportRegion } from "@openround/contracts";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import type {
+  CanvasBoardCreate,
+  CanvasBoardGuestView,
+  IdeaBoardView,
+  CanvasExportRegion,
+} from "@openround/contracts";
 import { ApiClientError } from "../../lib/api";
+import {
+  boardLaunchErrorKey,
+  boardLaunchUnavailableKey,
+  type BoardLaunchNoticeKey,
+} from "../../lib/board-launch-availability";
 import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
 import { useWorkspace } from "../workspace/workspace-provider";
@@ -18,23 +28,31 @@ import {
 } from "./workshop-canvas-client";
 import guestStyles from "./workshop-canvas-guest.module.css";
 
+export type WorkshopCanvasAttempt = { actorId: string; input: CanvasBoardCreate };
+
 export function WorkshopCanvasLauncher({
   board,
   disabled = false,
+  attempt,
+  launchDenial,
+  onLaunchDenialChange,
 }: {
   board: IdeaBoardView;
   disabled?: boolean;
+  attempt: RefObject<WorkshopCanvasAttempt | null>;
+  launchDenial: BoardLaunchNoticeKey | undefined;
+  onLaunchDenialChange: (key: BoardLaunchNoticeKey | undefined) => void;
 }) {
   const { t } = useLocale();
   const { creator, canEdit, productFeatures } = useWorkspace();
   const router = useRouter();
   const [existing, setExisting] = useState<{ sourceId: string; canvasId: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<false | "lookup" | "create">(false);
   const [refresh, setRefresh] = useState(0);
   const inFlight = useRef(false);
-  const attempt = useRef<{ sourceId: string; operationId: string } | null>(null);
   const active = useRef<AbortController | null>(null);
+  const launchNoticeId = useId();
   useEffect(() => {
     const controller = new AbortController();
     active.current = controller;
@@ -46,37 +64,61 @@ export function WorkshopCanvasLauncher({
       .catch((error) => {
         if (controller.signal.aborted) return;
         setExisting(null);
-        if (!(error instanceof ApiClientError && error.status === 404)) setFailed(true);
+        if (!(error instanceof ApiClientError && error.status === 404)) setFailed("lookup");
       });
     return () => controller.abort();
   }, [board.id, creator?.workspaceId, refresh]);
   const current = existing?.sourceId === board.id ? existing : null;
+  const previousAttempt =
+    creator &&
+    attempt.current?.actorId === creator.userId &&
+    attempt.current.input.workspaceId === creator.workspaceId &&
+    attempt.current.input.sourceBoardId === board.id
+      ? attempt.current
+      : null;
+  const launchUnavailable = boardLaunchUnavailableKey(
+    productFeatures?.canvasBoardsLaunchUnavailableReason,
+  );
+  const launchNotice = launchDenial ?? launchUnavailable;
+  const canLaunch =
+    (productFeatures?.canvasBoards || launchUnavailable) &&
+    (board.status === "draft" || board.status === "collecting");
   async function open() {
-    if (inFlight.current || !creator || disabled) return;
+    if (inFlight.current || !creator || !canEdit || disabled) return;
+    if (!previousAttempt && (!canLaunch || launchUnavailable)) return;
     inFlight.current = true;
     setBusy(true);
     setFailed(false);
+    onLaunchDenialChange(undefined);
     const controller = active.current;
-    if (attempt.current?.sourceId !== board.id)
-      attempt.current = { sourceId: board.id, operationId: clientUuid() };
     try {
-      const canvas = await createCanvas(
-        {
+      const input =
+        previousAttempt?.input ??
+        ({
           schemaVersion: 1,
           workspaceId: creator.workspaceId,
           title: board.title,
           boardType: "workshop",
           sourceBoardId: board.id,
-          operationId: attempt.current.operationId,
-        },
-        controller?.signal,
-      );
-      if (!controller?.signal.aborted) router.push(`/canvas/${canvas.id}`);
+          operationId: clientUuid(),
+        } satisfies CanvasBoardCreate);
+      attempt.current = { actorId: creator.userId, input };
+      const canvas = await createCanvas(input, controller?.signal, {
+        userId: creator.userId,
+        workspaceId: input.workspaceId,
+      });
+      if (!controller?.signal.aborted) {
+        attempt.current = null;
+        setExisting({ sourceId: board.id, canvasId: canvas.id });
+        router.push(`/canvas/${canvas.id}`);
+      }
     } catch (error) {
       if (controller?.signal.aborted) return;
       if (error instanceof ApiClientError && error.status < 500 && error.status !== 429)
         attempt.current = null;
-      setFailed(true);
+      const launchError = boardLaunchErrorKey(error);
+      if (launchError) onLaunchDenialChange(launchError);
+      else setFailed("create");
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -88,29 +130,36 @@ export function WorkshopCanvasLauncher({
         {t("canvas.workshop.open")}
       </Link>
     );
-  if (!canEdit || !productFeatures?.canvasBoards || !["draft", "collecting"].includes(board.status))
-    return null;
+  if (!canEdit || (!canLaunch && !previousAttempt)) return null;
   return (
     <div>
       <button
         className="button-quiet"
         type="button"
-        disabled={disabled || busy}
+        disabled={disabled || busy || (Boolean(launchUnavailable) && !previousAttempt)}
+        aria-describedby={launchNotice ? launchNoticeId : undefined}
         onClick={() => void open()}
       >
-        {t("canvas.workshop.add")}
+        {t(previousAttempt ? "boards.retry" : "canvas.workshop.add")}
       </button>
-      {failed ? (
+      {launchNotice ? (
+        <p id={launchNoticeId} role={launchDenial ? "alert" : undefined}>
+          {t(launchNotice)}
+        </p>
+      ) : null}
+      {failed === "lookup" || failed === "create" ? (
         <p className="error" role="alert">
-          {t("canvas.workshop.loadError")}{" "}
-          <button
-            type="button"
-            className="button-quiet"
-            disabled={busy}
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            {t("boards.retry")}
-          </button>
+          {t("canvas.workshop.loadError")}
+          {failed === "lookup" ? (
+            <button
+              type="button"
+              className="button-quiet"
+              disabled={busy}
+              onClick={() => setRefresh((value) => value + 1)}
+            >
+              {t("boards.retry")}
+            </button>
+          ) : null}
         </p>
       ) : null}
     </div>

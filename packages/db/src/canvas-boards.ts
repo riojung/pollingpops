@@ -62,7 +62,7 @@ import type {
 } from "./canvas-board-types.js";
 import { canvasBoardRole as roleFor, canvasMetadataRole } from "./canvas-metadata.js";
 
-import { CanvasBoardError } from "./canvas-board-error.js";
+import { CanvasBoardError, CanvasBoardOrganizationRestrictedError } from "./canvas-board-error.js";
 import { canvasHistoryHeads } from "./canvas-snapshot.js";
 import {
   canvasFacilitation,
@@ -73,7 +73,7 @@ import {
   sanitizeCanvasFacilitation,
   validateCanvasVersions,
 } from "./canvas-facilitation.js";
-export { CanvasBoardError } from "./canvas-board-error.js";
+export { CanvasBoardError, CanvasBoardOrganizationRestrictedError } from "./canvas-board-error.js";
 
 type CanvasCheckedRead<T extends CanvasSceneRead> = {
   state: T;
@@ -463,12 +463,12 @@ export class CanvasBoardRepository {
       if (
         !access?.user?.verified ||
         !["owner", "editor"].includes(access.workspace.membership ?? "") ||
-        access.organization?.status !== "active" ||
-        access.workspace.status !== "active" ||
         access.workspaceDeleting ||
         access.member?.role === "billing"
       )
         fail();
+      if (access.organization?.status !== "active" || access.workspace.status !== "active")
+        throw new CanvasBoardOrganizationRestrictedError();
       if (!this.options.communityMode && !currentSeat(access, actor.userId, now))
         throw new CanvasBoardError("FORBIDDEN", "An active creator license is required");
       const previous =

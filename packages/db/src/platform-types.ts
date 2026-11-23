@@ -396,6 +396,7 @@ export interface PlatformRepository {
   listOrganizationWorkspacesForOperator(
     organizationId: string,
   ): Promise<OrganizationWorkspaceRecord[]>;
+  getWorkspaceForOperator(workspaceId: string): Promise<OrganizationWorkspaceRecord | null>;
   listCreditLedgerForOperator(organizationId: string, limit?: number): Promise<CreditLedgerEntry[]>;
   listCreditLedgerPageForOperator(
     organizationId: string,

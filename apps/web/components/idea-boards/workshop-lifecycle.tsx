@@ -11,6 +11,8 @@ export function WorkshopLifecycleControls({
   board,
   canReopen = false,
   disabled = false,
+  launchUnavailable,
+  reopenError,
   retentionDeadline,
   onReopen,
   onRetryReopen,
@@ -18,6 +20,8 @@ export function WorkshopLifecycleControls({
   board: IdeaBoardView;
   canReopen?: boolean;
   disabled?: boolean;
+  launchUnavailable?: string;
+  reopenError?: string;
   retentionDeadline?: string;
   onReopen: (windowDays: number) => Promise<boolean>;
   onRetryReopen?: () => Promise<boolean>;
@@ -36,7 +40,12 @@ export function WorkshopLifecycleControls({
   const titleId = useId();
   const descriptionId = useId();
   const limitId = useId();
+  const launchNoticeId = useId();
   const atLimit = roundNumber >= IDEA_BOARD_MAX_ROUNDS;
+  const reopenBlocked = disabled || Boolean(launchUnavailable);
+  const submitDisabled = working || atLimit || (reopenBlocked && !onRetryReopen);
+  const launchNotice = reopenError ?? launchUnavailable;
+  const showLaunchNotice = !atLimit && openingRound === null && launchNotice;
 
   useEffect(() => {
     if (openingRound === null) return;
@@ -62,13 +71,7 @@ export function WorkshopLifecycleControls({
 
   async function reopen(event: FormEvent) {
     event.preventDefault();
-    if (
-      working ||
-      (disabled && !onRetryReopen) ||
-      board.status !== "closed" ||
-      openingRound !== roundNumber
-    )
-      return;
+    if (submitDisabled || board.status !== "closed" || openingRound !== roundNumber) return;
     setWorking(true);
     setFailed(false);
     try {
@@ -91,8 +94,8 @@ export function WorkshopLifecycleControls({
             ref={trigger}
             type="button"
             className="button"
-            disabled={disabled || atLimit}
-            aria-describedby={atLimit ? limitId : undefined}
+            disabled={reopenBlocked || atLimit}
+            aria-describedby={atLimit ? limitId : showLaunchNotice ? launchNoticeId : undefined}
             onClick={(event) => {
               event.currentTarget.focus();
               setFailed(false);
@@ -103,6 +106,11 @@ export function WorkshopLifecycleControls({
             {copy.reopenCollection}
           </button>
           {atLimit ? <p id={limitId}>{copy.roundLimit}</p> : null}
+          {showLaunchNotice ? (
+            <p id={launchNoticeId} role={reopenError ? "alert" : undefined}>
+              {launchNotice}
+            </p>
+          ) : null}
         </>
       ) : null}
       {openingRound !== null ? (
@@ -126,7 +134,7 @@ export function WorkshopLifecycleControls({
               <span>{copy.reopenWindow}</span>
               <select
                 value={windowDays}
-                disabled={working || disabled || Boolean(onRetryReopen)}
+                disabled={working || reopenBlocked || Boolean(onRetryReopen)}
                 onChange={(event) => setWindowDays(Number(event.target.value))}
               >
                 <option value={1}>{copy.oneDay}</option>
@@ -150,9 +158,9 @@ export function WorkshopLifecycleControls({
               })}
             </p>
             <p className={styles.hint}>{copy.reopenRetention}</p>
-            {failed ? (
+            {reopenError || (launchUnavailable && !onRetryReopen) || failed ? (
               <p className="error" role="alert">
-                {copy.reopenError}
+                {reopenError ?? (onRetryReopen ? undefined : launchUnavailable) ?? copy.reopenError}
               </p>
             ) : null}
             <div className={styles.actions}>
@@ -164,11 +172,7 @@ export function WorkshopLifecycleControls({
               >
                 {t("boards.cancel")}
               </button>
-              <button
-                className="button"
-                type="submit"
-                disabled={working || (disabled && !onRetryReopen)}
-              >
+              <button className="button" type="submit" disabled={submitDisabled}>
                 {working ? copy.reopening : onRetryReopen ? t("boards.retry") : copy.confirmReopen}
               </button>
             </div>

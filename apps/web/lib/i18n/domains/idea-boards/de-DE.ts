@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Ideenboards",
   "boards.description": "Sammeln und gruppieren Sie Ideen und wählen Sie gemeinsame Prioritäten.",
   "boards.create": "Board erstellen",
+  "boards.launch.operationalPause":
+    "Der Polling Pops-Betreiber hat den Start neuer Boards vorübergehend ausgesetzt.",
+  "boards.launch.organizationRestricted":
+    "Neue Boards können nicht gestartet werden, weil diese Organisation oder dieser Arbeitsbereich inaktiv ist.",
   "boards.creation.teamOperatorPolicy":
     "Ihr Polling Pops-Betreiber hat das Erstellen von Team-Canvases für diesen Arbeitsbereich deaktiviert.",
   "boards.creation.teamRolloutUnavailable":

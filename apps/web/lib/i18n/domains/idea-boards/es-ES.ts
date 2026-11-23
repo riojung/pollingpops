@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Tableros de ideas",
   "boards.description": "Recopila ideas, agrúpalas y elige prioridades compartidas.",
   "boards.create": "Crear tablero",
+  "boards.launch.operationalPause":
+    "El operador de Polling Pops ha pausado temporalmente el inicio de nuevos tableros.",
+  "boards.launch.organizationRestricted":
+    "No se pueden iniciar nuevos tableros porque esta organización o este espacio de trabajo no está activo.",
   "boards.creation.teamOperatorPolicy":
     "Tu operador de Polling Pops ha desactivado la creación de lienzos de equipo para este espacio de trabajo.",
   "boards.creation.teamRolloutUnavailable":

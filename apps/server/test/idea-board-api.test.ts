@@ -1064,6 +1064,7 @@ describe("independent idea board APIs", () => {
       payload: collectInput,
     });
     expect(paused.statusCode).toBe(404);
+    expect(paused.json().error).not.toHaveProperty("details");
     config.FEATURE_IDEA_BOARDS = true;
     const operationalPaused = await app.inject({
       method: "POST",
@@ -1072,6 +1073,10 @@ describe("independent idea board APIs", () => {
       payload: collectInput,
     });
     expect(operationalPaused.statusCode).toBe(409);
+    expect(operationalPaused.json().error).toMatchObject({
+      code: "ROOM_CLOSED",
+      details: { boardLaunchUnavailableReason: "operational_pause" },
+    });
     repository.operationalFeatures.sessionCreation = true;
     const opened = await app.inject({
       method: "POST",
@@ -1099,6 +1104,92 @@ describe("independent idea board APIs", () => {
         .statusCode,
     ).toBe(204);
   });
+
+  it.each(["organization", "workspace"] as const)(
+    "explains a restricted %s only in authorized Board launch contexts",
+    async (scope) => {
+      const { app, headers, config, repository, workspaceId } = await fixture();
+      const viewer = await member(app, headers, "viewer");
+      config.BUSINESS_PLATFORM_ENABLED = true;
+      config.FEATURE_CANVAS_BOARDS = true;
+      const { board: draft, payload } = await createBoard(app, headers);
+      const { board: active } = await createBoard(app, headers);
+      await host(app, active.id, headers, { type: "collect" });
+      const { board: closed } = await host(app, active.id, headers, { type: "close" });
+      const platform = createPlatformRepository(repository);
+      if (scope === "organization") {
+        const organization = (await platform.getOrganizationForWorkspace(workspaceId))!;
+        await platform.updateOrganizationStatus(organization.id, "suspended");
+      } else await platform.updateWorkspaceStatus(workspaceId, "suspended");
+
+      const account = async (current = headers) => {
+        const response = await app.inject({ url: "/v1/auth/me", headers: current });
+        expect(response.statusCode, response.body).toBe(200);
+        return response.json().productFeatures;
+      };
+      expect(await account()).toMatchObject({
+        ideaBoards: true,
+        canvasBoards: true,
+        ideaBoardsLaunchUnavailableReason: "organization_restricted",
+        canvasBoardsLaunchUnavailableReason: "organization_restricted",
+      });
+      const viewerFeatures = await account(viewer);
+      expect(viewerFeatures).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+      expect(viewerFeatures).not.toHaveProperty("canvasBoardsLaunchUnavailableReason");
+
+      const freshCreate = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/idea-boards",
+          headers,
+          payload: { ...payload, idempotencyKey: randomUUID() },
+        });
+      for (const response of await Promise.all([
+        freshCreate(),
+        ...(
+          [
+            [draft, { type: "collect" }],
+            [closed, { type: "reopen", roundNumber: 1 }],
+          ] as const
+        ).map(([board, command]) =>
+          app.inject({
+            method: "POST",
+            url: `/v1/idea-boards/${board.id}/commands`,
+            headers,
+            payload: { idempotencyKey: randomUUID(), expectedRevision: board.revision, command },
+          }),
+        ),
+      ])) {
+        expect(response.statusCode, response.body).toBe(409);
+        expect(response.json().error).toMatchObject({
+          code: "ROOM_CLOSED",
+          details: { boardLaunchUnavailableReason: "organization_restricted" },
+        });
+      }
+      expect((await app.inject({ url: `/v1/idea-boards/${closed.id}`, headers })).statusCode).toBe(
+        200,
+      );
+      expect(
+        (await app.inject({ method: "POST", url: "/v1/idea-boards", headers, payload })).statusCode,
+      ).toBe(201);
+
+      repository.operationalFeatures.sessionCreation = false;
+      expect((await freshCreate()).json().error.details).toEqual({
+        boardLaunchUnavailableReason: "operational_pause",
+      });
+      expect(await account()).toMatchObject({
+        ideaBoardsLaunchUnavailableReason: "operational_pause",
+        canvasBoardsLaunchUnavailableReason: "operational_pause",
+      });
+
+      repository.operationalFeatures.sessionCreation = true;
+      config.BUSINESS_PLATFORM_ENABLED = false;
+      const legacy = await account();
+      expect(legacy).not.toHaveProperty("ideaBoardsLaunchUnavailableReason");
+      expect(legacy.canvasBoardsLaunchUnavailableReason).toBe("organization_restricted");
+      expect((await freshCreate()).statusCode).toBe(201);
+    },
+  );
 
   it("keeps pending ideas and ballots private, freezes grouping, and releases final counts after closure", async () => {
     const { app, headers } = await fixture();

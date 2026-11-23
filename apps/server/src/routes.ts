@@ -156,6 +156,7 @@ import { EXTENDED_ROUND_RESPONSE_UNAVAILABLE_MESSAGE } from "./round-response-ro
 import {
   registerCustomerAccountRoutes,
   requireExpectedWorkspace,
+  resolveWorkspaceAccountContext,
   workspaceAccountContext,
 } from "./customer-account.js";
 import { registerCheckpointSetImportRoutes } from "./checkpoint-set-import-routes.js";
@@ -531,8 +532,6 @@ export async function registerRoutes(
     workspaceFeatureEnabled(repository, config, workspaceId, "uxBeta");
   const practiceAssignmentsWorkspaceEnabled = (workspaceId: string) =>
     workspaceFeatureEnabled(repository, config, workspaceId, "practiceAssignments");
-  const workspaceProductFeatures = (workspaceId: string) =>
-    resolveWorkspaceProductFeatures(repository, config, workspaceId);
   const requireWorkspaceRole = (
     creator: CreatorContext,
     allowed: CreatorContext["role"][],
@@ -1137,14 +1136,25 @@ export async function registerRoutes(
         creator.plan,
         "csvExport",
       );
+    const { workspace, organization } = await resolveWorkspaceAccountContext(
+      repository,
+      config,
+      creator,
+    );
     return {
       creator,
-      workspace: await workspaceAccountContext(repository, config, creator),
+      workspace,
       businessManagementEnabled: config.BUSINESS_PLATFORM_ENABLED && !config.COMMUNITY_MODE,
       entitlements,
       csvExportUnavailableReason,
       checkpointSetImportUnavailableReason: csvExportUnavailableReason,
-      productFeatures: await workspaceProductFeatures(creator.workspaceId),
+      productFeatures: await resolveWorkspaceProductFeatures(
+        repository,
+        config,
+        creator.workspaceId,
+        undefined,
+        { role: creator.role, organization },
+      ),
       brandTheme: entitlements.brandTheme
         ? await repository.getBrandTheme(creator.workspaceId)
         : null,

@@ -55,7 +55,10 @@ Presentation visual import availability explanations merged through
 [PR #306](https://github.com/riojung/pollingpops/pull/306) at `9e045a1`.
 The Presentation navigator resize landmark fix merged through
 [PR #307](https://github.com/riojung/pollingpops/pull/307) at `c1aa6c4`.
-The current WX-11 increment explains feature-policy restrictions on Board creation.
+Board creation feature-policy explanations merged through
+[PR #308](https://github.com/riojung/pollingpops/pull/308) at `db9c48a`.
+The current WX-11 increment explains operational pauses and inactive organization or workspace
+status for Board launches.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -82,7 +85,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #307. Board creation explanations are ready locally. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #308. Board launch availability is ready for review. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
@@ -103,9 +106,10 @@ CSV export reasons in PR #300. Retained Round report export reasons merged in PR
 Presentation launch reasons in PR #302. Source upload availability merged in PR #303 and LTI
 availability explanations in PR #304. Checkpoint-set export reasons merged in PR #305 and visual
 import explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307.
-Board creation explanations are implemented locally. Other capability explanations, WX-07–10
-and WX-12–14 remain pending. Additional customer-job collections and human review of localized
-copy remain open.
+Board creation feature-policy explanations merged in PR #308. Board launch explanations for
+operational pauses and inactive accounts are implemented locally. Round staff availability,
+other candidate capability explanations, WX-07–10 and WX-12–14 remain pending. Additional
+customer-job collections and human review of localized copy remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -990,8 +994,8 @@ operator-policy or rollout explanation in the Boards library and alongside disab
 the creation dialog. Owners and editors can see the reason even when both choices are unavailable.
 An older or unfamiliar response uses a generic unavailable message. The existing feature decisions
 and role checks control fresh creation, and saved Workshop setup retries can recover their exact
-requests. The explanations are localized in all ten catalogs. Frontend, server and localization own
-this increment on `codex/board-creation-availability`.
+requests. The explanations are localized in all ten catalogs. Frontend, server and localization
+owned this increment, merged through PR #308 at `db9c48a`.
 
 **Board creation local verification — 2026-11-22.** All 44 focused web tests and 76 focused server
 tests passed, covering reason precedence, older responses, editor and viewer access, and capability
@@ -1003,9 +1007,27 @@ The full `VITEST_MAX_WORKERS=1 pnpm check` passed on rerun with 10,523 package t
 tests, four builds, and compiled server startup. An existing Round ranking test timed out on the
 first attempt and passed in both subsequent runs. Optional integration tests were skipped.
 
-**Remaining capability explanations.** Operational and organization Board launch restrictions and
-Round staff actions have separate decisions to qualify. Other provider setup messages remain
-candidates.
+**Board launch availability explanations.** Owners and editors see why a fresh Board launch is
+unavailable when the operator pauses launches or the owning organization or workspace is inactive.
+The Boards library and creation chooser use the same workspace decisions as the server. Original
+Workshop hosts see the launch reason beside collection actions and can refresh availability.
+Authorized Canvas Workshop hosts see the operational reason when a launch request is denied.
+If only Canvas creation is restricted, a new Guided Workshop can continue without a Canvas starter.
+Existing access, active actions and exact accepted retries follow the existing authorization and
+receipt checks. Both reasons are localized in all ten catalogs. Frontend, server and localization
+own this increment on `codex/board-launch-availability`.
+
+**Board launch local verification — 2026-11-23.** All 78 focused web tests, 67 server tests and 48
+contract tests passed. The targeted Canvas and platform database suites passed in memory and against
+an isolated PostgreSQL instance using a restricted runtime role. All eight production browser cases
+passed across desktop Chromium and Firefox, mobile Chromium, and mobile WebKit. They cover a
+launch pause, retained Workshop access and actions, an inactive workspace explanation, Refresh,
+and a denial after the first availability read. Native-language review remains open.
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,532 package tests, 529 support tests, four
+builds, and compiled server startup. Optional integration suites were skipped in the full check.
+
+**Remaining capability explanations.** Round staff actions are the remaining named implementation
+slice. Other provider setup messages remain candidates. Native-language review remains open.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -1111,8 +1133,9 @@ and workspace CSV export reasons in PR #300. Retained Round report export reason
 PR #301, live Presentation launch reasons in PR #302 and source upload availability in PR #303.
 LTI availability explanations merged in PR #304. Checkpoint-set export reasons merged in PR #305
 and Presentation visual import reasons in PR #306. The navigator resize landmark fix merged in
-PR #307. Board creation feature-policy explanations are implemented locally. Operational Board
-launch restrictions and Round staff availability remain candidates for subsequent WX-11 slices.
+PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
+organization Board launch explanations are implemented locally. Round staff availability is the
+next named WX-11 implementation slice.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

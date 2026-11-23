@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Quadros de ideias",
   "boards.description": "Recolha ideias, agrupe-as e escolha prioridades comuns.",
   "boards.create": "Criar quadro",
+  "boards.launch.operationalPause":
+    "O operador Polling Pops suspendeu temporariamente o início de novos quadros.",
+  "boards.launch.organizationRestricted":
+    "Não é possível iniciar novos quadros porque esta organização ou este espaço de trabalho está inativo.",
   "boards.creation.teamOperatorPolicy":
     "O seu operador Polling Pops desativou a criação de telas de equipa neste espaço de trabalho.",
   "boards.creation.teamRolloutUnavailable":

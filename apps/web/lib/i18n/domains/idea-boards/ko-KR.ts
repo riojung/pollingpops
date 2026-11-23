@@ -21,6 +21,9 @@ const messages: IdeaBoardMessages = {
   "boards.title": "아이디어 보드",
   "boards.description": "아이디어를 모으고 그룹으로 정리하여 함께 우선순위를 정하세요.",
   "boards.create": "보드 만들기",
+  "boards.launch.operationalPause": "Polling Pops 운영자가 새 보드 시작을 일시 중지했습니다.",
+  "boards.launch.organizationRestricted":
+    "이 조직 또는 워크스페이스가 비활성 상태이므로 새 보드를 시작할 수 없습니다.",
   "boards.creation.teamOperatorPolicy":
     "Polling Pops 운영자가 이 워크스페이스의 팀 캔버스 만들기 기능을 비활성화했습니다.",
   "boards.creation.teamRolloutUnavailable":

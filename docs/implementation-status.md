@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Round staff availability explanations, November 23, 2026
+
+Implemented locally on `codex/round-staff-availability` after PR #309. Round hosts see whether
+cohosting is unavailable because of saved Round coverage, operator policy, or a plan limitation.
+Secure embed setup shows the missing HTTPS origin requirement before an issuance attempt. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Board launch availability explanations, November 23, 2026
 
-Implemented locally on `codex/board-launch-availability` after PR #308. The Boards library, creation
+Merged through PR #309 at `03bbb7e`. The Boards library, creation
 chooser and Workshop controls explain an operational launch pause or an inactive organization or
 workspace using the existing authorization and launch policy. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -253,7 +260,8 @@ PR #301, live Presentation launch availability reasons in PR #302 and source upl
 in PR #303. LTI availability explanations merged in PR #304 and checkpoint-set export reasons in
 PR #305. Visual import explanations merged in PR #306 and the navigator resize landmark fix in
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and organization
-Board launch explanations are implemented locally. Round staff availability remains pending.
+Board launch explanations merged in PR #309. Round staff availability is implemented locally and
+awaits review. Native-language acceptance remains pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

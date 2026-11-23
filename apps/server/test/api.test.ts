@@ -742,9 +742,34 @@ describe("creator to report journey", () => {
       headers: { cookie },
     });
     expect(staffList.statusCode).toBe(200);
+    expect(staffList.headers["cache-control"]).toBe("private, no-store");
     expect(staffList.body).not.toContain("tokenHash");
+    expect(staffList.body).not.toContain(presenterCredential.token);
+    expect(staffList.body).not.toContain(presenterCredential.embedPolicyKey);
+    expect(staffList.body).not.toContain("https://lms.example.edu");
     expect(staffList.json()).toMatchObject({
       credentials: [{ id: presenterCredential.credential.id, role: "presenter" }],
+      availability: { cohosting: true, embedOriginsConfigured: true },
+    });
+    const clearedEmbedOrigins = await app.inject({
+      method: "PUT",
+      url: "/v1/account/embed-origins",
+      headers: { cookie },
+      payload: { origins: [] },
+    });
+    expect(clearedEmbedOrigins.statusCode).toBe(200);
+    const presenterAfterClearingOrigins = await app.inject({
+      method: "POST",
+      url: `/v1/sessions/${session.sessionId}/staff`,
+      headers: { cookie },
+      payload: { role: "presenter" },
+    });
+    expect(presenterAfterClearingOrigins.statusCode).toBe(201);
+    expect(presenterAfterClearingOrigins.json()).toMatchObject({
+      token: expect.any(String),
+      credential: { role: "presenter" },
+      embedPolicyKey: expect.any(String),
+      embedAllowedOrigins: [],
     });
     expect(
       (

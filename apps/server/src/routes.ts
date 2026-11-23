@@ -8,7 +8,10 @@ import {
   createPlatformRepository,
   PlatformError,
 } from "@openround/db";
-import { roomEntitlementsWithExportAvailability } from "./room-entitlements.js";
+import {
+  roomEntitlementsWithExportAvailability,
+  roundCohostUnavailableReason,
+} from "./room-entitlements.js";
 import {
   AnswerSubmitSchema,
   SessionActivitySchema,
@@ -73,6 +76,7 @@ import {
   ReportContextSchema,
   ReportSummaryPageSchema,
   RoundFilterOptionsResponseSchema,
+  RoundStaffAvailabilitySchema,
   SessionSummaryPageSchema,
   SessionCountsResponseSchema,
   SessionHistorySearchSchema,
@@ -752,7 +756,14 @@ export async function registerRoutes(
       });
     }
     if (error instanceof SessionError) {
-      return apiError(reply, sessionStatus(error.code), error.code, error.message, request.id);
+      return apiError(
+        reply,
+        sessionStatus(error.code),
+        error.code,
+        error.message,
+        request.id,
+        error.details,
+      );
     }
     if (error instanceof TextResponseReadError) {
       return apiError(
@@ -2672,6 +2683,7 @@ export async function registerRoutes(
   });
 
   app.get("/v1/sessions/:id/staff", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     if (requireWorkspaceRole(creator, ["owner", "editor"], reply, request.id) !== true) return;
@@ -2680,7 +2692,25 @@ export async function registerRoutes(
     if (!session || session.workspaceId !== creator.workspaceId) {
       return apiError(reply, 404, "NOT_FOUND", "Session not found", request.id);
     }
-    const credentials = await repository.listSessionStaff(creator.workspaceId, id);
+    const [credentials, [cohosting, embedOrigins]] = await Promise.all([
+      repository.listSessionStaff(creator.workspaceId, id),
+      Promise.allSettled([
+        roundCohostUnavailableReason(repository, config, id, creator.workspaceId),
+        repository.getEmbedAllowedOrigins(creator.workspaceId),
+      ]),
+    ]);
+    if (cohosting.status === "rejected") {
+      request.log.warn(
+        { err: cohosting.reason, sessionId: id },
+        "Round co-host availability lookup failed",
+      );
+    }
+    if (embedOrigins.status === "rejected") {
+      request.log.warn(
+        { err: embedOrigins.reason, sessionId: id },
+        "Round embed origins lookup failed",
+      );
+    }
     return {
       credentials: credentials.map((credential) => ({
         id: credential.id,
@@ -2692,6 +2722,15 @@ export async function registerRoutes(
         revokedAt: credential.revokedAt?.toISOString() ?? null,
         createdAt: credential.createdAt.toISOString(),
       })),
+      availability: RoundStaffAvailabilitySchema.parse({
+        ...(cohosting.status === "fulfilled" && {
+          cohosting: cohosting.value === null,
+          ...(cohosting.value && { cohostingUnavailableReason: cohosting.value }),
+        }),
+        ...(embedOrigins.status === "fulfilled" && {
+          embedOriginsConfigured: embedOrigins.value.length > 0,
+        }),
+      }),
     };
   });
 

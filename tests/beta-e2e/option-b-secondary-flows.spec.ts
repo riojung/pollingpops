@@ -7,6 +7,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
+import type { RoundStaffAvailability } from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import { joinBetaParticipant } from "./round-join";
 
@@ -104,6 +105,14 @@ async function createRoom(page: Page): Promise<SeededRoom> {
   return { ...room, wrongChoice };
 }
 
+async function openHostRoom(page: Page, room: SeededRoom) {
+  await page.evaluate(
+    ({ sessionId, hostToken }) => sessionStorage.setItem(`openround:host:${sessionId}`, hostToken),
+    room,
+  );
+  await page.goto(`/host/${room.sessionId}`);
+}
+
 async function command(
   context: APIRequestContext,
   room: SeededRoom,
@@ -186,12 +195,14 @@ for (const suffix of ["desktop", "@mobile"]) {
     const room = await createRoom(page);
     try {
       await setLocale(page, "ko-KR");
-      await page.evaluate(
-        ({ sessionId, hostToken }) =>
-          sessionStorage.setItem(`openround:host:${sessionId}`, hostToken),
-        room,
-      );
-      await page.goto(`/host/${room.sessionId}`);
+      const staffUrl = `${api}/v1/sessions/${room.sessionId}/staff`;
+      const staffCreationRequests: unknown[] = [];
+      page.on("request", (request) => {
+        if (request.method() === "POST" && request.url() === staffUrl) {
+          staffCreationRequests.push(request.postDataJSON());
+        }
+      });
+      await openHostRoom(page, room);
       const staff = page.locator("details.staff-management");
       await expect(staff.locator("summary")).toHaveText("Round 스태프");
       await staff.locator("summary").click();
@@ -228,10 +239,16 @@ for (const suffix of ["desktop", "@mobile"]) {
         }),
       ).toBeVisible();
       await expect(link).toHaveAttribute("href", url.toString());
-      await qualifyLayout(page);
-      await staff.getByRole("button", { name: "보안 삽입 링크 만들기", exact: true }).click();
-      await expect(staff.locator("#staff-embed-error")).toContainText("HTTPS");
+      const embed = staff.getByRole("button", { name: "보안 삽입 링크 만들기", exact: true });
+      const embedHelp = /계정 설정에서 HTTPS 삽입 출처/;
+      await expect(embed).toBeDisabled();
+      await expect(embed).toHaveAccessibleDescription(embedHelp);
+      await expect(staff.locator("#staff-embed-availability")).toHaveText(embedHelp);
       await expect(staff.locator('a[href*="/embed/present/"]')).toHaveCount(0);
+      await qualifyLayout(page);
+      expect(staffCreationRequests).toEqual([
+        { role: "cohost", label: "Original assistant label", expiresInMinutes: 240 },
+      ]);
       const row = staff.getByRole("listitem").filter({ hasText: "Original assistant label" });
       const revokedResponse = page.waitForResponse(
         (response) =>
@@ -256,21 +273,243 @@ for (const suffix of ["desktop", "@mobile"]) {
         path: info.outputPath("secondary-staff-korean.png"),
         fullPage: true,
       });
-      await page.route(`${api}/v1/sessions/${room.sessionId}/staff`, (route) =>
+      const webOrigin = new URL(page.url()).origin;
+      await page.route(staffUrl, (route) =>
         route.request().method() === "GET"
           ? route.fulfill({
               status: 403,
+              headers: {
+                "access-control-allow-origin": webOrigin,
+                "access-control-allow-credentials": "true",
+              },
               json: { error: { code: "FORBIDDEN", message: "Synthetic read-only role" } },
             })
           : route.continue(),
       );
-      await page.reload();
-      await expect(page.locator("details.staff-management")).toHaveCount(0);
+      const forbidden = page.waitForResponse(
+        (response) => response.request().method() === "GET" && response.url() === staffUrl,
+      );
+      await staff.getByRole("button", { name: "사용 가능 여부 다시 확인", exact: true }).click();
+      expect((await forbidden).status()).toBe(403);
+      await expect(staff).toHaveCount(0);
       await expect(page.getByTestId("host-session")).toBeVisible();
     } finally {
       await command(anonymous, room, "end");
       await anonymous.dispose();
       await setLocale(page, "en-CA");
+    }
+  });
+
+  test(`Round staff explains availability and restores issuance after refresh ${suffix}`, async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await signInBeta(page);
+    if (suffix === "@mobile") await page.setViewportSize({ width: 320, height: 844 });
+    await setLocale(page, "en-CA");
+    const originsPath = "/v1/account/embed-origins";
+    const { origins } = await exchange<{ origins: string[] }>(page.request, "GET", originsPath);
+    const room = await createRoom(page);
+    const anonymous = await apiRequest.newContext();
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    try {
+      if (origins.length > 0) await exchange(page.request, "PUT", originsPath, { origins: [] });
+      const staffPath = `/v1/sessions/${room.sessionId}/staff`;
+      const staffUrl = `${api}${staffPath}`;
+      const label = "Existing assistant";
+      const { credential } = await exchange<{ credential: { id: string } }>(
+        page.request,
+        "POST",
+        staffPath,
+        { role: "cohost", label, expiresInMinutes: 240 },
+        undefined,
+        201,
+      );
+      const webOrigin = new URL(page.url()).origin;
+      let projectAvailability:
+        ((availability: RoundStaffAvailability) => Partial<RoundStaffAvailability>) | undefined = (
+        availability,
+      ) => ({
+        ...availability,
+        cohosting: false,
+        cohostingUnavailableReason: "operator_policy",
+      });
+      let holdNextRefresh = false;
+      let denyCohost = false;
+      await page.route(staffUrl, async (route) => {
+        const request = route.request();
+        if (request.method() === "GET" && holdNextRefresh) {
+          holdNextRefresh = false;
+          const response = await route.fetch();
+          await refreshGate;
+          return route.fulfill({ response });
+        }
+        if (request.method() === "GET" && projectAvailability) {
+          const project = projectAvailability;
+          const response = await route.fetch();
+          const body = await response.json();
+          return route.fulfill({
+            response,
+            json: { ...body, availability: project(body.availability) },
+          });
+        }
+        if (request.method() === "POST" && denyCohost && request.postDataJSON().role === "cohost") {
+          return route.fulfill({
+            status: 402,
+            headers: {
+              "access-control-allow-origin": webOrigin,
+              "access-control-allow-credentials": "true",
+            },
+            json: {
+              error: {
+                code: "ENTITLEMENT_LIMIT",
+                message: "Synthetic stale cohost denial",
+                details: { cohostingUnavailableReason: "plan_limit" },
+              },
+            },
+          });
+        }
+        return route.continue();
+      });
+      await openHostRoom(page, room);
+      const staff = page.locator("details.staff-management");
+      await staff.locator("summary").click();
+      const cohost = staff.getByRole("button", { name: "Create cohost link", exact: true });
+      const embed = staff.getByRole("button", { name: "Create secure embed link", exact: true });
+      const presenter = page.getByRole("button", { name: "Presenter view", exact: true });
+      const refresh = staff.getByRole("button", { name: "Refresh availability", exact: true });
+      const comparePlans = staff.getByRole("link", { name: "Compare plans", exact: true });
+      const cohostHelp = staff.locator("#staff-cohost-availability");
+      const staffRow = staff.getByRole("listitem").filter({ hasText: label });
+      const revoke = staffRow.getByRole("button", {
+        name: `Revoke access for ${label}`,
+        exact: true,
+      });
+      const operatorHelp =
+        "Cohost links are disabled for this workspace by your Polling Pops operator.";
+      const planHelp = "This workspace's current plan doesn't include cohost links.";
+      const unknownHelp = "Round staff availability couldn't be checked.";
+      await expect(cohost).toBeDisabled();
+      await expect(cohostHelp).toHaveText(operatorHelp);
+      await expect(cohost).toHaveAccessibleDescription(operatorHelp);
+      await expect(comparePlans).toHaveCount(0);
+      await expect(embed).toBeDisabled();
+      await expect(embed).toHaveAccessibleDescription(/HTTPS embed origin in Account settings/);
+      await expect(presenter).toBeVisible();
+      await expect(presenter).toBeEnabled();
+      await expect(staffRow).toBeVisible();
+      await expect(revoke).toBeEnabled();
+      await qualifyLayout(page);
+
+      await exchange(page.request, "PUT", originsPath, { origins: ["https://school.example"] });
+      projectAvailability = undefined;
+      await refresh.click();
+      await expect(cohost).toBeEnabled();
+      await expect(embed).toBeEnabled();
+      await expect(cohostHelp).toHaveCount(0);
+      await expect(staff.locator("#staff-embed-availability")).toHaveCount(0);
+      await expect(staffRow).toBeVisible();
+
+      const nextStaffCreation = () =>
+        page.waitForResponse(
+          (response) => response.request().method() === "POST" && response.url() === staffUrl,
+        );
+      const nextStaffRead = () =>
+        page.waitForResponse(
+          (response) => response.request().method() === "GET" && response.url() === staffUrl,
+        );
+      const embedResponse = nextStaffCreation();
+      await embed.click();
+      expect((await embedResponse).status()).toBe(201);
+      const embedLink = staff.locator('a[href*="/embed/present/"]');
+      await expect(embedLink).toHaveAttribute("href", /\/embed\/present\/.+#credential=/);
+
+      holdNextRefresh = true;
+      await refresh.click();
+      await expect(refresh).toBeDisabled();
+      denyCohost = true;
+      const deniedResponse = nextStaffCreation();
+      await cohost.click();
+      expect((await deniedResponse).status()).toBe(402);
+      await expect(cohost).toBeDisabled();
+      await expect(cohostHelp).toContainText(planHelp);
+      await expect(cohostHelp).toHaveAttribute("role", "alert");
+      await expect(comparePlans).toHaveAttribute("href", "/pricing");
+      await expect(page.getByText("Synthetic stale cohost denial", { exact: true })).toHaveCount(0);
+      await expect(embed).toBeEnabled();
+      await expect(embedLink).toBeVisible();
+      await expect(presenter).toBeEnabled();
+      await expect(staffRow).toBeVisible();
+      await expect(revoke).toBeEnabled();
+
+      const heldResponse = nextStaffRead();
+      releaseRefresh();
+      const older = await heldResponse;
+      expect(older.status()).toBe(200);
+      expect((await older.json()).availability).toMatchObject({
+        cohosting: true,
+        embedOriginsConfigured: true,
+      });
+      await expect(refresh).toBeEnabled();
+      await expect(cohost).toBeDisabled();
+      await expect(cohostHelp).toContainText(planHelp);
+      await expect(comparePlans).toHaveAttribute("href", "/pricing");
+
+      denyCohost = false;
+      const confirmedResponse = nextStaffRead();
+      await refresh.click();
+      expect((await confirmedResponse).status()).toBe(200);
+      await expect(cohost).toBeEnabled();
+      await expect(comparePlans).toHaveCount(0);
+
+      const incompleteAvailability: Partial<RoundStaffAvailability>[] = [
+        { embedOriginsConfigured: true },
+        { cohosting: true },
+        {},
+      ];
+      for (const availability of incompleteAvailability) {
+        projectAvailability = () => availability;
+        const partialResponse = nextStaffRead();
+        await refresh.click();
+        expect((await partialResponse).status()).toBe(200);
+        await expect(refresh).toBeEnabled();
+        await expect(cohost).toHaveJSProperty("disabled", availability.cohosting !== true);
+        await expect(embed).toHaveJSProperty(
+          "disabled",
+          availability.embedOriginsConfigured !== true,
+        );
+        await expect(staffRow).toBeVisible();
+        await expect(revoke).toBeEnabled();
+      }
+      await expect(cohost).toHaveAccessibleDescription(unknownHelp);
+      await expect(embed).toHaveAccessibleDescription(unknownHelp);
+
+      const revokeResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "DELETE" &&
+          response.url() === `${staffUrl}/${credential.id}`,
+      );
+      await revoke.click();
+      expect((await revokeResponse).status()).toBe(204);
+      await expect(staffRow).toContainText("revoked");
+      await expect(revoke).toHaveCount(0);
+
+      projectAvailability = undefined;
+      await refresh.click();
+      await expect(cohost).toBeEnabled();
+      await expect(embed).toBeEnabled();
+      await expect(staffRow).toContainText("revoked");
+    } finally {
+      releaseRefresh();
+      try {
+        await exchange(page.request, "PUT", originsPath, { origins });
+        await command(anonymous, room, "end");
+      } finally {
+        await anonymous.dispose();
+      }
     }
   });
 

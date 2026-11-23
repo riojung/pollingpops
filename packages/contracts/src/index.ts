@@ -1,6 +1,7 @@
 import {
   ProductFeatureKeySchema,
   ProductFeatureUnavailableReasonSchema,
+  RoundCohostUnavailableReasonSchema,
   WorkspaceCapabilityUnavailableReasonSchema,
 } from "./feature-policy";
 import {
@@ -2471,6 +2472,13 @@ export const SessionStaffRoleSchema = z.enum(["cohost", "presenter"]);
 export type SessionStaffRole = z.infer<typeof SessionStaffRoleSchema>;
 export const SessionStaffPurposeSchema = z.enum(["collaboration", "creator_resume"]);
 export type SessionStaffPurpose = z.infer<typeof SessionStaffPurposeSchema>;
+
+export const RoundStaffAvailabilitySchema = z.object({
+  cohosting: z.boolean().optional(),
+  cohostingUnavailableReason: RoundCohostUnavailableReasonSchema.optional().catch(undefined),
+  embedOriginsConfigured: z.boolean().optional(),
+});
+export type RoundStaffAvailability = z.infer<typeof RoundStaffAvailabilitySchema>;
 
 export const CreateSessionStaffCredentialSchema = z.object({
   role: SessionStaffRoleSchema,

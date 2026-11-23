@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SessionSnapshotSchema,
   supportedLocales,
+  type RoundCohostUnavailableReason,
   type SessionStaffCredential,
   type SupportedLocale,
 } from "@openround/contracts";
 import { resolveExperienceTheme } from "@openround/experience";
+import { ApiClientError } from "../../../lib/api";
 import type * as ApiModule from "../../../lib/api";
 import type * as RealtimeModule from "../../../lib/realtime";
 import { hostStaffCopy, hostStaffCopyKeys } from "../../../lib/i18n/host-staff-copy";
@@ -30,7 +32,11 @@ const fixtures = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => void>(),
   credentials: [] as SessionStaffCredential[],
   allowStaff: true,
-  allowCohost: true,
+  allowCohost: true as boolean | undefined,
+  cohostReason: undefined as RoundCohostUnavailableReason | "future_reason" | undefined,
+  embedOriginsConfigured: true as boolean | undefined,
+  legacyStaffRead: false,
+  staffReadStatus: undefined as number | undefined,
   syncDenied: false,
   emissions: [] as { name: string; payload: Record<string, unknown> }[],
 }));
@@ -146,6 +152,10 @@ beforeEach(() => {
   fixtures.credentials = [];
   fixtures.allowStaff = true;
   fixtures.allowCohost = true;
+  fixtures.cohostReason = undefined;
+  fixtures.embedOriginsConfigured = true;
+  fixtures.legacyStaffRead = false;
+  fixtures.staffReadStatus = undefined;
   fixtures.syncDenied = false;
   fixtures.emissions = [];
   fixtures.copy.mockReset().mockResolvedValue(undefined);
@@ -188,8 +198,26 @@ beforeEach(() => {
     if (path.endsWith("/entitlements"))
       return { entitlements: { cohosting: fixtures.allowCohost } };
     if (path.endsWith("/staff") && !init.method) {
-      if (!fixtures.allowStaff) throw new Error("Synthetic creator authorization denied");
-      return { credentials: fixtures.credentials };
+      if (!fixtures.allowStaff)
+        throw new ApiClientError("Synthetic creator authorization denied", "FORBIDDEN", 403);
+      if (fixtures.staffReadStatus)
+        throw new ApiClientError(
+          "Synthetic staff read error",
+          "INTERNAL_ERROR",
+          fixtures.staffReadStatus,
+        );
+      return {
+        credentials: fixtures.credentials,
+        ...(fixtures.legacyStaffRead
+          ? {}
+          : {
+              availability: {
+                cohosting: fixtures.allowCohost,
+                cohostingUnavailableReason: fixtures.cohostReason,
+                embedOriginsConfigured: fixtures.embedOriginsConfigured,
+              },
+            }),
+      };
     }
     if (init.method === "DELETE") return undefined;
     throw new Error(`Unexpected test request ${path}`);
@@ -518,7 +546,7 @@ describe("Round staff localization and authority", () => {
       0,
     );
     const staffRead = fixtures.apiFetch.mock.calls.find(([path]) => path.endsWith("/staff"));
-    expect(staffRead).toEqual(["/v1/sessions/room-a/staff"]);
+    expect(staffRead?.[0]).toBe("/v1/sessions/room-a/staff");
   });
 
   it("does not claim revocation after failure and associates the error only with its credential", async () => {
@@ -548,15 +576,177 @@ describe("Round staff localization and authority", () => {
   it("retains English controls and explains an empty list or unavailable cohosting plan", async () => {
     fixtures.locale = "en-CA";
     fixtures.allowCohost = false;
+    fixtures.cohostReason = "plan_limit";
     const page = await harness();
     const markup = page.render();
     expect(markup).toContain("Round staff");
     expect(markup).toContain("No staff credentials yet.");
     expect(markup).toContain(
-      "Shareable cohost links are available on Pro, Team, and Community plans.",
+      "This workspace&#x27;s current plan doesn&#x27;t include cohost links.",
     );
     expect(markup).toContain("Compare plans");
     expect(markup).toContain("Create secure embed link");
     expect(markup).not.toContain('id="cohost-label"');
+  });
+
+  it.each([
+    ["room_coverage", "This Round was started without cohost access."],
+    [
+      "operator_policy",
+      "Cohost links are disabled for this workspace by your Polling Pops operator.",
+    ],
+  ] as const)(
+    "explains %s while keeping retained staff management available",
+    async (reason, message) => {
+      fixtures.locale = "en-CA";
+      fixtures.allowCohost = false;
+      fixtures.cohostReason = reason;
+      fixtures.credentials = [credential()];
+      const page = await harness();
+      const markup = page.render();
+      expect(markup).toContain(message);
+      expect(markup).not.toContain("Compare plans");
+      expect(markup).toContain("Authored English label");
+      expect(button("Revoke").props.disabled).toBe(false);
+      expect(button("Create cohost link").props["aria-describedby"]).toBe(
+        "staff-cohost-availability",
+      );
+      expect(button("Create cohost link").props.disabled).toBe(true);
+      await page.click("Create cohost link");
+      expect(fixtures.apiFetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    },
+  );
+
+  it("rechecks a cohost denial after policy changes without describing it as a plan limit", async () => {
+    fixtures.locale = "en-CA";
+    const page = await harness();
+    fixtures.apiFetch.mockRejectedValueOnce(
+      new ApiClientError("Old plan message", "ENTITLEMENT_LIMIT", 402, undefined, {
+        cohostingUnavailableReason: "operator_policy",
+      }),
+    );
+    const denied = await page.click("Create cohost link");
+    expect(denied).toContain(
+      "Cohost links are disabled for this workspace by your Polling Pops operator.",
+    );
+    expect(denied).not.toContain("Old plan message");
+    expect(denied).not.toContain("Compare plans");
+    expect(button("Create cohost link").props.disabled).toBe(true);
+    const refreshed = await page.click("Refresh availability");
+    expect(refreshed).not.toContain("disabled for this workspace");
+    expect(button("Create cohost link").props.disabled).toBe(false);
+  });
+
+  it("preserves a cohost denial when an older staff refresh completes afterward", async () => {
+    fixtures.locale = "en-CA";
+    const page = await harness();
+    let finishOlderRead!: (value: unknown) => void;
+    fixtures.apiFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishOlderRead = resolve;
+      }),
+    );
+    await page.click("Refresh availability");
+    fixtures.apiFetch.mockRejectedValueOnce(
+      new ApiClientError("Changed policy", "ENTITLEMENT_LIMIT", 402, undefined, {
+        cohostingUnavailableReason: "operator_policy",
+      }),
+    );
+    await page.click("Create cohost link");
+    finishOlderRead({
+      credentials: [],
+      availability: { cohosting: true, embedOriginsConfigured: true },
+    });
+    await flush();
+    expect(page.render()).toContain("Cohost links are disabled for this workspace");
+    expect(button("Create cohost link").props.disabled).toBe(true);
+
+    fixtures.allowCohost = undefined;
+    expect(await page.click("Refresh availability")).toContain(
+      "Cohost links are disabled for this workspace",
+    );
+    fixtures.allowCohost = true;
+    expect(await page.click("Refresh availability")).not.toContain(
+      "Cohost links are disabled for this workspace",
+    );
+    expect(button("Create cohost link").props.disabled).toBe(false);
+  });
+
+  it.each([
+    ["cohost", undefined, true],
+    ["embed", true, undefined],
+    ["both", undefined, undefined],
+  ] as const)(
+    "keeps revocation available when %s availability is unknown",
+    async (_kind, cohost, embed) => {
+      fixtures.locale = "en-CA";
+      fixtures.allowCohost = cohost;
+      fixtures.embedOriginsConfigured = embed;
+      fixtures.credentials = [credential()];
+      const page = await harness();
+      const markup = page.render();
+      expect(markup).toContain("Round staff availability couldn&#x27;t be checked.");
+      expect(markup).toContain("Authored English label");
+      expect(button("Create cohost link").props.disabled).toBe(cohost === undefined);
+      expect(button("Create secure embed link").props.disabled).toBe(embed === undefined);
+      expect(button("Revoke").props.disabled).toBe(false);
+      expect(fixtures.apiFetch.mock.calls.some(([path]) => path.endsWith("/entitlements"))).toBe(
+        false,
+      );
+      await page.click("Revoke");
+      expect(fixtures.apiFetch.mock.calls).toContainEqual([
+        "/v1/sessions/room-a/staff/credential-a",
+        { method: "DELETE" },
+      ]);
+    },
+  );
+
+  it("checks embed origin setup without creating a credential and preserves separate Presenter view", async () => {
+    fixtures.locale = "en-CA";
+    fixtures.embedOriginsConfigured = false;
+    const page = await harness();
+    expect(page.render()).toContain("add at least one HTTPS embed origin");
+    expect(button("Create secure embed link").props["aria-describedby"]).toBe(
+      "staff-embed-availability",
+    );
+    expect(button("Create secure embed link").props.disabled).toBe(true);
+    expect(button("Presenter view").props.disabled).toBe(false);
+    await page.click("Create secure embed link");
+    expect(fixtures.apiFetch.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    fixtures.embedOriginsConfigured = true;
+    await page.click("Refresh availability");
+    expect(button("Create secure embed link").props.disabled).toBe(false);
+  });
+
+  it("recovers a failed staff read and uses neutral copy with a legacy room entitlement", async () => {
+    fixtures.locale = "en-CA";
+    fixtures.allowCohost = false;
+    fixtures.legacyStaffRead = true;
+    fixtures.staffReadStatus = 503;
+    fixtures.credentials = [credential()];
+    const page = await harness();
+    expect(page.render()).toContain("Round staff availability couldn&#x27;t be checked.");
+    expect(page.render()).not.toContain("Authored English label");
+    fixtures.staffReadStatus = undefined;
+    const refreshed = await page.click("Refresh availability");
+    expect(refreshed).toContain("Cohost links are unavailable for this Round.");
+    expect(refreshed).toContain("Authored English label");
+    expect(refreshed).not.toContain("Compare plans");
+    expect(button("Create secure embed link").props.disabled).toBe(false);
+  });
+
+  it("keeps confirmed limitations when an unfamiliar cohost reason arrives", async () => {
+    fixtures.locale = "en-CA";
+    fixtures.allowCohost = false;
+    fixtures.cohostReason = "future_reason";
+    fixtures.embedOriginsConfigured = false;
+    const page = await harness();
+    expect(page.render()).toContain("Cohost links are unavailable for this Round.");
+    expect(page.render()).not.toContain("Compare plans");
+    expect(button("Create cohost link").props.disabled).toBe(true);
+    expect(button("Create secure embed link").props.disabled).toBe(true);
+    expect(fixtures.apiFetch.mock.calls.some(([path]) => path.endsWith("/entitlements"))).toBe(
+      false,
+    );
   });
 });

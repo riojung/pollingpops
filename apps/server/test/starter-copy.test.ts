@@ -214,20 +214,39 @@ describe("durable Round starter copies", () => {
     expect(await f.repository.listQuizzes(f.actor.workspaceId)).toHaveLength(1);
   });
 
-  it("recovers the original copy after the catalog content version changes", async () => {
+  it("recovers an Event experience copy with its original description after the catalog changes", async () => {
     const f = await fixture();
-    const input = f.input();
-    const created = await f.copy(input);
+    const previousVersion = "launch-collection-v2";
+    const previousDescription =
+      "Tell us what was useful and what to improve next time. This is unscored feedback; skip optional questions that do not apply.";
+    const input = { ...f.input(), locale: "en-CA", contentVersion: previousVersion };
+    const catalog = vi
+      .spyOn(localization, "STARTER_CONTENT_VERSION", "get")
+      .mockReturnValue(previousVersion as typeof STARTER_CONTENT_VERSION);
+    const factory = vi.spyOn(starters, "instantiateStarter").mockReturnValueOnce({
+      ...starters.instantiateStarter("event-feedback"),
+      description: previousDescription,
+    });
+    const created = await f.copy(input, "event-feedback");
     expect(created.statusCode, created.body).toBe(201);
-    vi.spyOn(localization, "STARTER_CONTENT_VERSION", "get").mockReturnValue(
-      "next-catalog-version" as typeof STARTER_CONTENT_VERSION,
-    );
-    const replay = await f.copy(input);
+    expect(created.json().quiz.draft.description).toBe(previousDescription);
+    catalog.mockRestore();
+    factory.mockRestore();
+    const replay = await f.copy(input, "event-feedback");
     expect(replay.statusCode, replay.body).toBe(200);
-    expect(replay.json()).toMatchObject({ replayed: true, quiz: { id: created.json().quiz.id } });
-    const unaccepted = await f.copy({ ...input, idempotencyKey: randomUUID() });
+    expect(replay.json()).toMatchObject({ replayed: true, quiz: created.json().quiz });
+    const unaccepted = await f.copy({ ...input, idempotencyKey: randomUUID() }, "event-feedback");
     expect(unaccepted.statusCode).toBe(409);
     expect(unaccepted.json().error.code).toBe("STARTER_CONTENT_CHANGED");
+    const refreshed = await f.copy(
+      { ...input, idempotencyKey: randomUUID(), contentVersion: STARTER_CONTENT_VERSION },
+      "event-feedback",
+    );
+    expect(refreshed.statusCode, refreshed.body).toBe(201);
+    expect(refreshed.json().quiz.draft.description).toBe(
+      starters.instantiateStarter("event-feedback").description,
+    );
+    expect(refreshed.json().quiz.draft.description).not.toBe(previousDescription);
   });
 
   it("retains consumed keys after archive and deletion and permits a deliberate independent copy", async () => {

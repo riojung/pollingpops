@@ -13,6 +13,9 @@ const english = {
   workshopsTitle: "Workshops",
   workshopsDescription:
     "Choose a template to set workshop expectations, practise a technique or plan follow-up. Use each on its own when it fits.",
+  eventFeedbackTitle: "Event feedback",
+  eventFeedbackDescription:
+    "Choose a template to collect feedback during or after an event, guide a talk or demo, or plan follow-up. Use each template on its own when it fits.",
 } as const;
 
 export type TemplateCollectionCopy = Record<keyof typeof english, string>;
@@ -35,6 +38,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "Ateliers",
     workshopsDescription:
       "Choisissez un modèle pour clarifier les attentes de l’atelier, vous entraîner à une technique ou préparer le suivi. Chaque modèle peut être utilisé séparément selon vos besoins.",
+    eventFeedbackTitle: "Retours sur les événements",
+    eventFeedbackDescription:
+      "Choisissez un modèle pour recueillir des retours pendant ou après un événement, structurer une intervention ou une démonstration, ou préparer le suivi. Chaque modèle peut être utilisé séparément selon vos besoins.",
   },
   "de-DE": {
     label: "Sammlungen",
@@ -49,6 +55,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "Workshops",
     workshopsDescription:
       "Wählen Sie eine Vorlage, um Erwartungen an den Workshop zu klären, eine Methode zu üben oder die nächsten Schritte zu planen. Jede Vorlage lässt sich bei Bedarf einzeln nutzen.",
+    eventFeedbackTitle: "Feedback zu Veranstaltungen",
+    eventFeedbackDescription:
+      "Wählen Sie eine Vorlage, um während oder nach einer Veranstaltung Feedback einzuholen, einen Vortrag oder eine Demo zu gestalten oder die nächsten Schritte zu planen. Jede Vorlage lässt sich bei Bedarf einzeln nutzen.",
   },
   "es-ES": {
     label: "Colecciones",
@@ -63,6 +72,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "Talleres",
     workshopsDescription:
       "Elige una plantilla para aclarar las expectativas del taller, practicar una técnica o preparar el seguimiento. Puedes usar cada plantilla por separado cuando te convenga.",
+    eventFeedbackTitle: "Opiniones sobre eventos",
+    eventFeedbackDescription:
+      "Elige una plantilla para recoger opiniones durante o después de un evento, estructurar una charla o una demostración, o preparar el seguimiento. Puedes usar cada plantilla por separado cuando te convenga.",
   },
   "it-IT": {
     label: "Raccolte",
@@ -77,6 +89,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "Laboratori",
     workshopsDescription:
       "Scegli un modello per chiarire le aspettative sul laboratorio, esercitarti con una tecnica o pianificare i prossimi passi. Puoi usare ogni modello singolarmente secondo le tue esigenze.",
+    eventFeedbackTitle: "Feedback sugli eventi",
+    eventFeedbackDescription:
+      "Scegli un modello per raccogliere feedback durante o dopo un evento, strutturare un intervento o una demo, oppure pianificare i prossimi passi. Puoi usare ogni modello singolarmente secondo le tue esigenze.",
   },
   "pt-PT": {
     label: "Coleções",
@@ -91,6 +106,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "Workshops",
     workshopsDescription:
       "Escolha um modelo para clarificar as expectativas para o workshop, praticar uma técnica ou planear o acompanhamento. Pode utilizar cada modelo por si só, conforme necessário.",
+    eventFeedbackTitle: "Opiniões sobre eventos",
+    eventFeedbackDescription:
+      "Escolha um modelo para recolher opiniões durante ou após um evento, estruturar uma palestra ou demonstração, ou planear o acompanhamento. Pode utilizar cada modelo por si só, conforme necessário.",
   },
   "ja-JP": {
     label: "コレクション",
@@ -105,6 +123,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "ワークショップ",
     workshopsDescription:
       "ワークショップへの期待を確認したり、手法を練習したり、終了後のフォローアップを計画したりするためのテンプレートです。目的に合わせて、それぞれ単独で使えます。",
+    eventFeedbackTitle: "イベントのフィードバック",
+    eventFeedbackDescription:
+      "イベント中や終了後の意見収集、講演やデモの進行、フォローアップの計画に使えるテンプレートです。目的に合わせて、それぞれ単独で使えます。",
   },
   "ko-KR": {
     label: "컬렉션",
@@ -119,6 +140,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "워크숍",
     workshopsDescription:
       "워크숍에서 기대하는 바를 확인하거나, 기법을 연습하거나, 후속 활동을 계획할 때 알맞은 템플릿을 선택하세요. 필요에 따라 각 템플릿을 따로 사용할 수 있습니다.",
+    eventFeedbackTitle: "행사 피드백",
+    eventFeedbackDescription:
+      "행사 중이나 행사가 끝난 뒤 의견을 모으거나, 발표나 시연을 진행하거나, 후속 활동을 계획할 때 알맞은 템플릿을 선택하세요. 필요에 따라 각 템플릿을 따로 사용할 수 있습니다.",
   },
   "zh-CN": {
     label: "模板集",
@@ -133,6 +157,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "工作坊",
     workshopsDescription:
       "选择合适的模板来明确对工作坊的期待、练习一种方法，或安排后续行动。每种模板都可以按需单独使用。",
+    eventFeedbackTitle: "活动反馈",
+    eventFeedbackDescription:
+      "选择合适的模板，在活动期间或结束后收集反馈、组织演讲或演示，或安排后续行动。每种模板都可以按需单独使用。",
   },
   "zh-TW": {
     label: "範本集",
@@ -147,6 +174,9 @@ export const templateCollectionCopyCatalog: Readonly<
     workshopsTitle: "工作坊",
     workshopsDescription:
       "選擇合適的範本來釐清對工作坊的期待、練習一項方法，或規劃後續行動。每種範本都可以視需要單獨使用。",
+    eventFeedbackTitle: "活動回饋",
+    eventFeedbackDescription:
+      "選擇合適的範本，在活動中或結束後蒐集回饋、安排演講或示範的流程，或規劃後續行動。每種範本都可以視需要單獨使用。",
   },
 };
 

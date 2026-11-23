@@ -43,8 +43,8 @@ describe("creation-only original starter catalogs", () => {
       starterSummaries.map((summary) => ({ summary, draft: instantiateStarter(summary.id) })),
     ).replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/giu, "<id>");
     expect(createHash("sha256").update(original).digest("hex")).toBe(
-      // Adds the Workshop expectations and Exit ticket Round guides to the existing originals.
-      "7786949221b810642c03090956ead614d30909805c38bf172701e4c396cd4579",
+      // Includes the two Event feedback Round guides and the live-only Event experience description.
+      "93b08e0f94282fd3faafea358e84ba3d9dfe668088d0483c01130e051443c7b7",
     );
   });
   it.each(supportedLocales)(

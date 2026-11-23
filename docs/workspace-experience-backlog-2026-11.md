@@ -62,8 +62,9 @@ through [PR #309](https://github.com/riojung/pollingpops/pull/309) at `03bbb7e`.
 Round staff availability and credential recovery merged through
 [PR #310](https://github.com/riojung/pollingpops/pull/310) at `70b7e60`, completing the named
 WX-11 software scope. The Training and onboarding collection merged through
-[PR #311](https://github.com/riojung/pollingpops/pull/311) at `01e9765`. The next P1 increment adds
-the Workshops collection under WX-04.
+[PR #311](https://github.com/riojung/pollingpops/pull/311) at `01e9765`. Workshops merged through
+[PR #312](https://github.com/riojung/pollingpops/pull/312) at `61d1094`. The next P1 increment adds
+the Event feedback collection under WX-04.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -83,7 +84,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                                       | Frontend + product design       |
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                                       | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                                        | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Collections merged in PRs #273 and #311. Workshops implemented locally.         | Content design + localization   |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Three collections merged. Event feedback implemented locally.                   | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
 | WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                               | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                                         | Async delivery + privacy        |
@@ -114,8 +115,8 @@ import explanations in PR #306. The Presentation navigator resize landmark fix m
 Board creation feature-policy explanations merged in PR #308. Operational and organization Board
 launch explanations merged in PR #309. Round staff availability merged in PR #310. Native-language
 acceptance, optional provider setup explanations, WX-07–10 and WX-12–14 remain open.
-The Training and onboarding collection merged in PR #311. Workshops is the next WX-04 increment.
-Event feedback remains a candidate collection.
+Training and onboarding merged in PR #311 and Workshops merged in PR #312.
+Event feedback is implemented locally as the fourth WX-04 collection.
 
 ### WX-01 Home: start and resume work
 
@@ -247,10 +248,18 @@ remain open.
 Practical workshop Presentations, and the Plan the next lesson Survey reuse five original template
 definitions. The collection supports setting expectations, facilitated practice, working through an
 example, and preparing a future session. Each template works on its own and has a facilitator
-guide in all ten supported locales. Content design and localization own the increment on
-`codex/workshops-collection`. See the [editorial record](evidence/workshops-editorial-review-2026-11.md).
-Human editorial and native-language acceptance remain open. Event feedback remains a candidate
-collection.
+guide in all ten supported locales. The collection merged in PR #312 at `61d1094`.
+See the [editorial record](evidence/workshops-editorial-review-2026-11.md).
+Human editorial and native-language acceptance remain open.
+
+**Event feedback follow-up:** Training feedback and Event experience Rounds, Product demo and
+feedback and Event talk Presentations, and the Event experience Survey provide live feedback,
+event delivery, and a self-paced follow-up option. The two Event experience entries share a source
+ID. The selected format controls the preview, facilitator guide, and independent draft type.
+Content design and localization own the increment on `codex/event-feedback-collection`.
+See the [editorial record](evidence/event-feedback-editorial-review-2026-11.md).
+This completes the named WX-04 collection software scope locally. Human editorial and
+native-language acceptance remain open.
 
 ### WX-05 Creation: consolidate methods and source intake
 
@@ -1175,7 +1184,8 @@ and Presentation visual import reasons in PR #306. The navigator resize landmark
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
 organization Board launch explanations merged in PR #309. Round staff availability merged in
 PR #310, completing the named WX-11 software scope. Native-language acceptance remains pending.
-Training and onboarding merged in PR #311. The Workshops work is the current WX-04 increment.
+Training and onboarding merged in PR #311 and Workshops merged in PR #312. Event feedback is the
+last named WX-04 collection and is implemented locally.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

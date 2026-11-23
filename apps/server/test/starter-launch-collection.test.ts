@@ -73,7 +73,7 @@ describe("complete authored launch collection", () => {
         } else {
           const survey = instantiateSurveyStarter(id, locale)!;
           expect(SurveyContentSchema.safeParse(survey).success).toBe(true);
-          expect(survey.description).toBe(draft.description);
+          if (id !== "event-feedback") expect(survey.description).toBe(draft.description);
           expect(survey.items.some((item) => !item.required)).toBe(true);
           const responses = Object.fromEntries(
             survey.items
@@ -139,6 +139,6 @@ describe("complete authored launch collection", () => {
     expect(legacy.description).toBe(
       "Answer independently at your own pace. This Survey is unscored.",
     );
-    expect(starterGuideForLocale("training-feedback", "en-CA")).toBeUndefined();
+    expect(starterGuideForLocale("training-feedback", "en-CA", true)).toBeUndefined();
   });
 });

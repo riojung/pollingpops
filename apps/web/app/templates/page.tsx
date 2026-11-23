@@ -62,6 +62,10 @@ function TemplatesWorkspace() {
       title: collectionCopy.workshopsTitle,
       description: collectionCopy.workshopsDescription,
     },
+    "event-feedback": {
+      title: collectionCopy.eventFeedbackTitle,
+      description: collectionCopy.eventFeedbackDescription,
+    },
   } satisfies Record<TemplateCollectionId, { title: string; description: string }>;
   const example = publicTemplateContext(searchParams.get("sourceId"), type);
   const exampleContext =

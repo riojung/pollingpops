@@ -2,7 +2,7 @@ import type { QuizDraft, StarterId, SupportedLocale } from "@openround/contracts
 import { launchStarter } from "./starter-launch-collection.js";
 
 /** Versioned original copy, applied only while explicitly instantiating a new starter. */
-export const STARTER_CONTENT_VERSION = "launch-collection-v2";
+export const STARTER_CONTENT_VERSION = "launch-collection-v3";
 export const starterTranslationLocales = [
   "fr-FR",
   "de-DE",

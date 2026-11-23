@@ -7,7 +7,11 @@ import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 import { STARTER_CONTENT_VERSION, surveyCreationCopy } from "../src/starter-localization.js";
-import { instantiateStarter, instantiateSurveyStarter } from "../src/starters.js";
+import {
+  instantiateStarter,
+  instantiateSurveyStarter,
+  starterGuideForLocale,
+} from "../src/starters.js";
 import { signInFromVerificationResponse } from "./support/email-auth.js";
 
 let app: FastifyInstance | undefined;
@@ -128,6 +132,40 @@ describe("explicit starter creation languages", () => {
     expect(version.content.title).toBe(instantiateStarter("misconception-check", "ko-KR").title);
   });
 
+  it("shows the localized new-hire Round guide in the list and preview without saving it in the copy", async () => {
+    const { app, headers, repository } = await fixture();
+    const id = "new-hire-knowledge-check";
+    for (const locale of supportedLocales) {
+      const auditCount = repository.audits.length;
+      const listed = await app.inject({ url: `/v1/starters?locale=${locale}`, headers });
+      expect(listed.statusCode, listed.body).toBe(200);
+      const summary = listed
+        .json<{ starters: StarterSummary[] }>()
+        .starters.find((entry) => entry.id === id)!;
+      const preview = await app.inject({ url: `/v1/starters/${id}?locale=${locale}`, headers });
+      expect(preview.statusCode, preview.body).toBe(200);
+      expect(preview.json()).toMatchObject({
+        contentLocale: locale,
+        guide: starterGuideForLocale(id, locale),
+        draft: { title: summary.title },
+      });
+      expect(preview.json().guide).toEqual(summary.guide);
+      expect(repository.audits).toHaveLength(auditCount);
+      const created = await app.inject({
+        method: "POST",
+        url: `/v1/starters/${id}/use`,
+        headers,
+        payload: { locale },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const { draft } = created.json().quiz;
+      expect(draft.title).toBe(summary.title);
+      expect(draft.questions[0].prompt).toBe(summary.previewPrompt);
+      expect(draft.questions[0].id).not.toBe(preview.json().draft.questions[0].id);
+      expect(draft.guide).toBeUndefined();
+    }
+  });
+
   it("creates localized Surveys with immutable retries, explicit copy suffixes and English compatibility", async () => {
     const { app, headers } = await fixture();
     for (const locale of supportedLocales) {
@@ -151,6 +189,11 @@ describe("explicit starter creation languages", () => {
         "service-experience",
         "team-collaboration",
       ]);
+      expect(
+        listed
+          .json<{ templates: StarterSummary[] }>()
+          .templates.find((entry) => entry.id === "onboarding-experience")?.guide,
+      ).toEqual(starterGuideForLocale("onboarding-experience", locale, true));
       const payload = { idempotencyKey: randomUUID(), templateId: "team-collaboration", locale };
       const created = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
       expect(created.statusCode, created.body).toBe(201);
@@ -258,6 +301,7 @@ describe("explicit starter creation languages", () => {
           contentVersion: STARTER_CONTENT_VERSION,
           guide: { minutes: 5 },
         });
+        expect(projected.guide).toEqual(starterGuideForLocale(id, locale, true));
         expect(projected.draft).toEqual(instantiateSurveyStarter(id, locale));
         expect(
           (

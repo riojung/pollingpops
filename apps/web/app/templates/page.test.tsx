@@ -162,6 +162,12 @@ describe("Template library sections", () => {
       const view = harness();
       view.render();
       const identity = view.gallery().key;
+      (view.collection("training-onboarding").props.onClick as () => void)();
+      view.render();
+      expect(view.gallery().key).toBe(identity);
+      expect(view.gallery().props.collection).toBe("training-onboarding");
+      expect(view.collection("training-onboarding").props["aria-pressed"]).toBe(true);
+      expect(view.collection("team-meetings").props["aria-pressed"]).toBe(false);
       (view.collection("all").props.onClick as () => void)();
       view.render();
       expect(view.gallery().key).toBe(identity);
@@ -195,6 +201,21 @@ describe("Template library sections", () => {
     });
     view.render();
     expect(view.collection("all").props["aria-pressed"]).toBe(true);
+  });
+
+  it("opens and retains the Training and onboarding collection on format links", () => {
+    mocked.search = "?type=rounds&collection=training-onboarding";
+    const view = harness();
+    view.render();
+    expect(view.markup()).toContain("Training and onboarding");
+    expect(view.collection("training-onboarding").props["aria-pressed"]).toBe(true);
+    (view.tab("surveys").props.onClick as () => void)();
+    expect(mocked.push).toHaveBeenLastCalledWith(
+      "/templates?type=surveys&collection=training-onboarding",
+      { scroll: false },
+    );
+    view.render();
+    expect(view.gallery().props.collection).toBe("training-onboarding");
   });
 
   it("returns from Designs to the collection's Rounds and clears collection filtering on Designs", () => {
@@ -325,6 +346,12 @@ describe("Template library sections", () => {
     expect(view.markup()).toContain("Meeting priorities");
     expect(view.markup()).toContain('href="/examples?example=meeting-priorities"');
     expect(view.markup()).toContain("Round content gallery");
+    (view.collection("training-onboarding").props.onClick as () => void)();
+    view.render();
+    expect(view.markup()).not.toContain('aria-label="Selected public example"');
+    (view.collection("all").props.onClick as () => void)();
+    view.render();
+    expect(view.markup()).toContain('aria-label="Selected public example"');
     mocked.search = "?type=surveys&sourceId=meeting-priorities";
     view.render();
     expect(view.markup()).not.toContain('aria-label="Selected public example"');

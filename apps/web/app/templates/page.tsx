@@ -12,7 +12,12 @@ import { useWorkspace, WorkspaceProvider } from "../../components/workspace/work
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
 import styles from "../../components/workspace/workspace-content.module.css";
 import galleryStyles from "../../components/workspace/template-gallery.module.css";
-import { parseTemplateCollection, type TemplateCollectionId } from "../../lib/template-collections";
+import {
+  parseTemplateCollection,
+  templateCollectionIds,
+  templateCollectionMemberships,
+  type TemplateCollectionId,
+} from "../../lib/template-collections";
 import { templateCollectionCopy } from "../../lib/i18n/template-collection-copy";
 import { workspaceBlankCreationHref } from "../../components/workspace/workspace-creation-model";
 import { publicTemplateContext } from "../../lib/public-examples";
@@ -47,7 +52,23 @@ function TemplatesWorkspace() {
   const collectionCopy = templateCollectionCopy(locale);
   const collection =
     type === "designs" ? null : parseTemplateCollection(searchParams.get("collection"));
-  const exampleContext = publicTemplateContext(searchParams.get("sourceId"), type);
+  const collectionDetails = {
+    "team-meetings": { title: collectionCopy.title, description: collectionCopy.description },
+    "training-onboarding": {
+      title: collectionCopy.trainingOnboardingTitle,
+      description: collectionCopy.trainingOnboardingDescription,
+    },
+  } satisfies Record<TemplateCollectionId, { title: string; description: string }>;
+  const example = publicTemplateContext(searchParams.get("sourceId"), type);
+  const exampleContext =
+    example &&
+    (!collection ||
+      templateCollectionMemberships.some(
+        ({ collectionId, kind, templateId }) =>
+          collectionId === collection && kind === example.kind && templateId === example.sourceId,
+      ))
+      ? example
+      : undefined;
   function selectType(next: TemplateType) {
     const query = new URLSearchParams(searchParams.toString());
     query.set("type", next);
@@ -110,7 +131,7 @@ function TemplatesWorkspace() {
             <h2 id="template-collection-heading" className={galleryStyles.sectionTitle}>
               {collectionCopy.label}
             </h2>
-            {collection ? <p>{collectionCopy.description}</p> : null}
+            {collection ? <p>{collectionDetails[collection].description}</p> : null}
           </div>
           <div
             className={galleryStyles.collectionChoices}
@@ -126,15 +147,18 @@ function TemplatesWorkspace() {
             >
               {collectionCopy.allTemplates}
             </button>
-            <button
-              type="button"
-              className={galleryStyles.collectionChoice}
-              aria-pressed={collection === "team-meetings"}
-              data-collection="team-meetings"
-              onClick={() => selectCollection("team-meetings")}
-            >
-              {collectionCopy.title}
-            </button>
+            {templateCollectionIds.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={galleryStyles.collectionChoice}
+                aria-pressed={collection === id}
+                data-collection={id}
+                onClick={() => selectCollection(id)}
+              >
+                {collectionDetails[id].title}
+              </button>
+            ))}
           </div>
         </section>
         <div

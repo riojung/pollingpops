@@ -1,4 +1,5 @@
 import type { WorkspaceProductFeatures } from "@openround/contracts";
+import type { TemplateCollectionId } from "../../lib/template-collections";
 
 export const roundCreationMethods = ["blank", "starters", "source", "import"] as const;
 export type RoundCreationMethod = (typeof roundCreationMethods)[number];
@@ -25,7 +26,7 @@ export function surveyCreationHref(method?: SurveyCreationMethod): string {
 
 export function templateCatalogHref(
   type?: "rounds" | "presentations" | "surveys" | "designs",
-  collection?: "team-meetings",
+  collection?: TemplateCollectionId,
 ): string {
   const query = new URLSearchParams();
   if (type) query.set("type", type);

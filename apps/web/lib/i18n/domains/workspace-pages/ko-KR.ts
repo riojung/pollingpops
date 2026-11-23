@@ -408,6 +408,12 @@ const messages = {
   "pages.library.restore": "복원",
   "pages.library.restoreCount": "복원({count})",
   "pages.library.resultCount": "{visible}/{total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Polling Pops 운영자가 체크포인트 세트 내보내기를 비활성화했습니다.",
+  "pages.library.roundExportPlanLimit":
+    "이 워크스페이스의 요금제에는 체크포인트 세트 내보내기가 포함되어 있지 않습니다.",
+  "pages.library.roundExportUnavailable":
+    "이 워크스페이스에서는 체크포인트 세트를 내보낼 수 없습니다.",
   "pages.library.roundView": "원형 도서관 전경",
   "pages.library.searchPresentations": "프레젠테이션 검색",
   "pages.library.searchRounds": "라운드 검색",

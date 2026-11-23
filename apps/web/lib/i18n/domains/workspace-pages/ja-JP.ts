@@ -421,6 +421,12 @@ const messages = {
   "pages.library.restore": "復元",
   "pages.library.restoreCount": "復元 ({count})",
   "pages.library.resultCount": "{visible} / {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Polling Popsの運営者がチェックポイント セットのエクスポートを無効にしています。",
+  "pages.library.roundExportPlanLimit":
+    "このワークスペースのプランにはチェックポイント セットのエクスポート機能が含まれていません。",
+  "pages.library.roundExportUnavailable":
+    "このワークスペースではチェックポイント セットをエクスポートできません。",
   "pages.library.roundView": "ラウンドライブラリビュー",
   "pages.library.searchPresentations": "プレゼンテーションを検索する",
   "pages.library.searchRounds": "捜索ラウンド",

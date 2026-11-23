@@ -8,6 +8,7 @@ import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
 
 let app: FastifyInstance | undefined;
+const exportFormats = ["json", "csv", "qti.zip"];
 
 afterEach(async () => {
   if (app) await app.close();
@@ -27,24 +28,20 @@ async function authenticatedApp(communityMode: boolean, repository = new MemoryR
     { repository, cache: new MemorySessionCache() },
   );
   app = built.app;
-  const magic = await app.inject({
+  const cookie = await signIn(app, `portable-${communityMode ? "community" : "free"}@example.com`);
+  return { app, cookie };
+}
+
+async function signIn(server: FastifyInstance, email: string) {
+  const magic = await server.inject({
     method: "POST",
     url: "/v1/auth/magic-link",
-    payload: {
-      email: `portable-${communityMode ? "community" : "free"}@example.com`,
-      segment: "workplace",
-      acceptPolicies: true,
-    },
+    payload: { email, segment: "workplace", acceptPolicies: true },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await verifyEmailAndSignIn(
-    app,
-    `/v1/auth/verify?token=${token}`,
-    `portable-${communityMode ? "community" : "free"}@example.com`,
-  );
+  const verified = await verifyEmailAndSignIn(server, `/v1/auth/verify?token=${token}`, email);
   const setCookie = verified.headers["set-cookie"]!;
-  const cookie = (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
-  return { app, cookie };
+  return (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
 }
 
 async function createCheckpointSet(server: FastifyInstance, cookie: string) {
@@ -222,30 +219,98 @@ describe("checkpoint-set portability API", () => {
   it("keeps hosted portability behind the configured Pro entitlement", async () => {
     const { app: server, cookie } = await authenticatedApp(false);
     const quizId = await createCheckpointSet(server, cookie);
-
-    const exported = await server.inject({
-      method: "GET",
-      url: `/v1/quizzes/${quizId}/export.json`,
-      headers: { cookie },
+    const headers = { cookie };
+    const account = await server.inject({ url: "/v1/auth/me", headers });
+    expect(account.json()).toMatchObject({
+      entitlements: { plan: "free", csvExport: false },
+      csvExportUnavailableReason: "plan_limit",
     });
-    expect(exported.statusCode).toBe(402);
-    expect(exported.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+    const { creator } = account.json<{ creator: { userId: string; workspaceId: string } }>();
+
+    for (const format of exportFormats) {
+      const exported = await server.inject({
+        url: `/v1/quizzes/${quizId}/export.${format}`,
+        headers,
+      });
+      expect(exported.statusCode).toBe(402);
+      expect(exported.headers["cache-control"]).toBe("private, no-store");
+      expect(exported.json()).toMatchObject({
+        error: {
+          code: "ENTITLEMENT_LIMIT",
+          details: {
+            unavailableReason: "plan_limit",
+            actorId: creator.userId,
+            workspaceId: creator.workspaceId,
+          },
+        },
+      });
+      const missing = await server.inject({
+        url: `/v1/quizzes/${randomUUID()}/export.${format}`,
+        headers,
+      });
+      expect(missing.statusCode).toBe(404);
+      expect(missing.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    }
 
     const imported = await server.inject({
       method: "POST",
       url: "/v1/quizzes/import",
-      headers: { cookie },
+      headers,
       payload: { format: "bulk", data: "Question\n* Correct\n- Incorrect" },
     });
     expect(imported.statusCode).toBe(402);
     expect(imported.json()).toMatchObject({ error: { code: "ENTITLEMENT_LIMIT" } });
+  });
 
-    const qtiExport = await server.inject({
-      method: "GET",
-      url: `/v1/quizzes/${quizId}/export.qti.zip`,
-      headers: { cookie },
+  it("keeps exports scoped to the selected workspace and available to its viewers", async () => {
+    const repository = new MemoryRepository();
+    const { app: server, cookie } = await authenticatedApp(true, repository);
+    const quizId = await createCheckpointSet(server, cookie);
+    const { creator: owner } = (
+      await server.inject({ url: "/v1/auth/me", headers: { cookie } })
+    ).json<{
+      creator: { workspaceId: string };
+    }>();
+    const viewerCookie = await signIn(server, "portable-viewer@example.com");
+    const headers = { cookie: viewerCookie };
+    const { creator: viewer } = (await server.inject({ url: "/v1/auth/me", headers })).json<{
+      creator: { userId: string; workspaceId: string };
+    }>();
+    for (const format of exportFormats) {
+      const url = `/v1/quizzes/${quizId}/export.${format}`;
+      expect((await server.inject({ url })).statusCode).toBe(401);
+      expect((await server.inject({ url, headers })).statusCode).toBe(404);
+    }
+
+    repository.workspaceMembers.set(`${owner.workspaceId}:${viewer.userId}`, {
+      workspaceId: owner.workspaceId,
+      userId: viewer.userId,
+      role: "viewer",
+      joinedAt: new Date(),
     });
-    expect(qtiExport.statusCode).toBe(402);
+    const selected = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${owner.workspaceId}/select`,
+      headers,
+    });
+    expect(selected.statusCode, selected.body).toBe(200);
+
+    for (const format of exportFormats) {
+      const url = `/v1/quizzes/${quizId}/export.${format}`;
+      const stale = await server.inject({
+        url: `${url}?expectedWorkspaceId=${viewer.workspaceId}`,
+        headers,
+      });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.headers["cache-control"]).toBe("private, no-store");
+      expect(stale.json()).toMatchObject({ error: { code: "CONFLICT" } });
+      const exported = await server.inject({
+        url: `${url}?expectedWorkspaceId=${owner.workspaceId}`,
+        headers,
+      });
+      expect(exported.statusCode, exported.body).toBe(200);
+      expect(exported.headers["cache-control"]).toBe("private, no-store");
+    }
   });
 
   it("reports unavailable exports and branding when a Pro workspace has both features disabled", async () => {
@@ -268,11 +333,12 @@ describe("checkpoint-set portability API", () => {
     expect(account.statusCode).toBe(200);
     expect(account.json()).toMatchObject({
       entitlements: { plan: "pro", csvExport: false, brandTheme: false },
+      csvExportUnavailableReason: "operator_policy",
     });
 
-    for (const format of ["json", "csv", "qti.zip"]) {
+    for (const format of exportFormats) {
       const exported = await server.inject({
-        url: `/v1/quizzes/${quizId}/export.${format}`,
+        url: `/v1/quizzes/${quizId}/export.${format}?expectedWorkspaceId=${creator.workspaceId}`,
         headers,
       });
       expect(exported.statusCode).toBe(402);
@@ -280,6 +346,11 @@ describe("checkpoint-set portability API", () => {
         error: {
           code: "ENTITLEMENT_LIMIT",
           message: "Checkpoint-set export is unavailable for this workspace",
+          details: {
+            unavailableReason: "operator_policy",
+            actorId: creator.userId,
+            workspaceId: creator.workspaceId,
+          },
         },
       });
     }

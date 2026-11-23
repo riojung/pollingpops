@@ -713,6 +713,13 @@ profile supports single select, true/false, multiple select, and numeric respons
 types and omitted media are explicit warnings/errors. CSV output escapes spreadsheet formula
 prefixes.
 
+All three export endpoints return `Cache-Control: private, no-store` and accept an optional
+`expectedWorkspaceId` UUID. A mismatch with the signed-in creator's active workspace returns
+`409 CONFLICT`. Callers can omit the parameter to use the active workspace. Export looks up the
+checkpoint set in that workspace before checking the effective `csvExport` entitlement reported by
+`/v1/auth/me`. A denied entitlement returns `402 ENTITLEMENT_LIMIT`. The response's `error.details`
+contains `unavailableReason` (`plan_limit` or `operator_policy`), `actorId`, and `workspaceId`.
+
 The UI uses preview followed by confirmation. The retained legacy `POST /v1/quizzes/import`
 continues to validate and create in one action for existing clients; it does not provide the new
 confirmation retry guarantee. Source text and file contents are not stored in import receipts.

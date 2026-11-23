@@ -421,6 +421,12 @@ export const workspacePageEnglishMessages = {
   "pages.library.restore": "Restore",
   "pages.library.restoreCount": "Restore ({count})",
   "pages.library.resultCount": "{visible} of {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Checkpoint-set exports are disabled by your Polling Pops operator.",
+  "pages.library.roundExportPlanLimit":
+    "This workspace’s plan does not include checkpoint-set exports.",
+  "pages.library.roundExportUnavailable":
+    "Checkpoint-set exports are unavailable for this workspace.",
   "pages.library.roundView": "Round library view",
   "pages.library.searchPresentations": "Search presentations",
   "pages.library.searchRounds": "Search rounds",

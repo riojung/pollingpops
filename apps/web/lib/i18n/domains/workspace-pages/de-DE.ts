@@ -426,6 +426,12 @@ const messages = {
   "pages.library.restore": "Wiederherstellen",
   "pages.library.restoreCount": "Wiederherstellen ({count})",
   "pages.library.resultCount": "{visible} von {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Ihr Polling Pops-Betreiber hat den Export von Checkpoint-Sets deaktiviert.",
+  "pages.library.roundExportPlanLimit":
+    "Der Tarif dieses Arbeitsbereichs umfasst keinen Export von Checkpoint-Sets.",
+  "pages.library.roundExportUnavailable":
+    "Der Export von Checkpoint-Sets ist für diesen Arbeitsbereich nicht verfügbar.",
   "pages.library.roundView": "Runde Bibliotheksansicht",
   "pages.library.searchPresentations": "Präsentationen durchsuchen",
   "pages.library.searchRounds": "Suchrunden",

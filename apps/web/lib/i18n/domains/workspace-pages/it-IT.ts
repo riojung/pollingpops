@@ -424,6 +424,12 @@ const messages = {
   "pages.library.restore": "Ripristina",
   "pages.library.restoreCount": "Ripristina ({count})",
   "pages.library.resultCount": "{visible} di {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Il tuo operatore Polling Pops ha disattivato l’esportazione dei set di checkpoint.",
+  "pages.library.roundExportPlanLimit":
+    "Il piano di questo spazio di lavoro non include l’esportazione dei set di checkpoint.",
+  "pages.library.roundExportUnavailable":
+    "L’esportazione dei set di checkpoint non è disponibile per questo spazio di lavoro.",
   "pages.library.roundView": "Vista rotonda della biblioteca",
   "pages.library.searchPresentations": "Cerca presentazioni",
   "pages.library.searchRounds": "Cerchi di ricerca",

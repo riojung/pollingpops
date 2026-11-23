@@ -328,10 +328,16 @@ for (const narrow of [false, true]) {
     let navigator = await openE01Navigator(page);
     const saved = async () => (await readE01Record(page, record.id)).draft;
     const original = await saved();
-    const separator = page.getByRole("separator", { name: "Resize slide navigator", exact: true });
+    const resizeHandle = { name: "Resize slide navigator", exact: true };
     if (narrow) {
-      await expect(separator).toBeHidden();
+      await expect(
+        page.getByRole("separator", { ...resizeHandle, includeHidden: true }),
+      ).toBeHidden();
     } else {
+      const separator = page
+        .getByRole("complementary", { name: "Presentation map", exact: true })
+        .getByRole("separator", resizeHandle);
+      await expect(separator).toBeVisible();
       const hide = page.getByRole("button", { name: "Hide inspector", exact: true });
       if (await hide.isVisible()) await hide.click();
       const before = Number(await separator.getAttribute("aria-valuenow"));

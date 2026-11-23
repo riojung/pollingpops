@@ -21,6 +21,14 @@ const messages: IdeaBoardMessages = {
   "boards.title": "创意看板",
   "boards.description": "收集创意，手动分组，共同确定优先事项。",
   "boards.create": "创建看板",
+  "boards.creation.teamOperatorPolicy":
+    "您的 Polling Pops 运营方已禁用此工作区的团队画布创建功能。",
+  "boards.creation.teamRolloutUnavailable": "此工作区当前开放的功能不包括创建团队画布。",
+  "boards.creation.teamUnavailable": "此工作区无法创建团队画布。",
+  "boards.creation.workshopOperatorPolicy":
+    "您的 Polling Pops 运营方已禁用此工作区的工作坊创建功能。",
+  "boards.creation.workshopRolloutUnavailable": "此工作区当前开放的功能不包括创建工作坊。",
+  "boards.creation.workshopUnavailable": "此工作区无法创建工作坊。",
   "boards.boardTitle": "看板标题",
   "boards.prompt": "主题说明",
   "boards.identity": "参与者身份",

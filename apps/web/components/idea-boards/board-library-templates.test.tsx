@@ -1,4 +1,4 @@
-import { CANVAS_SCHEMA_VERSION } from "@openround/contracts";
+import { CANVAS_SCHEMA_VERSION, type ProductFeatureUnavailableReason } from "@openround/contracts";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as ApiModule from "../../lib/api";
@@ -40,7 +40,12 @@ const mocked = vi.hoisted(() => ({
     userId: "00000000-0000-4000-8000-000000000001",
     workspaceId: "00000000-0000-4000-8000-000000000002",
   },
-  features: { canvasBoards: true, ideaBoards: true },
+  features: { canvasBoards: true, ideaBoards: true } as {
+    canvasBoards: boolean;
+    ideaBoards: boolean;
+    canvasBoardsCreationUnavailableReason?: ProductFeatureUnavailableReason;
+    ideaBoardsCreationUnavailableReason?: ProductFeatureUnavailableReason;
+  },
 }));
 vi.mock("../../lib/api", async (original) => ({
   ...(await original<typeof ApiModule>()),
@@ -224,6 +229,70 @@ afterEach(() => {
 });
 
 describe("board library starter creation", () => {
+  it.each(["editor", "viewer", "loading"] as const)(
+    "shows confirmed creation denials on the library only when the account can edit (%s)",
+    (account) => {
+      mocked.features = {
+        canvasBoards: false,
+        ideaBoards: false,
+        canvasBoardsCreationUnavailableReason: "operator_policy",
+        ideaBoardsCreationUnavailableReason: "rollout_unavailable",
+      };
+      mocked.canEdit = account !== "viewer";
+      mocked.loading = account === "loading";
+      const view = harness();
+      view.render();
+      const markup = view.render();
+      for (const notice of [
+        english["boards.creation.teamOperatorPolicy"],
+        english["boards.creation.workshopRolloutUnavailable"],
+      ]) {
+        expect(markup.includes(notice)).toBe(account === "editor");
+      }
+      expect(view.find((element) => element.type === BoardLibraryToolbar).props.canCreate).toBe(
+        false,
+      );
+      expect(mocked.fetch).not.toHaveBeenCalled();
+      view.unmount();
+    },
+  );
+
+  it("explains a Workshop restriction and blocks a fresh submit if access changes in the dialog", () => {
+    const view = harness();
+    view.render();
+    view.render();
+    view.click("New board");
+    view.render();
+    view.click("Guided workshop");
+    view.render();
+    const title = view.find(
+      (element) => element.type === "input" && element.props.required === true,
+    );
+    (title.props.onChange as (event: unknown) => void)({ target: { value: "Planning Workshop" } });
+    view.render();
+
+    const submit = () =>
+      view.find((entry) => entry.type === "button" && entry.props.type === "submit");
+    expect(submit().props.disabled).toBe(false);
+    mocked.features = {
+      canvasBoards: false,
+      ideaBoards: false,
+      canvasBoardsCreationUnavailableReason: "operator_policy",
+      ideaBoardsCreationUnavailableReason: "operator_policy",
+    };
+    const markup = view.render();
+    const workshop = view.find((entry) => entry.props["aria-label"] === "Guided workshop");
+    expect(workshop.props.disabled).toBe(true);
+    expect(workshop.props["aria-describedby"]).toBe(
+      "canvas-workshop-description canvas-workshop-availability",
+    );
+    expect(markup).toContain(english["boards.creation.workshopOperatorPolicy"]);
+    expect(submit().props.disabled).toBe(true);
+    view.submit();
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
   it("opens an authorized creation link once without submitting or replaying it on close", () => {
     mocked.query = "create=1&q=retro&token=synthetic-private-value";
     const view = harness();
@@ -339,7 +408,7 @@ describe("board library starter creation", () => {
     const dialog = view.find((element) => element.type === "dialog");
     const dialogMarkup = renderToStaticMarkup(dialog);
     expect(dialogMarkup).toContain('id="canvas-team-availability"');
-    expect(dialogMarkup).toContain(english["canvas.creationPaused"]);
+    expect(dialogMarkup).toContain(english["boards.creation.teamUnavailable"]);
     expect(mocked.fetch).not.toHaveBeenCalled();
 
     const title = view.find(

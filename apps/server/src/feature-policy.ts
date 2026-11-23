@@ -2,9 +2,9 @@ import {
   productFeatureCatalog,
   type Entitlements,
   type Plan,
-  type PresentationRealtimeUnavailableReason,
   type ProductFeatureKey,
   type ProductFeatureRules,
+  type ProductFeatureUnavailableReason,
   type WorkspaceProductFeatures,
   productFeatureKeys,
 } from "@openround/contracts";
@@ -128,11 +128,11 @@ export function featureResolver(
   };
   const unavailableReason = (
     key: ProductFeatureKey,
-  ): PresentationRealtimeUnavailableReason | undefined => {
+  ): ProductFeatureUnavailableReason | undefined => {
     const rule = rules[key];
     if (rule && (!rule.enabled || !rule.plans.includes(plan))) return "operator_policy";
 
-    let reason: PresentationRealtimeUnavailableReason | undefined =
+    let reason: ProductFeatureUnavailableReason | undefined =
       !rule && !legacy(key) ? "rollout_unavailable" : undefined;
     for (const dependency of dependencies.get(key) ?? []) {
       const dependencyReason = unavailableReason(dependency);
@@ -168,10 +168,14 @@ export async function workspaceProductFeatures(
     resolveWorkspaceFeatures(repository, config, workspaceId, planOverride),
     repository.getOperationalFeatures(),
   ]);
+  const ideaBoardsCreationUnavailableReason = features.unavailableReason("ideaBoards");
+  const canvasBoardsCreationUnavailableReason = features.unavailableReason("canvasBoards");
   const presentationRealtimeUnavailableReason = features.unavailableReason("presentationRealtime");
   return {
-    ideaBoards: features.enabled("ideaBoards"),
-    canvasBoards: features.enabled("canvasBoards"),
+    ideaBoards: ideaBoardsCreationUnavailableReason === undefined,
+    ...(ideaBoardsCreationUnavailableReason && { ideaBoardsCreationUnavailableReason }),
+    canvasBoards: canvasBoardsCreationUnavailableReason === undefined,
+    ...(canvasBoardsCreationUnavailableReason && { canvasBoardsCreationUnavailableReason }),
     canvasBoardSharing: features.enabled("canvasBoardSharing"),
     canvasBoardRealtime: features.enabled("canvasBoardRealtime"),
     multiSelectPolls: features.enabled("roundClientProtocol"),

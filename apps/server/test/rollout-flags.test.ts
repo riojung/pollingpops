@@ -2,7 +2,11 @@ import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { MemoryRepository } from "@openround/db";
+import {
+  WorkspaceProductFeaturesSchema,
+  type WorkspaceProductFeatures,
+} from "@openround/contracts";
+import { MemoryRepository, createPlatformRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -35,6 +39,87 @@ afterEach(async () => {
 });
 
 describe("professional workspace rollout flags", () => {
+  it("reports workspace Board creation decisions and handles older or unfamiliar reasons", async () => {
+    const workspaceId = randomUUID();
+    const repository = new MemoryRepository({
+      initialWorkspaceId: workspaceId,
+      initialPlan: "free",
+    });
+    const config = ConfigSchema.parse({
+      NODE_ENV: "test",
+      ALLOW_IN_MEMORY: "true",
+      COMMUNITY_MODE: "false",
+      FEATURE_IDEA_BOARDS: "true",
+      FEATURE_CANVAS_BOARDS: "true",
+      LOG_LEVEL: "silent",
+    });
+    const built = await buildApp(config, { repository, cache: new MemorySessionCache() });
+    app = built.app;
+    const cookie = await signIn(app);
+    const productFeatures = async () => {
+      const response = await built.app.inject({ url: "/v1/auth/me", headers: { cookie } });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json<{ productFeatures: WorkspaceProductFeatures }>().productFeatures;
+    };
+
+    const rollout = await productFeatures();
+    expect(rollout).toMatchObject({
+      ideaBoards: false,
+      ideaBoardsCreationUnavailableReason: "rollout_unavailable",
+      canvasBoards: false,
+      canvasBoardsCreationUnavailableReason: "rollout_unavailable",
+    });
+    const legacy = { ...rollout };
+    delete legacy.ideaBoardsCreationUnavailableReason;
+    delete legacy.canvasBoardsCreationUnavailableReason;
+    const legacyParsed = WorkspaceProductFeaturesSchema.parse(legacy);
+    expect(legacyParsed).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
+    expect(legacyParsed).not.toHaveProperty("canvasBoardsCreationUnavailableReason");
+    expect(
+      WorkspaceProductFeaturesSchema.parse({
+        ...legacy,
+        ideaBoardsCreationUnavailableReason: "future_reason",
+        canvasBoardsCreationUnavailableReason: null,
+      }),
+    ).toMatchObject({
+      ideaBoards: false,
+      ideaBoardsCreationUnavailableReason: undefined,
+      canvasBoards: false,
+      canvasBoardsCreationUnavailableReason: undefined,
+    });
+
+    config.CORE_PARITY_WORKSPACE_ALLOWLIST = [workspaceId];
+    const enabled = await productFeatures();
+    expect(enabled).toMatchObject({ ideaBoards: true, canvasBoards: true });
+    expect(enabled).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
+    expect(enabled).not.toHaveProperty("canvasBoardsCreationUnavailableReason");
+
+    const platform = createPlatformRepository(repository);
+    const canvasRule = await platform.saveFeaturePolicy({
+      expectedRevision: 0,
+      features: { canvasBoards: { enabled: true, plans: ["pro"] } },
+    });
+    const canvasDenied = await productFeatures();
+    expect(canvasDenied).toMatchObject({
+      ideaBoards: true,
+      canvasBoards: false,
+      canvasBoardsCreationUnavailableReason: "operator_policy",
+    });
+    expect(canvasDenied).not.toHaveProperty("ideaBoardsCreationUnavailableReason");
+
+    config.CORE_PARITY_WORKSPACE_ALLOWLIST = [];
+    await platform.saveFeaturePolicy({
+      expectedRevision: canvasRule.revision,
+      features: { ideaBoards: { enabled: false, plans: [] } },
+    });
+    expect(WorkspaceProductFeaturesSchema.parse(await productFeatures())).toMatchObject({
+      ideaBoards: false,
+      ideaBoardsCreationUnavailableReason: "operator_policy",
+      canvasBoards: false,
+      canvasBoardsCreationUnavailableReason: "operator_policy",
+    });
+  });
+
   it("fails closed for new Presentation creation while keeping recovery reads registered", async () => {
     const built = await buildApp(
       ConfigSchema.parse({

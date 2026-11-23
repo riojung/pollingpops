@@ -21,6 +21,18 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Ideenboards",
   "boards.description": "Sammeln und gruppieren Sie Ideen und wählen Sie gemeinsame Prioritäten.",
   "boards.create": "Board erstellen",
+  "boards.creation.teamOperatorPolicy":
+    "Ihr Polling Pops-Betreiber hat das Erstellen von Team-Canvases für diesen Arbeitsbereich deaktiviert.",
+  "boards.creation.teamRolloutUnavailable":
+    "Das Erstellen von Team-Canvases ist nicht Teil des aktuellen Rollouts für diesen Arbeitsbereich.",
+  "boards.creation.teamUnavailable":
+    "In diesem Arbeitsbereich können keine Team-Canvases erstellt werden.",
+  "boards.creation.workshopOperatorPolicy":
+    "Ihr Polling Pops-Betreiber hat das Erstellen von Workshops für diesen Arbeitsbereich deaktiviert.",
+  "boards.creation.workshopRolloutUnavailable":
+    "Das Erstellen von Workshops ist nicht Teil des aktuellen Rollouts für diesen Arbeitsbereich.",
+  "boards.creation.workshopUnavailable":
+    "In diesem Arbeitsbereich können keine Workshops erstellt werden.",
   "boards.boardTitle": "Titel des Boards",
   "boards.prompt": "Fragestellung",
   "boards.identity": "Teilnehmeridentität",

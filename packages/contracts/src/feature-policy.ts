@@ -45,13 +45,13 @@ export const WorkspaceCapabilityUnavailableReasonSchema = z.enum(["plan_limit", 
 export type WorkspaceCapabilityUnavailableReason = z.infer<
   typeof WorkspaceCapabilityUnavailableReasonSchema
 >;
-export const PresentationRealtimeUnavailableReasonSchema = z.enum([
+export const ProductFeatureUnavailableReasonSchema = z.enum([
   "rollout_unavailable",
   "operator_policy",
 ]);
-export type PresentationRealtimeUnavailableReason = z.infer<
-  typeof PresentationRealtimeUnavailableReasonSchema
->;
+export type ProductFeatureUnavailableReason = z.infer<typeof ProductFeatureUnavailableReasonSchema>;
+export const PresentationRealtimeUnavailableReasonSchema = ProductFeatureUnavailableReasonSchema;
+export type PresentationRealtimeUnavailableReason = ProductFeatureUnavailableReason;
 export const RoundReportExportUnavailableReasonSchema = z.enum([
   "room_coverage",
   ...WorkspaceCapabilityUnavailableReasonSchema.options,

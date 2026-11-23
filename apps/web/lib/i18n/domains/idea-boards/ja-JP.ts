@@ -21,6 +21,16 @@ const messages: IdeaBoardMessages = {
   "boards.title": "アイデアボード",
   "boards.description": "アイデアを集めてグループに分け、共通の優先事項を選びます。",
   "boards.create": "ボードを作成",
+  "boards.creation.teamOperatorPolicy":
+    "Polling Popsの運営者が、このワークスペースでのチームキャンバスの作成を無効にしています。",
+  "boards.creation.teamRolloutUnavailable":
+    "チームキャンバスの作成は、このワークスペースの現在の提供対象に含まれていません。",
+  "boards.creation.teamUnavailable": "このワークスペースではチームキャンバスを作成できません。",
+  "boards.creation.workshopOperatorPolicy":
+    "Polling Popsの運営者が、このワークスペースでのワークショップの作成を無効にしています。",
+  "boards.creation.workshopRolloutUnavailable":
+    "ワークショップの作成は、このワークスペースの現在の提供対象に含まれていません。",
+  "boards.creation.workshopUnavailable": "このワークスペースではワークショップを作成できません。",
   "boards.boardTitle": "ボードのタイトル",
   "boards.prompt": "お題",
   "boards.identity": "参加者の表示名",

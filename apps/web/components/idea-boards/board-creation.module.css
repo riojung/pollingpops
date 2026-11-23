@@ -17,6 +17,9 @@
   display: flex;
   flex-direction: column;
 }
+.libraryAvailability:has(~ .dialog[open]) {
+  display: none;
+}
 .dialog::backdrop {
   background: rgb(24 35 32 / 46%);
 }

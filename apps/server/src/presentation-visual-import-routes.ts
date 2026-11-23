@@ -7,6 +7,7 @@ import {
   PRESENTATION_VISUAL_IMPORT_MAX_PAGES,
   PRESENTATION_VISUAL_IMPORT_MAX_PDF_BYTES,
   PRESENTATION_VISUAL_IMPORT_MAX_TOTAL_BYTES,
+  type PresentationVisualImportUnavailableReason,
 } from "@openround/contracts";
 import {
   PresentationDraftConflictError,
@@ -34,8 +35,16 @@ function failure(
   code: string,
   message: string,
   requestId: string,
+  unavailableReason?: PresentationVisualImportUnavailableReason,
 ) {
-  return reply.code(status).send({ error: { code, message, requestId } });
+  return reply.code(status).send({
+    error: {
+      code,
+      message,
+      requestId,
+      ...(unavailableReason ? { details: { unavailableReason } } : {}),
+    },
+  });
 }
 
 export async function registerPresentationVisualImportRoutes(
@@ -46,7 +55,7 @@ export async function registerPresentationVisualImportRoutes(
     auth: AuthService;
     service: PresentationVisualImportService;
     storage: StorageService;
-    workspaceEnabled: (workspaceId: string, plan?: CreatorContext["plan"]) => Promise<boolean>;
+    workspaceEnabled: (workspaceId: string) => Promise<boolean>;
   },
 ) {
   const { repository, presentations, auth, service, storage } = deps;
@@ -67,7 +76,14 @@ export async function registerPresentationVisualImportRoutes(
       return await run();
     } catch (error) {
       if (error instanceof PresentationVisualImportError)
-        return failure(reply, error.status, error.code, error.message, requestId);
+        return failure(
+          reply,
+          error.status,
+          error.code,
+          error.message,
+          requestId,
+          error.unavailableReason,
+        );
       if (error instanceof RepositoryImportError)
         return failure(
           reply,
@@ -113,14 +129,17 @@ export async function registerPresentationVisualImportRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     const { id } = Params.parse(request.params);
-    if (!(await presentations.getPresentation(creator.workspaceId, id)))
+    const presentation = await presentations.getPresentation(creator.workspaceId, id);
+    if (!presentation)
       return failure(reply, 404, "NOT_FOUND", "Presentation not found", request.id);
     reply.header("cache-control", "private, no-store");
+    const { unavailableReason } = await service.sourceAvailability(
+      creator.workspaceId,
+      presentation.status,
+    );
     return {
-      available:
-        service.available &&
-        (await repository.getOperationalFeatures()).mediaUploads &&
-        (await deps.workspaceEnabled(creator.workspaceId, creator.plan)),
+      available: unavailableReason === undefined,
+      ...(unavailableReason ? { unavailableReason } : {}),
       jobs: await service.imports.list(creator.workspaceId, id),
       limits: {
         maxPdfBytes: PRESENTATION_VISUAL_IMPORT_MAX_PDF_BYTES,
@@ -139,12 +158,7 @@ export async function registerPresentationVisualImportRoutes(
       const { id } = Params.parse(request.params);
       const input = CreatePresentationVisualImportSchema.parse(request.body);
       return safe(reply, request.id, async () => {
-        const job = await service.create(
-          creator,
-          id,
-          input,
-          await deps.workspaceEnabled(creator.workspaceId, creator.plan),
-        );
+        const job = await service.create(creator, id, input);
         await repository.recordAudit({
           workspaceId: creator.workspaceId,
           actorId: creator.userId,
@@ -208,7 +222,7 @@ export async function registerPresentationVisualImportRoutes(
         id,
         jobId!,
         input,
-        await deps.workspaceEnabled(creator.workspaceId, creator.plan),
+        await deps.workspaceEnabled(creator.workspaceId),
       );
       await repository.recordAudit({
         workspaceId: creator.workspaceId,

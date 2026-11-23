@@ -129,6 +129,17 @@ const review = {
   accessibleText: "The second bar is twice the first.",
   readingOrderReviewed: true,
 };
+const listPath = `/v1/presentations/${presentationId}/visual-imports`;
+const availableResponse = {
+  available: true,
+  jobs: [job],
+  limits: {
+    maxPdfBytes: 6000000,
+    maxImageBytes: 10485760,
+    maxImageSetBytes: 20000000,
+    maxPages: 40,
+  },
+};
 
 function harness() {
   const hooks = { cursor: 0, slots: [] as unknown[], effects: [] as Array<() => void> };
@@ -179,16 +190,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocked.load.mockResolvedValue(null);
   mocked.save.mockResolvedValue(undefined);
-  mocked.fetch.mockResolvedValue({
-    available: true,
-    jobs: [job],
-    limits: {
-      maxPdfBytes: 6000000,
-      maxImageBytes: 10485760,
-      maxImageSetBytes: 20000000,
-      maxPages: 40,
-    },
-  });
+  mocked.fetch.mockResolvedValue(availableResponse);
   vi.stubGlobal("document", { activeElement: null });
   vi.stubGlobal("HTMLElement", class {});
   vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
@@ -196,6 +198,184 @@ beforeEach(() => {
 afterEach(() => {
   mocked.hooks = null;
   vi.unstubAllGlobals();
+});
+
+describe("visual import availability", () => {
+  const checking = "Checking visual import availability…";
+  const failed = "Visual import availability could not be checked. Try again.";
+  const unavailable = "Visual import is currently unavailable.";
+  const paused = "Media uploads are paused on this deployment.";
+
+  function chooser(view: ReturnType<typeof harness>) {
+    return view.find((node) => node.type === "input" && node.props.type === "file");
+  }
+
+  function button(view: ReturnType<typeof harness>, label: string) {
+    return view.find((node) => node.type === "button" && node.props.children === label);
+  }
+
+  function click(view: ReturnType<typeof harness>, label: string) {
+    (button(view, label).props.onClick as () => void)();
+  }
+
+  it("allows new uploads when an older server confirms availability without a reason field", async () => {
+    const view = harness();
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.render();
+    expect(chooser(view).props.disabled).toBe(true);
+    await view.settle();
+    expect(chooser(view).props.disabled).toBe(false);
+    expect(view.markup()).toContain(job.sourceName);
+    expect(view.markup()).not.toContain("Check availability again");
+    expect(view.markup()).not.toContain(checking);
+    expect(view.markup()).not.toContain(unavailable);
+  });
+
+  it.each([
+    [
+      "operator_policy",
+      "Visual import is disabled for this workspace by your Polling Pops operator.",
+    ],
+    ["media_uploads_paused", paused],
+    ["future_reason", unavailable],
+    [undefined, unavailable],
+  ])(
+    "explains confirmed unavailability for %s while retaining jobs",
+    async (unavailableReason, notice) => {
+      mocked.fetch.mockResolvedValueOnce({
+        ...availableResponse,
+        available: false,
+        unavailableReason,
+      });
+      const view = harness();
+      view.render();
+      await view.settle();
+      const markup = view.markup();
+      expect(markup).toContain(notice);
+      if (notice === paused || notice === unavailable) {
+        expect(markup).toContain("continue editing native slides");
+      }
+      expect(markup).toContain(job.sourceName);
+      expect(markup).not.toContain(checking);
+      expect(markup).not.toContain(failed);
+      expect(chooser(view).props.disabled).toBe(true);
+      expect(button(view, "Convert for review").props.disabled).toBe(true);
+      expect(button(view, "Check availability again").props.disabled).toBe(false);
+    },
+  );
+
+  it("distinguishes a pending check from a failed check and retries without changing the saved review", async () => {
+    const draft = {
+      createBody: null,
+      insertBody: null,
+      insertJobId: null,
+      jobId,
+      order: [1],
+      reviews: { 1: review },
+      fidelity: true,
+    };
+    mocked.load.mockResolvedValue({ draft });
+    let rejectCheck!: (error: Error) => void;
+    const check = new Promise<never>((_resolve, reject) => (rejectCheck = reject));
+    mocked.fetch.mockResolvedValueOnce(availableResponse).mockReturnValueOnce(check);
+    const view = harness();
+    view.render();
+    await view.settle();
+    expect(view.markup()).toContain(review.accessibleText);
+    expect(button(view, "Insert 2 reviewed slides").props.disabled).toBe(false);
+    const writes = mocked.save.mock.calls.length;
+
+    click(view, "Refresh conversions");
+    await view.settle();
+    expect(view.markup()).toContain(checking);
+    expect(view.markup()).not.toContain(failed);
+    expect(view.markup()).not.toContain(unavailable);
+    expect(chooser(view).props.disabled).toBe(true);
+
+    rejectCheck(new Error("Network request failed"));
+    await view.settle();
+    expect(view.markup()).toContain(failed);
+    expect(view.markup()).not.toContain(checking);
+    expect(view.markup()).not.toContain(unavailable);
+    expect(view.markup()).toContain(job.sourceName);
+    expect(view.markup()).toContain(review.accessibleText);
+    expect(button(view, "Insert 2 reviewed slides").props.disabled).toBe(false);
+    expect(chooser(view).props.disabled).toBe(true);
+    expect(mocked.fetch).toHaveBeenCalledTimes(2);
+
+    click(view, "Check availability again");
+    await view.settle();
+    expect(mocked.fetch).toHaveBeenCalledTimes(3);
+    expect(mocked.fetch).toHaveBeenLastCalledWith(listPath, { signal: expect.any(AbortSignal) });
+    expect(mocked.save).toHaveBeenCalledTimes(writes);
+    expect(view.markup()).toContain(review.accessibleText);
+    expect(view.markup()).not.toContain(failed);
+    expect(chooser(view).props.disabled).toBe(false);
+  });
+
+  it("preserves the late upload denial and exact receipt when an older list response arrives", async () => {
+    const body = JSON.stringify({
+      requestId: randomUUID(),
+      retainOriginal: false,
+      files: [{ name: "slide.png", mimeType: "image/png", base64: "YQ==" }],
+    });
+    mocked.load.mockResolvedValue({
+      draft: {
+        createBody: body,
+        insertBody: null,
+        insertJobId: null,
+        jobId: "",
+        order: [],
+        reviews: {},
+        fidelity: false,
+      },
+    });
+    let finishList!: (result: typeof availableResponse) => void;
+    const list = new Promise<typeof availableResponse>((resolve) => (finishList = resolve));
+    mocked.fetch.mockImplementation(async (_path: string, init?: RequestInit) => {
+      if (init?.method === "POST")
+        throw Object.assign(new Error("Media uploads are temporarily unavailable"), {
+          status: 503,
+          code: "DEPENDENCY_UNAVAILABLE",
+          details: { unavailableReason: "media_uploads_paused" },
+        });
+      return list;
+    });
+    const view = harness();
+    view.render();
+    await view.settle();
+    expect(mocked.fetch).toHaveBeenCalledExactlyOnceWith(listPath, {
+      signal: expect.any(AbortSignal),
+    });
+    expect(view.markup()).toContain(checking);
+
+    click(view, "Retry same upload");
+    await view.settle();
+    expect(view.markup()).toContain(paused);
+    expect(view.markup()).not.toContain("continue editing native slides");
+    expect(button(view, "Close visual import").props.disabled).toBe(true);
+    expect(view.props.onPendingChange).not.toHaveBeenCalledWith(false);
+
+    finishList(availableResponse);
+    await view.settle();
+    expect(view.markup()).toContain(paused);
+    expect(view.markup()).toContain(job.sourceName);
+    expect(chooser(view).props.disabled).toBe(true);
+    click(view, "Retry same upload");
+    await view.settle();
+    const posts = mocked.fetch.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posts).toEqual([
+      [listPath, { method: "POST", body }],
+      [listPath, { method: "POST", body }],
+    ]);
+
+    mocked.fetch.mockResolvedValueOnce({ ...availableResponse, available: false });
+    click(view, "Check availability again");
+    await view.settle();
+    expect(view.markup()).toContain(unavailable);
+    expect(view.markup()).not.toContain("continue editing native slides");
+    expect(button(view, "Retry same upload").props.disabled).toBe(false);
+  });
 });
 
 describe("visual slide import UI", () => {

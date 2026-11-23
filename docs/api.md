@@ -937,6 +937,8 @@ It is separate from the source-grounded proposal APIs below. Creator authenticat
 scope apply throughout; creation, cancellation and insertion require owner/editor access.
 
 - `GET /v1/presentations/{id}/visual-imports` — availability, limits and recent private jobs.
+  The response uses `Cache-Control: private, no-store` and includes `unavailableReason` when
+  `available` is `false`.
 - `POST /v1/presentations/{id}/visual-imports` — `{requestId, files: [{name, mimeType, base64}],
 retainOriginal: false}`; returns `202 {job}`. Keep the exact UUID and body for a lost-response retry.
 - `GET /v1/presentations/{id}/visual-imports/{jobId}` — pending/processing/ready/failed/canceled
@@ -952,6 +954,15 @@ retainOriginal: false}`; returns `202 {job}`. Keep the exact UUID and body for a
   image and an editable reading version. An otherwise empty initial placeholder is replaced.
   Existing native content/activities can be interleaved afterward. Draft revision/mutation receipts
   prevent duplicate insertion; readiness is checked atomically with cancellation and expiry.
+
+Availability describes new uploads. The first applicable reason is `operator_policy` when
+workspace feature policy blocks Presentation authoring, `rollout_unavailable` when its deployment
+rollout excludes the workspace, `presentation_archived` when the target Presentation is archived,
+`deployment_unavailable` when the deployment lacks upload support, storage, scanning, or conversion,
+and `media_uploads_paused` when operations have paused uploads. Fresh creation denied by one of
+these checks includes the same value in `error.details.unavailableReason`. Scanner communication
+failures during an upload return `503 DEPENDENCY_UNAVAILABLE`. An exact accepted creation retry
+returns its retained job even when new uploads are unavailable.
 
 Sources are limited to one 6 MB PDF (40 pages) or 40 images (10 MiB each, 20 MB total), with three
 active conversions and ten new jobs per workspace per UTC day. No PPTX rendering, editable source

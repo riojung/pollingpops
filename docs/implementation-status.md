@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation visual import availability explanations, November 22, 2026
+
+Implemented locally on `codex/visual-import-availability` after PR #305. Presentation authors
+see the reason for a confirmed upload restriction and can retry a failed availability check in
+the dialog. Existing conversion review and exact acknowledgement recovery use the same routes.
+See the [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Checkpoint-set export availability explanations, November 22, 2026
 
-Implemented locally on `codex/checkpoint-export-availability` after PR #304. The current and classic
+Merged through PR #305 at `00a8932`. The current and classic
 Rounds dashboards explain whether the workspace plan or operator policy blocks JSON, CSV and QTI
 exports. Export requests use the same grant and return a scoped denial if access changes. See the
 [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -223,8 +230,9 @@ WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296.
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
-in PR #303. LTI availability explanations merged in PR #304. Checkpoint-set export reasons are
-implemented locally. Other capability explanations remain pending.
+in PR #303. LTI availability explanations merged in PR #304 and checkpoint-set export reasons in
+PR #305. Visual import explanations are implemented locally. Other capability explanations remain
+pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

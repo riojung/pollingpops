@@ -94,6 +94,98 @@ async function noOverflow(page: Page) {
 }
 
 for (const suffix of ["", " @mobile"]) {
+  test(`Presentation visual import rechecks availability without leaving the dialog${suffix}`, async ({
+    page,
+  }, info) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signInBeta(page);
+    const record = await createE01Deck(page, [e01Slide("Review availability")], 7);
+    const listPath = `/v1/presentations/${record.id}/visual-imports`;
+    let releaseInitialStatus!: () => void;
+    const initialStatus = new Promise<void>((resolve) => {
+      releaseInitialStatus = resolve;
+    });
+    let statusReads = 0;
+    await page.route(
+      (url) => url.origin === e01ApiUrl && url.pathname === listPath,
+      async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        const read = ++statusReads;
+        if (read > 2) return route.continue();
+        if (read === 1) await initialStatus;
+        const response = await route.fetch();
+        expect(response.ok()).toBe(true);
+        if (read === 2) {
+          return route.fulfill({
+            response,
+            status: 503,
+            json: { error: { code: "UNAVAILABLE", message: "Synthetic status read failure" } },
+          });
+        }
+        return route.fulfill({
+          response,
+          json: {
+            ...(await response.json()),
+            available: false,
+            unavailableReason: "media_uploads_paused",
+          },
+        });
+      },
+    );
+    try {
+      await enterE01Editor(page, record.id, Boolean(info.project.use.isMobile));
+      await clickNavigatorAction(page, "Import visual slides");
+      const dialog = page.getByRole("dialog", { name: "Import visual slides", exact: true });
+      const checking = dialog.getByText("Checking visual import availability…", { exact: true });
+      const paused = dialog.getByText(
+        "Media uploads are paused on this deployment. Try again later or continue editing native slides.",
+        { exact: true },
+      );
+      const failed = dialog.getByText(
+        "Visual import availability could not be checked. Try again.",
+        {
+          exact: true,
+        },
+      );
+      const retry = dialog.getByRole("button", { name: "Check availability again", exact: true });
+      const picker = dialog.getByLabel("PDF or images", { exact: true });
+
+      await expect.poll(() => statusReads).toBe(1);
+      await expect(checking).toBeVisible();
+      await expect(dialog.getByText(/Visual import is currently unavailable/)).toHaveCount(0);
+      await expect(paused).toHaveCount(0);
+      await expect(picker).toBeDisabled();
+
+      releaseInitialStatus();
+      await expect(paused).toBeVisible();
+      await expect(checking).toHaveCount(0);
+      await expect(picker).toBeDisabled();
+      await retry.focus();
+      await retry.press("Enter");
+      await expect(failed).toBeVisible();
+      await expect(paused).toHaveCount(0);
+      await expect(picker).toBeDisabled();
+      await expect(retry).toBeFocused();
+
+      await retry.press("Enter");
+      await expect(picker).toBeEnabled();
+      await expect(failed).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: "Refresh conversions" })).toBeFocused();
+      expect(statusReads).toBe(3);
+      await picker.setInputFiles({
+        name: "Availability recovered.pdf",
+        mimeType: "application/pdf",
+        buffer: await twoPagePdf("Availability recovered"),
+      });
+      await expect(
+        dialog.getByRole("button", { name: "Convert for review", exact: true }),
+      ).toBeEnabled();
+    } finally {
+      releaseInitialStatus();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+  });
+
   test(`Presentation visual PDF imports require page review and recover exact pair insertion${suffix}`, async ({
     page,
   }, info) => {

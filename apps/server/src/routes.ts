@@ -2153,76 +2153,66 @@ export async function registerRoutes(
     return { quiz, currentVersion };
   });
 
-  app.get("/v1/quizzes/:id/export.json", async (request, reply) => {
+  async function checkpointSetForExport(request: FastifyRequest, reply: FastifyReply) {
+    reply.header("cache-control", "private, no-store");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const { id } = IdParamsSchema.parse(request.params);
     const quiz = await repository.getQuiz(creator.workspaceId, id);
-    if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (
-      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
-        .csvExport
-    ) {
-      return apiError(
+    if (!quiz) {
+      apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
+      return;
+    }
+    const { entitlements, unavailableReason } = await workspaceEntitlementsWithAvailability(
+      repository,
+      config,
+      creator.workspaceId,
+      creator.plan,
+      "csvExport",
+    );
+    if (!entitlements.csvExport) {
+      apiError(
         reply,
         402,
         "ENTITLEMENT_LIMIT",
         "Checkpoint-set export is unavailable for this workspace",
         request.id,
+        { unavailableReason, actorId: creator.userId, workspaceId: creator.workspaceId },
       );
+      return;
     }
+    return { id, draft: quiz.draft };
+  }
+
+  app.get("/v1/quizzes/:id/export.json", async (request, reply) => {
+    const checkpointSet = await checkpointSetForExport(request, reply);
+    if (!checkpointSet) return;
+    const { id, draft } = checkpointSet;
     return reply
       .header("content-type", "application/json; charset=utf-8")
       .header(
         "content-disposition",
         `attachment; filename="polling-pops-checkpoint-set-${id}.json"`,
       )
-      .send(openRoundJson(quiz.draft));
+      .send(openRoundJson(draft));
   });
 
   app.get("/v1/quizzes/:id/export.csv", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    const { id } = IdParamsSchema.parse(request.params);
-    const quiz = await repository.getQuiz(creator.workspaceId, id);
-    if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (
-      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
-        .csvExport
-    ) {
-      return apiError(
-        reply,
-        402,
-        "ENTITLEMENT_LIMIT",
-        "Checkpoint-set export is unavailable for this workspace",
-        request.id,
-      );
-    }
+    const checkpointSet = await checkpointSetForExport(request, reply);
+    if (!checkpointSet) return;
+    const { id, draft } = checkpointSet;
     return reply
       .header("content-type", "text/csv; charset=utf-8")
       .header("content-disposition", `attachment; filename="polling-pops-checkpoint-set-${id}.csv"`)
-      .send(checkpointSetCsv(quiz.draft));
+      .send(checkpointSetCsv(draft));
   });
 
   app.get("/v1/quizzes/:id/export.qti.zip", async (request, reply) => {
-    const creator = await auth.requireCreator(request, reply);
-    if (!creator) return;
-    const { id } = IdParamsSchema.parse(request.params);
-    const quiz = await repository.getQuiz(creator.workspaceId, id);
-    if (!quiz) return apiError(reply, 404, "NOT_FOUND", "Checkpoint set not found", request.id);
-    if (
-      !(await workspaceEntitlements(repository, config, creator.workspaceId, creator.plan))
-        .csvExport
-    ) {
-      return apiError(
-        reply,
-        402,
-        "ENTITLEMENT_LIMIT",
-        "Checkpoint-set export is unavailable for this workspace",
-        request.id,
-      );
-    }
-    const result = await exportQtiPackage(quiz.draft);
+    const checkpointSet = await checkpointSetForExport(request, reply);
+    if (!checkpointSet) return;
+    const { id, draft } = checkpointSet;
+    const result = await exportQtiPackage(draft);
     if (!result.archive) {
       return reply.code(422).send({
         error: {
@@ -2235,7 +2225,6 @@ export async function registerRoutes(
     }
     return reply
       .header("content-type", "application/zip")
-      .header("cache-control", "private, no-store")
       .header("x-openround-export-warnings", String(result.validation.warnings.length))
       .header(
         "content-disposition",

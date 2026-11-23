@@ -422,6 +422,12 @@ const messages = {
   "pages.library.restore": "Restaurar",
   "pages.library.restoreCount": "Restaurar ({count})",
   "pages.library.resultCount": "{visible} de {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "Tu operador de Polling Pops ha desactivado la exportación de conjuntos de puntos de control.",
+  "pages.library.roundExportPlanLimit":
+    "El plan de este espacio de trabajo no incluye la exportación de conjuntos de puntos de control.",
+  "pages.library.roundExportUnavailable":
+    "La exportación de conjuntos de puntos de control no está disponible para este espacio de trabajo.",
   "pages.library.roundView": "Vista de biblioteca redonda",
   "pages.library.searchPresentations": "Buscar presentaciones",
   "pages.library.searchRounds": "Rondas de búsqueda",

@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Checkpoint-set export availability explanations, November 22, 2026
+
+Implemented locally on `codex/checkpoint-export-availability` after PR #304. The current and classic
+Rounds dashboards explain whether the workspace plan or operator policy blocks JSON, CSV and QTI
+exports. Export requests use the same grant and return a scoped denial if access changes. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### LTI registration availability explanations, November 22, 2026
 
-Implemented locally on `codex/lti-availability-explanations` after PR #303. Workspace Settings
+Merged through PR #304 at `b2f3b31`. Workspace Settings
 explains whether institution policy, deployment configuration, or the absence of an active
 learning-platform registration blocks LTI. The matched owner-only registration read supplies
 the status. See the
@@ -216,8 +223,8 @@ WX-07–10 and WX-12–14 remain scoped work. WX-11A–F merged through PR #296.
 availability copy merged in PR #297, import reasons in PR #298, live-brand save reasons in PR #299
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
-in PR #303. LTI availability explanations are implemented locally. Other capability explanations
-remain pending.
+in PR #303. LTI availability explanations merged in PR #304. Checkpoint-set export reasons are
+implemented locally. Other capability explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

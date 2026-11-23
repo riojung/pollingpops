@@ -5,9 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   CheckpointSetImportUnavailableReasonSchema,
+  WorkspaceCapabilityUnavailableReasonSchema,
   type CheckpointSetImportUnavailableReason,
   type Entitlements,
   type QuizDraft,
+  type WorkspaceCapabilityUnavailableReason,
 } from "@openround/contracts";
 import { AuthoringAssistant } from "../../components/authoring-assistant";
 import { CreatorBrand } from "../../components/brand";
@@ -50,6 +52,70 @@ interface QuizRecord {
   lastHostedAt: string | null;
 }
 
+type CheckpointExportFormat = "json" | "csv" | "qti.zip";
+
+const checkpointExportReasonKeys = {
+  plan_limit: "pages.library.roundExportPlanLimit",
+  operator_policy: "pages.library.roundExportOperatorPolicy",
+} as const satisfies Record<WorkspaceCapabilityUnavailableReason, string>;
+
+function checkpointExportNoticeKey(reason?: WorkspaceCapabilityUnavailableReason) {
+  return reason ? checkpointExportReasonKeys[reason] : "pages.library.roundExportUnavailable";
+}
+
+type DashboardError = string | { messageKey: ReturnType<typeof checkpointExportNoticeKey> };
+
+function DashboardErrorAlert({ error }: { error: DashboardError }) {
+  const { locale, t } = useLocale();
+  const localized = typeof error !== "string";
+  return (
+    <p className="error" role="alert" lang={localized ? locale : undefined}>
+      {localized ? t(error.messageKey) : error}
+    </p>
+  );
+}
+
+async function saveCheckpointSetExport(
+  creator: Pick<Creator, "userId" | "workspaceId">,
+  quizId: string,
+  format: CheckpointExportFormat,
+  filename: string,
+) {
+  const query = new URLSearchParams({ expectedWorkspaceId: creator.workspaceId });
+  const response = await fetch(
+    `${API_URL}/v1/quizzes/${encodeURIComponent(quizId)}/export.${format}?${query}`,
+    {
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string; message?: string; details?: Record<string, unknown> };
+    } | null;
+    if (response.status === 402 && body?.error?.code === "ENTITLEMENT_LIMIT") {
+      const details = body.error.details;
+      const reason =
+        details?.actorId === creator.userId && details?.workspaceId === creator.workspaceId
+          ? WorkspaceCapabilityUnavailableReasonSchema.safeParse(details.unavailableReason).data
+          : undefined;
+      return { messageKey: checkpointExportNoticeKey(reason) } as const;
+    }
+    throw new Error(body?.error?.message ?? `Export failed (${response.status}).`);
+  }
+
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  try {
+    document.body.append(link);
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
 function LegacyDashboardPage() {
   const router = useRouter();
   const {
@@ -59,10 +125,11 @@ function LegacyDashboardPage() {
     productFeatures: workspaceFeatures,
     startUpgrade,
   } = useWorkspace();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const [account, setAccount] = useState<{
     creator: Creator;
     entitlements: Entitlements;
+    exportUnavailableReason?: WorkspaceCapabilityUnavailableReason;
     importUnavailableReason?: CheckpointSetImportUnavailableReason;
   } | null>(null);
   const creator = account?.creator ?? null;
@@ -78,7 +145,7 @@ function LegacyDashboardPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DashboardError>("");
   const [productFeatures, setProductFeatures] = useState<{ workspaceShell: boolean } | null>(null);
 
   const refresh = useCallback(
@@ -88,6 +155,7 @@ function LegacyDashboardPage() {
           apiFetch<{
             creator: Creator;
             entitlements: Entitlements;
+            csvExportUnavailableReason?: unknown;
             checkpointSetImportUnavailableReason?: unknown;
             productFeatures?: { workspaceShell?: boolean };
           }>("/v1/auth/me"),
@@ -99,6 +167,9 @@ function LegacyDashboardPage() {
         setAccount({
           creator: me.creator,
           entitlements: me.entitlements,
+          exportUnavailableReason: WorkspaceCapabilityUnavailableReasonSchema.safeParse(
+            me.csvExportUnavailableReason,
+          ).data,
           importUnavailableReason: CheckpointSetImportUnavailableReasonSchema.safeParse(
             me.checkpointSetImportUnavailableReason,
           ).data,
@@ -218,27 +289,18 @@ function LegacyDashboardPage() {
     await startUpgrade();
   }
 
-  async function downloadCheckpointSet(quizId: string, format: "json" | "csv" | "qti.zip") {
+  async function downloadCheckpointSet(quizId: string, format: CheckpointExportFormat) {
+    if (!creator || !checkpointExportAllowed) return;
     setBusyId(quizId);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/v1/quizzes/${quizId}/export.${format}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(body?.error?.message ?? `Export failed (${response.status}).`);
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `polling-pops-checkpoint-set-${quizId}.${format}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      const denial = await saveCheckpointSetExport(
+        creator,
+        quizId,
+        format,
+        `polling-pops-checkpoint-set-${quizId}.${format}`,
+      );
+      if (denial) setError(denial);
     } catch (caught) {
       setError(humanError(caught));
     } finally {
@@ -258,11 +320,16 @@ function LegacyDashboardPage() {
   );
   const publishedQuizCount = quizzes.filter((quiz) => quiz.status === "published").length;
   const canEdit = creator?.role === "owner" || creator?.role === "editor";
-  const importUnavailableReason =
-    account?.entitlements.csvExport === false &&
-    workspaceCanEdit &&
+  const accountMatchesWorkspace =
+    account &&
     account.creator.userId === workspaceCreator?.userId &&
-    account.creator.workspaceId === workspaceCreator?.workspaceId
+    account.creator.workspaceId === workspaceCreator?.workspaceId;
+  const checkpointExportAccess = accountMatchesWorkspace
+    ? account.entitlements.csvExport
+    : undefined;
+  const checkpointExportAllowed = checkpointExportAccess === true;
+  const importUnavailableReason =
+    account?.entitlements.csvExport === false && workspaceCanEdit && accountMatchesWorkspace
       ? account.importUnavailableReason
       : undefined;
 
@@ -301,11 +368,7 @@ function LegacyDashboardPage() {
             </button>
           ) : null}
         </div>
-        {error ? (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        ) : null}
+        {error ? <DashboardErrorAlert error={error} /> : null}
         {entitlements && entitlements.maxPublishedQuizzes !== null ? (
           <p className="notice">
             {publishedQuizCount} of {entitlements.maxPublishedQuizzes} published checkpoint-set
@@ -418,6 +481,11 @@ function LegacyDashboardPage() {
             </p>
           </section>
         ) : null}
+        {!loading && visibleQuizzes.length > 0 && checkpointExportAccess === false ? (
+          <p className="notice" lang={locale}>
+            {t(checkpointExportNoticeKey(account?.exportUnavailableReason))}
+          </p>
+        ) : null}
         <section className="quiz-grid" aria-label="Checkpoint-set library">
           {visibleQuizzes.map((quiz) => (
             <article className="card quiz-card" key={quiz.id}>
@@ -504,7 +572,7 @@ function LegacyDashboardPage() {
                     </button>
                   )
                 ) : null}
-                {entitlements?.csvExport ? (
+                {checkpointExportAllowed ? (
                   <button
                     className="button-quiet small-button"
                     disabled={busyId === quiz.id}
@@ -514,7 +582,7 @@ function LegacyDashboardPage() {
                     Export JSON
                   </button>
                 ) : null}
-                {entitlements?.csvExport ? (
+                {checkpointExportAllowed ? (
                   <button
                     className="button-quiet small-button"
                     disabled={busyId === quiz.id}
@@ -524,7 +592,7 @@ function LegacyDashboardPage() {
                     Export CSV
                   </button>
                 ) : null}
-                {entitlements?.csvExport ? (
+                {checkpointExportAllowed ? (
                   <button
                     className="button-quiet small-button"
                     disabled={busyId === quiz.id}
@@ -589,7 +657,15 @@ function LegacyDashboardPage() {
 function BetaDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { creator, entitlements, productFeatures, canEdit, startUpgrade } = useWorkspace();
+  const { locale, t } = useLocale();
+  const {
+    creator,
+    entitlements,
+    csvExportUnavailableReason,
+    productFeatures,
+    canEdit,
+    startUpgrade,
+  } = useWorkspace();
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
@@ -600,7 +676,7 @@ function BetaDashboard() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DashboardError>("");
   const [libraryViewState, setLibraryViewState] = useState<{
     workspaceId: string;
     view: RoundLibraryView;
@@ -715,27 +791,18 @@ function BetaDashboard() {
     }
   }
 
-  async function downloadRound(quizId: string, format: "json" | "csv" | "qti.zip") {
+  async function downloadRound(quizId: string, format: CheckpointExportFormat) {
+    if (!creator || !entitlements?.csvExport) return;
     setBusyId(quizId);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/v1/quizzes/${quizId}/export.${format}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(body?.error?.message ?? `Export failed (${response.status}).`);
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `polling-pops-round-${quizId}.${format}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      const denial = await saveCheckpointSetExport(
+        creator,
+        quizId,
+        format,
+        `polling-pops-round-${quizId}.${format}`,
+      );
+      if (denial) setError(denial);
     } catch (caught) {
       setError(humanError(caught));
     } finally {
@@ -767,11 +834,7 @@ function BetaDashboard() {
           {queryMessage}
         </p>
       ) : null}
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <DashboardErrorAlert error={error} /> : null}
       {entitlements && entitlements.maxPublishedQuizzes !== null ? (
         <div className={styles.planNotice}>
           <span>
@@ -858,6 +921,11 @@ function BetaDashboard() {
             </Link>
           ) : null}
         </div>
+      ) : null}
+      {!loading && visibleQuizzes.length > 0 && entitlements?.csvExport === false ? (
+        <p className="notice" lang={locale}>
+          {t(checkpointExportNoticeKey(csvExportUnavailableReason))}
+        </p>
       ) : null}
 
       <section

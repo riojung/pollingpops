@@ -14,10 +14,12 @@ import type {
   CheckpointSetImportUnavailableReason,
   Entitlements,
   SupportedLocale,
+  WorkspaceCapabilityUnavailableReason,
   WorkspaceProductFeatures as ContractWorkspaceProductFeatures,
 } from "@openround/contracts";
 import {
   CheckpointSetImportUnavailableReasonSchema,
+  WorkspaceCapabilityUnavailableReasonSchema,
   WorkspaceProductFeaturesSchema,
 } from "@openround/contracts";
 import { apiFetch, humanError } from "../../lib/api";
@@ -65,6 +67,7 @@ interface WorkspaceAccountResponse {
   creator: WorkspaceCreator;
   workspace?: WorkspaceAccountContext;
   entitlements: Entitlements;
+  csvExportUnavailableReason?: unknown;
   checkpointSetImportUnavailableReason?: unknown;
   productFeatures: WorkspaceProductFeatures;
 }
@@ -74,6 +77,7 @@ interface WorkspaceContextValue {
   creator: WorkspaceCreator | null;
   workspace: WorkspaceAccountContext | null;
   entitlements: Entitlements | null;
+  csvExportUnavailableReason?: WorkspaceCapabilityUnavailableReason;
   checkpointSetImportUnavailableReason?: CheckpointSetImportUnavailableReason;
   productFeatures: WorkspaceProductFeatures | null;
   loading: boolean;
@@ -101,19 +105,21 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
     actorId: string;
     workspaceId: string;
     entitlements: Entitlements;
+    exportUnavailableReason?: WorkspaceCapabilityUnavailableReason;
     importUnavailableReason?: CheckpointSetImportUnavailableReason;
   } | null>(null);
   const [productFeatures, setProductFeatures] = useState<WorkspaceProductFeatures | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const entitlements = access?.entitlements ?? null;
+  const scopedAccess =
+    access && access.actorId === creator?.userId && access.workspaceId === creator?.workspaceId
+      ? access
+      : null;
+  const entitlements = scopedAccess?.entitlements ?? null;
+  const csvExportUnavailableReason =
+    entitlements?.csvExport === false ? scopedAccess?.exportUnavailableReason : undefined;
   const checkpointSetImportUnavailableReason =
-    access &&
-    access.entitlements.csvExport === false &&
-    access.actorId === creator?.userId &&
-    access.workspaceId === creator?.workspaceId
-      ? access.importUnavailableReason
-      : undefined;
+    entitlements?.csvExport === false ? scopedAccess?.importUnavailableReason : undefined;
 
   const refreshAccount = useCallback(async () => {
     setError("");
@@ -132,6 +138,9 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
         actorId: account.creator.userId,
         workspaceId: account.creator.workspaceId,
         entitlements: account.entitlements,
+        exportUnavailableReason: WorkspaceCapabilityUnavailableReasonSchema.safeParse(
+          account.csvExportUnavailableReason,
+        ).data,
         importUnavailableReason: CheckpointSetImportUnavailableReasonSchema.safeParse(
           account.checkpointSetImportUnavailableReason,
         ).data,
@@ -191,6 +200,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       creator,
       workspace,
       entitlements,
+      csvExportUnavailableReason,
       checkpointSetImportUnavailableReason,
       productFeatures,
       loading,
@@ -212,6 +222,7 @@ export function WorkspaceProvider({ children }: Readonly<{ children: React.React
       checkpointSetImportUnavailableReason,
       confirmNavigation,
       creator,
+      csvExportUnavailableReason,
       entitlements,
       error,
       loading,

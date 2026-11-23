@@ -421,6 +421,12 @@ const messages = {
   "pages.library.restore": "Restaurar",
   "pages.library.restoreCount": "Restaurar ({count})",
   "pages.library.resultCount": "{visible} de {total} {type}",
+  "pages.library.roundExportOperatorPolicy":
+    "O seu operador Polling Pops desativou a exportação de conjuntos de pontos de verificação.",
+  "pages.library.roundExportPlanLimit":
+    "O plano deste espaço de trabalho não inclui a exportação de conjuntos de pontos de verificação.",
+  "pages.library.roundExportUnavailable":
+    "A exportação de conjuntos de pontos de verificação não está disponível neste espaço de trabalho.",
   "pages.library.roundView": "Visualização redonda da biblioteca",
   "pages.library.searchPresentations": "Pesquisar apresentações",
   "pages.library.searchRounds": "Rodadas de pesquisa",

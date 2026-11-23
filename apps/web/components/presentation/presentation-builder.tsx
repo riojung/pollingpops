@@ -653,6 +653,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
   const [nativeInspectorTarget, setNativeInspectorTarget] = useState<HTMLDivElement | null>(null);
   const mapTrigger = useRef<HTMLButtonElement>(null);
   const inspectorTrigger = useRef<HTMLButtonElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const mapPanel = useRef<HTMLElement>(null);
   const inspectorPanel = useRef<HTMLElement>(null);
   const drawerOpener = useRef<HTMLElement | null>(null);
@@ -3437,6 +3438,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
         />
       ) : null}
       <div
+        ref={workspaceRef}
         className={`${styles.workspace} ${mapOpen ? "" : styles.mapClosed} ${inspectorOpen ? "" : styles.inspectorClosed}`}
         inert={builderMutationBlocked || preparingImport}
       >
@@ -3753,9 +3755,12 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
               </EditorMenuSection>
             </EditorDisclosure>
           </div>
+          <PresentationNavigatorResize
+            workspaceRef={workspaceRef}
+            enabled={mapOpen && !compactEditor}
+          />
         </aside>
 
-        <PresentationNavigatorResize enabled={mapOpen && !compactEditor} />
         <main className={styles.canvasArea} id="presentation-canvas">
           <div className={styles.compactCommands} inert={builderMutationBlocked || preparingImport}>
             <span className={`${styles.saveStatus} ${styles[`save_${saveState}`]}`} role="status">

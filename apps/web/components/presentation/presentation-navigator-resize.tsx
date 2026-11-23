@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useLocale } from "../locale-provider";
 import { presentationNavigatorCopy } from "./presentation-navigator-copy";
 import {
@@ -13,7 +13,13 @@ import {
 import styles from "./presentation-builder.module.css";
 
 /** This preference belongs to the local workspace view, never the presentation draft. */
-export function PresentationNavigatorResize({ enabled }: { enabled: boolean }) {
+export function PresentationNavigatorResize({
+  workspaceRef,
+  enabled,
+}: {
+  workspaceRef: RefObject<HTMLDivElement | null>;
+  enabled: boolean;
+}) {
   const { locale } = useLocale();
   const copy = presentationNavigatorCopy(locale);
   const handle = useRef<HTMLDivElement>(null);
@@ -27,7 +33,7 @@ export function PresentationNavigatorResize({ enabled }: { enabled: boolean }) {
     } catch {
       // Accessing the storage object itself can be blocked by browser policy.
     }
-    const workspace = handle.current?.parentElement;
+    const workspace = workspaceRef.current;
     if (!workspace) return;
     const inspector = workspace.querySelector<HTMLElement>("#presentation-object-inspector");
     const measure = () => {
@@ -50,7 +56,7 @@ export function PresentationNavigatorResize({ enabled }: { enabled: boolean }) {
       if (!observer) window.removeEventListener("resize", measure);
       workspace.style.removeProperty("--presentation-navigator-width");
     };
-  }, []);
+  }, [workspaceRef]);
   useEffect(() => {
     if (enabled || !drag.current) return;
     const pointerId = drag.current.pointerId;
@@ -62,10 +68,7 @@ export function PresentationNavigatorResize({ enabled }: { enabled: boolean }) {
     const actual = clampPresentationNavigatorWidth(next, maximum);
     preferred.current = actual;
     setWidth(actual);
-    handle.current?.parentElement?.style.setProperty(
-      "--presentation-navigator-width",
-      `${actual}px`,
-    );
+    workspaceRef.current?.style.setProperty("--presentation-navigator-width", `${actual}px`);
     try {
       savePresentationNavigatorWidth(window.localStorage, actual);
     } catch {
@@ -114,7 +117,7 @@ export function PresentationNavigatorResize({ enabled }: { enabled: boolean }) {
         if (!enabled || event.button !== 0) return;
         event.preventDefault();
         event.currentTarget.focus();
-        const workspace = event.currentTarget.parentElement;
+        const workspace = workspaceRef.current;
         const scale = workspace
           ? workspace.getBoundingClientRect().width / workspace.offsetWidth || 1
           : 1;

@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### Presentation navigator resize landmark, November 22, 2026
+
+Implemented locally on `codex/presentation-navigator-landmark` after PR #306. The desktop resize
+control sits within the existing Presentation map landmark and retains pointer, keyboard, and local
+width preference behavior. See the
+[workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
+
 ### Presentation visual import availability explanations, November 22, 2026
 
-Implemented locally on `codex/visual-import-availability` after PR #305. Presentation authors
+Merged through PR #306 at `9e045a1`. Presentation authors
 see the reason for a confirmed upload restriction and can retry a failed availability check in
 the dialog. Existing conversion review and exact acknowledgement recovery use the same routes.
 See the [workspace backlog](workspace-experience-backlog-2026-11.md#wx-11-consistent-surfaces-and-commercial-explanations).
@@ -231,8 +238,8 @@ availability copy merged in PR #297, import reasons in PR #298, live-brand save 
 and workspace CSV export reasons in PR #300. Retained Round report export reasons merged in
 PR #301, live Presentation launch availability reasons in PR #302 and source upload availability
 in PR #303. LTI availability explanations merged in PR #304 and checkpoint-set export reasons in
-PR #305. Visual import explanations are implemented locally. Other capability explanations remain
-pending.
+PR #305. Visual import explanations merged in PR #306. The navigator resize landmark fix is
+implemented locally. Other capability explanations remain pending.
 Recurrence and learning sequences need identity/privacy decisions,
 moderator passes need a permission design,
 organization collections need curator policy, and native integrations need a provider decision.

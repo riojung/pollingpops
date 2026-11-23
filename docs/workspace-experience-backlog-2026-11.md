@@ -59,7 +59,9 @@ Board creation feature-policy explanations merged through
 [PR #308](https://github.com/riojung/pollingpops/pull/308) at `db9c48a`.
 Board launch explanations for operational pauses and inactive organizations or workspaces merged
 through [PR #309](https://github.com/riojung/pollingpops/pull/309) at `03bbb7e`.
-The current WX-11 increment explains Round staff availability.
+Round staff availability and credential recovery merged through
+[PR #310](https://github.com/riojung/pollingpops/pull/310) at `70b7e60`, completing the named
+WX-11 software scope. The next P1 increment is the Training and onboarding collection under WX-04.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -74,22 +76,22 @@ follow its smaller checkpoints below; do not combine every checkpoint into one p
 Each delivery needs an assigned owner, tests, documentation and an explicit disposition of its
 remaining work. Candidate priorities indicate evaluation order, not a release promise.
 
-| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                                     | Responsible role                |
-| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------- |
-| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                              | Frontend + product design       |
-| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                              | Frontend + accessibility        |
-| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                               | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Merged in PR #273; Team meetings                                       | Content design + localization   |
-| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                 | Authoring + frontend            |
-| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                      | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                                | Async delivery + privacy        |
-| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #309. Round staff explanations are ready for review. | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
+| ID    | Priority | Size                               | Outcome                                                             | State / dependency                                                              | Responsible role                |
+| ----- | -------- | ---------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------- |
+| WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                                       | Frontend + product design       |
+| WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                                       | Frontend + accessibility        |
+| WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                                        | Library API + frontend          |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Team meetings merged in PR #273; Training and onboarding implemented locally    | Content design + localization   |
+| WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                               | Surveys + contracts + reporting |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Discovery; live Pulse is not recurrence                                         | Async delivery + privacy        |
+| WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                                | Contracts + live experience     |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                         | Realtime + security + frontend  |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                         | Reporting + learning evidence   |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Named software scope merged through PR #310; native-language acceptance pending | Design system + frontend        |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                                | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                               | Learning delivery + privacy     |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                                  | Library + organization access   |
 
 ## Selected first delivery
 
@@ -108,9 +110,10 @@ Presentation launch reasons in PR #302. Source upload availability merged in PR 
 availability explanations in PR #304. Checkpoint-set export reasons merged in PR #305 and visual
 import explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307.
 Board creation feature-policy explanations merged in PR #308. Operational and organization Board
-launch explanations merged in PR #309. Round staff availability is implemented locally. Other
-candidate capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job
-collections and human review of localized copy remain open.
+launch explanations merged in PR #309. Round staff availability merged in PR #310. Native-language
+acceptance, optional provider setup explanations, WX-07–10 and WX-12–14 remain open.
+The Training and onboarding collection is the next WX-04 increment. Further customer-job
+collections remain candidates.
 
 ### WX-01 Home: start and resume work
 
@@ -228,7 +231,15 @@ The URL-backed collection shortcut filters existing catalogs and independent-cop
 No new catalog persistence, publication format, dependency or asset is introduced.
 See the [named editorial and verification record](evidence/team-meetings-editorial-review-2026-11.md).
 Automated content/code review is distinct from pending human editorial and native-language
-acceptance; existing Preview labels remain. Other customer-job collections remain later increments.
+acceptance; existing Preview labels remain.
+
+**Training and onboarding follow-up:** two existing knowledge-check Rounds, two facilitated
+Presentations and the First-month onboarding Survey support first-week preparation, low-stakes
+practice and follow-up. The Templates collection preserves format navigation, read-only previews
+and independent copies. The new guidance covers audience, preparation, delivery and follow-up in all
+ten locales. See the [editorial record](evidence/training-onboarding-editorial-review-2026-11.md).
+The collection is implemented locally on `codex/training-onboarding-collection`. Human editorial
+and native-language acceptance remain open. Workshops and event feedback remain candidate collections.
 
 ### WX-05 Creation: consolidate methods and source intake
 
@@ -612,9 +623,8 @@ and **C4 shared summaries/exports/lifecycle** must serialize one immutable final
 including withheld outcomes, and withdraw rather than recompute after population erasure.
 **B3** then adds condition editing, safe ID
 remapping/reordering/deletion, previews, and an explicit writer grant after B2 and C qualify.
-WX-07–10, WX-12–14, the remaining WX-11 surfaces and human release acceptance remain pending;
-the selected WX-11A/WX-11B surface increments are recorded below. Earlier merged P1 slices do not imply
-these later areas are shipped.
+WX-07–10, WX-12–14 and human release acceptance remain pending. The WX-11 section below tracks
+the merged software slices and remaining native-language acceptance.
 
 At B1, production compatibility used valid proposed v4 content and six server boundary cases,
 including six accepted receipt-hash goldens from main `4dcefcc`. B2 retains those goldens and
@@ -1033,7 +1043,8 @@ operator has disabled it, or their current workspace plan excludes it. A confirm
 includes the existing plans link. Hosts see missing HTTPS origins before requesting a secure embed
 link. Refresh checks both decisions in the same Round, including recovery after a denial that
 arrived after the first read. Retained credential management and Presenter view use their existing
-permissions. Frontend, server and localization own this increment on `codex/round-staff-availability`.
+permissions. Frontend, server and localization owned this increment, merged through PR #310 at
+`70b7e60`.
 
 **Round staff local verification — 2026-11-23.** All 27 focused host tests, 53 server tests, and
 9 contract tests passed. All 12 production browser cases passed across desktop Chromium and
@@ -1043,9 +1054,8 @@ first availability read.
 The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,544 package tests, 529 support tests, four
 builds, and compiled server startup. Optional integration suites were skipped in the full check.
 
-**Remaining capability explanations.** Round staff completes the named WX-11 implementation slices
-locally. Review, merge and native-language acceptance remain open. Other provider setup messages
-remain candidates for selection.
+**WX-11 remaining work.** PR #310 completed the named software slices. Native-language acceptance
+remains open. Other provider setup messages remain candidates for selection.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -1152,9 +1162,9 @@ PR #301, live Presentation launch reasons in PR #302 and source upload availabil
 LTI availability explanations merged in PR #304. Checkpoint-set export reasons merged in PR #305
 and Presentation visual import reasons in PR #306. The navigator resize landmark fix merged in
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
-organization Board launch explanations merged in PR #309. Round staff availability is implemented
-locally. The named WX-11 software scope awaits review and merge of this increment, with
-native-language acceptance pending.
+organization Board launch explanations merged in PR #309. Round staff availability merged in
+PR #310, completing the named WX-11 software scope. Native-language acceptance remains pending.
+The Training and onboarding collection follows as one WX-04 increment.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

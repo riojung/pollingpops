@@ -43,8 +43,8 @@ describe("creation-only original starter catalogs", () => {
       starterSummaries.map((summary) => ({ summary, draft: instantiateStarter(summary.id) })),
     ).replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/giu, "<id>");
     expect(createHash("sha256").update(original).digest("hex")).toBe(
-      // Launch originals plus three keyed team-meeting originals; human language review is separate.
-      "ae95e5cf328da33292e7b880c4e9846ed52dcb50c218e243faefd7bba9c21b1b",
+      // Round originals include the first-week new-hire guide.
+      "55b04b8cda59e6dc41b293afa4cdec50104ef72096856f9f7590410e249c4b32",
     );
   });
   it.each(supportedLocales)(

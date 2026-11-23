@@ -17,7 +17,13 @@ describe("template collection copy", () => {
       expect(copy[key].match(/\{\w+\}/g) ?? [], key).toEqual(english[key].match(/\{\w+\}/g) ?? []);
     }
     if (locale !== "en-CA")
-      for (const key of ["title", "description", "allTemplates"] as const)
+      for (const key of [
+        "title",
+        "description",
+        "allTemplates",
+        "trainingOnboardingTitle",
+        "trainingOnboardingDescription",
+      ] as const)
         expect(copy[key], key).not.toBe(english[key]);
   });
 
@@ -29,6 +35,8 @@ describe("template collection copy", () => {
       "description",
       "allTemplates",
       "chooseCollection",
+      "trainingOnboardingTitle",
+      "trainingOnboardingDescription",
     ]);
     for (const locale of supportedLocales)
       expect(Object.keys(templateCollectionCopyCatalog[locale]).sort()).toEqual(
@@ -40,6 +48,7 @@ describe("template collection copy", () => {
     const copy = templateCollectionCopy();
     expect(copy.label).toBe("Collections");
     expect(copy.title).toBe("Team meetings");
+    expect(copy.trainingOnboardingTitle).toBe("Training and onboarding");
     expect(copy.allTemplates).toBe("All templates");
     expect(copy.chooseCollection).toBe("Collection");
     expect(copy.description).toContain(

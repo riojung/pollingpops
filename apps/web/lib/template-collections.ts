@@ -1,8 +1,10 @@
 import type { StarterGuide, SupportedLocale } from "@openround/contracts";
+import { trainingOnboardingPresentationGuides } from "./training-onboarding-guides";
 
-export const templateCollectionIds = ["team-meetings"] as const;
+export const templateCollectionIds = ["team-meetings", "training-onboarding"] as const;
 export type TemplateCollectionId = (typeof templateCollectionIds)[number];
-export type TemplateCollectionKind = "round" | "presentation" | "survey";
+const templateCollectionKinds = ["round", "presentation", "survey"] as const;
+export type TemplateCollectionKind = (typeof templateCollectionKinds)[number];
 
 export const teamMeetingTemplateIds = Object.freeze({
   round: Object.freeze(["meeting-priorities", "team-retrospective"] as const),
@@ -10,10 +12,23 @@ export const teamMeetingTemplateIds = Object.freeze({
   survey: Object.freeze(["team-collaboration"] as const),
 });
 
+export const trainingOnboardingTemplateIds = Object.freeze({
+  round: Object.freeze(["new-hire-knowledge-check", "feedback-skills"] as const),
+  presentation: Object.freeze(["training", "onboarding"] as const),
+  survey: Object.freeze(["onboarding-experience"] as const),
+});
+
+const templateIdsByCollection = {
+  "team-meetings": teamMeetingTemplateIds,
+  "training-onboarding": trainingOnboardingTemplateIds,
+} satisfies Record<TemplateCollectionId, Record<TemplateCollectionKind, readonly string[]>>;
+
 export const templateCollectionMemberships = Object.freeze(
-  (Object.keys(teamMeetingTemplateIds) as TemplateCollectionKind[]).flatMap((kind) =>
-    teamMeetingTemplateIds[kind].map((templateId) =>
-      Object.freeze({ collectionId: "team-meetings" as const, kind, templateId }),
+  templateCollectionIds.flatMap((collectionId) =>
+    templateCollectionKinds.flatMap((kind) =>
+      templateIdsByCollection[collectionId][kind].map((templateId) =>
+        Object.freeze({ collectionId, kind, templateId }),
+      ),
     ),
   ),
 );
@@ -22,14 +37,14 @@ export const templateCollectionMemberships = Object.freeze(
 export function parseTemplateCollection(
   value: string | null | undefined,
 ): TemplateCollectionId | null {
-  return value === "team-meetings" ? value : null;
+  return templateCollectionIds.find((id) => id === value) ?? null;
 }
 
 export function collectionTemplateIds(
   kind: TemplateCollectionKind,
   collection: TemplateCollectionId | null | undefined,
 ): readonly string[] | undefined {
-  return collection === "team-meetings" ? teamMeetingTemplateIds[kind] : undefined;
+  return collection ? templateIdsByCollection[collection]?.[kind] : undefined;
 }
 
 type CollectionPresentationId = (typeof teamMeetingTemplateIds.presentation)[number];
@@ -320,9 +335,13 @@ export function templateCollectionGuide(
   id: string,
   locale: SupportedLocale = "en-CA",
 ): StarterGuide | undefined {
-  if (kind !== "presentation" || (id !== "meeting" && id !== "retrospective")) return undefined;
-  const guides = Object.hasOwn(templateCollectionPresentationGuides, locale)
-    ? templateCollectionPresentationGuides[locale]
-    : templateCollectionPresentationGuides["en-CA"];
-  return { ...guides[id] };
+  if (kind !== "presentation") return undefined;
+  const language = Object.hasOwn(templateCollectionPresentationGuides, locale) ? locale : "en-CA";
+  if (id === "meeting" || id === "retrospective") {
+    return { ...templateCollectionPresentationGuides[language][id] };
+  }
+  if (id === "training" || id === "onboarding") {
+    return { ...trainingOnboardingPresentationGuides[language][id] };
+  }
+  return undefined;
 }

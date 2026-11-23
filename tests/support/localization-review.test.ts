@@ -28,6 +28,7 @@ import {
 } from "../../apps/web/lib/i18n/template-collection-copy";
 import {
   templateCollectionGuide,
+  templateCollectionIds,
   templateCollectionMemberships,
 } from "../../apps/web/lib/template-collections";
 import {
@@ -452,10 +453,11 @@ describe("native-language review preparation", () => {
         target: { template: templateCollectionCopy("ko-KR")[key] },
       });
     }
-    expect(
-      bundle.items.find((item) => item.id === "collection/team-meetings/memberships")?.english,
-    ).toEqual(templateCollectionMemberships);
-    for (const id of ["meeting", "retrospective"]) {
+    for (const id of templateCollectionIds)
+      expect(
+        bundle.items.find((item) => item.id === `collection/${id}/memberships`)?.english,
+      ).toEqual(templateCollectionMemberships.filter(({ collectionId }) => collectionId === id));
+    for (const id of ["meeting", "retrospective", "training", "onboarding"]) {
       expect(bundle.items.find((item) => item.id === `presentation/${id}/guide`)).toMatchObject({
         english: templateCollectionGuide("presentation", id, "en-CA"),
         target: templateCollectionGuide("presentation", id, "ko-KR"),
@@ -471,8 +473,10 @@ describe("native-language review preparation", () => {
       expect.arrayContaining([
         expect.objectContaining({ path: "apps/web/lib/template-collections.ts" }),
         expect.objectContaining({ path: "apps/web/lib/i18n/template-collection-copy.ts" }),
+        expect.objectContaining({ path: "apps/web/lib/training-onboarding-guides.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-collection.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-copy.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-training-guides.ts" }),
       ]),
     );
   });

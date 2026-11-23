@@ -1,4 +1,8 @@
-import { CANVAS_SCHEMA_VERSION, type ProductFeatureUnavailableReason } from "@openround/contracts";
+import {
+  CANVAS_SCHEMA_VERSION,
+  type BoardLaunchUnavailableReason,
+  type ProductFeatureUnavailableReason,
+} from "@openround/contracts";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as ApiModule from "../../lib/api";
@@ -33,6 +37,7 @@ const mocked = vi.hoisted(() => ({
   fetch: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
+  refreshAccount: vi.fn(),
   query: "",
   canEdit: true,
   loading: false,
@@ -45,6 +50,8 @@ const mocked = vi.hoisted(() => ({
     ideaBoards: boolean;
     canvasBoardsCreationUnavailableReason?: ProductFeatureUnavailableReason;
     ideaBoardsCreationUnavailableReason?: ProductFeatureUnavailableReason;
+    canvasBoardsLaunchUnavailableReason?: BoardLaunchUnavailableReason;
+    ideaBoardsLaunchUnavailableReason?: BoardLaunchUnavailableReason;
   },
 }));
 vi.mock("../../lib/api", async (original) => ({
@@ -69,6 +76,7 @@ vi.mock("../workspace/workspace-provider", () => ({
     canEdit: mocked.canEdit,
     loading: mocked.loading,
     productFeatures: mocked.features,
+    refreshAccount: mocked.refreshAccount,
   }),
 }));
 vi.mock("../workspace/workspace-shell", () => ({
@@ -256,6 +264,169 @@ describe("board library starter creation", () => {
       view.unmount();
     },
   );
+
+  it("shows one operational pause and refreshes availability while fresh creation is disabled", () => {
+    mocked.features = {
+      canvasBoards: true,
+      ideaBoards: true,
+      canvasBoardsLaunchUnavailableReason: "operational_pause",
+      ideaBoardsLaunchUnavailableReason: "operational_pause",
+    };
+    const view = harness();
+    view.render();
+    const markup = view.render();
+    expect(markup.split(english["boards.launch.operationalPause"])).toHaveLength(2);
+    const toolbar = () => view.find((element) => element.type === BoardLibraryToolbar);
+    expect(toolbar().props.canCreate).toBe(false);
+    view.click("Refresh");
+    expect(mocked.refreshAccount).toHaveBeenCalledOnce();
+    mocked.features = { canvasBoards: true, ideaBoards: true };
+    expect(view.render()).not.toContain(english["boards.launch.operationalPause"]);
+    expect(toolbar().props.canCreate).toBe(true);
+    expect(mocked.fetch).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("offers a blank Workshop when only Team Canvas launch is restricted", () => {
+    const view = harness();
+    view.render();
+    view.render();
+    view.click("New board");
+    view.render();
+    view.selectStarter();
+    view.render();
+    view.click("Cancel");
+    view.render();
+    mocked.features = {
+      canvasBoards: true,
+      ideaBoards: true,
+      canvasBoardsLaunchUnavailableReason: "organization_restricted",
+    };
+    view.render();
+    view.click("New board");
+    const markup = view.render();
+    const team = view.find((entry) => entry.props["aria-label"] === "Team canvas");
+    const workshop = view.find((entry) => entry.props["aria-label"] === "Guided workshop");
+    expect(team.props.disabled).toBe(true);
+    expect(workshop.props["aria-pressed"]).toBe(true);
+    expect(workshop.props.disabled).toBe(false);
+    expect(markup).toContain(english["boards.launch.organizationRestricted"]);
+    expect(markup).toContain('data-templates="false"');
+    const submit = () =>
+      view.find((entry) => entry.type === "button" && entry.props.type === "submit");
+    expect(submit().props.disabled).toBe(true);
+    view.click(copy.blank);
+    expect(view.render()).toContain('value="Project kickoff"');
+    expect(submit().props.disabled).toBe(false);
+    view.unmount();
+  });
+
+  it("rechecks an authoritative pause that starts after the chooser opened", async () => {
+    mocked.fetch.mockRejectedValueOnce(
+      new ApiClientError("Paused", "FORBIDDEN", 403, undefined, {
+        boardLaunchUnavailableReason: "operational_pause",
+      }),
+    );
+    const view = harness();
+    view.render();
+    view.render();
+    view.click("New board");
+    view.render();
+    const title = view.find((entry) => entry.type === "input" && entry.props.required === true);
+    (title.props.onChange as (event: unknown) => void)({ target: { value: "Team planning" } });
+    view.render();
+    view.submit();
+    await settle();
+    const markup = view.render();
+    expect(markup).toContain(english["boards.launch.operationalPause"]);
+    expect(markup).toContain('value="Team planning"');
+    expect(mocked.fetch).toHaveBeenCalledOnce();
+    expect(mocked.push).not.toHaveBeenCalled();
+
+    view.click("Cancel");
+    expect(view.render()).toContain(english["boards.launch.operationalPause"]);
+    mocked.refreshAccount.mockImplementationOnce(() => {
+      mocked.features = {
+        canvasBoards: true,
+        ideaBoards: true,
+        canvasBoardsLaunchUnavailableReason: "operational_pause",
+        ideaBoardsLaunchUnavailableReason: "operational_pause",
+      };
+    });
+    view.click("Refresh");
+    expect(mocked.refreshAccount).toHaveBeenCalledOnce();
+    const stillPaused = view.render();
+    expect(stillPaused.split(english["boards.launch.operationalPause"])).toHaveLength(2);
+    expect(stillPaused).not.toContain('role="alert"');
+
+    mocked.refreshAccount.mockImplementationOnce(() => {
+      mocked.features = { canvasBoards: true, ideaBoards: true };
+    });
+    view.click("Refresh");
+    expect(mocked.refreshAccount).toHaveBeenCalledTimes(2);
+    expect(view.render()).not.toContain(english["boards.launch.operationalPause"]);
+    expect(view.find((entry) => entry.type === BoardLibraryToolbar).props.canCreate).toBe(true);
+    expect(mocked.fetch).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  it("keeps an exact pending Workshop retry reachable after fresh launches pause", async () => {
+    mocked.features = {
+      canvasBoards: true,
+      ideaBoards: true,
+      canvasBoardsLaunchUnavailableReason: "organization_restricted",
+    };
+    mocked.fetch
+      .mockRejectedValueOnce(new TypeError("Response lost"))
+      .mockResolvedValueOnce({ board: boardFixture });
+    const view = harness();
+    view.render();
+    view.render();
+    view.click("New board");
+    view.render();
+    const title = view.find((entry) => entry.type === "input" && entry.props.required === true);
+    (title.props.onChange as (event: unknown) => void)({
+      target: { value: "Workshop to recover" },
+    });
+    view.render();
+    view.submit();
+    await settle();
+    view.render();
+    view.click(copy.closePending);
+    view.render();
+
+    mocked.refreshAccount.mockImplementationOnce(() => {
+      mocked.features = {
+        canvasBoards: true,
+        ideaBoards: true,
+        canvasBoardsLaunchUnavailableReason: "operational_pause",
+        ideaBoardsLaunchUnavailableReason: "operational_pause",
+      };
+    });
+    view.click("Refresh");
+    const paused = view.render();
+    expect(paused).toContain(english["boards.launch.operationalPause"]);
+    expect(paused).toContain(copy.retry);
+    expect(view.find((entry) => entry.type === BoardLibraryToolbar).props.canCreate).toBe(false);
+    expect(mocked.fetch).toHaveBeenCalledOnce();
+    mocked.canEdit = false;
+    expect(view.render()).not.toContain(copy.retry);
+    mocked.canEdit = true;
+    view.render();
+
+    view.click(copy.retry);
+    expect(view.render()).toContain('value="Workshop to recover"');
+    view.submit();
+    await settle();
+    expect(mocked.fetch).toHaveBeenCalledTimes(2);
+    expect(mocked.fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/v1/idea-boards",
+      "/v1/idea-boards",
+    ]);
+    expect(mocked.fetch.mock.calls[1]![1].body).toBe(mocked.fetch.mock.calls[0]![1].body);
+    expect(mocked.push).toHaveBeenCalledWith(`/boards/${boardFixture.id}`);
+    view.unmount();
+  });
 
   it("explains a Workshop restriction and blocks a fresh submit if access changes in the dialog", () => {
     const view = harness();

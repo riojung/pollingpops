@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Bacheche delle idee",
   "boards.description": "Raccogli idee, raggruppale e scegli le priorità comuni.",
   "boards.create": "Crea bacheca",
+  "boards.launch.operationalPause":
+    "L’operatore Polling Pops ha sospeso temporaneamente l’avvio di nuove bacheche.",
+  "boards.launch.organizationRestricted":
+    "Non è possibile avviare nuove bacheche a causa dell’inattività dell’organizzazione o dello spazio di lavoro.",
   "boards.creation.teamOperatorPolicy":
     "Il tuo operatore Polling Pops ha disattivato la creazione di tele del team per questo spazio di lavoro.",
   "boards.creation.teamRolloutUnavailable":

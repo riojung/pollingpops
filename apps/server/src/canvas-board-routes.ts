@@ -10,6 +10,7 @@ import {
 } from "@openround/contracts";
 import {
   CanvasBoardError,
+  CanvasBoardOrganizationRestrictedError,
   IdeaBoardError,
   type CanvasBoardRepository,
   type Repository,
@@ -20,6 +21,7 @@ import type { SessionCache } from "./cache.js";
 import type { StorageService } from "./storage.js";
 import type { MetricsService } from "./metrics.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
+import { BoardLaunchUnavailableError } from "./board-launch-availability.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import { completeMediaFinalization, MediaFinalizationConflictError } from "./media-finalization.js";
 import { CanvasBoardLive } from "./canvas-board-live.js";
@@ -137,7 +139,11 @@ export async function registerCanvasBoardRoutes(
             requestId: request.id,
           },
         });
-      if (error instanceof CanvasBoardError || error instanceof IdeaBoardError) {
+      if (
+        error instanceof CanvasBoardError ||
+        error instanceof IdeaBoardError ||
+        error instanceof BoardLaunchUnavailableError
+      ) {
         const observation = observations.get(request);
         if (observation)
           observation.conflict =
@@ -157,9 +163,16 @@ export async function registerCanvasBoardRoutes(
                       ? 422
                       : 409;
         if (status === 429) reply.header("retry-after", "60");
-        return reply
-          .code(status)
-          .send({ error: { code: error.code, message: error.message, requestId: request.id } });
+        return reply.code(status).send({
+          error: {
+            code: error.code,
+            message: error.message,
+            requestId: request.id,
+            ...(error instanceof BoardLaunchUnavailableError && {
+              details: { boardLaunchUnavailableReason: error.reason },
+            }),
+          },
+        });
       }
       throw error;
     });
@@ -181,6 +194,18 @@ export async function registerCanvasBoardRoutes(
       const actor = await user(request);
       if (actor.userId !== userId) throw new CanvasBoardError("UNAUTHORIZED", "Sign in required");
       return actor;
+    };
+    const activeCreationContext = async (
+      request: FastifyRequest,
+      userId: string,
+      workspaceId: string,
+    ) => {
+      const creator = await deps.auth.creatorFromRequest(request);
+      return (
+        creator?.userId === userId &&
+        creator.workspaceId === workspaceId &&
+        creator.role !== "viewer"
+      );
     };
     const requireFeature = async (workspaceId: string, key: ProductFeatureKey) => {
       if (!(await workspaceFeatureEnabled(deps.repository, deps.config, workspaceId, key)))
@@ -374,10 +399,27 @@ export async function registerCanvasBoardRoutes(
             .code(201)
             .send({ board: await freshBoard(request, actor.userId, previous.id) });
         await requireFeature(input.workspaceId, "canvasBoards");
-        if (!(await deps.repository.getOperationalFeatures()).sessionCreation)
-          throw new CanvasBoardError("FORBIDDEN", "New canvas creation is temporarily paused");
+        if (!(await deps.repository.getOperationalFeatures()).sessionCreation) {
+          const message = "New canvas creation is temporarily paused";
+          if (await activeCreationContext(request, actor.userId, input.workspaceId))
+            throw new BoardLaunchUnavailableError("FORBIDDEN", message, "operational_pause");
+          throw new CanvasBoardError("FORBIDDEN", message);
+        }
         const current = await sameUser(request, actor.userId);
-        const created = await deps.canvases.create(current, input, clock);
+        const created = await deps.canvases
+          .create(current, input, clock)
+          .catch(async (error: unknown) => {
+            if (
+              error instanceof CanvasBoardOrganizationRestrictedError &&
+              (await activeCreationContext(request, current.userId, input.workspaceId))
+            )
+              throw new BoardLaunchUnavailableError(
+                "NOT_FOUND",
+                error.message,
+                "organization_restricted",
+              );
+            throw error;
+          });
         await deps.repository.recordAudit({
           workspaceId: created.workspaceId,
           actorId: actor.userId,
@@ -422,11 +464,12 @@ export async function registerCanvasBoardRoutes(
               (input.command.command.roundNumber ?? 1) === board.sourceBoard.roundNumber)
           ) {
             await requireFeature(board.workspaceId, "ideaBoards");
-            if (!(await deps.repository.getOperationalFeatures()).sessionCreation)
-              throw new CanvasBoardError(
-                "FORBIDDEN",
-                "New workshop collection is temporarily paused",
-              );
+            if (!(await deps.repository.getOperationalFeatures()).sessionCreation) {
+              const message = "New workshop collection is temporarily paused";
+              if (board.capabilities.facilitate)
+                throw new BoardLaunchUnavailableError("FORBIDDEN", message, "operational_pause");
+              throw new CanvasBoardError("FORBIDDEN", message);
+            }
           }
         }
         if (

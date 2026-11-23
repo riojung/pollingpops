@@ -15,3 +15,9 @@ export class CanvasBoardError extends Error {
     super(message);
   }
 }
+
+export class CanvasBoardOrganizationRestrictedError extends CanvasBoardError {
+  constructor() {
+    super("NOT_FOUND", "Canvas board not found or access is no longer available");
+  }
+}

@@ -6,6 +6,11 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { IdeaBoardHostCommand, IdeaBoardView } from "@openround/contracts";
 import { apiFetch, ApiClientError } from "../../lib/api";
 import {
+  boardLaunchErrorKey,
+  boardLaunchUnavailableKey,
+  type BoardLaunchNoticeKey,
+} from "../../lib/board-launch-availability";
+import {
   commandIdeaBoard,
   fetchIdeaBoard,
   ideaBoardCommandIntent,
@@ -19,7 +24,10 @@ import { WorkspaceShell } from "../workspace/workspace-shell";
 import { IdeaBoardIdeas } from "./idea-list";
 import { IdeaContent } from "./idea-content";
 import styles from "./boards.module.css";
-import { WorkshopCanvasLauncher } from "../canvas-boards/workshop-canvas-bridge";
+import {
+  WorkshopCanvasLauncher,
+  type WorkshopCanvasAttempt,
+} from "../canvas-boards/workshop-canvas-bridge";
 import { GuestInvitationDialog } from "./guest-invitation-dialog";
 import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
 import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
@@ -82,13 +90,19 @@ export function BoardHost({ id }: { id: string }) {
   const { t, locale } = useLocale();
   const sharingCopy = canvasSharingMessages(locale);
   const workshopCopy = guidedWorkshopCopy(locale);
-  const { creator, canEdit } = useWorkspace();
+  const { creator, canEdit, productFeatures, refreshAccount } = useWorkspace();
   const router = useRouter();
+  const actorId = creator?.userId;
   const workspaceId = creator?.workspaceId;
   const [loaded, setLoaded] = useState<{ workspaceId: string; board: IdeaBoardView } | null>(null);
-  const [error, setError] = useState<false | "boards.error" | "boards.unavailable" | "approval">(
-    false,
-  );
+  const [error, setError] = useState<
+    | false
+    | "boards.error"
+    | "boards.unavailable"
+    | "approval"
+    | { action: "collect" | "reopen"; key: BoardLaunchNoticeKey; roundNumber: number }
+  >(false);
+  const [canvasLaunchDenial, setCanvasLaunchDenial] = useState<BoardLaunchNoticeKey>();
   const [notice, setNotice] = useState<
     "boards.saved" | "boards.copied" | "boards.copyFailed" | null
   >(null);
@@ -99,6 +113,7 @@ export function BoardHost({ id }: { id: string }) {
   const [link, setLink] = useState("");
   const controller = useRef<AbortController | null>(null);
   const pending = useRef<ReturnType<typeof ideaBoardCommandIntent> | null>(null);
+  const canvasAttempt = useRef<WorkshopCanvasAttempt | null>(null);
   const needsRebase = useRef(false);
   const inFlight = useRef(false);
   const scope = useRef(workspaceId);
@@ -109,6 +124,13 @@ export function BoardHost({ id }: { id: string }) {
   activeRound.current = roundNumber;
   const pendingHeading = useRef<HTMLHeadingElement>(null);
   const votingHintId = `board-voting-hint-${id}`;
+  const launchNoticeId = `board-launch-notice-${id}`;
+  const launchUnavailable = boardLaunchUnavailableKey(
+    productFeatures?.ideaBoardsLaunchUnavailableReason,
+  );
+  const launchDenial =
+    typeof error === "object" && error.roundNumber === roundNumber ? error : undefined;
+  const collectNotice = launchDenial?.action === "collect" ? launchDenial.key : launchUnavailable;
 
   useEffect(() => {
     if (board && pending.current && (pending.current.command.roundNumber ?? 1) !== roundNumber) {
@@ -124,10 +146,19 @@ export function BoardHost({ id }: { id: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     setLink(`${window.location.origin}/board/${id}`);
     pending.current = null;
+    const attempt = canvasAttempt.current;
+    if (
+      attempt &&
+      (attempt.input.sourceBoardId !== id ||
+        (actorId && attempt.actorId !== actorId) ||
+        (workspaceId && attempt.input.workspaceId !== workspaceId))
+    )
+      canvasAttempt.current = null;
     setInviting(false);
     needsRebase.current = false;
     setBusy(false);
     setError(false);
+    setCanvasLaunchDenial(undefined);
     async function poll() {
       if (!workspaceId || active.signal.aborted) return;
       try {
@@ -153,26 +184,42 @@ export function BoardHost({ id }: { id: string }) {
       active.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [id, workspaceId]);
+  }, [actorId, id, workspaceId]);
 
   async function refresh() {
+    if (!workspaceId) return;
+    const signal = controller.current?.signal;
     try {
-      const value = await fetchIdeaBoard(id, controller.current?.signal);
-      if (workspaceId && scope.current === workspaceId && !controller.current?.signal.aborted) {
+      const value = await fetchIdeaBoard(id, signal);
+      if (scope.current === workspaceId && !signal?.aborted) {
         setLoaded((previous) =>
           previous?.workspaceId === workspaceId && previous.board.revision > value.revision
             ? previous
             : { workspaceId, board: value },
         );
-        setError(false);
+        if (!pending.current) setError(false);
       }
     } catch (caught) {
-      if (!controller.current?.signal.aborted) {
+      if (scope.current === workspaceId && !signal?.aborted) {
         const unavailable = caught instanceof ApiClientError && [404, 410].includes(caught.status);
         if (unavailable) setLoaded(null);
         setError(unavailable ? "boards.unavailable" : "boards.error");
       }
     }
+  }
+  async function refreshHost() {
+    void refresh();
+    if (
+      !launchUnavailable &&
+      !launchDenial &&
+      !canvasLaunchDenial &&
+      !productFeatures?.canvasBoardsLaunchUnavailableReason
+    )
+      return;
+    const signal = controller.current?.signal;
+    await refreshAccount();
+    if (scope.current === workspaceId && !signal?.aborted)
+      setCanvasLaunchDenial((current) => (current === canvasLaunchDenial ? undefined : current));
   }
   async function command(value?: IdeaBoardHostCommand): Promise<boolean> {
     if (!board || !canEdit || !workspaceId || inFlight.current) return false;
@@ -185,6 +232,12 @@ export function BoardHost({ id }: { id: string }) {
       needsRebase.current = false;
       if (!value) return false;
     }
+    if (
+      !pending.current &&
+      launchUnavailable &&
+      (value?.type === "collect" || value?.type === "reopen")
+    )
+      return false;
     try {
       if (pending.current && needsRebase.current) {
         pending.current = ideaBoardCommandIntent(board.revision, pending.current.command);
@@ -199,13 +252,14 @@ export function BoardHost({ id }: { id: string }) {
     if (!pending.current) return false;
     const operation = pending.current;
     const operationRound = operation.command.roundNumber ?? 1;
+    const signal = controller.current?.signal;
     inFlight.current = true;
     setBusy(true);
     setError(false);
     setNotice(null);
     try {
-      const result = await commandIdeaBoard(id, operation, controller.current?.signal);
-      if (scope.current !== workspaceId || controller.current?.signal.aborted) return false;
+      const result = await commandIdeaBoard(id, operation, signal);
+      if (scope.current !== workspaceId || signal?.aborted) return false;
       pending.current = null;
       needsRebase.current = false;
       setLoaded((previous) =>
@@ -217,7 +271,7 @@ export function BoardHost({ id }: { id: string }) {
       setNotice("boards.saved");
       return true;
     } catch (caught) {
-      if (scope.current !== workspaceId || controller.current?.signal.aborted) return false;
+      if (scope.current !== workspaceId || signal?.aborted) return false;
       if (operationRound !== activeRound.current) {
         pending.current = null;
         needsRebase.current = false;
@@ -227,18 +281,27 @@ export function BoardHost({ id }: { id: string }) {
         needsRebase.current = true;
       else if (caught instanceof ApiClientError && caught.status < 500 && caught.status !== 429)
         pending.current = null;
+      const action = operation.command.type;
+      const launchKey =
+        action === "collect" || action === "reopen" ? boardLaunchErrorKey(caught) : undefined;
       await refresh();
+      if (
+        scope.current !== workspaceId ||
+        signal?.aborted ||
+        operationRound !== activeRound.current
+      )
+        return false;
       setError(
-        caught instanceof ApiClientError &&
-          caught.status === 422 &&
-          operation.command.type === "start_voting"
-          ? "approval"
-          : "boards.error",
+        launchKey && (action === "collect" || action === "reopen")
+          ? { action, key: launchKey, roundNumber: operationRound }
+          : caught instanceof ApiClientError && caught.status === 422 && action === "start_voting"
+            ? "approval"
+            : "boards.error",
       );
       return false;
     } finally {
       inFlight.current = false;
-      if (scope.current === workspaceId) setBusy(false);
+      if (scope.current === workspaceId && !signal?.aborted) setBusy(false);
     }
   }
   async function removeBoard() {
@@ -284,16 +347,26 @@ export function BoardHost({ id }: { id: string }) {
       translationLevel="full"
       actions={
         <>
-          {board ? <WorkshopCanvasLauncher board={board} disabled={locked} /> : null}
+          {board ? (
+            <WorkshopCanvasLauncher
+              board={board}
+              disabled={locked}
+              attempt={canvasAttempt}
+              launchDenial={canvasLaunchDenial}
+              onLaunchDenialChange={setCanvasLaunchDenial}
+            />
+          ) : null}
           <Link className="button-quiet" href="/boards">
             {t("boards.back")}
           </Link>
         </>
       }
     >
-      {error ? (
+      {error && (typeof error === "string" || !board) ? (
         <p className="error" role="alert">
-          {error === "approval" ? workshopCopy.approvalChanged : t(error)}{" "}
+          {error === "approval"
+            ? workshopCopy.approvalChanged
+            : t(typeof error === "object" ? error.key : error)}{" "}
           <button
             type="button"
             className="button-quiet"
@@ -336,7 +409,7 @@ export function BoardHost({ id }: { id: string }) {
                 type="button"
                 className="button-quiet"
                 disabled={busy}
-                onClick={() => void refresh()}
+                onClick={() => void refreshHost()}
               >
                 {t("boards.refresh")}
               </button>
@@ -344,7 +417,8 @@ export function BoardHost({ id }: { id: string }) {
                 <button
                   type="button"
                   className="button"
-                  disabled={locked}
+                  disabled={locked || Boolean(launchUnavailable)}
+                  aria-describedby={collectNotice ? launchNoticeId : undefined}
                   onClick={() => void command({ type: "collect" })}
                 >
                   {t("boards.collect")}
@@ -376,10 +450,21 @@ export function BoardHost({ id }: { id: string }) {
                 </button>
               ) : null}
             </div>
+            {canEdit && board.status === "draft" && collectNotice ? (
+              <p
+                id={launchNoticeId}
+                className={launchDenial?.action === "collect" ? "error" : undefined}
+                role={launchDenial?.action === "collect" ? "alert" : undefined}
+              >
+                {t(collectNotice)}
+              </p>
+            ) : null}
             <WorkshopLifecycleControls
               board={board}
               canReopen={canEdit}
               disabled={locked}
+              launchUnavailable={launchUnavailable ? t(launchUnavailable) : undefined}
+              reopenError={launchDenial?.action === "reopen" ? t(launchDenial.key) : undefined}
               onReopen={(windowDays) => command({ type: "reopen", windowDays })}
               onRetryReopen={
                 !busy && pending.current?.command.type === "reopen" ? () => command() : undefined

@@ -1,7 +1,9 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as IdeaBoardClientModule from "../../lib/idea-board-client";
-import type { IdeaBoardGuestView } from "@openround/contracts";
+import type * as CanvasClientModule from "../canvas-boards/canvas-client";
+import type * as WorkshopCanvasClientModule from "../canvas-boards/workshop-canvas-client";
+import type { BoardLaunchUnavailableReason, IdeaBoardGuestView } from "@openround/contracts";
 import { CanvasBoardGuestViewSchema, IdeaBoardCanvasSchema } from "@openround/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +14,11 @@ import { BoardHost } from "./board-host";
 import { BoardGuest } from "./board-guest";
 import { emptyIdeaDraft, IdeaComposer, type IdeaDraft } from "./idea-composer";
 import { IdeaBoardIdeas } from "./idea-list";
-import { PublishedWorkshopCanvas } from "../canvas-boards/workshop-canvas-bridge";
+import {
+  PublishedWorkshopCanvas,
+  WorkshopCanvasLauncher,
+  type WorkshopCanvasAttempt,
+} from "../canvas-boards/workshop-canvas-bridge";
 import { IdeaCanvasComposer } from "./idea-canvas-composer";
 
 interface Hooks {
@@ -26,14 +32,22 @@ const fixtures = vi.hoisted(() => ({
   publicRead: vi.fn(),
   guestRead: vi.fn(),
   command: vi.fn(),
+  refreshAccount: vi.fn(),
   submitIdea: vi.fn(),
   submitVotes: vi.fn(),
   uploadImage: vi.fn(),
+  readAttachedCanvas: vi.fn(),
+  createAttachedCanvas: vi.fn(),
+  canvasLaunchUnavailable: undefined as BoardLaunchUnavailableReason | undefined,
 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
   return {
     ...react,
+    useId: () => {
+      if (!fixtures.hooks) return react.useId();
+      return `test-control-${fixtures.hooks.cursor++}`;
+    },
     useState: <T,>(initial: T | (() => T)) => {
       if (!fixtures.hooks) return react.useState(initial);
       const hooks = fixtures.hooks;
@@ -72,7 +86,15 @@ vi.mock("../locale-provider", () => ({
   }),
 }));
 vi.mock("../workspace/workspace-provider", () => ({
-  useWorkspace: () => ({ creator: { workspaceId: "workspace", role: "owner" }, canEdit: true }),
+  useWorkspace: () => ({
+    creator: { userId: "user", workspaceId: "workspace", role: "owner" },
+    canEdit: true,
+    refreshAccount: fixtures.refreshAccount,
+    productFeatures: {
+      canvasBoards: true,
+      canvasBoardsLaunchUnavailableReason: fixtures.canvasLaunchUnavailable,
+    },
+  }),
 }));
 vi.mock("../workspace/workspace-shell", () => ({
   WorkspaceShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
@@ -88,8 +110,16 @@ vi.mock("../../lib/idea-board-client", async (importOriginal) => ({
   submitBoardVotes: fixtures.submitVotes,
   uploadIdeaBoardImage: fixtures.uploadImage,
 }));
+vi.mock("../canvas-boards/workshop-canvas-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof WorkshopCanvasClientModule>()),
+  readWorkshopCanvas: fixtures.readAttachedCanvas,
+}));
+vi.mock("../canvas-boards/canvas-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof CanvasClientModule>()),
+  createCanvas: fixtures.createAttachedCanvas,
+}));
 
-function harness(render: () => ReactElement) {
+function harness(render: () => ReactNode) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [] };
   let tree: ReactNode;
   const cleanup: Array<() => void> = [];
@@ -121,7 +151,9 @@ function harness(render: () => ReactElement) {
           return;
         }
         if (!isValidElement<Record<string, unknown>>(node)) return;
-        return predicate(node) ? node : visit(node.props.children as ReactNode);
+        return predicate(node)
+          ? node
+          : (visit(node.props.children as ReactNode) ?? visit(node.props.actions as ReactNode));
       }
       const result = visit(tree);
       if (!result) throw new Error("Control missing");
@@ -139,6 +171,7 @@ async function settle() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
+  fixtures.canvasLaunchUnavailable = undefined;
   vi.stubGlobal("window", {
     location: { origin: "http://localhost" },
     localStorage: { getItem: () => "ab".repeat(32) },
@@ -988,6 +1021,112 @@ describe("idea board async state", () => {
     expect(retried.idempotencyKey).not.toBe(original.idempotencyKey);
     expect(view.render()).toContain('value="00000000-0000-4000-8000-000000000008" selected=""');
     view.unmount();
+  });
+
+  it("rechecks Canvas launch availability after a denial with a stale account snapshot", async () => {
+    fixtures.hostRead.mockResolvedValue(boardFixture);
+    fixtures.readAttachedCanvas.mockRejectedValue(new ApiClientError("Missing", "NOT_FOUND", 404));
+    fixtures.createAttachedCanvas.mockRejectedValueOnce(
+      new ApiClientError("Paused", "ROOM_CLOSED", 409, undefined, {
+        boardLaunchUnavailableReason: "operational_pause",
+      }),
+    );
+    fixtures.refreshAccount
+      .mockImplementationOnce(async () => {
+        fixtures.canvasLaunchUnavailable = "organization_restricted";
+      })
+      .mockImplementationOnce(async () => {
+        fixtures.canvasLaunchUnavailable = undefined;
+      });
+    const host = harness(() => BoardHost({ id: boardId }));
+    const launcher = harness(() =>
+      WorkshopCanvasLauncher(
+        host.find((element) => element.type === WorkshopCanvasLauncher).props as Parameters<
+          typeof WorkshopCanvasLauncher
+        >[0],
+      ),
+    );
+    const button = (view: ReturnType<typeof harness>, label: string) =>
+      view.find((element) => element.type === "button" && element.props.children === label);
+
+    host.render();
+    host.mount();
+    await settle();
+    host.render();
+    launcher.render();
+    launcher.mount();
+    await settle();
+    (button(launcher, english["canvas.workshop.add"]).props.onClick as () => void)();
+    await settle();
+    host.render();
+    expect(launcher.render()).toContain(english["boards.launch.operationalPause"]);
+    expect(fixtures.refreshAccount).not.toHaveBeenCalled();
+
+    (button(host, english["boards.refresh"]).props.onClick as () => void)();
+    await settle();
+    expect(fixtures.refreshAccount).toHaveBeenCalledTimes(1);
+    host.render();
+    const restricted = launcher.render();
+    expect(restricted).toContain(english["boards.launch.organizationRestricted"]);
+    expect(restricted).not.toContain(english["boards.launch.operationalPause"]);
+    expect(button(launcher, english["canvas.workshop.add"]).props.disabled).toBe(true);
+    expect(button(host, english["boards.startVoting"]).props.disabled).toBe(false);
+
+    (button(host, english["boards.refresh"]).props.onClick as () => void)();
+    await settle();
+    expect(fixtures.refreshAccount).toHaveBeenCalledTimes(2);
+    host.render();
+    const recovered = launcher.render();
+    expect(recovered).not.toContain(english["boards.launch.organizationRestricted"]);
+    expect(recovered).not.toContain(english["boards.launch.operationalPause"]);
+    expect(button(launcher, english["canvas.workshop.add"]).props.disabled).toBe(false);
+    launcher.unmount();
+    host.unmount();
+  });
+
+  it("retries the original Canvas attachment across a refresh that pauses new launches", async () => {
+    fixtures.readAttachedCanvas.mockRejectedValue(new ApiClientError("Missing", "NOT_FOUND", 404));
+    fixtures.createAttachedCanvas
+      .mockRejectedValueOnce(new TypeError("Connection lost"))
+      .mockResolvedValueOnce({ id: "canvas" });
+    const attempt: { current: WorkshopCanvasAttempt | null } = { current: null };
+    let board = boardFixture;
+    const onLaunchDenialChange = vi.fn();
+    const renderLauncher = () =>
+      WorkshopCanvasLauncher({ board, attempt, launchDenial: undefined, onLaunchDenialChange });
+    const button = (view: ReturnType<typeof harness>, label: string) =>
+      view.find((element) => element.type === "button" && element.props.children === label);
+    const launch = harness(renderLauncher);
+    fixtures.canvasLaunchUnavailable = "operational_pause";
+    launch.render();
+    launch.mount();
+    await settle();
+    expect(launch.render()).toContain(english["boards.launch.operationalPause"]);
+    expect(button(launch, english["canvas.workshop.add"]).props.disabled).toBe(true);
+
+    fixtures.canvasLaunchUnavailable = undefined;
+    launch.render();
+    (button(launch, english["canvas.workshop.add"]).props.onClick as () => void)();
+    await settle();
+    const original = fixtures.createAttachedCanvas.mock.calls[0]![0];
+    expect(attempt.current?.input).toEqual(original);
+    launch.unmount();
+
+    fixtures.canvasLaunchUnavailable = "operational_pause";
+    board = { ...board, title: "Retitled workshop" };
+    const refreshed = harness(renderLauncher);
+    refreshed.render();
+    refreshed.mount();
+    await settle();
+    expect(refreshed.render()).toContain(english["boards.launch.operationalPause"]);
+    const retry = button(refreshed, english["boards.retry"]);
+    expect(retry.props.disabled).toBe(false);
+    (retry.props.onClick as () => void)();
+    await settle();
+    expect(fixtures.createAttachedCanvas.mock.calls[1]![0]).toEqual(original);
+    expect(attempt.current).toBeNull();
+    expect(refreshed.render()).toContain('href="/canvas/canvas"');
+    refreshed.unmount();
   });
 
   it.each(["host", "guest"] as const)(

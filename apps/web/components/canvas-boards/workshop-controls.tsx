@@ -7,6 +7,10 @@ import type {
   IdeaBoardHostCommand,
 } from "@openround/contracts";
 import { apiFetch, ApiClientError } from "../../lib/api";
+import {
+  boardLaunchErrorKey,
+  type BoardLaunchNoticeKey,
+} from "../../lib/board-launch-availability";
 import { clientUuid } from "../../lib/uuid";
 import { useLocale } from "../locale-provider";
 import { IdeaContent } from "../idea-boards/idea-content";
@@ -28,7 +32,12 @@ export function CanvasWorkshopControls({
   const copy = guidedWorkshopCopy(locale);
   const source = board.sourceBoard;
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<false | "approval" | "generic">(false);
+  const [problem, setProblem] = useState<
+    | false
+    | "approval"
+    | "generic"
+    | { action: "collect" | "reopen"; key: BoardLaunchNoticeKey; scope: string }
+  >(false);
   const [conflict, setConflict] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [renames, setRenames] = useState<Record<string, string>>({});
@@ -57,6 +66,9 @@ export function CanvasWorkshopControls({
   const approved = source.ideas.filter((idea) => idea.status === "approved");
   const awaitingReview = source.ideas.some((idea) => idea.status === "pending");
   const locked = busy || disabled || pending.current !== null;
+  const launchDenial =
+    typeof problem === "object" && problem.scope === activeScope.current ? problem : undefined;
+  const reopenError = launchDenial?.action === "reopen" ? t(launchDenial.key) : undefined;
 
   async function openOriginal() {
     if (!source || locked || board.role !== "owner") return;
@@ -105,13 +117,15 @@ export function CanvasWorkshopControls({
     } catch (error) {
       if (operationScope !== activeScope.current) return false;
       const intent = attempt.operation.command;
+      const action = intent.type === "workshop" ? intent.command.type : undefined;
+      const launchKey =
+        action === "collect" || action === "reopen" ? boardLaunchErrorKey(error) : undefined;
       setProblem(
-        error instanceof ApiClientError &&
-          error.status === 422 &&
-          intent.type === "workshop" &&
-          intent.command.type === "start_voting"
-          ? "approval"
-          : "generic",
+        launchKey && (action === "collect" || action === "reopen")
+          ? { action, key: launchKey, scope: operationScope }
+          : error instanceof ApiClientError && error.status === 422 && action === "start_voting"
+            ? "approval"
+            : "generic",
       );
       const stale = error instanceof ApiClientError && error.status === 409;
       setConflict(stale);
@@ -149,6 +163,7 @@ export function CanvasWorkshopControls({
         board={source}
         canReopen
         disabled={locked}
+        reopenError={reopenError}
         retentionDeadline={board.expiresAt}
         onReopen={(windowDays) => perform({ type: "reopen", windowDays })}
         onRetryReopen={
@@ -160,12 +175,12 @@ export function CanvasWorkshopControls({
             : undefined
         }
       />
-      {problem ? (
+      {typeof problem === "string" || launchDenial?.action === "collect" ? (
         <div className="error" role="alert">
           <p>
             {problem === "approval"
               ? copy.approvalChanged
-              : t(conflict ? "canvas.conflictHelp" : "boards.error")}
+              : t(launchDenial?.key ?? (conflict ? "canvas.conflictHelp" : "boards.error"))}
           </p>
           {pending.current ? (
             <button

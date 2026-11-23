@@ -13,13 +13,17 @@ import {
 import {
   IdeaBoardError,
   PlatformError,
-  createPlatformRepository,
   type IdeaBoardRepository,
   type Repository,
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { AuthService } from "./auth.js";
 import { workspaceFeatureEnabled } from "./feature-policy.js";
+import {
+  BoardLaunchUnavailableError,
+  boardLaunchOrganizationRestricted,
+  ideaBoardLaunchRequiresActiveOrganization,
+} from "./board-launch-availability.js";
 import { roomCreationPolicy } from "./room-entitlements.js";
 import { cleanPlainText, hashToken } from "./security.js";
 import type { StorageService } from "./storage.js";
@@ -96,7 +100,11 @@ export async function registerIdeaBoardRoutes(
             requestId: request.id,
           },
         });
-      if (error instanceof IdeaBoardError || error instanceof PlatformError) {
+      if (
+        error instanceof IdeaBoardError ||
+        error instanceof PlatformError ||
+        error instanceof BoardLaunchUnavailableError
+      ) {
         const status =
           error.code === "NOT_FOUND"
             ? 404
@@ -118,6 +126,9 @@ export async function registerIdeaBoardRoutes(
             message: error.message,
             requestId: request.id,
             ...(error.code === "RATE_LIMITED" ? { retryAfterSeconds: 60 } : {}),
+            ...(error instanceof BoardLaunchUnavailableError && {
+              details: { boardLaunchUnavailableReason: error.reason },
+            }),
           },
         });
       }
@@ -177,21 +188,20 @@ export async function registerIdeaBoardRoutes(
         throw new IdeaBoardError("NOT_FOUND", "Board creation is not enabled for this workspace");
       const operational = await deps.repository.getOperationalFeatures();
       if (!operational.sessionCreation)
-        throw new IdeaBoardError("ROOM_CLOSED", "New board launches are temporarily paused");
-      if (deps.config.BUSINESS_PLATFORM_ENABLED && !deps.config.COMMUNITY_MODE) {
-        const platform = createPlatformRepository(deps.repository);
-        const organization = await platform.getOrganizationForWorkspace(workspaceId);
-        const workspace = organization
-          ? (await platform.listOrganizationWorkspacesForOperator(organization.id)).find(
-              (entry) => entry.id === workspaceId,
-            )
-          : null;
-        if (!organization || organization.status !== "active" || workspace?.status !== "active")
-          throw new IdeaBoardError(
-            "ROOM_CLOSED",
-            "New board launches are paused for this workspace",
-          );
-      }
+        throw new BoardLaunchUnavailableError(
+          "ROOM_CLOSED",
+          "New board launches are temporarily paused",
+          "operational_pause",
+        );
+      if (
+        ideaBoardLaunchRequiresActiveOrganization(deps.config) &&
+        (await boardLaunchOrganizationRestricted(deps.repository, workspaceId))
+      )
+        throw new BoardLaunchUnavailableError(
+          "ROOM_CLOSED",
+          "New board launches are paused for this workspace",
+          "organization_restricted",
+        );
     };
     routes.get("/v1/idea-boards", routeOptions, async (request, reply) => {
       const actor = await creator(request, reply);

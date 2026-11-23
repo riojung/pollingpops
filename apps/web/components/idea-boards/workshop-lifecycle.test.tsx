@@ -38,6 +38,28 @@ describe("workshop lifecycle", () => {
     expect(html.match(/<button[^>]*>Reopen collection<\/button>/)?.[0]).toContain('disabled=""');
     expect(html).toContain("This workshop has reached its round limit.");
   });
+  it("describes a blocked reopen and leaves a command denial retryable", () => {
+    const reason = "New Board launches are temporarily paused by the Polling Pops operator.";
+    const props = {
+      board: { ...boardFixture, status: "closed" as const },
+      canReopen: true,
+      onReopen: async () => false,
+    };
+    const blocked = renderToStaticMarkup(
+      withEnglishLocale(<WorkshopLifecycleControls {...props} launchUnavailable={reason} />),
+    );
+    const blockedButton = blocked.match(/<button[^>]*>Reopen collection<\/button>/)?.[0];
+    const noticeId = blockedButton?.match(/aria-describedby="([^"]+)"/)?.[1];
+    expect(blockedButton).toContain('disabled=""');
+    expect(noticeId).toBeDefined();
+    expect(blocked).toContain(`id="${noticeId}">${reason}</p>`);
+
+    const denied = renderToStaticMarkup(
+      withEnglishLocale(<WorkshopLifecycleControls {...props} reopenError={reason} />),
+    );
+    expect(denied.match(/<button[^>]*>Reopen collection<\/button>/)?.[0]).not.toContain("disabled");
+    expect(denied).toContain(`role="alert">${reason}</p>`);
+  });
   it("renders aggregate history through the deduplicated redacted idea map", () => {
     const board: IdeaBoardView = {
       ...boardFixture,

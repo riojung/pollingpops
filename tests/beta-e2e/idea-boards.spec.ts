@@ -5,6 +5,8 @@ import type { WorkshopTemplateIntent } from "../../apps/web/components/idea-boar
 import {
   CANVAS_SCHEMA_VERSION,
   IdeaBoardCreateSchema,
+  IdeaBoardViewSchema,
+  type BoardLaunchUnavailableReason,
 } from "../../packages/contracts/src/index.ts";
 import { specialistLocale } from "./option-b-specialist-support";
 import { signInBeta } from "./sign-in";
@@ -218,6 +220,257 @@ for (const mobile of [false, true]) {
     await expect(dialog).toBeVisible();
     await expect(savedTitle).toHaveValue(pendingTitle);
     expect(creationRequests).toEqual([]);
+  });
+
+  test(`${mobile ? "@mobile " : ""}Boards pauses new launches while retained Workshops stay usable`, async ({
+    page,
+  }) => {
+    test.skip(process.env.BETA_E2E_IDEA_BOARDS !== "true", "Opt-in idea board writer journey");
+    await signInBeta(page, undefined, { returnTo: "/home" });
+    await specialistLocale(page, "en-CA");
+    const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
+    const titlePrefix = `Launch availability ${randomUUID().slice(0, 8)}`;
+    async function createWorkshop(title: string) {
+      const response = await page.request.post(`${api}/v1/idea-boards`, {
+        data: { title, idempotencyKey: randomUUID() },
+      });
+      expect(response.status(), await response.text()).toBe(201);
+      return IdeaBoardViewSchema.parse((await response.json()).board);
+    }
+    const retained = await createWorkshop(`${titlePrefix} draft`);
+    const active = await createWorkshop(`${titlePrefix} active`);
+    const opened = await page.request.post(`${api}/v1/idea-boards/${active.id}/commands`, {
+      data: {
+        idempotencyKey: randomUUID(),
+        expectedRevision: active.revision,
+        command: { type: "collect" },
+      },
+    });
+    expect(opened.status(), await opened.text()).toBe(200);
+
+    let launchReason: BoardLaunchUnavailableReason | undefined = "operational_pause";
+    await page.route(`${api}/v1/auth/me`, async (route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      const account = await response.json();
+      expect(account.creator.role).toBe("owner");
+      await route.fulfill({
+        response,
+        json: {
+          ...account,
+          productFeatures: {
+            ...account.productFeatures,
+            ideaBoards: true,
+            canvasBoards: true,
+            ideaBoardsLaunchUnavailableReason: launchReason,
+            canvasBoardsLaunchUnavailableReason: launchReason,
+          },
+        },
+      });
+    });
+
+    const boardsPath = `/boards?q=${encodeURIComponent(titlePrefix)}`;
+    const main = page.getByRole("main");
+    const createTrigger = main.getByRole("button", { name: "New board", exact: true });
+    const savedWorkshop = main.getByRole("link", { name: retained.title, exact: true });
+    const activeWorkshop = main.getByRole("link", { name: active.title, exact: true });
+    const heading = (title: string) =>
+      main.getByRole("heading", { name: title, level: 1, exact: true });
+    const collectButton = { name: "Open collection", exact: true };
+    const collect = main.getByRole("button", collectButton);
+    const collection = main.locator("section").filter({
+      has: page.getByRole("button", collectButton),
+    });
+    const pauseCopy = "New Board launches are temporarily paused by the Polling Pops operator.";
+    const restrictedCopy =
+      "New Board launches are unavailable because this organization or workspace is inactive.";
+    await page.goto(boardsPath);
+    await expect(main.getByText(pauseCopy, { exact: true })).toBeVisible();
+    await expect(createTrigger).toHaveCount(0);
+    await expect(savedWorkshop).toHaveAttribute("href", `/boards/${retained.id}`);
+    await activeWorkshop.click();
+    await expect(heading(active.title)).toBeVisible();
+    const visibility = main.getByRole("checkbox", {
+      name: "Show approved ideas during collection",
+      exact: true,
+    });
+    await hostCommand(page, () => visibility.click());
+    await expect(visibility).toBeChecked();
+
+    launchReason = "organization_restricted";
+    await page.goto(boardsPath);
+    await savedWorkshop.click();
+    await expect(heading(retained.title)).toBeVisible();
+    await expect(collect).toBeDisabled();
+    await expect(collect).toHaveAccessibleDescription(restrictedCopy);
+    await expect(collection.getByText(restrictedCopy, { exact: true })).toBeVisible();
+
+    launchReason = undefined;
+    await main.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(collect).toBeEnabled();
+    await expect(collection.getByText(restrictedCopy, { exact: true })).toHaveCount(0);
+
+    const commandUrl = `${api}/v1/idea-boards/${retained.id}/commands`;
+    const webOrigin = new URL(page.url()).origin;
+    await page.route(commandUrl, (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      return route.fulfill({
+        status: 409,
+        headers: {
+          "access-control-allow-origin": webOrigin,
+          "access-control-allow-credentials": "true",
+        },
+        json: {
+          error: {
+            code: "ROOM_CLOSED",
+            message: "Synthetic launch denial after the account read",
+            details: { boardLaunchUnavailableReason: "operational_pause" },
+          },
+        },
+      });
+    });
+    await collect.click();
+    await expect(collection.getByRole("alert")).toHaveText(pauseCopy);
+    await expect(heading(retained.title)).toBeVisible();
+
+    await page.unroute(commandUrl);
+    await hostCommand(page, () => collect.click());
+    await expect(main.getByText("Collecting ideas", { exact: true })).toBeVisible();
+    await expect(main.getByText(pauseCopy, { exact: true })).toHaveCount(0);
+
+    await page.goto(boardsPath);
+    await expect(savedWorkshop).toBeVisible();
+    await expect(activeWorkshop).toBeVisible();
+    await expect(createTrigger).toBeEnabled();
+  });
+
+  test(`${mobile ? "@mobile " : ""}Boards refreshes launch denials and retries an accepted Workshop setup during a pause`, async ({
+    page,
+  }) => {
+    test.skip(process.env.BETA_E2E_IDEA_BOARDS !== "true", "Opt-in idea board writer journey");
+    await signInBeta(page, undefined, { returnTo: "/home" });
+    await specialistLocale(page, "en-CA");
+    const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
+    const accountUrl = `${api}/v1/auth/me`;
+    const createUrl = `${api}/v1/idea-boards`;
+    const headers = {
+      "access-control-allow-origin": new URL(page.url()).origin,
+      "access-control-allow-credentials": "true",
+    };
+    let pauseWorkshopLaunch = false;
+    await page.route(accountUrl, async (route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      const account = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...account,
+          productFeatures: {
+            ...account.productFeatures,
+            ideaBoards: true,
+            canvasBoards: true,
+            ideaBoardsLaunchUnavailableReason: pauseWorkshopLaunch
+              ? "operational_pause"
+              : undefined,
+            canvasBoardsLaunchUnavailableReason: "operational_pause",
+          },
+        },
+      });
+    });
+    await page.route(createUrl, (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      return route.fulfill({
+        status: 403,
+        headers,
+        json: {
+          error: {
+            code: "FORBIDDEN",
+            message: "Synthetic launch denial after the account read",
+            details: { boardLaunchUnavailableReason: "organization_restricted" },
+          },
+        },
+      });
+    });
+
+    const title = `Recover accepted Workshop ${randomUUID().slice(0, 8)}`;
+    const pauseCopy = "New Board launches are temporarily paused by the Polling Pops operator.";
+    const restrictedCopy =
+      "New Board launches are unavailable because this organization or workspace is inactive.";
+    const main = page.getByRole("main");
+    const createTrigger = main.getByRole("button", { name: "New board", exact: true });
+    const dialog = page.getByRole("dialog", { name: "New board", exact: true });
+    const boardTitle = dialog.getByLabel("Board title", { exact: true });
+    const create = dialog.getByRole("button", { name: "Create board", exact: true });
+    const workshop = dialog.getByRole("button", { name: "Guided workshop", exact: true });
+    const alert = main.getByRole("alert");
+    const refresh = { name: "Refresh", exact: true };
+
+    await page.goto(`/boards?q=${encodeURIComponent(title)}`);
+    await createTrigger.click();
+    await workshop.click();
+    await boardTitle.fill(title);
+    await create.click();
+    await expect(dialog.getByRole("alert")).toHaveText(restrictedCopy);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(alert).toContainText(restrictedCopy);
+    await expect(createTrigger).toBeEnabled();
+
+    await page.unroute(createUrl);
+    const [accountRefresh] = await Promise.all([
+      page.waitForResponse(
+        (response) => response.url() === accountUrl && response.request().method() === "GET",
+      ),
+      alert.getByRole("button", refresh).click(),
+    ]);
+    expect(accountRefresh.ok()).toBe(true);
+    await expect(createTrigger).toBeEnabled();
+    await expect(alert).toHaveCount(0);
+
+    const payloads: Array<string | null> = [];
+    let acceptedBoardId = "";
+    await page.route(createUrl, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      payloads.push(route.request().postData());
+      if (payloads.length > 1) return route.continue();
+      const accepted = await route.fetch();
+      expect(accepted.status(), await accepted.text()).toBe(201);
+      acceptedBoardId = IdeaBoardViewSchema.parse((await accepted.json()).board).id;
+      return route.fulfill({
+        status: 503,
+        headers,
+        json: { error: { code: "INTERNAL_ERROR", message: "Synthetic lost acknowledgement" } },
+      });
+    });
+    await createTrigger.click();
+    await workshop.click();
+    await boardTitle.fill(title);
+    await create.click();
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "The request could not finish. Check the current board and retry.",
+    );
+    await dialog
+      .getByRole("button", { name: "Close and resume later", exact: true })
+      .first()
+      .click();
+    await expect(dialog).toHaveCount(0);
+
+    const canvasPause = main.locator("p").filter({ hasText: `Team canvas · ${pauseCopy}` });
+    await expect(canvasPause).toBeVisible();
+    pauseWorkshopLaunch = true;
+    await canvasPause.locator("..").getByRole("button", refresh).click();
+    await expect(main.getByText(pauseCopy, { exact: true })).toHaveText(pauseCopy);
+    await expect(createTrigger).toHaveCount(0);
+    await main.getByRole("button", { name: "Retry this setup", exact: true }).click();
+    await expect(boardTitle).toHaveValue(title);
+    await expect(boardTitle).toBeDisabled();
+    await dialog.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/boards/${acceptedBoardId}$`));
+    await expect(main.getByRole("heading", { name: title, level: 1, exact: true })).toBeVisible();
+    expect(payloads).toHaveLength(2);
+    expect(payloads[0]).toBeTruthy();
+    expect(payloads[1]).toBe(payloads[0]);
   });
 
   test(`${mobile ? "@mobile " : ""}rich ideas preserve drawings and link cards through moderation`, async ({

@@ -11,6 +11,11 @@ import {
   type IdeaBoardCreate,
 } from "@openround/contracts";
 import { ApiClientError } from "../../lib/api";
+import {
+  boardLaunchErrorKey,
+  boardLaunchUnavailableKey,
+  type BoardLaunchNoticeKey,
+} from "../../lib/board-launch-availability";
 import { createIdeaBoard, ideaBoardCreateIntent } from "../../lib/idea-board-client";
 import { clientUuid } from "../../lib/uuid";
 import { createCanvas } from "../canvas-boards/canvas-client";
@@ -93,7 +98,13 @@ export function BoardLibrary() {
   const creationCopy = canvasCreationMessages(locale);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { creator, canEdit, productFeatures, loading: accountLoading } = useWorkspace();
+  const {
+    creator,
+    canEdit,
+    productFeatures,
+    refreshAccount,
+    loading: accountLoading,
+  } = useWorkspace();
   const workspaceId = creator?.workspaceId;
   const userId = creator?.userId;
   const contextKey = `${userId ?? ""}:${workspaceId ?? ""}`;
@@ -108,7 +119,7 @@ export function BoardLibrary() {
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<false | "boards.error" | BoardLaunchNoticeKey>(false);
   const [refresh, setRefresh] = useState(0);
   const pending = useRef<Intent | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -119,10 +130,19 @@ export function BoardLibrary() {
   const title = useRef<HTMLInputElement>(null);
   const templateOpener = useRef<HTMLElement | null>(null);
   const createButton = useRef<HTMLButtonElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
   const handledCreateRequest = useRef(false);
   const createRequested = searchParams.get("create") === "1";
-  const teamEnabled = productFeatures?.canvasBoards === true;
-  const workshopEnabled = productFeatures?.ideaBoards === true;
+  const teamFeatureEnabled = productFeatures?.canvasBoards === true;
+  const workshopFeatureEnabled = productFeatures?.ideaBoards === true;
+  const teamLaunchKey = teamFeatureEnabled
+    ? boardLaunchUnavailableKey(productFeatures?.canvasBoardsLaunchUnavailableReason)
+    : undefined;
+  const workshopLaunchKey = workshopFeatureEnabled
+    ? boardLaunchUnavailableKey(productFeatures?.ideaBoardsLaunchUnavailableReason)
+    : undefined;
+  const teamEnabled = teamFeatureEnabled && !teamLaunchKey;
+  const workshopEnabled = workshopFeatureEnabled && !workshopLaunchKey;
   const canCreate = canEdit && (teamEnabled || workshopEnabled);
   const canCreateSelection =
     canEdit && (kind === "team" ? teamEnabled : workshopEnabled && (!templateId || teamEnabled));
@@ -130,25 +150,30 @@ export function BoardLibrary() {
   const teamNotice =
     creationFeatures && !teamEnabled
       ? t(
-          creationNoticeKeys.team[
-            creationFeatures.canvasBoardsCreationUnavailableReason ?? "fallback"
-          ],
+          teamLaunchKey ??
+            creationNoticeKeys.team[
+              creationFeatures.canvasBoardsCreationUnavailableReason ?? "fallback"
+            ],
         )
       : null;
   const workshopNotice =
     creationFeatures && !workshopEnabled
       ? t(
-          creationNoticeKeys.workshop[
-            creationFeatures.ideaBoardsCreationUnavailableReason ?? "fallback"
-          ],
+          workshopLaunchKey ??
+            creationNoticeKeys.workshop[
+              creationFeatures.ideaBoardsCreationUnavailableReason ?? "fallback"
+            ],
         )
       : null;
+  const sharedLaunchNotice =
+    teamLaunchKey && teamLaunchKey === workshopLaunchKey ? teamNotice : null;
+  const libraryLaunchError = !creating && error && error !== "boards.error";
   const library = useBoardLibrary({
     workspaceId,
     scope,
     search,
     refresh,
-    canvasEnabled: Boolean(productFeatures?.canvasBoards),
+    canvasEnabled: teamFeatureEnabled,
   });
   useEffect(() => {
     const active = new AbortController();
@@ -210,7 +235,7 @@ export function BoardLibrary() {
     )
       return;
     handledCreateRequest.current = true;
-    if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
+    if (!pending.current) setKind(teamEnabled ? "team" : "workshop");
     createButton.current?.focus();
     setCreating(true);
     const next = new URLSearchParams();
@@ -224,13 +249,13 @@ export function BoardLibrary() {
     busy,
     formContext,
     contextKey,
-    productFeatures?.canvasBoards,
+    teamEnabled,
     urlSearch,
     router,
   ]);
   useEffect(() => {
-    if (!canCreate || !productFeatures?.canvasBoards) setBrowsing(false);
-  }, [canCreate, productFeatures?.canvasBoards]);
+    if (!canCreate || !teamEnabled) setBrowsing(false);
+  }, [canCreate, teamEnabled]);
   useEffect(() => {
     // WorkspaceShell withholds the dialog while the account and its locale load.
     if (accountLoading || !creating || formContext !== contextKey) return;
@@ -242,6 +267,7 @@ export function BoardLibrary() {
     return () => {
       node.close();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      else retryButton.current?.focus();
       templateOpener.current = null;
     };
   }, [accountLoading, creating, formContext, contextKey]);
@@ -255,6 +281,16 @@ export function BoardLibrary() {
     pending.current.value.workspaceId === workspaceId
       ? pending.current.value
       : null;
+  const plainCreationPending =
+    canEdit &&
+    formContext === contextKey &&
+    pending.current !== null &&
+    pending.current.kind !== "template";
+
+  function refreshLaunchAvailability() {
+    setError((current) => (current === "boards.error" ? current : false));
+    void refreshAccount();
+  }
 
   function chooseTemplate(id: CanvasTemplateId | null) {
     setTemplateId(id);
@@ -275,7 +311,7 @@ export function BoardLibrary() {
   function startTemplate(id: CanvasTemplateId | null) {
     if (
       !canCreate ||
-      !productFeatures?.canvasBoards ||
+      !teamEnabled ||
       busy ||
       pending.current ||
       setupError === "invalid" ||
@@ -338,7 +374,7 @@ export function BoardLibrary() {
               }
             : { kind, value: ideaBoardCreateIntent(input) };
     } catch {
-      setError(true);
+      setError("boards.error");
       return;
     }
     const active = controller.current;
@@ -413,7 +449,7 @@ export function BoardLibrary() {
           caught.status !== 429
         )
           pending.current = null;
-        setError(true);
+        setError(boardLaunchErrorKey(caught) ?? "boards.error");
       }
     } finally {
       if (controller.current === active) {
@@ -429,7 +465,7 @@ export function BoardLibrary() {
       requireBeta={false}
       translationLevel="full"
     >
-      {canCreate && productFeatures?.canvasBoards ? (
+      {canCreate && teamEnabled ? (
         <CanvasTemplateStrip
           disabled={busy || pending.current !== null || setupError === "invalid"}
           inactive={creating || browsing}
@@ -451,38 +487,70 @@ export function BoardLibrary() {
         onSearchChange={setSearch}
         onScopeChange={setScope}
         disabled={busy}
-        canCreate={canCreate}
+        canCreate={canCreate && !plainCreationPending}
         createButtonRef={createButton}
         onCreate={() => {
-          if (!pending.current) setKind(productFeatures?.canvasBoards ? "team" : "workshop");
+          if (!pending.current) setKind(teamEnabled ? "team" : "workshop");
           setCreating(true);
         }}
       />
       {teamNotice || workshopNotice ? (
         <div className={`stack-sm ${creationStyles.libraryAvailability}`}>
-          {teamNotice ? <p className={styles.muted}>{teamNotice}</p> : null}
-          {workshopNotice ? <p className={styles.muted}>{workshopNotice}</p> : null}
+          {sharedLaunchNotice ? <p className={styles.muted}>{sharedLaunchNotice}</p> : null}
+          {!sharedLaunchNotice && teamNotice ? (
+            <p className={styles.muted}>
+              {teamLaunchKey ? <strong>{t("canvas.team")} · </strong> : null}
+              {teamNotice}
+            </p>
+          ) : null}
+          {!sharedLaunchNotice && workshopNotice ? (
+            <p className={styles.muted}>
+              {workshopLaunchKey ? <strong>{t("canvas.workshop")} · </strong> : null}
+              {workshopNotice}
+            </p>
+          ) : null}
+          {teamLaunchKey || workshopLaunchKey ? (
+            <button
+              className="button-quiet"
+              type="button"
+              disabled={busy}
+              onClick={refreshLaunchAvailability}
+            >
+              {t("boards.refresh")}
+            </button>
+          ) : null}
         </div>
       ) : null}
-      {templatePending && !creating ? (
+      {!creating && (templatePending || plainCreationPending) ? (
         <aside className={templateStyles.recovery} role="status">
-          <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
-          <button type="button" className="button-quiet" onClick={() => setCreating(true)}>
+          {templatePending ? (
+            <p>{templatePending.sourceBoardId ? copy.sourceCreated : copy.pending}</p>
+          ) : null}
+          <button
+            type="button"
+            className="button-quiet"
+            ref={retryButton}
+            disabled={busy}
+            onClick={() => setCreating(true)}
+          >
             {copy.retry}
           </button>
-          {templatePending.sourceBoardId ? (
+          {templatePending?.sourceBoardId ? (
             <Link href={`/boards/${templatePending.sourceBoardId}`}>{copy.openSource}</Link>
           ) : null}
         </aside>
       ) : null}
-      {error || library.error ? (
+      {(!creating && error) || library.error ? (
         <p className="error" role="alert">
-          {t("boards.error")}{" "}
+          {t((!creating && error) || "boards.error")}{" "}
           <button
             type="button"
             className="button-quiet"
             disabled={busy || library.busy}
-            onClick={() => setRefresh((value) => value + 1)}
+            onClick={() => {
+              setRefresh((value) => value + 1);
+              if (libraryLaunchError) refreshLaunchAvailability();
+            }}
           >
             {t("boards.refresh")}
           </button>
@@ -552,7 +620,7 @@ export function BoardLibrary() {
           {t("boards.more")}
         </button>
       ) : null}
-      {browsing && formContext === contextKey && canCreate && productFeatures?.canvasBoards ? (
+      {browsing && formContext === contextKey && canCreate && teamEnabled ? (
         <CanvasTemplateBrowserDialog
           returnFocus={templateOpener.current}
           onClose={() => {
@@ -598,7 +666,7 @@ export function BoardLibrary() {
           </header>
           {error ? (
             <p className="error" role="alert">
-              {t("boards.error")}
+              {t(error)}
             </p>
           ) : null}
           {setupError ? (
@@ -624,7 +692,7 @@ export function BoardLibrary() {
                       removeCanvasCreationSetup(userId, workspaceId);
                       setSetupError(null);
                     } catch {
-                      setError(true);
+                      setError("boards.error");
                     }
                   }}
                 >
@@ -674,9 +742,12 @@ export function BoardLibrary() {
                   aria-label={t("canvas.team")}
                   aria-pressed={kind === "team"}
                   aria-describedby={
-                    teamNotice
-                      ? "canvas-team-description canvas-team-availability"
-                      : "canvas-team-description"
+                    "canvas-team-description" +
+                    (sharedLaunchNotice
+                      ? " board-launch-availability"
+                      : teamNotice
+                        ? " canvas-team-availability"
+                        : "")
                   }
                   disabled={!teamEnabled}
                   onClick={() => setKind("team")}
@@ -699,9 +770,12 @@ export function BoardLibrary() {
                   aria-label={t("canvas.workshop")}
                   aria-pressed={kind === "workshop"}
                   aria-describedby={
-                    workshopNotice
-                      ? "canvas-workshop-description canvas-workshop-availability"
-                      : "canvas-workshop-description"
+                    "canvas-workshop-description" +
+                    (sharedLaunchNotice
+                      ? " board-launch-availability"
+                      : workshopNotice
+                        ? " canvas-workshop-availability"
+                        : "")
                   }
                   disabled={!workshopEnabled}
                   onClick={() => setKind("workshop")}
@@ -720,20 +794,27 @@ export function BoardLibrary() {
                   </span>
                 </button>
               </div>
-              {teamNotice ? (
+              {sharedLaunchNotice ? (
+                <p id="board-launch-availability" className={creationStyles.availability}>
+                  {sharedLaunchNotice}
+                </p>
+              ) : null}
+              {!sharedLaunchNotice && teamNotice ? (
                 <p id="canvas-team-availability" className={creationStyles.availability}>
+                  {teamLaunchKey ? <strong>{t("canvas.team")} · </strong> : null}
                   {teamNotice}
                 </p>
               ) : null}
-              {workshopNotice ? (
+              {!sharedLaunchNotice && workshopNotice ? (
                 <p id="canvas-workshop-availability" className={creationStyles.availability}>
+                  {workshopLaunchKey ? <strong>{t("canvas.workshop")} · </strong> : null}
                   {workshopNotice}
                 </p>
               ) : null}
               <div
                 className={creationStyles.body}
                 data-testid="board-creation-body"
-                data-templates={Boolean(productFeatures?.canvasBoards)}
+                data-templates={teamEnabled}
               >
                 <div className={creationStyles.settings}>
                   <label className={creationStyles.titleField}>
@@ -826,6 +907,15 @@ export function BoardLibrary() {
                           </label>
                         </div>
                       </details>
+                      {!teamEnabled && workshopEnabled && templateId && !pending.current ? (
+                        <button
+                          className="button-quiet"
+                          type="button"
+                          onClick={() => setTemplateId(null)}
+                        >
+                          {copy.blank}
+                        </button>
+                      ) : null}
                     </>
                   ) : (
                     <div className={creationStyles.scopeNote}>
@@ -837,7 +927,7 @@ export function BoardLibrary() {
                     </div>
                   )}
                 </div>
-                {productFeatures?.canvasBoards ? (
+                {teamEnabled ? (
                   <div className={creationStyles.gallery} data-testid="board-starters-scroll">
                     <CanvasTemplateChooser value={templateId} onChange={chooseTemplate} />
                   </div>

@@ -21,6 +21,10 @@ const messages: IdeaBoardMessages = {
   "boards.title": "Tableaux d’idées",
   "boards.description": "Recueillez des idées, regroupez-les et choisissez des priorités communes.",
   "boards.create": "Créer un tableau",
+  "boards.launch.operationalPause":
+    "L’opérateur Polling Pops a temporairement suspendu le lancement de nouveaux tableaux.",
+  "boards.launch.organizationRestricted":
+    "Impossible de lancer de nouveaux tableaux, car cette organisation ou cet espace de travail est inactif.",
   "boards.creation.teamOperatorPolicy":
     "Votre opérateur Polling Pops a désactivé la création de canevas d’équipe pour cet espace de travail.",
   "boards.creation.teamRolloutUnavailable":

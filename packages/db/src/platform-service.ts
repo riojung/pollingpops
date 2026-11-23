@@ -913,6 +913,9 @@ export class PlatformService implements P.PlatformRepository {
   async listOrganizationWorkspacesForOperator(org: string) {
     return this.store.list<P.OrganizationWorkspaceRecord>("workspace", org);
   }
+  async getWorkspaceForOperator(workspaceId: string) {
+    return this.store.get<P.OrganizationWorkspaceRecord>("workspace", workspaceId);
+  }
   async createOrganizationWorkspace(input: {
     organizationId: string;
     actorId: string;

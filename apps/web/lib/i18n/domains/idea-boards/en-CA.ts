@@ -18,6 +18,10 @@ const messages = {
   "boards.title": "Idea boards",
   "boards.description": "Collect ideas, group them together, and choose shared priorities.",
   "boards.create": "Create board",
+  "boards.launch.operationalPause":
+    "New Board launches are temporarily paused by the Polling Pops operator.",
+  "boards.launch.organizationRestricted":
+    "New Board launches are unavailable because this organization or workspace is inactive.",
   "boards.creation.teamOperatorPolicy":
     "Team Canvas creation is disabled for this workspace by your Polling Pops operator.",
   "boards.creation.teamRolloutUnavailable":

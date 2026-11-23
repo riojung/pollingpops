@@ -539,6 +539,7 @@ describe("board-scoped canvas HTTP boundaries", () => {
         payload: { ...payload, operationId: randomUUID() },
       });
       expect(fresh.statusCode).toBe(pause === "canvas-policy" ? 404 : 403);
+      expect(fresh.json().error).not.toHaveProperty("details");
       const listed = await f.app.inject({
         url: "/v1/canvas-boards?scope=owned",
         headers: f.owner.headers,
@@ -595,6 +596,141 @@ describe("board-scoped canvas HTTP boundaries", () => {
         await f.app.inject({ url: "/v1/canvas-boards?scope=owned", headers: f.owner.headers })
       ).json().boards,
     ).toEqual([]);
+  });
+
+  it("limits Canvas creation launch reasons to an authorized active workspace", async () => {
+    const f = await fixture();
+    const selected = await f.app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${f.workspaceId}/select`,
+      headers: f.owner.headers,
+    });
+    expect(selected.statusCode, selected.body).toBe(200);
+    const retained = await create(f);
+    const attempt = (headers: { cookie: string }, workspaceId = f.workspaceId) =>
+      f.app.inject({
+        method: "POST",
+        url: "/v1/canvas-boards",
+        headers,
+        payload: {
+          schemaVersion: 1,
+          workspaceId,
+          title: "Fresh canvas",
+          boardType: "team",
+          operationId: randomUUID(),
+        },
+      });
+    await f.repository.updateOperationalFeatures({ sessionCreation: false }, randomUUID());
+    const paused = await attempt(f.owner.headers);
+    expect(paused.statusCode).toBe(403);
+    expect(paused.json().error).toMatchObject({
+      code: "FORBIDDEN",
+      details: { boardLaunchUnavailableReason: "operational_pause" },
+    });
+    for (const foreign of [
+      await attempt(f.outsider.headers),
+      await attempt(f.owner.headers, f.outsider.workspaceId),
+    ]) {
+      expect(foreign.statusCode).toBe(403);
+      expect(foreign.json().error).not.toHaveProperty("details");
+    }
+    expect(
+      (await f.app.inject({ url: `/v1/canvas-boards/${retained.id}`, headers: f.owner.headers }))
+        .statusCode,
+    ).toBe(200);
+
+    await f.repository.updateOperationalFeatures({ sessionCreation: true }, randomUUID());
+    await f.platform.updateWorkspaceStatus(f.workspaceId, "suspended");
+    const restricted = await attempt(f.owner.headers);
+    expect(restricted.statusCode).toBe(404);
+    expect(restricted.json().error).toMatchObject({
+      code: "NOT_FOUND",
+      details: { boardLaunchUnavailableReason: "organization_restricted" },
+    });
+    const foreignRestricted = await attempt(f.outsider.headers);
+    expect(foreignRestricted.statusCode).toBe(404);
+    expect(foreignRestricted.json().error).not.toHaveProperty("details");
+    const readRestricted = await f.app.inject({
+      url: `/v1/canvas-boards/${retained.id}`,
+      headers: f.owner.headers,
+    });
+    expect(readRestricted.statusCode).toBe(404);
+    expect(readRestricted.json().error).not.toHaveProperty("details");
+  });
+
+  it("explains a fresh Canvas collection pause to facilitators and replays accepted launches", async () => {
+    const f = await fixture();
+    const selected = await f.app.inject({
+      method: "POST",
+      url: `/v1/workspaces/${f.workspaceId}/select`,
+      headers: f.owner.headers,
+    });
+    expect(selected.statusCode, selected.body).toBe(200);
+    const source = await f.app.inject({
+      method: "POST",
+      url: "/v1/idea-boards",
+      headers: f.owner.headers,
+      payload: { title: "Canvas workshop", idempotencyKey: randomUUID() },
+    });
+    expect(source.statusCode, source.body).toBe(201);
+    const { id: sourceBoardId, revision } = source.json().board;
+    const board = await create(f, { boardType: "workshop", sourceBoardId });
+    const invitation = await invite(f, board, f.billing.email, "viewer");
+    expect((await accept(f, invitation.id, f.billing.headers)).statusCode).toBe(200);
+    const setSessionCreation = (sessionCreation: boolean) =>
+      f.repository.updateOperationalFeatures({ sessionCreation }, randomUUID());
+    const collect: CanvasBoardCommand = {
+      type: "workshop",
+      expectedRevision: revision,
+      command: { type: "collect" },
+    };
+    const collectId = randomUUID();
+    await setSessionCreation(false);
+    const paused = await command(f, board, collect, f.owner.headers, collectId);
+    expect(paused.statusCode).toBe(403);
+    expect(paused.json().error).toMatchObject({
+      code: "FORBIDDEN",
+      details: { boardLaunchUnavailableReason: "operational_pause" },
+    });
+    const viewer = await command(f, board, collect, f.billing.headers);
+    expect(viewer.statusCode).toBe(403);
+    expect(viewer.json().error).not.toHaveProperty("details");
+    const outsider = await command(f, board, collect, f.outsider.headers);
+    expect(outsider.statusCode).toBe(404);
+    expect(outsider.json().error).not.toHaveProperty("details");
+
+    await setSessionCreation(true);
+    const opened = await command(f, board, collect, f.owner.headers, collectId);
+    expect(opened.statusCode, opened.body).toBe(200);
+    await setSessionCreation(false);
+    const collectRetry = await command(f, board, collect, f.owner.headers, collectId);
+    expect(collectRetry.statusCode, collectRetry.body).toBe(200);
+    expect(collectRetry.json().receipt).toEqual(opened.json().receipt);
+
+    const closed = await command(f, board, {
+      type: "workshop",
+      expectedRevision: opened.json().board.sourceBoard.revision,
+      command: { type: "close" },
+    });
+    expect(closed.statusCode, closed.body).toBe(200);
+    const reopen: CanvasBoardCommand = {
+      type: "workshop",
+      expectedRevision: closed.json().board.sourceBoard.revision,
+      command: { type: "reopen", roundNumber: 1 },
+    };
+    const reopenId = randomUUID();
+    const reopenPaused = await command(f, board, reopen, f.owner.headers, reopenId);
+    expect(reopenPaused.statusCode).toBe(403);
+    expect(reopenPaused.json().error.details).toEqual({
+      boardLaunchUnavailableReason: "operational_pause",
+    });
+    await setSessionCreation(true);
+    const reopened = await command(f, board, reopen, f.owner.headers, reopenId);
+    expect(reopened.statusCode, reopened.body).toBe(200);
+    await setSessionCreation(false);
+    const reopenRetry = await command(f, board, reopen, f.owner.headers, reopenId);
+    expect(reopenRetry.statusCode, reopenRetry.body).toBe(200);
+    expect(reopenRetry.json().receipt).toEqual(reopened.json().receipt);
   });
 
   it("shares with a verified licensed colleague without granting workspace access, supports billing viewers and revokes grants", async () => {

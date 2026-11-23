@@ -122,7 +122,7 @@ export interface ReviewDecisions {
 export const reviewExampleSource =
   "Synthetic authored source: 12345678-1234-4123-8123-123456789abc $& $` $' {title} <img src=x onerror=alert(1)>";
 const scope =
-  "Creation, method explanations, structured-import preview and confirmation recovery, durable Round starter-copy recovery, ordered Survey page reader and read-only editor copy, practice, Presentation report, Session insights, template-guide and collection copy; Team meetings and Training and onboarding collection membership and Presentation guides; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
+  "Creation, method explanations, structured-import preview and confirmation recovery, durable Round starter-copy recovery, ordered Survey page reader and read-only editor copy, practice, Presentation report, Session insights, template-guide and collection copy; Team meetings, Training and onboarding, and Workshops collection membership and Presentation guides; all 21 Presentation definitions and generated drafts; all 36 Round starters with owner guides and 17 shared-factory Survey projections, including the six curated catalog entries, participant introductions, per-item optionality and Survey owner guides; action-created defaults. Static editorial preparation only: no native-quality, accessibility, in-context, support/legal, or release acceptance is inferred. Raw catalog parity remains covered by existing catalog tests, not English fallback merging.";
 const shaPattern = /^[a-f0-9]{40}$/;
 const hashPattern = /^sha256:[a-f0-9]{64}$/;
 const uuidPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -572,6 +572,8 @@ export async function buildReviewBundle(
       "Five existing original templates grouped as alternatives for a team meeting, not a required sequence or popularity ranking.",
     "training-onboarding":
       "Five original templates that can be used independently to practise a skill, guide new teammates, or collect onboarding feedback.",
+    workshops:
+      "Five original templates that can be used independently to discover learning needs, set workshop expectations, practise, or plan an application.",
   };
   for (const id of templateCollectionIds) {
     const memberships = templateCollectionMemberships.filter(

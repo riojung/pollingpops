@@ -8,9 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-04 Workshops template collection, November 23, 2026
+
+Implemented locally on `codex/workshops-collection` after PR #311. The Templates collection groups
+five existing originals for setting expectations, practising a skill, or planning a later session.
+It includes two Rounds, a facilitated Presentation, a worked-example Presentation, and a
+learning-needs Survey. Preview and independent draft creation use the existing workflows.
+The [editorial record](evidence/workshops-editorial-review-2026-11.md) documents the localized
+facilitator guides, verification and pending human acceptance.
+
 ### WX-04 Training and onboarding template collection, November 23, 2026
 
-Implemented locally on `codex/training-onboarding-collection` after PR #310. Templates groups
+Merged through PR #311 at `01e9765`. Templates groups
 the New-hire knowledge check and Feedback skills Rounds, the Training and recovery and Welcome
 and first steps Presentations, and the First-month onboarding Survey. Creators can preview each
 original with facilitator guidance and make an independent draft through the existing copy paths.
@@ -240,11 +249,12 @@ navigation reuse existing controls. New long-form editorial copy is explicitly E
 See the [research, claim matrix and follow-up scope](public-product-experience-2026-11.md).
 Commercial/legal qualification, native-language acceptance and observed usability remain open.
 
-### Workspace experience: current position, November 22, 2026
+### Workspace experience: current position, November 23, 2026
 
 The selected P1 deliveries in WX-01–05 are merged: Home/start/resume, template discovery and
-preview/use, All content Library, the Team meetings collection, and creation navigation/import
-preview/durable Round starter-copy recovery. Survey ordered-page readers (WX-06A1, PR #284) and
+preview/use, All content Library, the Team meetings and Training and onboarding collections, and
+creation navigation/import preview/durable Round starter-copy recovery. Workshops is implemented
+locally. Event feedback remains a candidate. Survey ordered-page readers (WX-06A1, PR #284) and
 opt-in page authoring (WX-06A2, PR #285 at `4dcefcc`) are also merged. The default-off `surveyPages`
 capability preserves existing v2 creation and published links; enabling it remains an explicit
 operator policy decision.

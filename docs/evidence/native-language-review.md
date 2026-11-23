@@ -29,7 +29,7 @@ Each locale receives:
 - `bundle.json`: deterministic canonical content and source binding.
 - `decisions.json`: a separate human-owned record, initially entirely pending.
 
-The current scope has **794 entries per locale**: all 21 Presentation template definitions
+The current scope has **799 entries per locale**: all 21 Presentation template definitions
 and generated drafts, all 36 Round starters and 17 Survey-compatible projections, typed
 creation/practice/report/insights interface inventories, and action-created default/scaffold examples.
 This includes 54 creation-method, navigation and Survey interface phrases covering inputs,
@@ -43,11 +43,12 @@ safe save/retry, resume, closure and read-only creator previews, with one item p
 `surveyPagesCopy` string. Another 34 `surveyPageAuthoringCopy` strings cover page organization,
 question movement, confirmation, publishing validation and capability/view-only states.
 Conditional paths remain a subsequent checkpoint.
-The Team meetings and Training and onboarding collections each add five memberships and two
+Team meetings, Training and onboarding, and Workshops each add five memberships and two
 complete Presentation guides, with all collection labels and descriptions in the interface inventory.
 Existing Round and Survey entries include authored content, owner guides and item requirements.
-See the [Team meetings editorial record](team-meetings-editorial-review-2026-11.md) and the
-[Training and onboarding editorial record](training-onboarding-editorial-review-2026-11.md).
+See the [Team meetings editorial record](team-meetings-editorial-review-2026-11.md), the
+[Training and onboarding editorial record](training-onboarding-editorial-review-2026-11.md), and the
+[Workshops editorial record](workshops-editorial-review-2026-11.md).
 This is a bounded review inventory, not a claim that every product message is included.
 It contains repository copy and synthetic authored examples, not customer records.
 

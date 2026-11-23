@@ -30,10 +30,11 @@ Library links to the matching section. Template format links survive reload and 
 
 Choose **Collections → Team meetings** to narrow the formats to two short Rounds, two guided
 Presentations and one follow-up Survey. Choose **Training and onboarding** for knowledge checks,
-facilitated practice, a first-steps Presentation or a first-month feedback Survey. Each template
-works on its own. The collection stays selected when you switch between those formats and
-survives reload and back/forward navigation. Choose
-**All templates** to browse the complete catalog; choosing **Designs** clears the collection.
+facilitated practice, a first-steps Presentation or a first-month feedback Survey. Choose
+**Workshops** to set expectations, run a practice exercise, teach with a worked example or plan
+a later session. Each template works on its own. The collection stays selected when you switch
+between those formats and survives reload and back/forward navigation. Choose **All templates**
+to browse the complete catalog. Choosing **Designs** clears the collection.
 Open the template guide for audience, estimated time, preparation and a concrete follow-up.
 Search original Round and Survey templates and filter by category/type. On a wide screen, browse
 summaries beside the selected preview; on a phone, choose a template above the preview. Prompts,

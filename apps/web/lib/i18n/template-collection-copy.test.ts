@@ -23,6 +23,7 @@ describe("template collection copy", () => {
         "allTemplates",
         "trainingOnboardingTitle",
         "trainingOnboardingDescription",
+        "workshopsDescription",
       ] as const)
         expect(copy[key], key).not.toBe(english[key]);
   });
@@ -37,6 +38,8 @@ describe("template collection copy", () => {
       "chooseCollection",
       "trainingOnboardingTitle",
       "trainingOnboardingDescription",
+      "workshopsTitle",
+      "workshopsDescription",
     ]);
     for (const locale of supportedLocales)
       expect(Object.keys(templateCollectionCopyCatalog[locale]).sort()).toEqual(
@@ -49,6 +52,7 @@ describe("template collection copy", () => {
     expect(copy.label).toBe("Collections");
     expect(copy.title).toBe("Team meetings");
     expect(copy.trainingOnboardingTitle).toBe("Training and onboarding");
+    expect(copy.workshopsTitle).toBe("Workshops");
     expect(copy.allTemplates).toBe("All templates");
     expect(copy.chooseCollection).toBe("Collection");
     expect(copy.description).toContain(

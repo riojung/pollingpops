@@ -1207,7 +1207,23 @@ permanent untracked object.
   Presentation session and its responses, report, credentials, and room-code claim.
   Returns `204`, tenant-scoped `404`, or `409 CONFLICT` for an active, unexpired room.
   Eligibility uses durable status/`liveExpiresAt`, checked atomically with deletion.
-- Session staff credential creation/list/revocation routes under `/v1/sessions/{id}/staff`
+- `GET /v1/sessions/{id}/staff` — same-workspace owners and editors receive the retained
+  credential list and `{availability: {cohosting?, cohostingUnavailableReason?, embedOriginsConfigured?}}`
+  with `Cache-Control: private, no-store`. `cohosting` describes new shareable co-host credentials.
+  When unavailable, its reason is `room_coverage` if the saved Round coverage excludes co-hosting.
+  For Rounds without applicable saved coverage, it is `operator_policy` when a configured feature
+  rule denies access or `plan_limit` when the effective workspace plan excludes co-hosting.
+  Community mode uses current entitlements for legacy coverage. `embedOriginsConfigured` indicates
+  whether the workspace has configured HTTPS origins for secure embeds. The `availability` object
+  is always present on success. If a lookup fails, its fields are omitted and the credential list
+  and any available fields are returned.
+- `POST /v1/sessions/{id}/staff` — creates a co-host or presenter credential. A co-host
+  entitlement denial returns `402 ENTITLEMENT_LIMIT` with `error.details.cohostingUnavailableReason`.
+  Presenter credentials remain available independently of co-hosting and embed setup. The creation
+  response supplies the origins applied to the new presenter credential.
+- `DELETE /v1/sessions/{id}/staff/{credentialId}` — revokes a credential. Owners and editors can
+  list and revoke retained credentials when new co-host credentials are unavailable or either
+  availability lookup fails.
 - Presenter/embed policy issuance under the session routes
 - `GET /v1/embed/policies/{sessionId}/{policyKey}`
 

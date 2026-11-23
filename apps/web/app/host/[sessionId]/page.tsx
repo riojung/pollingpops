@@ -9,10 +9,17 @@ import type {
   HostAction,
   InterventionType,
   RecoveryPackCardSelection,
+  RoundCohostUnavailableReason,
+  RoundStaffAvailability,
   SessionStaffCredential,
   SessionSnapshot,
 } from "@openround/contracts";
-import { currentRoundClientCapabilities, ROUND_CLIENT_UPDATE_MESSAGE } from "@openround/contracts";
+import {
+  currentRoundClientCapabilities,
+  ROUND_CLIENT_UPDATE_MESSAGE,
+  RoundCohostUnavailableReasonSchema,
+  RoundStaffAvailabilitySchema,
+} from "@openround/contracts";
 import { Brand, creatorLandingHref } from "../../../components/brand";
 import {
   AudiencePanel,
@@ -46,7 +53,7 @@ import { TextModerationPanel } from "../../../components/text-moderation-panel";
 import { TextLiveResults } from "../../../components/text-live-results";
 import { isTextQuestion } from "../../../lib/text-response";
 import { QnaPanel } from "../../../components/qna-panel";
-import { apiFetch, humanError } from "../../../lib/api";
+import { apiFetch, ApiClientError, humanError } from "../../../lib/api";
 import {
   createHostCredentialRecovery,
   readHostCredential,
@@ -77,12 +84,28 @@ import liveTheme from "../../../components/round-live-theme.module.css";
 
 type Ack<T> = { data?: T; error?: { code: string; message: string } };
 type StaffAction = "cohost" | "embed" | "presenter" | "revoke";
+type StaffRead = {
+  sessionId: string;
+  data: {
+    credentials: SessionStaffCredential[];
+    availability: RoundStaffAvailability;
+    legacyAvailability: boolean;
+  } | null;
+};
 const STAFF_ERROR_KEYS = {
   cohost: "Could not create the cohost link.",
   embed: "Could not create the secure embed link.",
   presenter: "Could not open the presenter view.",
   revoke: "Could not revoke this staff credential.",
 } as const;
+const COHOST_REASON_COPY = {
+  room_coverage: "This Round was started without cohost access.",
+  operator_policy: "Cohost links are disabled for this workspace by your Polling Pops operator.",
+  plan_limit: "This workspace's current plan doesn't include cohost links.",
+} as const satisfies Record<RoundCohostUnavailableReason, HostStaffCopyKey>;
+const EMBED_ORIGINS_REQUIRED =
+  "Ask a workspace owner to add at least one HTTPS embed origin in Account settings, then create a new embed link.";
+const STAFF_AVAILABILITY_UNKNOWN = "Round staff availability couldn't be checked.";
 
 const ACK_TIMEOUT_MS = 10_000;
 const SYNC_GRACE_MS = 5_000;
@@ -159,14 +182,36 @@ export default function HostPage() {
     () => (mediaCredential ? `${sessionId}:moderator:${clientUuid()}` : `${sessionId}:moderator`),
     [mediaCredential, sessionId],
   );
-  const [staffCredentials, setStaffCredentials] = useState<SessionStaffCredential[]>([]);
+  const [staffRead, setStaffRead] = useState<StaffRead | null>(null);
+  const [staffRefreshing, setStaffRefreshing] = useState(false);
+  const staffReadRequest = useRef<AbortController | null>(null);
+  const staffSession = useRef(sessionId);
+  staffSession.current = sessionId;
+  const cohostDenialVersion = useRef(0);
+  const [cohostDenial, setCohostDenial] = useState<{
+    sessionId: string;
+    reason: RoundCohostUnavailableReason;
+    version: number;
+  } | null>(null);
   const [cohostLabel, setCohostLabel] = useState("");
   const [cohostLink, setCohostLink] = useState("");
   const [embedLink, setEmbedLink] = useState("");
   const [embedCopyStatus, setEmbedCopyStatus] = useState<HostStaffCopyKey | null>(null);
   const [cohostCopyStatus, setCohostCopyStatus] = useState<HostStaffCopyKey | null>(null);
-  const [staffManagementAvailable, setStaffManagementAvailable] = useState(false);
-  const [cohostingAvailable, setCohostingAvailable] = useState(false);
+  const currentStaff = staffRead?.sessionId === sessionId ? staffRead : null;
+  const staffData = currentStaff?.data;
+  const staffAvailability = staffData?.availability;
+  const staffCredentials = staffData?.credentials ?? [];
+  const cohostDenied = cohostDenial?.sessionId === sessionId ? cohostDenial.reason : undefined;
+  const cohostingAvailable = staffAvailability?.cohosting === true && !cohostDenied;
+  const cohostReason = cohostDenied ?? staffAvailability?.cohostingUnavailableReason;
+  const embedNeedsOrigins = staffAvailability?.embedOriginsConfigured === false;
+  const embedNotice = embedNeedsOrigins
+    ? EMBED_ORIGINS_REQUIRED
+    : staffData?.legacyAvailability === false &&
+        staffAvailability?.embedOriginsConfigured === undefined
+      ? STAFF_AVAILABILITY_UNKNOWN
+      : undefined;
   const [creatorHref, setCreatorHref] = useState<"/" | "/home" | "/dashboard">("/");
   const [audienceOpen, setAudienceOpen] = useState(false);
   const [audienceTab, setAudienceTab] = useState<"participants" | "pulse" | "qna" | "chat">(
@@ -398,38 +443,75 @@ export default function HostPage() {
   }, [sessionId, socket]);
 
   const loadStaff = useCallback(async () => {
+    if (staffSession.current !== sessionId) return;
+    staffReadRequest.current?.abort();
+    const request = new AbortController();
+    staffReadRequest.current = request;
+    const { signal } = request;
+    // Only a read started after a denial can clear it.
+    const denialVersionAtRead = cohostDenialVersion.current;
+    setStaffRefreshing(true);
     try {
-      const response = await apiFetch<{ credentials: SessionStaffCredential[] }>(
-        `/v1/sessions/${sessionId}/staff`,
-      );
-      setStaffCredentials(response.credentials);
-      setStaffManagementAvailable(true);
-    } catch {
-      setStaffManagementAvailable(false);
+      const response = await apiFetch<{
+        credentials: SessionStaffCredential[];
+        availability?: unknown;
+      }>(`/v1/sessions/${sessionId}/staff`, { signal });
+      const legacyAvailability = response.availability === undefined;
+      let availability = RoundStaffAvailabilitySchema.safeParse(response.availability).data ?? {};
+      if (legacyAvailability) {
+        // Older servers expose only the room entitlement; it cannot explain a denial.
+        const room = await apiFetch<{ entitlements: { cohosting?: boolean } }>(
+          `/v1/sessions/${sessionId}/entitlements`,
+          { signal },
+        ).catch(() => null);
+        if (typeof room?.entitlements?.cohosting === "boolean") {
+          availability = { cohosting: room.entitlements.cohosting };
+        }
+      }
+      if (!signal.aborted && staffSession.current === sessionId) {
+        setStaffRead({
+          sessionId,
+          data: { credentials: response.credentials, availability, legacyAvailability },
+        });
+        if (availability.cohosting !== undefined) {
+          setCohostDenial((current) =>
+            current?.sessionId === sessionId && current.version <= denialVersionAtRead
+              ? null
+              : current,
+          );
+        }
+        if (availability.embedOriginsConfigured === true) {
+          setStaffActionError((current) =>
+            current?.action === "embed" && current.message === EMBED_ORIGINS_REQUIRED
+              ? null
+              : current,
+          );
+        }
+      }
+    } catch (caught) {
+      if (signal.aborted || staffSession.current !== sessionId) return;
+      const transient =
+        !(caught instanceof ApiClientError) || caught.status >= 500 || caught.status === 429;
+      setStaffRead(transient ? { sessionId, data: null } : null);
+    } finally {
+      if (!signal.aborted && staffSession.current === sessionId) setStaffRefreshing(false);
     }
   }, [sessionId]);
 
   useEffect(() => {
     void loadStaff();
+    return () => staffReadRequest.current?.abort();
   }, [loadStaff]);
 
   useEffect(() => {
-    apiFetch<{
-      entitlements: { cohosting?: boolean };
-      productFeatures?: { workspaceShell?: boolean };
-    }>("/v1/auth/me")
-      .then(async ({ entitlements, productFeatures }) => {
+    apiFetch<{ productFeatures?: { workspaceShell?: boolean } }>("/v1/auth/me")
+      .then(({ productFeatures }) => {
         setCreatorHref(
           creatorLandingHref({ workspaceShell: productFeatures?.workspaceShell === true }),
         );
-        const room = await apiFetch<{ entitlements: { cohosting?: boolean } }>(
-          `/v1/sessions/${sessionId}/entitlements`,
-        );
-        setCohostingAvailable(Boolean(room.entitlements.cohosting ?? entitlements.cohosting));
       })
       .catch(() => {
         setCreatorHref("/");
-        setCohostingAvailable(false);
       });
   }, [sessionId]);
 
@@ -608,7 +690,7 @@ export default function HostPage() {
   }
 
   async function createEmbedLink() {
-    if (presenterWriteLock.current) return;
+    if (presenterWriteLock.current || !staffData || embedNotice) return;
     presenterWriteLock.current = true;
     setStaffActionError(null);
     setEmbedCopyStatus(null);
@@ -626,8 +708,7 @@ export default function HostPage() {
       if (access.embedAllowedOrigins.length === 0) {
         setStaffActionError({
           action: "embed",
-          message:
-            "Ask a workspace owner to add at least one HTTPS embed origin in Account settings, then create a new embed link.",
+          message: EMBED_ORIGINS_REQUIRED,
         });
         return;
       }
@@ -659,7 +740,7 @@ export default function HostPage() {
   }
 
   async function createCohost() {
-    if (staffWriteLock.current) return;
+    if (staffWriteLock.current || !cohostingAvailable) return;
     staffWriteLock.current = true;
     setStaffActionError(null);
     setStaffNotice(null);
@@ -684,7 +765,14 @@ export default function HostPage() {
       setCohostLabel("");
       await loadStaff();
     } catch (caught) {
-      setStaffFailure("cohost", caught);
+      if (staffSession.current !== sessionId) return;
+      const reason =
+        caught instanceof ApiClientError && caught.code === "ENTITLEMENT_LIMIT"
+          ? RoundCohostUnavailableReasonSchema.safeParse(caught.details?.cohostingUnavailableReason)
+              .data
+          : undefined;
+      if (reason) setCohostDenial({ sessionId, reason, version: ++cohostDenialVersion.current });
+      else setStaffFailure("cohost", caught);
     } finally {
       staffWriteLock.current = false;
       setStaffPending(false);
@@ -1357,34 +1445,40 @@ export default function HostPage() {
                     ) : null}
                   </div>
                 ) : null}
-                {staffManagementAvailable ? (
+                {currentStaff ? (
                   <details className="staff-management" lang={locale}>
                     <summary>{staffCopy("Round staff")}</summary>
-                    <p className="muted">
-                      {staffCopy(
-                        "Cohosts can run this round. Presenter credentials remain read-only. Links expire automatically and can be revoked here.",
-                      )}
-                    </p>
-                    {cohostingAvailable ? (
+                    {staffData ? (
                       <>
-                        <label className="field" htmlFor="cohost-label">
-                          <span>{staffCopy("Co-host label")}</span>
-                          <input
-                            className="input"
-                            id="cohost-label"
-                            lang=""
-                            maxLength={80}
-                            onChange={(event) => setCohostLabel(event.target.value)}
-                            placeholder={staffCopy("Teaching assistant")}
-                            value={cohostLabel}
-                          />
-                        </label>
+                        <p className="muted">
+                          {staffCopy(
+                            "Cohosts can run this round. Presenter credentials remain read-only. Links expire automatically and can be revoked here.",
+                          )}
+                        </p>
+                        {cohostingAvailable ? (
+                          <label className="field" htmlFor="cohost-label">
+                            <span>{staffCopy("Co-host label")}</span>
+                            <input
+                              className="input"
+                              id="cohost-label"
+                              lang=""
+                              maxLength={80}
+                              onChange={(event) => setCohostLabel(event.target.value)}
+                              placeholder={staffCopy("Teaching assistant")}
+                              value={cohostLabel}
+                            />
+                          </label>
+                        ) : null}
                         <button
                           aria-describedby={
-                            staffActionError?.action === "cohost" ? "staff-cohost-error" : undefined
+                            !cohostingAvailable
+                              ? "staff-cohost-availability"
+                              : staffActionError?.action === "cohost"
+                                ? "staff-cohost-error"
+                                : undefined
                           }
                           className="button-quiet small-button"
-                          disabled={staffPending}
+                          disabled={staffPending || !cohostingAvailable}
                           onClick={() => void createCohost()}
                           type="button"
                         >
@@ -1394,6 +1488,27 @@ export default function HostPage() {
                               : "Create cohost link",
                           )}
                         </button>
+                        {!cohostingAvailable ? (
+                          <p
+                            className="notice"
+                            id="staff-cohost-availability"
+                            role={cohostDenied ? "alert" : undefined}
+                          >
+                            {staffCopy(
+                              cohostReason
+                                ? COHOST_REASON_COPY[cohostReason]
+                                : staffAvailability?.cohosting === undefined
+                                  ? STAFF_AVAILABILITY_UNKNOWN
+                                  : "Cohost links are unavailable for this Round.",
+                            )}
+                            {cohostReason === "plan_limit" ? (
+                              <>
+                                {" "}
+                                <Link href="/pricing">{staffCopy("Compare plans")}</Link>.
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
                         {staffError("cohost")}
                         {cohostLink ? (
                           <div className="notice staff-share-link">
@@ -1418,109 +1533,127 @@ export default function HostPage() {
                             ) : null}
                           </div>
                         ) : null}
-                      </>
-                    ) : (
-                      <p className="notice">
-                        {staffCopy(
-                          "Shareable cohost links are available on Pro, Team, and Community plans.",
-                        )}{" "}
-                        <Link href="/pricing">{staffCopy("Compare plans")}</Link>.
-                      </p>
-                    )}
-                    <hr className="staff-divider" />
-                    <h3>{staffCopy("Presenter embed")}</h3>
-                    <p className="muted">
-                      {staffCopy(
-                        "Creates a read-only presenter link restricted to the workspace's configured HTTPS origins. The credential is carried in the URL fragment and removed after opening.",
-                      )}
-                    </p>
-                    <button
-                      aria-describedby={
-                        staffActionError?.action === "embed" ? "staff-embed-error" : undefined
-                      }
-                      className="button-quiet small-button"
-                      disabled={presenterPending}
-                      onClick={() => void createEmbedLink()}
-                      type="button"
-                    >
-                      {staffCopy(
-                        presenterOperation === "embed"
-                          ? "Creating secure embed link…"
-                          : "Create secure embed link",
-                      )}
-                    </button>
-                    {staffError("embed")}
-                    {embedLink ? (
-                      <div className="notice staff-share-link">
-                        <strong role="status">
-                          {staffCopy("Embed this read-only presenter URL")}
-                        </strong>
-                        <p>
+                        <hr className="staff-divider" />
+                        <h3>{staffCopy("Presenter embed")}</h3>
+                        <p className="muted">
                           {staffCopy(
-                            "Save this read-only link before leaving this tab. It can be used on the configured origins until it expires or is revoked.",
+                            "Creates a read-only presenter link restricted to the workspace's configured HTTPS origins. The credential is carried in the URL fragment and removed after opening.",
                           )}
                         </p>
-                        <a href={embedLink} lang="" rel="noreferrer">
-                          {embedLink}
-                        </a>
                         <button
+                          aria-describedby={
+                            embedNotice
+                              ? "staff-embed-availability"
+                              : staffActionError?.action === "embed"
+                                ? "staff-embed-error"
+                                : undefined
+                          }
                           className="button-quiet small-button"
-                          onClick={() => void copyStaffLink("embed")}
+                          disabled={presenterPending || Boolean(embedNotice)}
+                          onClick={() => void createEmbedLink()}
                           type="button"
                         >
-                          {staffCopy("Copy embed link")}
+                          {staffCopy(
+                            presenterOperation === "embed"
+                              ? "Creating secure embed link…"
+                              : "Create secure embed link",
+                          )}
                         </button>
-                        {embedCopyStatus ? (
-                          <span role="status">{staffCopy(embedCopyStatus)}</span>
+                        {embedNotice ? (
+                          <p className="notice" id="staff-embed-availability">
+                            {staffCopy(embedNotice)}
+                          </p>
                         ) : null}
-                      </div>
-                    ) : null}
-                    {staffCredentials.length > 0 ? (
-                      <ul className="staff-list">
-                        {staffCredentials.map((credential) => (
-                          <li key={credential.id}>
-                            <span>
-                              <strong lang={credential.label ? "" : locale}>
-                                {credential.label || staffCopy(credential.role)}
-                              </strong>{" "}
-                              · {staffCopy(credential.role)}
-                              {credential.revokedAt ? ` · ${staffCopy("revoked")}` : ""}
-                            </span>
-                            {!credential.revokedAt ? (
-                              <button
-                                aria-describedby={
-                                  staffActionError?.action === "revoke" &&
-                                  staffActionError.credentialId === credential.id
-                                    ? "staff-revoke-error"
-                                    : undefined
-                                }
-                                aria-label={
-                                  pendingStaffCredentialId === credential.id
-                                    ? `${staffCopy("Revoking…")} ${credential.label || staffCopy(credential.role)}`
-                                    : staffCopy("Revoke access for {label}", {
-                                        label: credential.label || staffCopy(credential.role),
-                                      })
-                                }
-                                className="button-danger small-button"
-                                disabled={staffPending}
-                                onClick={() => void revokeStaff(credential.id)}
-                                type="button"
-                              >
-                                {staffCopy(
-                                  pendingStaffCredentialId === credential.id
-                                    ? "Revoking…"
-                                    : "Revoke",
-                                )}
-                              </button>
+                        {!(
+                          embedNeedsOrigins && staffActionError?.message === EMBED_ORIGINS_REQUIRED
+                        )
+                          ? staffError("embed")
+                          : null}
+                        {embedLink ? (
+                          <div className="notice staff-share-link">
+                            <strong role="status">
+                              {staffCopy("Embed this read-only presenter URL")}
+                            </strong>
+                            <p>
+                              {staffCopy(
+                                "Save this read-only link before leaving this tab. It can be used on the configured origins until it expires or is revoked.",
+                              )}
+                            </p>
+                            <a href={embedLink} lang="" rel="noreferrer">
+                              {embedLink}
+                            </a>
+                            <button
+                              className="button-quiet small-button"
+                              onClick={() => void copyStaffLink("embed")}
+                              type="button"
+                            >
+                              {staffCopy("Copy embed link")}
+                            </button>
+                            {embedCopyStatus ? (
+                              <span role="status">{staffCopy(embedCopyStatus)}</span>
                             ) : null}
-                          </li>
-                        ))}
-                      </ul>
+                          </div>
+                        ) : null}
+                        {staffCredentials.length > 0 ? (
+                          <ul className="staff-list">
+                            {staffCredentials.map((credential) => (
+                              <li key={credential.id}>
+                                <span>
+                                  <strong lang={credential.label ? "" : locale}>
+                                    {credential.label || staffCopy(credential.role)}
+                                  </strong>{" "}
+                                  · {staffCopy(credential.role)}
+                                  {credential.revokedAt ? ` · ${staffCopy("revoked")}` : ""}
+                                </span>
+                                {!credential.revokedAt ? (
+                                  <button
+                                    aria-describedby={
+                                      staffActionError?.action === "revoke" &&
+                                      staffActionError.credentialId === credential.id
+                                        ? "staff-revoke-error"
+                                        : undefined
+                                    }
+                                    aria-label={
+                                      pendingStaffCredentialId === credential.id
+                                        ? `${staffCopy("Revoking…")} ${credential.label || staffCopy(credential.role)}`
+                                        : staffCopy("Revoke access for {label}", {
+                                            label: credential.label || staffCopy(credential.role),
+                                          })
+                                    }
+                                    className="button-danger small-button"
+                                    disabled={staffPending}
+                                    onClick={() => void revokeStaff(credential.id)}
+                                    type="button"
+                                  >
+                                    {staffCopy(
+                                      pendingStaffCredentialId === credential.id
+                                        ? "Revoking…"
+                                        : "Revoke",
+                                    )}
+                                  </button>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="muted">{staffCopy("No staff credentials yet.")}</p>
+                        )}
+                        {staffError("revoke")}
+                        {staffNotice ? <p role="status">{staffCopy(staffNotice)}</p> : null}
+                      </>
                     ) : (
-                      <p className="muted">{staffCopy("No staff credentials yet.")}</p>
+                      <p className="error" role="alert">
+                        {staffCopy(STAFF_AVAILABILITY_UNKNOWN)}
+                      </p>
                     )}
-                    {staffError("revoke")}
-                    {staffNotice ? <p role="status">{staffCopy(staffNotice)}</p> : null}
+                    <button
+                      className="button-quiet small-button"
+                      disabled={staffRefreshing || staffPending || presenterPending}
+                      onClick={() => void loadStaff()}
+                      type="button"
+                    >
+                      {staffCopy("Refresh availability")}
+                    </button>
                   </details>
                 ) : null}
               </RecoveryCompass>

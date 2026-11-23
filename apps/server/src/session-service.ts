@@ -10,6 +10,7 @@ import {
   deriveRoundProtocol,
   ROUND_CLIENT_UPDATE_MESSAGE,
   type RoundClientCapabilities,
+  type RoundCohostUnavailableReason,
   responseForAnswer,
   type AnswerAck,
   type AnswerSubmit,
@@ -76,6 +77,7 @@ import { retentionExpiry } from "./entitlements.js";
 import {
   roomCreationPolicy,
   roomEntitlements,
+  roundCohostUnavailableReason,
   coverageRequest,
   roomCreationIdentity,
 } from "./room-entitlements.js";
@@ -184,6 +186,7 @@ export class SessionError extends Error {
       | "CLIENT_UPDATE_REQUIRED"
       | "CONFLICT",
     message: string,
+    public readonly details?: { cohostingUnavailableReason: RoundCohostUnavailableReason },
   ) {
     super(message);
   }
@@ -592,22 +595,20 @@ export class SessionService {
     if (!session || session.workspaceId !== creator.workspaceId) {
       throw new SessionError("NOT_FOUND", "Session not found");
     }
-    if (
-      input.role === "cohost" &&
-      !(
-        await roomEntitlements(
-          this.repository,
-          this.config,
-          "round",
-          sessionId,
-          creator.workspaceId,
-        )
-      ).cohosting
-    ) {
-      throw new SessionError(
-        "ENTITLEMENT_LIMIT",
-        "Shareable cohost access is available on Pro, Team, and Community plans",
+    if (input.role === "cohost") {
+      const cohostingUnavailableReason = await roundCohostUnavailableReason(
+        this.repository,
+        this.config,
+        sessionId,
+        creator.workspaceId,
       );
+      if (cohostingUnavailableReason) {
+        throw new SessionError(
+          "ENTITLEMENT_LIMIT",
+          "Shareable cohost access is available on Pro, Team, and Community plans",
+          { cohostingUnavailableReason },
+        );
+      }
     }
     const token = opaqueToken();
     const embedPolicyKey = input.role === "presenter" ? opaqueToken() : undefined;

@@ -14,6 +14,7 @@ import {
 import {
   PresentationDraftSchema,
   PresentationContentSchema,
+  RoundStaffAvailabilitySchema,
   WorkspaceProductFeaturesSchema,
   RecoveryPackContentSchema,
   recoveryPackContentHash,
@@ -436,6 +437,186 @@ describe("live event credit integration", () => {
         features: { csvExport: { enabled: true, plans: ["free", "pro"] } },
       });
       await expectAccess(null);
+    } finally {
+      await built.app.close();
+    }
+  });
+
+  it.each([true, false])(
+    "keeps funded Round co-hosting at %s after a policy change",
+    async (cohosting) => {
+      const f = await fixture();
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 0,
+        features: { cohosting: { enabled: cohosting, plans: cohosting ? ["pro"] : [] } },
+      });
+      const room = await f.service.createSession(f.creator, f.quizId, settings, {
+        useEventCredit: true,
+      });
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 1,
+        features: { cohosting: { enabled: !cohosting, plans: cohosting ? [] : ["free", "pro"] } },
+      });
+      const built = await buildApp(f.config, {
+        repository: f.repository,
+        cache: new MemorySessionCache(),
+      });
+      try {
+        const verified = await requestPinAndSignIn(built.app, f.creator.email);
+        const headers = { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
+        const url = `/v1/sessions/${room.sessionId}/staff`;
+        const staff = await built.app.inject({ url, headers });
+        expect(staff.statusCode).toBe(200);
+        expect(staff.headers["cache-control"]).toBe("private, no-store");
+        expect(staff.json()).toEqual({
+          credentials: [],
+          availability: RoundStaffAvailabilitySchema.parse({
+            cohosting,
+            ...(!cohosting && { cohostingUnavailableReason: "room_coverage" }),
+            embedOriginsConfigured: false,
+          }),
+        });
+
+        const invite = await built.app.inject({
+          method: "POST",
+          url,
+          headers,
+          payload: { role: "cohost" },
+        });
+        expect(invite.statusCode).toBe(cohosting ? 201 : 402);
+        if (cohosting) {
+          expect(invite.json()).toMatchObject({
+            credential: { role: "cohost", purpose: "collaboration" },
+          });
+        } else {
+          expect(invite.json()).toMatchObject({
+            error: {
+              code: "ENTITLEMENT_LIMIT",
+              details: { cohostingUnavailableReason: "room_coverage" },
+            },
+          });
+        }
+        expect(await f.repository.getPlan(f.creator.workspaceId)).toBe("free");
+        expect(await f.platform.getCreditBalance(f.organization.id)).toMatchObject({
+          balance: 1,
+          reserved: 1,
+        });
+      } finally {
+        await built.app.close();
+      }
+    },
+  );
+
+  it("refreshes co-host access for uncovered Rounds while retaining existing credentials", async () => {
+    const f = await fixture();
+    const communitySessions = new SessionService(
+      f.repository,
+      new MemorySessionCache(),
+      { ...f.config, COMMUNITY_MODE: true },
+      new MetricsService(),
+    );
+    services.push(communitySessions);
+    const room = await communitySessions.createSession(f.creator, f.quizId, settings);
+    expect(await f.platform.getRoomCoverage("round", room.sessionId)).toBeNull();
+    const built = await buildApp(f.config, {
+      repository: f.repository,
+      cache: new MemorySessionCache(),
+    });
+    try {
+      const verified = await requestPinAndSignIn(built.app, f.creator.email);
+      const headers = { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
+      const url = `/v1/sessions/${room.sessionId}/staff`;
+      const staff = () => built.app.inject({ url, headers });
+      const cohost = () =>
+        built.app.inject({ method: "POST", url, headers, payload: { role: "cohost" } });
+      const expectDenied = async (reason: "plan_limit" | "operator_policy") => {
+        const response = await cohost();
+        expect(response.statusCode).toBe(402);
+        expect(response.json()).toMatchObject({
+          error: { code: "ENTITLEMENT_LIMIT", details: { cohostingUnavailableReason: reason } },
+        });
+        expect((await staff()).json()).toMatchObject({
+          availability: { cohosting: false, cohostingUnavailableReason: reason },
+        });
+      };
+      await expectDenied("plan_limit");
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 0,
+        features: { cohosting: { enabled: true, plans: ["free", "pro"] } },
+      });
+      const available = (await staff()).json();
+      expect(available.availability).toEqual({ cohosting: true, embedOriginsConfigured: false });
+      const created = await cohost();
+      expect(created.statusCode).toBe(201);
+      const { credential, token } = created.json<{ credential: { id: string }; token: string }>();
+
+      await f.platform.saveFeaturePolicy({
+        expectedRevision: 1,
+        features: { cohosting: { enabled: true, plans: ["pro"] } },
+      });
+      await expectDenied("operator_policy");
+      await built.sessions.hostCommand({
+        sessionId: room.sessionId,
+        hostToken: room.hostToken,
+        commandId: randomUUID(),
+        expectedVersion: room.snapshot.version,
+        action: "end",
+      });
+      const retained = await staff();
+      expect(retained.json().credentials).toEqual([
+        expect.objectContaining({ id: credential.id, revokedAt: null }),
+      ]);
+      expect(retained.body).not.toContain(token);
+      expect(
+        (await built.app.inject({ method: "DELETE", url: `${url}/${credential.id}`, headers }))
+          .statusCode,
+      ).toBe(204);
+      expect((await staff()).json().credentials).toEqual([
+        expect.objectContaining({ id: credential.id, revokedAt: expect.any(String) }),
+      ]);
+    } finally {
+      await built.app.close();
+    }
+  });
+
+  it("uses current Community access for a Round with legacy coverage", async () => {
+    const f = await fixture();
+    const legacySessions = new SessionService(
+      f.repository,
+      new MemorySessionCache(),
+      { ...f.config, BUSINESS_PLATFORM_ENABLED: false },
+      new MetricsService(),
+    );
+    services.push(legacySessions);
+    const room = await legacySessions.createSession(f.creator, f.quizId, {
+      ...settings,
+      audienceLimit: 20,
+    });
+    expect(await f.platform.getRoomCoverage("round", room.sessionId)).toMatchObject({
+      funding: "legacy",
+      snapshot: { cohosting: false },
+    });
+    const built = await buildApp(
+      { ...f.config, COMMUNITY_MODE: true },
+      {
+        repository: f.repository,
+        cache: new MemorySessionCache(),
+      },
+    );
+    try {
+      const verified = await requestPinAndSignIn(built.app, f.creator.email);
+      const headers = { cookie: String(verified.headers["set-cookie"]).split(";")[0]! };
+      const url = `/v1/sessions/${room.sessionId}/staff`;
+      const staff = await built.app.inject({ url, headers });
+      expect(staff.statusCode).toBe(200);
+      expect(staff.json().availability).toEqual({ cohosting: true, embedOriginsConfigured: false });
+      const invite = await built.app.inject({
+        method: "POST",
+        url,
+        headers,
+        payload: { role: "cohost" },
+      });
+      expect(invite.statusCode).toBe(201);
     } finally {
       await built.app.close();
     }

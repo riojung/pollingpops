@@ -124,8 +124,8 @@ reasons merged in PR #302. Source upload availability merged in PR #303. LTI ava
 explanations merged in PR #304, checkpoint-set export reasons in PR #305, and visual import
 explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307. Board
 creation feature-policy explanations merged in PR #308. Board launch explanations for operational
-pauses and inactive organizations or workspaces are implemented locally. Round staff availability
-remains pending.
+pauses and inactive organizations or workspaces merged in PR #309. Round staff availability is
+implemented locally and awaits review.
 
 Survey C3/C4 reporting and B3 authoring remain pending the recorded privacy acceptance. See the
 [overall delivery backlog](workspace-experience-backlog-2026-11.md).

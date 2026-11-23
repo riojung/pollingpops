@@ -98,7 +98,7 @@ export async function workspaceEntitlementsWithAvailability(
   config: Parameters<typeof entitlementsFor>[1],
   workspaceId: string,
   plan: Plan,
-  capability: "csvExport" | "brandTheme",
+  capability: "csvExport" | "brandTheme" | "cohosting",
 ) {
   const { entitlements, rules } = await resolveFeatureEntitlements(
     repository,

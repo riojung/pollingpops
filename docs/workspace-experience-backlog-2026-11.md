@@ -57,8 +57,9 @@ The Presentation navigator resize landmark fix merged through
 [PR #307](https://github.com/riojung/pollingpops/pull/307) at `c1aa6c4`.
 Board creation feature-policy explanations merged through
 [PR #308](https://github.com/riojung/pollingpops/pull/308) at `db9c48a`.
-The current WX-11 increment explains operational pauses and inactive organization or workspace
-status for Board launches.
+Board launch explanations for operational pauses and inactive organizations or workspaces merged
+through [PR #309](https://github.com/riojung/pollingpops/pull/309) at `03bbb7e`.
+The current WX-11 increment explains Round staff availability.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -85,7 +86,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                       | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                | Reporting + learning evidence   |
-| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #308. Board launch availability is ready for review. | Design system + frontend        |
+| WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Merged through PR #309. Round staff explanations are ready for review. | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                       | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                      | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                         | Library + organization access   |
@@ -106,10 +107,10 @@ CSV export reasons in PR #300. Retained Round report export reasons merged in PR
 Presentation launch reasons in PR #302. Source upload availability merged in PR #303 and LTI
 availability explanations in PR #304. Checkpoint-set export reasons merged in PR #305 and visual
 import explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307.
-Board creation feature-policy explanations merged in PR #308. Board launch explanations for
-operational pauses and inactive accounts are implemented locally. Round staff availability,
-other candidate capability explanations, WX-07–10 and WX-12–14 remain pending. Additional
-customer-job collections and human review of localized copy remain open.
+Board creation feature-policy explanations merged in PR #308. Operational and organization Board
+launch explanations merged in PR #309. Round staff availability is implemented locally. Other
+candidate capability explanations, WX-07–10 and WX-12–14 remain pending. Additional customer-job
+collections and human review of localized copy remain open.
 
 ### WX-01 Home: start and resume work
 
@@ -1015,7 +1016,7 @@ Authorized Canvas Workshop hosts see the operational reason when a launch reques
 If only Canvas creation is restricted, a new Guided Workshop can continue without a Canvas starter.
 Existing access, active actions and exact accepted retries follow the existing authorization and
 receipt checks. Both reasons are localized in all ten catalogs. Frontend, server and localization
-own this increment on `codex/board-launch-availability`.
+owned this increment, merged through PR #309 at `03bbb7e`.
 
 **Board launch local verification — 2026-11-23.** All 78 focused web tests, 67 server tests and 48
 contract tests passed. The targeted Canvas and platform database suites passed in memory and against
@@ -1026,8 +1027,25 @@ and a denial after the first availability read. Native-language review remains o
 The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,532 package tests, 529 support tests, four
 builds, and compiled server startup. Optional integration suites were skipped in the full check.
 
-**Remaining capability explanations.** Round staff actions are the remaining named implementation
-slice. Other provider setup messages remain candidates. Native-language review remains open.
+**Round staff availability explanations.** The private Round staff read reports the same cohost
+decision used to create links. Hosts see whether the existing Round lacks cohost coverage, the
+operator has disabled it, or their current workspace plan excludes it. A confirmed plan limitation
+includes the existing plans link. Hosts see missing HTTPS origins before requesting a secure embed
+link. Refresh checks both decisions in the same Round, including recovery after a denial that
+arrived after the first read. Retained credential management and Presenter view use their existing
+permissions. Frontend, server and localization own this increment on `codex/round-staff-availability`.
+
+**Round staff local verification — 2026-11-23.** All 27 focused host tests, 53 server tests, and
+9 contract tests passed. All 12 production browser cases passed across desktop Chromium and
+Firefox, mobile Chromium, and mobile WebKit. They cover cohost recovery scope, retained revocation,
+preflight origin guidance, real embed issuance after refreshing the setup, and a denial after the
+first availability read.
+The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,544 package tests, 529 support tests, four
+builds, and compiled server startup. Optional integration suites were skipped in the full check.
+
+**Remaining capability explanations.** Round staff completes the named WX-11 implementation slices
+locally. Review, merge and native-language acceptance remain open. Other provider setup messages
+remain candidates for selection.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
@@ -1134,8 +1152,9 @@ PR #301, live Presentation launch reasons in PR #302 and source upload availabil
 LTI availability explanations merged in PR #304. Checkpoint-set export reasons merged in PR #305
 and Presentation visual import reasons in PR #306. The navigator resize landmark fix merged in
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
-organization Board launch explanations are implemented locally. Round staff availability is the
-next named WX-11 implementation slice.
+organization Board launch explanations merged in PR #309. Round staff availability is implemented
+locally. The named WX-11 software scope awaits review and merge of this increment, with
+native-language acceptance pending.
 The public-site work merged in PR #288.
 WX-14 needs a curator policy;
 WX-07/13 need identity/privacy decisions, WX-09 needs credential permissions, and WX-12 needs a

@@ -1,9 +1,9 @@
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReportV3Schema, type SessionSnapshot } from "@openround/contracts";
-import { MemoryRepository } from "@openround/db";
+import { createPlatformRepository, MemoryRepository } from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -360,16 +360,37 @@ describe("P0 beta API privacy and recovery regressions", () => {
       session.sessionId,
     );
     const auditsBefore = repository.audits.length;
+    const staffUrl = `/v1/sessions/${session.sessionId}/staff`;
 
     expectApiError(
       await target.inject({
         method: "GET",
-        url: `/v1/sessions/${session.sessionId}/staff`,
+        url: staffUrl,
         headers: { cookie: outsider.cookie },
       }),
       404,
       "NOT_FOUND",
       "Session not found",
+    );
+    expectApiError(
+      await target.inject({
+        method: "POST",
+        url: staffUrl,
+        headers: { cookie: outsider.cookie },
+        payload: { role: "cohost" },
+      }),
+      404,
+      "NOT_FOUND",
+      "Session not found",
+    );
+    expectApiError(
+      await target.inject({
+        url: staffUrl,
+        headers: { authorization: `Bearer ${session.hostToken}` },
+      }),
+      401,
+      "UNAUTHORIZED",
+      "Sign in required",
     );
     expectApiError(
       await target.inject({
@@ -426,6 +447,150 @@ describe("P0 beta API privacy and recovery regressions", () => {
       credentialsBefore,
     );
     expect(repository.audits).toHaveLength(auditsBefore);
+
+    const memberKey = `${primaryWorkspaceId}:${outsider.creator.userId}`;
+    const membership = {
+      workspaceId: primaryWorkspaceId,
+      userId: outsider.creator.userId,
+      joinedAt: new Date(),
+    };
+    repository.workspaceMembers.set(memberKey, { ...membership, role: "viewer" });
+    const selected = await target.inject({
+      method: "POST",
+      url: `/v1/workspaces/${primaryWorkspaceId}/select`,
+      headers: { cookie: outsider.cookie },
+    });
+    expect(selected.statusCode).toBe(200);
+    expectApiError(
+      await target.inject({ url: staffUrl, headers: { cookie: outsider.cookie } }),
+      403,
+      "UNAUTHORIZED",
+      "Your workspace role does not allow this action",
+    );
+    repository.workspaceMembers.set(memberKey, { ...membership, role: "editor" });
+    const editorStaff = await target.inject({
+      url: staffUrl,
+      headers: { cookie: outsider.cookie },
+    });
+    expect(editorStaff.statusCode).toBe(200);
+    expect(editorStaff.json().availability).toMatchObject({ cohosting: false });
+  });
+
+  it("keeps scoped Round staff credentials listable and revocable during availability lookup failures", async () => {
+    const { app: target, repository } = await build();
+    const owner = await signIn(target, "staff-lookup-owner@example.com");
+    const member = await signIn(target, "staff-lookup-member@example.com");
+    const workspaceId = owner.creator.workspaceId;
+    const quiz = await createPublishedRound(target, owner.cookie);
+    const { sessionId } = await createSession(target, owner.cookie, quiz.id);
+    const url = `/v1/sessions/${sessionId}/staff`;
+    const headers = { cookie: owner.cookie };
+    const memberHeaders = { cookie: member.cookie };
+    const create = (role: "cohost" | "presenter") =>
+      target.inject({ method: "POST", url, headers, payload: { role } });
+
+    const origin = "https://lms.example.edu";
+    await repository.updateEmbedAllowedOrigins(workspaceId, [origin]);
+    const created = await create("presenter");
+    expect(created.statusCode).toBe(201);
+    const { credential, token, embedPolicyKey } = created.json<{
+      credential: { id: string };
+      token: string;
+      embedPolicyKey: string;
+    }>();
+    const revoke = (headers: { cookie: string }) =>
+      target.inject({ method: "DELETE", url: `${url}/${credential.id}`, headers });
+
+    const cohostingFailure = new Error("private cohosting lookup error");
+    const embedFailure = new Error("private embed origins lookup error");
+    const roomCoverage = vi.spyOn(createPlatformRepository(repository), "getRoomCoverage");
+    const embedOrigins = vi.spyOn(repository, "getEmbedAllowedOrigins");
+
+    roomCoverage.mockRejectedValueOnce(cohostingFailure);
+    const cohostingUnknown = await target.inject({ url, headers });
+    expect(cohostingUnknown.statusCode).toBe(200);
+    expect(cohostingUnknown.headers["cache-control"]).toBe("private, no-store");
+    expect(cohostingUnknown.json()).toEqual({
+      credentials: [credential],
+      availability: { embedOriginsConfigured: true },
+    });
+
+    embedOrigins.mockRejectedValueOnce(embedFailure);
+    const embedUnknown = await target.inject({ url, headers });
+    expect(embedUnknown.statusCode).toBe(200);
+    expect(embedUnknown.json()).toEqual({
+      credentials: [credential],
+      availability: { cohosting: false, cohostingUnavailableReason: "room_coverage" },
+    });
+
+    roomCoverage.mockRejectedValue(cohostingFailure);
+    embedOrigins.mockRejectedValue(embedFailure);
+    const bothUnknown = await target.inject({ url, headers });
+    expect(bothUnknown.statusCode).toBe(200);
+    expect(bothUnknown.json()).toEqual({ credentials: [credential], availability: {} });
+    for (const detail of [
+      cohostingFailure.message,
+      embedFailure.message,
+      token,
+      embedPolicyKey,
+      origin,
+    ]) {
+      expect(bothUnknown.body).not.toContain(detail);
+    }
+
+    expectApiError(
+      await target.inject({ url, headers: memberHeaders }),
+      404,
+      "NOT_FOUND",
+      "Session not found",
+    );
+    expectApiError(await revoke(memberHeaders), 404, "NOT_FOUND", "Session not found");
+    const memberKey = `${workspaceId}:${member.creator.userId}`;
+    const membership = { workspaceId, userId: member.creator.userId, joinedAt: new Date() };
+    repository.workspaceMembers.set(memberKey, { ...membership, role: "viewer" });
+    const selected = await target.inject({
+      method: "POST",
+      url: `/v1/workspaces/${workspaceId}/select`,
+      headers: memberHeaders,
+    });
+    expect(selected.statusCode).toBe(200);
+    expectApiError(
+      await target.inject({ url, headers: memberHeaders }),
+      403,
+      "UNAUTHORIZED",
+      "Your workspace role does not allow this action",
+    );
+    expectApiError(
+      await revoke(memberHeaders),
+      403,
+      "UNAUTHORIZED",
+      "Your workspace role does not allow this action",
+    );
+
+    for (const role of ["cohost", "presenter"] as const) {
+      expectApiError(
+        await create(role),
+        500,
+        "INTERNAL_ERROR",
+        "The request could not be completed",
+      );
+    }
+    repository.workspaceMembers.set(memberKey, { ...membership, role: "editor" });
+    expect((await revoke(memberHeaders)).statusCode).toBe(204);
+    const revoked = await target.inject({ url, headers: memberHeaders });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json()).toEqual({
+      credentials: [{ ...credential, revokedAt: expect.any(String) }],
+      availability: {},
+    });
+
+    vi.spyOn(repository, "listSessionStaff").mockRejectedValueOnce(new Error("private list error"));
+    expectApiError(
+      await target.inject({ url, headers }),
+      500,
+      "INTERNAL_ERROR",
+      "The request could not be completed",
+    );
   });
 
   it("does not issue or audit a creator pass when the session finishes during replacement", async () => {

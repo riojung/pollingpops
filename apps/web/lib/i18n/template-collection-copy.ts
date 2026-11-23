@@ -10,6 +10,9 @@ const english = {
   trainingOnboardingTitle: "Training and onboarding",
   trainingOnboardingDescription:
     "Choose a template to practise a skill, guide new teammates through their first steps or collect feedback on onboarding. Use each on its own when it fits.",
+  workshopsTitle: "Workshops",
+  workshopsDescription:
+    "Choose a template to set workshop expectations, practise a technique or plan follow-up. Use each on its own when it fits.",
 } as const;
 
 export type TemplateCollectionCopy = Record<keyof typeof english, string>;
@@ -29,6 +32,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "Formation et intégration",
     trainingOnboardingDescription:
       "Choisissez un modèle pour travailler une compétence, accompagner les nouveaux membres de l’équipe dans leurs premiers pas ou recueillir leurs retours sur l’intégration. Chaque modèle peut être utilisé séparément selon vos besoins.",
+    workshopsTitle: "Ateliers",
+    workshopsDescription:
+      "Choisissez un modèle pour clarifier les attentes de l’atelier, vous entraîner à une technique ou préparer le suivi. Chaque modèle peut être utilisé séparément selon vos besoins.",
   },
   "de-DE": {
     label: "Sammlungen",
@@ -40,6 +46,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "Schulung und Einarbeitung",
     trainingOnboardingDescription:
       "Wählen Sie eine Vorlage, um eine Fertigkeit zu üben, neue Teammitglieder bei ihren ersten Schritten zu begleiten oder Feedback zur Einarbeitung einzuholen. Jede Vorlage lässt sich bei Bedarf einzeln nutzen.",
+    workshopsTitle: "Workshops",
+    workshopsDescription:
+      "Wählen Sie eine Vorlage, um Erwartungen an den Workshop zu klären, eine Methode zu üben oder die nächsten Schritte zu planen. Jede Vorlage lässt sich bei Bedarf einzeln nutzen.",
   },
   "es-ES": {
     label: "Colecciones",
@@ -51,6 +60,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "Formación y acogida",
     trainingOnboardingDescription:
       "Elige una plantilla para practicar una habilidad, orientar a quienes se incorporan al equipo en sus primeros pasos o recoger sus impresiones sobre la acogida. Puedes usar cada plantilla por separado cuando te convenga.",
+    workshopsTitle: "Talleres",
+    workshopsDescription:
+      "Elige una plantilla para aclarar las expectativas del taller, practicar una técnica o preparar el seguimiento. Puedes usar cada plantilla por separado cuando te convenga.",
   },
   "it-IT": {
     label: "Raccolte",
@@ -62,6 +74,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "Formazione e inserimento",
     trainingOnboardingDescription:
       "Scegli un modello per esercitare una competenza, accompagnare chi entra nel team nei primi passi o raccogliere feedback sull’inserimento. Puoi usare ogni modello singolarmente secondo le tue esigenze.",
+    workshopsTitle: "Laboratori",
+    workshopsDescription:
+      "Scegli un modello per chiarire le aspettative sul laboratorio, esercitarti con una tecnica o pianificare i prossimi passi. Puoi usare ogni modello singolarmente secondo le tue esigenze.",
   },
   "pt-PT": {
     label: "Coleções",
@@ -73,6 +88,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "Formação e integração",
     trainingOnboardingDescription:
       "Escolha um modelo para praticar uma competência, orientar novos membros da equipa nos primeiros passos ou recolher opiniões sobre a integração. Pode utilizar cada modelo por si só, conforme necessário.",
+    workshopsTitle: "Workshops",
+    workshopsDescription:
+      "Escolha um modelo para clarificar as expectativas para o workshop, praticar uma técnica ou planear o acompanhamento. Pode utilizar cada modelo por si só, conforme necessário.",
   },
   "ja-JP": {
     label: "コレクション",
@@ -84,6 +102,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "研修とオンボーディング",
     trainingOnboardingDescription:
       "スキルの練習、新しいチームメンバーの最初のステップの案内、オンボーディングに関する意見の収集に使えるテンプレートです。目的に合わせて、それぞれ単独で使えます。",
+    workshopsTitle: "ワークショップ",
+    workshopsDescription:
+      "ワークショップへの期待を確認したり、手法を練習したり、終了後のフォローアップを計画したりするためのテンプレートです。目的に合わせて、それぞれ単独で使えます。",
   },
   "ko-KR": {
     label: "컬렉션",
@@ -95,6 +116,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "교육 및 온보딩",
     trainingOnboardingDescription:
       "기술을 연습하거나, 새 팀원의 첫 업무를 안내하거나, 온보딩에 대한 의견을 모을 때 알맞은 템플릿을 선택하세요. 필요에 따라 각 템플릿을 따로 사용할 수 있습니다.",
+    workshopsTitle: "워크숍",
+    workshopsDescription:
+      "워크숍에서 기대하는 바를 확인하거나, 기법을 연습하거나, 후속 활동을 계획할 때 알맞은 템플릿을 선택하세요. 필요에 따라 각 템플릿을 따로 사용할 수 있습니다.",
   },
   "zh-CN": {
     label: "模板集",
@@ -106,6 +130,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "培训与入职引导",
     trainingOnboardingDescription:
       "选择合适的模板来练习技能、指导新成员迈出第一步，或收集他们对入职流程的反馈。每种模板都可以按需单独使用。",
+    workshopsTitle: "工作坊",
+    workshopsDescription:
+      "选择合适的模板来明确对工作坊的期待、练习一种方法，或安排后续行动。每种模板都可以按需单独使用。",
   },
   "zh-TW": {
     label: "範本集",
@@ -117,6 +144,9 @@ export const templateCollectionCopyCatalog: Readonly<
     trainingOnboardingTitle: "培訓與入職引導",
     trainingOnboardingDescription:
       "選擇合適的範本來練習技能、引導新成員熟悉初期工作，或蒐集他們對入職流程的回饋。每種範本都可以視需要單獨使用。",
+    workshopsTitle: "工作坊",
+    workshopsDescription:
+      "選擇合適的範本來釐清對工作坊的期待、練習一項方法，或規劃後續行動。每種範本都可以視需要單獨使用。",
   },
 };
 

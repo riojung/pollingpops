@@ -58,6 +58,10 @@ function TemplatesWorkspace() {
       title: collectionCopy.trainingOnboardingTitle,
       description: collectionCopy.trainingOnboardingDescription,
     },
+    workshops: {
+      title: collectionCopy.workshopsTitle,
+      description: collectionCopy.workshopsDescription,
+    },
   } satisfies Record<TemplateCollectionId, { title: string; description: string }>;
   const example = publicTemplateContext(searchParams.get("sourceId"), type);
   const exampleContext =

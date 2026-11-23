@@ -29,6 +29,7 @@ import {
   meetingSurveyOptions,
 } from "./starter-meeting-collection.js";
 import { trainingStarterGuide } from "./starter-training-guides.js";
+import { workshopStarterGuide } from "./starter-workshop-guides.js";
 
 const ids = {
   q1: "00000000-0000-4000-8000-000000000001",
@@ -1249,6 +1250,7 @@ export function starterGuideForLocale(
   survey = false,
 ): StarterGuide | undefined {
   return (
+    workshopStarterGuide(id, locale, survey) ??
     trainingStarterGuide(id, locale, survey) ??
     meetingStarterGuide(id, locale, survey) ??
     launchStarterGuide(id, locale, survey)

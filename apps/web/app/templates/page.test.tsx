@@ -203,19 +203,21 @@ describe("Template library sections", () => {
     expect(view.collection("all").props["aria-pressed"]).toBe(true);
   });
 
-  it("opens and retains the Training and onboarding collection on format links", () => {
-    mocked.search = "?type=rounds&collection=training-onboarding";
+  it.each([
+    ["training-onboarding", "Training and onboarding"],
+    ["workshops", "Workshops"],
+  ])("opens and retains the %s collection on format links", (id, title) => {
+    mocked.search = `?type=rounds&collection=${id}`;
     const view = harness();
     view.render();
-    expect(view.markup()).toContain("Training and onboarding");
-    expect(view.collection("training-onboarding").props["aria-pressed"]).toBe(true);
+    expect(view.markup()).toContain(title);
+    expect(view.collection(id).props["aria-pressed"]).toBe(true);
     (view.tab("surveys").props.onClick as () => void)();
-    expect(mocked.push).toHaveBeenLastCalledWith(
-      "/templates?type=surveys&collection=training-onboarding",
-      { scroll: false },
-    );
+    expect(mocked.push).toHaveBeenLastCalledWith(`/templates?type=surveys&collection=${id}`, {
+      scroll: false,
+    });
     view.render();
-    expect(view.gallery().props.collection).toBe("training-onboarding");
+    expect(view.gallery().props.collection).toBe(id);
   });
 
   it("returns from Designs to the collection's Rounds and clears collection filtering on Designs", () => {

@@ -457,7 +457,9 @@ describe("native-language review preparation", () => {
       expect(
         bundle.items.find((item) => item.id === `collection/${id}/memberships`)?.english,
       ).toEqual(templateCollectionMemberships.filter(({ collectionId }) => collectionId === id));
-    for (const id of ["meeting", "retrospective", "training", "onboarding"]) {
+    for (const { templateId: id } of templateCollectionMemberships.filter(
+      ({ kind }) => kind === "presentation",
+    )) {
       expect(bundle.items.find((item) => item.id === `presentation/${id}/guide`)).toMatchObject({
         english: templateCollectionGuide("presentation", id, "en-CA"),
         target: templateCollectionGuide("presentation", id, "ko-KR"),
@@ -474,9 +476,11 @@ describe("native-language review preparation", () => {
         expect.objectContaining({ path: "apps/web/lib/template-collections.ts" }),
         expect.objectContaining({ path: "apps/web/lib/i18n/template-collection-copy.ts" }),
         expect.objectContaining({ path: "apps/web/lib/training-onboarding-guides.ts" }),
+        expect.objectContaining({ path: "apps/web/lib/workshop-collection-guides.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-collection.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-meeting-copy.ts" }),
         expect.objectContaining({ path: "apps/server/src/starter-training-guides.ts" }),
+        expect.objectContaining({ path: "apps/server/src/starter-workshop-guides.ts" }),
       ]),
     );
   });

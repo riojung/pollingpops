@@ -6,7 +6,10 @@ import {
   type SupportedLocale,
 } from "@openround/contracts";
 import { describe, expect, it } from "vitest";
-import { instantiatePresentationTemplate, presentationTemplates } from "./presentation-templates";
+import {
+  allPresentationTemplates,
+  instantiatePresentationTemplate,
+} from "./presentation-templates";
 import { loadPresentationTemplateLocale } from "./presentation-template-locales";
 import {
   collectionTemplateIds,
@@ -18,13 +21,15 @@ import {
   templateCollectionMemberships,
   templateCollectionPresentationGuides,
   trainingOnboardingTemplateIds,
+  workshopTemplateIds,
   type TemplateCollectionKind,
 } from "./template-collections";
 import { trainingOnboardingPresentationGuides } from "./training-onboarding-guides";
+import { workshopPresentationGuides } from "./workshop-collection-guides";
 
 describe("Template collections", () => {
   it("recognizes only exact collection IDs", () => {
-    expect(templateCollectionIds).toEqual(["team-meetings", "training-onboarding"]);
+    expect(templateCollectionIds).toEqual(["team-meetings", "training-onboarding", "workshops"]);
     for (const id of templateCollectionIds) expect(parseTemplateCollection(id)).toBe(id);
     for (const value of [
       null,
@@ -38,6 +43,8 @@ describe("Template collections", () => {
       "team-meetings,other",
       "Training-onboarding",
       "training-onboarding ",
+      "Workshops",
+      "workshop",
       "toString",
       "__proto__",
     ])
@@ -60,6 +67,11 @@ describe("Template collections", () => {
       { collectionId: "training-onboarding", kind: "presentation", templateId: "training" },
       { collectionId: "training-onboarding", kind: "presentation", templateId: "onboarding" },
       { collectionId: "training-onboarding", kind: "survey", templateId: "onboarding-experience" },
+      { collectionId: "workshops", kind: "round", templateId: "workshop-expectations" },
+      { collectionId: "workshops", kind: "round", templateId: "exit-ticket" },
+      { collectionId: "workshops", kind: "presentation", templateId: "workshop" },
+      { collectionId: "workshops", kind: "presentation", templateId: "native-practical-workshop" },
+      { collectionId: "workshops", kind: "survey", templateId: "learning-needs" },
     ]);
     expect(
       new Set(
@@ -67,10 +79,10 @@ describe("Template collections", () => {
           ({ collectionId, kind, templateId }) => `${collectionId}:${kind}:${templateId}`,
         ),
       ).size,
-    ).toBe(10);
+    ).toBe(15);
     for (const { kind, templateId } of templateCollectionMemberships) {
       if (kind === "presentation")
-        expect(presentationTemplates.some(({ id }) => id === templateId)).toBe(true);
+        expect(allPresentationTemplates.some(({ id }) => id === templateId)).toBe(true);
       else expect(StarterIdSchema.safeParse(templateId).success).toBe(true);
     }
   });
@@ -81,11 +93,13 @@ describe("Template collections", () => {
       expect(collectionTemplateIds(kind, "training-onboarding")).toEqual(
         trainingOnboardingTemplateIds[kind],
       );
+      expect(collectionTemplateIds(kind, "workshops")).toEqual(workshopTemplateIds[kind]);
       expect(collectionTemplateIds(kind, null)).toBeUndefined();
       expect(collectionTemplateIds(kind, undefined)).toBeUndefined();
       expect(collectionTemplateIds(kind, parseTemplateCollection("unknown"))).toBeUndefined();
       expect(Object.isFrozen(collectionTemplateIds(kind, "team-meetings"))).toBe(true);
       expect(Object.isFrozen(collectionTemplateIds(kind, "training-onboarding"))).toBe(true);
+      expect(Object.isFrozen(collectionTemplateIds(kind, "workshops"))).toBe(true);
     }
   });
 
@@ -136,6 +150,7 @@ describe("Template collections", () => {
     for (const id of [
       ...teamMeetingTemplateIds.presentation,
       ...trainingOnboardingTemplateIds.presentation,
+      ...workshopTemplateIds.presentation,
     ]) {
       const english = templateCollectionGuide("presentation", id, "en-CA")!;
       expect(templateCollectionGuide("presentation", id)).toEqual(english);
@@ -208,6 +223,40 @@ describe("Template collections", () => {
         };
         expect(friction.choices).toHaveLength(4);
         expect(friction.choices[3]!.label).toBe(neutralChoices[locale]);
+      }
+    },
+  );
+});
+
+describe("Workshops collection", () => {
+  it.each(supportedLocales)(
+    "keeps distinct facilitated and worked-example content with full guides in %s",
+    async (locale) => {
+      await loadPresentationTemplateLocale(locale);
+      const guided = instantiatePresentationTemplate("workshop", locale);
+      const worked = instantiatePresentationTemplate("native-practical-workshop", locale);
+      expect(guided.blocks).toHaveLength(6);
+      const activities = guided.blocks.filter((block) => block.kind === "question");
+      expect(activities.map(({ question }) => question.type)).toEqual(["poll", "poll", "rating"]);
+      for (const { question } of activities) {
+        expect(question.purpose).toBe("opinion");
+        expect(question.basePoints).toBe(0);
+        if ("choices" in question)
+          expect(question.choices.every((choice) => !choice.isCorrect)).toBe(true);
+      }
+      expect(worked.schemaVersion).toBe(8);
+      expect(worked.blocks).toHaveLength(8);
+      expect(worked.blocks.every((block) => block.kind === "content")).toBe(true);
+
+      for (const id of workshopTemplateIds.presentation) {
+        const guide = StarterGuideSchema.parse(templateCollectionGuide("presentation", id, locale));
+        expect(guide).toEqual(workshopPresentationGuides[locale][id]);
+        expect(guide.minutes).toBe(id === "workshop" ? 30 : 25);
+        if (locale === "en-CA") continue;
+        for (const key of templateCollectionGuideKeys) {
+          if (key !== "minutes")
+            expect(guide[key]).not.toBe(workshopPresentationGuides["en-CA"][id][key]);
+        }
       }
     },
   );

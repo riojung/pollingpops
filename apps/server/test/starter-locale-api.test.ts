@@ -132,39 +132,46 @@ describe("explicit starter creation languages", () => {
     expect(version.content.title).toBe(instantiateStarter("misconception-check", "ko-KR").title);
   });
 
-  it("shows the localized new-hire Round guide in the list and preview without saving it in the copy", async () => {
-    const { app, headers, repository } = await fixture();
-    const id = "new-hire-knowledge-check";
-    for (const locale of supportedLocales) {
-      const auditCount = repository.audits.length;
-      const listed = await app.inject({ url: `/v1/starters?locale=${locale}`, headers });
-      expect(listed.statusCode, listed.body).toBe(200);
-      const summary = listed
-        .json<{ starters: StarterSummary[] }>()
-        .starters.find((entry) => entry.id === id)!;
-      const preview = await app.inject({ url: `/v1/starters/${id}?locale=${locale}`, headers });
-      expect(preview.statusCode, preview.body).toBe(200);
-      expect(preview.json()).toMatchObject({
-        contentLocale: locale,
-        guide: starterGuideForLocale(id, locale),
-        draft: { title: summary.title },
-      });
-      expect(preview.json().guide).toEqual(summary.guide);
-      expect(repository.audits).toHaveLength(auditCount);
-      const created = await app.inject({
-        method: "POST",
-        url: `/v1/starters/${id}/use`,
-        headers,
-        payload: { locale },
-      });
-      expect(created.statusCode, created.body).toBe(201);
-      const { draft } = created.json().quiz;
-      expect(draft.title).toBe(summary.title);
-      expect(draft.questions[0].prompt).toBe(summary.previewPrompt);
-      expect(draft.questions[0].id).not.toBe(preview.json().draft.questions[0].id);
-      expect(draft.guide).toBeUndefined();
-    }
-  });
+  it.each([
+    ["new-hire-knowledge-check", 5],
+    ["workshop-expectations", 5],
+    ["exit-ticket", 8],
+  ] as const)(
+    "shows the localized %s Round guide in the list and preview without saving it in the copy",
+    async (id, minutes) => {
+      const { app, headers, repository } = await fixture();
+      for (const locale of supportedLocales) {
+        const auditCount = repository.audits.length;
+        const listed = await app.inject({ url: `/v1/starters?locale=${locale}`, headers });
+        expect(listed.statusCode, listed.body).toBe(200);
+        const summary = listed
+          .json<{ starters: StarterSummary[] }>()
+          .starters.find((entry) => entry.id === id)!;
+        const preview = await app.inject({ url: `/v1/starters/${id}?locale=${locale}`, headers });
+        expect(preview.statusCode, preview.body).toBe(200);
+        expect(preview.json()).toMatchObject({
+          contentLocale: locale,
+          guide: starterGuideForLocale(id, locale),
+          draft: { title: summary.title },
+        });
+        expect(preview.json().guide).toEqual(summary.guide);
+        expect(summary.guide?.minutes).toBe(minutes);
+        expect(repository.audits).toHaveLength(auditCount);
+        const created = await app.inject({
+          method: "POST",
+          url: `/v1/starters/${id}/use`,
+          headers,
+          payload: { locale },
+        });
+        expect(created.statusCode, created.body).toBe(201);
+        const { draft } = created.json().quiz;
+        expect(draft.title).toBe(summary.title);
+        expect(draft.questions[0].prompt).toBe(summary.previewPrompt);
+        expect(draft.questions[0].id).not.toBe(preview.json().draft.questions[0].id);
+        expect(draft.guide).toBeUndefined();
+      }
+    },
+  );
 
   it("creates localized Surveys with immutable retries, explicit copy suffixes and English compatibility", async () => {
     const { app, headers } = await fixture();
@@ -189,11 +196,12 @@ describe("explicit starter creation languages", () => {
         "service-experience",
         "team-collaboration",
       ]);
-      expect(
-        listed
-          .json<{ templates: StarterSummary[] }>()
-          .templates.find((entry) => entry.id === "onboarding-experience")?.guide,
-      ).toEqual(starterGuideForLocale("onboarding-experience", locale, true));
+      for (const id of ["onboarding-experience", "learning-needs"] as const) {
+        expect(
+          listed.json<{ templates: StarterSummary[] }>().templates.find((entry) => entry.id === id)
+            ?.guide,
+        ).toEqual(starterGuideForLocale(id, locale, true));
+      }
       const payload = { idempotencyKey: randomUUID(), templateId: "team-collaboration", locale };
       const created = await app.inject({ method: "POST", url: "/v1/surveys", headers, payload });
       expect(created.statusCode, created.body).toBe(201);

@@ -1,7 +1,8 @@
 import type { StarterGuide, SupportedLocale } from "@openround/contracts";
 import { trainingOnboardingPresentationGuides } from "./training-onboarding-guides";
+import { workshopPresentationGuides } from "./workshop-collection-guides";
 
-export const templateCollectionIds = ["team-meetings", "training-onboarding"] as const;
+export const templateCollectionIds = ["team-meetings", "training-onboarding", "workshops"] as const;
 export type TemplateCollectionId = (typeof templateCollectionIds)[number];
 const templateCollectionKinds = ["round", "presentation", "survey"] as const;
 export type TemplateCollectionKind = (typeof templateCollectionKinds)[number];
@@ -18,9 +19,16 @@ export const trainingOnboardingTemplateIds = Object.freeze({
   survey: Object.freeze(["onboarding-experience"] as const),
 });
 
+export const workshopTemplateIds = Object.freeze({
+  round: Object.freeze(["workshop-expectations", "exit-ticket"] as const),
+  presentation: Object.freeze(["workshop", "native-practical-workshop"] as const),
+  survey: Object.freeze(["learning-needs"] as const),
+});
+
 const templateIdsByCollection = {
   "team-meetings": teamMeetingTemplateIds,
   "training-onboarding": trainingOnboardingTemplateIds,
+  workshops: workshopTemplateIds,
 } satisfies Record<TemplateCollectionId, Record<TemplateCollectionKind, readonly string[]>>;
 
 export const templateCollectionMemberships = Object.freeze(
@@ -342,6 +350,9 @@ export function templateCollectionGuide(
   }
   if (id === "training" || id === "onboarding") {
     return { ...trainingOnboardingPresentationGuides[language][id] };
+  }
+  if (id === "workshop" || id === "native-practical-workshop") {
+    return { ...workshopPresentationGuides[language][id] };
   }
   return undefined;
 }

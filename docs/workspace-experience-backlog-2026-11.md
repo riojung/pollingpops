@@ -68,8 +68,10 @@ through [PR #313](https://github.com/riojung/pollingpops/pull/313) at `0877465`,
 named WX-04 collection software scope. The WX-07 recurring check-in design merged through
 [PR #314](https://github.com/riojung/pollingpops/pull/314) at `00119a7`. The WX-09
 [moderator pass design](moderator-pass-design.md) merged through
-[PR #315](https://github.com/riojung/pollingpops/pull/315) at `3f573ce`. The next P2 checkpoint
-defines [WX-10 report comparison disclosure](report-comparison-disclosure-design.md).
+[PR #315](https://github.com/riojung/pollingpops/pull/315) at `3f573ce`. The WX-10
+[report comparison disclosure design](report-comparison-disclosure-design.md) merged through
+[PR #316](https://github.com/riojung/pollingpops/pull/316) at `a7f3975`. The next P2 checkpoint
+defines [WX-14 curator permissions](organization-template-curator-design.md).
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -95,11 +97,11 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Design merged in PR #314; product and privacy acceptance pending                | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                                | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Design merged in PR #315; acceptance and runtime pending                        | Realtime + security + frontend  |
-| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Disclosure design drafted; acceptance and runtime pending                       | Reporting + learning evidence   |
+| WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Design merged in PR #316; acceptance and runtime pending                        | Reporting + learning evidence   |
 | WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Named software scope merged through PR #310; native-language acceptance pending | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                                | Integrations + security         |
 | WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                               | Learning delivery + privacy     |
-| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Extend existing org sharing, not a marketplace                                  | Library + organization access   |
+| WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Curator permissions design drafted; acceptance and runtime pending              | Library + organization access   |
 
 ## Selected first delivery
 
@@ -738,7 +740,7 @@ revoked/deleted sessions disappear from saved comparisons. Test mismatched versi
 **Dependencies:** comparison disclosure design and current report privacy projections. Owner:
 reporting + learning evidence. Broader Recovery Trail/Concept Health remains R2-04.
 
-**Proposed initial milestone after PR #315:** the [report comparison design](report-comparison-disclosure-design.md)
+**Initial milestone proposal merged in PR #316:** the [report comparison design](report-comparison-disclosure-design.md)
 limits the first private view to initial accuracy and response-count bands for one assessed
 checkpoint across two finished deliveries of the same published Round. This narrower milestone
 needs explicit product approval, plus learning-evidence and human privacy acceptance before
@@ -1163,6 +1165,12 @@ cross-tenant denial. Public creator submissions, payments and marketplace licens
 Dependencies: WX-03, existing organization sharing projections and a curation policy. Owner:
 Library + organization access.
 
+**Curator permissions checkpoint after PR #316:** the
+[curator design](organization-template-curator-design.md) proposes an owner-appointed,
+organization-scoped grant, with current Library access governing published entries, preview, and
+independent copy. It defines scope-safe discovery, grant and publication revocation, and audit.
+Product, organization access, and security acceptance remain open before runtime work.
+
 ## Local acceptance and next working session
 
 ### WX-01/02 local verification, 2026-11-17
@@ -1222,9 +1230,10 @@ All named WX-04 collection software is merged.
 The public-site work merged in PR #288.
 WX-07's merged discovery candidate awaits product and privacy approval. WX-09's merged
 permission and audit design awaits product, security, and privacy acceptance. WX-08 needs evidence
-for the fixed-allocation job. The WX-10 comparison proposal needs product, learning-evidence,
-and human privacy acceptance. WX-13 needs an identity and privacy decision, WX-14 needs a curator
-policy, and WX-12 needs a provider choice.
+for the fixed-allocation job. WX-10's merged comparison proposal needs product, learning-evidence,
+and human privacy acceptance. WX-12 needs a provider choice and WX-13 needs an identity and
+privacy decision. WX-14's proposed curator permissions need product, organization access, and
+security acceptance.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),
 hosted capacity/security/legal/backup evidence, customer research, or public launch gates.

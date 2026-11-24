@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
-### WX-07 recurring check-ins discovery
+### WX-09 moderator-only Q&A pass design
 
-The [eligibility and disclosure design](recurring-check-ins-design.md) after PR #313 proposes
+The [moderator pass design](moderator-pass-design.md) after PR #314 proposes a scoped pass
+for Live Presentation Q&A with explicit queue actions, immediate server-side invalidation,
+and transactional audit. It records qualification for both the new credential and the
+isolated queue. Product, security, and privacy acceptance remain open before runtime work.
+
+### WX-07 recurring check-ins discovery, November 23, 2026
+
+The [eligibility and disclosure design](recurring-check-ins-design.md) merged in
+[PR #314](https://github.com/riojung/pollingpops/pull/314) at `00119a7` and proposes
 manually opened, rating-only check-ins. It separates per-run credential limits, collection,
 disclosure and retention, and records synthetic qualification cases. Product and human privacy
 acceptance remain open before runtime selection.
@@ -297,9 +305,9 @@ PR #305. Visual import explanations merged in PR #306 and the navigator resize l
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and organization
 Board launch explanations merged in PR #309. Round staff availability merged in PR #310,
 completing the named WX-11 software scope. Native-language acceptance remains pending.
-Recurrence and learning sequences need identity/privacy decisions,
-moderator passes need a permission design,
-organization collections need curator policy, and native integrations need a provider decision.
+Recurrence and learning sequences need identity and privacy decisions. The moderator pass
+design needs product, security, and privacy acceptance. Organization collections need curator
+policy, and native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 
 ### WX-04 Team meetings template collection

@@ -8,9 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-10 Round report comparison disclosure design
+
+The [report comparison design](report-comparison-disclosure-design.md) after PR #315 proposes a
+private initial-accuracy view for two finished deliveries of the same published Round. It
+defines collection-window evidence, withholding in the comparison view, and source withdrawal.
+Product acceptance of the narrower milestone, learning-evidence acceptance, and a privacy
+decision across existing report surfaces remain open before runtime work.
+
 ### WX-09 moderator-only Q&A pass design
 
-The [moderator pass design](moderator-pass-design.md) after PR #314 proposes a scoped pass
+The [moderator pass design](moderator-pass-design.md) merged in
+[PR #315](https://github.com/riojung/pollingpops/pull/315) at `3f573ce` and proposes a scoped pass
 for Live Presentation Q&A with explicit queue actions, immediate server-side invalidation,
 and transactional audit. It records qualification for both the new credential and the
 isolated queue. Product, security, and privacy acceptance remain open before runtime work.
@@ -306,8 +315,9 @@ PR #307. Board creation feature-policy explanations merged in PR #308. Operation
 Board launch explanations merged in PR #309. Round staff availability merged in PR #310,
 completing the named WX-11 software scope. Native-language acceptance remains pending.
 Recurrence and learning sequences need identity and privacy decisions. The moderator pass
-design needs product, security, and privacy acceptance. Organization collections need curator
-policy, and native integrations need a provider decision.
+design needs product, security, and privacy acceptance. Round report comparison needs product,
+learning-evidence, and disclosure acceptance. Organization collections need curator policy, and
+native integrations need a provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 
 ### WX-04 Team meetings template collection

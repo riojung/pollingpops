@@ -8,10 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-12 first integration provider evaluation
+
+The [integration evaluation](integration-provider-evaluation.md) after PR #318 recommends
+Microsoft PowerPoint desktop for the first feasibility test. It defines a live in-slide display,
+explicit browser controls, and guest QR/link fallback for an existing Presentation room.
+Managed Office validation and paying-partner evidence remain pending before production selection.
+
 ### WX-08 fixed-budget allocation discovery
 
-The [allocation workflow protocol](allocation-workflow-discovery.md) after PR #317 defines a
-synthetic 100-point task, comparisons against ranking and Board voting, and evidence criteria
+The [allocation workflow protocol](allocation-workflow-discovery.md) merged in
+[PR #318](https://github.com/riojung/pollingpops/pull/318) at `871a646` and defines a synthetic
+100-point task, comparisons against ranking and Board voting, and evidence criteria
 for a recurring decision that depends on each participant's fixed-budget tradeoffs. Partner
 observation and surface selection remain pending before runtime work.
 
@@ -333,8 +341,8 @@ completing the named WX-11 software scope. Native-language acceptance remains pe
 Recurrence and learning sequences need identity and privacy decisions. The moderator pass
 design needs product, security, and privacy acceptance. Round report comparison needs product,
 learning-evidence, and disclosure acceptance. The curator design for organization collections
-needs product, organization access, and security acceptance. Native integrations need a
-provider decision.
+needs product, organization access, and security acceptance. Native integrations need
+managed-device feasibility and partner evidence for the recommended PowerPoint candidate.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 
 ### WX-04 Team meetings template collection

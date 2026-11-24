@@ -8,10 +8,18 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-14 organization template collection curator design
+
+The [curator design](organization-template-curator-design.md) after PR #316 proposes an
+owner-appointed grant for organization-wide template collections. It keeps publication preview
+and copy under the existing Library authority and defines revocation, scoped discovery, and
+audit. Product, organization access, and security acceptance remain open before runtime work.
+
 ### WX-10 Round report comparison disclosure design
 
-The [report comparison design](report-comparison-disclosure-design.md) after PR #315 proposes a
-private initial-accuracy view for two finished deliveries of the same published Round. It
+The [report comparison design](report-comparison-disclosure-design.md) merged in
+[PR #316](https://github.com/riojung/pollingpops/pull/316) at `a7f3975` and proposes a private
+initial-accuracy view for two finished deliveries of the same published Round. It
 defines collection-window evidence, withholding in the comparison view, and source withdrawal.
 Product acceptance of the narrower milestone, learning-evidence acceptance, and a privacy
 decision across existing report surfaces remain open before runtime work.
@@ -316,8 +324,9 @@ Board launch explanations merged in PR #309. Round staff availability merged in 
 completing the named WX-11 software scope. Native-language acceptance remains pending.
 Recurrence and learning sequences need identity and privacy decisions. The moderator pass
 design needs product, security, and privacy acceptance. Round report comparison needs product,
-learning-evidence, and disclosure acceptance. Organization collections need curator policy, and
-native integrations need a provider decision.
+learning-evidence, and disclosure acceptance. The curator design for organization collections
+needs product, organization access, and security acceptance. Native integrations need a
+provider decision.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 
 ### WX-04 Team meetings template collection

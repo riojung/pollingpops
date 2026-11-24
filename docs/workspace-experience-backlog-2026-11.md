@@ -65,7 +65,9 @@ WX-11 software scope. The Training and onboarding collection merged through
 [PR #311](https://github.com/riojung/pollingpops/pull/311) at `01e9765`. Workshops merged through
 [PR #312](https://github.com/riojung/pollingpops/pull/312) at `61d1094`. Event feedback merged
 through [PR #313](https://github.com/riojung/pollingpops/pull/313) at `0877465`, completing the
-named WX-04 collection software scope. The next P2 discovery checkpoint covers recurring check-ins.
+named WX-04 collection software scope. The WX-07 recurring check-in design merged through
+[PR #314](https://github.com/riojung/pollingpops/pull/314) at `00119a7`. The next P2 checkpoint
+defines [WX-09 moderator permissions and audit](moderator-pass-design.md).
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -88,9 +90,9 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Four named collections merged through PR #313; human acceptance pending         | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
 | WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                               | Surveys + contracts + reporting |
-| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Identity and disclosure design drafted; approval pending                        | Async delivery + privacy        |
+| WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Design merged in PR #314; product and privacy acceptance pending                | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Candidate under IDEA-004 / R2-03                                                | Contracts + live experience     |
-| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission design first                                                         | Realtime + security + frontend  |
+| WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Permission and audit design drafted; acceptance and runtime pending             | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Extend IDEA-015 / R2-10                                                         | Reporting + learning evidence   |
 | WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Named software scope merged through PR #310; native-language acceptance pending | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Reuse IDEA-002/005/007 and R2-11                                                | Integrations + security         |
@@ -99,7 +101,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 
 ## Selected first delivery
 
-As of 2026-11-22, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
+As of 2026-11-23, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
 in progress: ordered-page readers and authoring are merged, while conditional pages have not
 been enabled in the product. C1's internal counting and withheld-only contract are merged.
 C2's candidate whole-report policy is merged; human privacy acceptance, C3/C4 runtime
@@ -670,7 +672,7 @@ become longitudinal employee tracking. Correlation with learning recovery is not
 **Dependencies:** privacy/identity decision, existing Survey/job/history infrastructure. Distinct
 from the learning follow-up in IDEA-008 / R2-04. Owner: async delivery + privacy.
 
-**Discovery after PR #313:** the [eligibility and disclosure design](recurring-check-ins-design.md)
+**Discovery merged in PR #314:** the [eligibility and disclosure design](recurring-check-ins-design.md)
 proposes a manually opened, rating-only first increment with independent run credentials,
 frozen outcomes, and explicit withdrawal. It gives product and privacy owners qualification
 cases for access, retries, sparse samples, known overlap, and deletion. Identity and disclosure
@@ -712,6 +714,12 @@ Approval behavior does not imply organizer-blind anonymity.
 
 **Dependencies:** explicit credential and audit design. Persistent pre/post-meeting Q&A remains the
 separate IDEA-014 / R2-09. Owner: realtime + security + frontend.
+
+**Permission and audit checkpoint after PR #314:** the [moderator pass design](moderator-pass-design.md)
+proposes a single active pass for Presentation Q&A, a limited queue and command set, and
+transactional audit and revocation. The design records qualification for the implementation.
+Product, security, and privacy acceptance remain open before runtime work. Round adaptation
+follows separate qualification of its staff authorization and question projection.
 
 ### WX-10 Report comparison
 
@@ -1194,9 +1202,10 @@ PR #310, completing the named WX-11 software scope. Native-language acceptance r
 Training and onboarding merged in PR #311, Workshops in PR #312, and Event feedback in PR #313.
 All named WX-04 collection software is merged.
 The public-site work merged in PR #288.
-WX-07 has a discovery candidate awaiting product and privacy approval. WX-13 needs an
-identity/privacy decision, WX-09 needs credential permissions, WX-10 needs a comparison disclosure
-decision, WX-14 needs a curator policy, and WX-12 needs a provider choice.
+WX-07's merged discovery candidate awaits product and privacy approval. WX-09's proposed
+permissions and audit await product, security, and privacy acceptance. WX-08 needs evidence
+for the fixed-allocation job, WX-10 needs a comparison disclosure decision, WX-13 needs an
+identity and privacy decision, WX-14 needs a curator policy, and WX-12 needs a provider choice.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),
 hosted capacity/security/legal/backup evidence, customer research, or public launch gates.

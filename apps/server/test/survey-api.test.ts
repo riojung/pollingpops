@@ -3,7 +3,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { ApiErrorSchema } from "@openround/contracts";
-import { MemoryRepository, SurveyRepository, createPlatformRepository } from "@openround/db";
+import { SurveyContentSchema, type SurveyResponses } from "@openround/contracts/surveys";
+import {
+  MemoryRepository,
+  SurveyRepository,
+  createPlatformRepository,
+  createSurveyRepository,
+} from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -586,6 +592,223 @@ describe("Survey creator and participant APIs", () => {
         await app.inject({ method: "GET", url: `/v1/survey-rooms/${room.id}/results`, headers })
       ).json(),
     ).toEqual(final);
+  });
+  it("keeps attempts, results and deletion independent for two runs of one published Survey", async () => {
+    const { app, headers, repository } = await fixture();
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/surveys",
+      headers,
+      payload: { idempotencyKey: randomUUID(), templateId: "training-feedback" },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const { id, revision } = created.json().survey;
+    const published = await app.inject({
+      method: "POST",
+      url: `/v1/surveys/${id}/publish`,
+      headers,
+      payload: { idempotencyKey: randomUUID(), expectedRevision: revision },
+    });
+    expect(published.statusCode, published.body).toBe(200);
+    const { draft, versionId } = published.json().survey;
+    expect(versionId).toEqual(expect.any(String));
+    const content = SurveyContentSchema.parse(draft);
+    async function openRun() {
+      const opened = await app.inject({
+        method: "POST",
+        url: `/v1/surveys/${id}/rooms`,
+        headers,
+        payload: { idempotencyKey: randomUUID(), expectedRevision: revision },
+      });
+      expect(opened.statusCode, opened.body).toBe(201);
+      return opened.json<{ room: { id: string; code: string } }>().room;
+    }
+    const first = await openRun();
+    const second = await openRun();
+    expect(second.id).not.toBe(first.id);
+    expect(second.code).not.toBe(first.code);
+    const surveys = createSurveyRepository(repository);
+    for (const { id } of [first, second]) {
+      expect(await surveys.getRoom(id)).toMatchObject({ versionId, content });
+    }
+
+    const guest = () => ({ authorization: `Bearer ${randomBytes(32).toString("hex")}` });
+    type GuestHeaders = ReturnType<typeof guest>;
+    async function join(roomId: string, guestHeaders: GuestHeaders) {
+      const joined = await app.inject({
+        method: "POST",
+        url: `/v1/survey-rooms/${roomId}/join`,
+        headers: guestHeaders,
+      });
+      expect(joined.statusCode, joined.body).toBe(200);
+      return joined.json().attempt;
+    }
+    const attempt = (roomId: string, guestHeaders: GuestHeaders) =>
+      app.inject({
+        method: "GET",
+        url: `/v1/survey-rooms/${roomId}/attempt`,
+        headers: guestHeaders,
+      });
+    const respond = (
+      roomId: string,
+      guestHeaders: GuestHeaders,
+      action: "draft" | "submit",
+      responses: SurveyResponses,
+      expectedRevision = 0,
+      idempotencyKey = randomUUID(),
+    ) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/survey-rooms/${roomId}/${action}`,
+        headers: guestHeaders,
+        payload: { idempotencyKey, expectedRevision, responses },
+      });
+    function answers(choice: number): SurveyResponses {
+      return Object.fromEntries(
+        content.items.map(({ question }) => [
+          question.id,
+          question.type === "poll"
+            ? { kind: "poll", choiceIds: [question.choices[choice]!.id] }
+            : { kind: "rating", value: 4 },
+        ]),
+      );
+    }
+    async function results(roomId: string) {
+      const report = await app.inject({
+        method: "GET",
+        url: `/v1/survey-rooms/${roomId}/results`,
+        headers,
+      });
+      expect(report.statusCode, report.body).toBe(200);
+      return report.json().results;
+    }
+    const hiddenQuestions = content.items.map(() =>
+      expect.objectContaining({ suppressed: true, answeredCount: null, distribution: [] }),
+    );
+
+    const sharedGuest = guest();
+    const firstAnswers = answers(0);
+    await join(first.id, sharedGuest);
+    const saved = await respond(first.id, sharedGuest, "draft", firstAnswers);
+    expect(saved.statusCode, saved.body).toBe(200);
+    expect((await attempt(first.id, sharedGuest)).json().attempt).toMatchObject({
+      roomId: first.id,
+      revision: 1,
+      finalized: false,
+      responses: firstAnswers,
+    });
+    expect((await results(first.id)).submittedCount).toBe(0);
+    const crossRunRead = await attempt(second.id, sharedGuest);
+    const crossRunSubmit = await respond(second.id, sharedGuest, "submit", firstAnswers);
+    for (const denied of [crossRunRead, crossRunSubmit]) {
+      expect(denied.statusCode, denied.body).toBe(401);
+      expect(denied.json().error.code).toBe("UNAUTHORIZED");
+    }
+    const submitKey = randomUUID();
+    const firstSubmission = await respond(
+      first.id,
+      sharedGuest,
+      "submit",
+      firstAnswers,
+      1,
+      submitKey,
+    );
+    expect(firstSubmission.statusCode, firstSubmission.body).toBe(200);
+    const firstFinal = firstSubmission.json().attempt;
+    expect(firstFinal).toMatchObject({
+      roomId: first.id,
+      revision: 2,
+      finalized: true,
+      responses: firstAnswers,
+      receipt: expect.any(String),
+    });
+    const duplicate = await respond(first.id, sharedGuest, "submit", firstAnswers, 2);
+    expect(duplicate.statusCode, duplicate.body).toBe(422);
+
+    // Explicit admission with the same client-chosen bearer creates a separate attempt.
+    expect(await join(second.id, sharedGuest)).toMatchObject({
+      roomId: second.id,
+      revision: 0,
+      finalized: false,
+      responses: {},
+      receipt: null,
+    });
+    const secondAnswers = answers(1);
+    expect(secondAnswers).not.toEqual(firstAnswers);
+    const submitSecond = () =>
+      respond(second.id, sharedGuest, "submit", secondAnswers, 0, submitKey);
+    const secondSubmission = await submitSecond();
+    expect(secondSubmission.statusCode, secondSubmission.body).toBe(200);
+    const secondFinal = secondSubmission.json().attempt;
+    expect(secondFinal).toMatchObject({
+      roomId: second.id,
+      revision: 1,
+      finalized: true,
+      responses: secondAnswers,
+      receipt: expect.any(String),
+    });
+    expect(secondFinal.receipt).not.toBe(firstFinal.receipt);
+
+    for (const guestHeaders of [guest(), guest(), guest(), guest()]) {
+      await join(first.id, guestHeaders);
+      const submitted = await respond(first.id, guestHeaders, "submit", firstAnswers);
+      expect(submitted.statusCode, submitted.body).toBe(200);
+    }
+
+    for (const [roomId, submittedCount] of [
+      [first.id, 5],
+      [second.id, 1],
+    ] as const) {
+      expect(await results(roomId)).toMatchObject({
+        resultsStatus: "collecting",
+        suppressed: true,
+        submittedCount,
+        questions: hiddenQuestions,
+      });
+      const closed = await app.inject({
+        method: "POST",
+        url: `/v1/survey-rooms/${roomId}/close`,
+        headers,
+        payload: { idempotencyKey: randomUUID() },
+      });
+      expect(closed.statusCode, closed.body).toBe(204);
+    }
+    const firstReport = await results(first.id);
+    expect(firstReport).toMatchObject({
+      resultsStatus: "available",
+      suppressed: false,
+      submittedCount: 5,
+    });
+    expect(
+      firstReport.questions[0].distribution.map(({ count }: { count: number }) => count),
+    ).toEqual([5, 0, 0, 0]);
+    const secondReport = await results(second.id);
+    expect(secondReport).toMatchObject({
+      resultsStatus: "insufficient_sample",
+      suppressed: true,
+      submittedCount: 1,
+      questions: hiddenQuestions,
+    });
+    for (const final of [firstFinal, secondFinal]) {
+      const resumed = await attempt(final.roomId, sharedGuest);
+      expect(resumed.statusCode, resumed.body).toBe(200);
+      expect(resumed.json().attempt).toEqual({ ...final, closed: true });
+    }
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/v1/survey-rooms/${first.id}`,
+      headers,
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    expect((await attempt(first.id, sharedGuest)).statusCode).toBe(404);
+    expect(await results(second.id)).toEqual(secondReport);
+    expect((await attempt(second.id, sharedGuest)).json().attempt).toEqual({
+      ...secondFinal,
+      closed: true,
+    });
+    const retry = await submitSecond();
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(retry.json()).toEqual(secondSubmission.json());
   });
   it("allows editors to close runs but reserves permanent deletion for the workspace owner", async () => {
     const { app, headers } = await fixture();

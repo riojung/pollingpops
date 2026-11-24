@@ -8,9 +8,16 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-07 recurring check-ins discovery
+
+The [eligibility and disclosure design](recurring-check-ins-design.md) after PR #313 proposes
+manually opened, rating-only check-ins. It separates per-run credential limits, collection,
+disclosure and retention, and records synthetic qualification cases. Product and human privacy
+acceptance remain open before runtime selection.
+
 ### WX-04 Event feedback template collection, November 23, 2026
 
-Implemented locally on `codex/event-feedback-collection` after PR #312. Templates groups five
+Merged through PR #313 at `0877465`. Templates groups five
 existing originals for live and self-paced feedback, a facilitated demo, and a content-only
 event talk. The Event experience Round and Survey show distinct facilitator guides and use
 their existing type-specific copy workflows. The [editorial record](evidence/event-feedback-editorial-review-2026-11.md)
@@ -260,8 +267,8 @@ Commercial/legal qualification, native-language acceptance and observed usabilit
 ### Workspace experience: current position, November 23, 2026
 
 The selected P1 deliveries in WX-01–05 are merged, including Home/start/resume, template discovery
-and preview/use, All content Library, the first three curated collections, and creation navigation,
-import preview and durable Round starter-copy recovery. Event feedback is implemented locally.
+and preview/use, All content Library, all four named curated collections, and creation navigation,
+import preview and durable Round starter-copy recovery.
 Survey ordered-page readers (WX-06A1, PR #284) and
 opt-in page authoring (WX-06A2, PR #285 at `4dcefcc`) are also merged. The default-off `surveyPages`
 capability preserves existing v2 creation and published links; enabling it remains an explicit

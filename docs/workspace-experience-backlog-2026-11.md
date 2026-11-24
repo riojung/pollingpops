@@ -77,8 +77,9 @@ named WX-04 collection software scope. The WX-07 recurring check-in design merge
 [PR #318](https://github.com/riojung/pollingpops/pull/318) at `871a646`. The
 [WX-12 integration provider evaluation](integration-provider-evaluation.md) merged through
 [PR #319](https://github.com/riojung/pollingpops/pull/319) at `0179deb`. The
-[WX-13 learner identity and privacy proposal](learning-sequence-privacy-design.md) defines
-the next discovery checkpoint.
+[WX-13 learner identity and privacy proposal](learning-sequence-privacy-design.md) merged
+through [PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`. The next
+checkpoint prepares the [WX-06 Survey disclosure review](survey-branching-disclosure-review.md).
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -100,14 +101,14 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                                        | Library API + frontend          |
 | WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Four named collections merged through PR #313; human acceptance pending         | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
-| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | A1/A2/B1/B2/C1/C2 merged; privacy acceptance open                               | Surveys + contracts + reporting |
+| WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | C2 merged; review evidence ready and privacy acceptance pending                 | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Design merged in PR #314; product and privacy acceptance pending                | Async delivery + privacy        |
 | WX-08 | P2       | L, two checkpoints                 | A complete 100-point allocation interaction                         | Study merged in PR #318; partner observation and runtime selection pending      | Contracts + live experience     |
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Design merged in PR #315; acceptance and runtime pending                        | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Design merged in PR #316; acceptance and runtime pending                        | Reporting + learning evidence   |
 | WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Named software scope merged through PR #310; native-language acceptance pending | Design system + frontend        |
 | WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Evaluation merged in PR #319; client tests and partner evidence pending         | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Identity/privacy proposed; product review and partner observation pending       | Learning delivery + privacy     |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Design merged in PR #320; product review and partner observation pending        | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Design merged in PR #317; acceptance and runtime pending                        | Library + organization access   |
 
 ## Selected first delivery
@@ -650,6 +651,12 @@ boundary cases passed; 31 new C2 cases include 625 reference histograms and nume
 Independent read-only review found no actionable issue. Configured optional integration skips
 remain; automated qualification does not replace human privacy acceptance.
 
+**WX-06 disclosure review preparation after PR #320:** the
+[review brief](survey-branching-disclosure-review.md) reproduces five synthetic cases,
+including equal-sized runs with different whole-report outcomes. It records the audience and
+utility decisions needed before C3, adds direct API checks for rejected conditional summary
+shares and downloads, and identifies retained-snapshot qualification for C4.
+
 C2's candidate implementation and automated tests do not grant human privacy or hosted release
 acceptance. No runtime/writer grant changes. After acceptance, **C3 runtime results/readers**
 and **C4 shared summaries/exports/lifecycle** must serialize one immutable final outcome per run,
@@ -1171,7 +1178,7 @@ between link attempts and unique learners; clear behavior when sources expire or
 revoked; accessible resume/skip/retry; no claim of long-term retention from one completed sequence.
 Owner: learning delivery + privacy + product research.
 
-**Identity and privacy evaluation after PR #319:** the
+**Identity and privacy evaluation merged in PR #320:** the
 [WX-13 design](learning-sequence-privacy-design.md) proposes an account-free, browser-local
 checklist over pinned Presentation reading and untimed choice practice. Each assignment
 controls its own guest access and attempts. Checklist status is self-marked and unavailable to
@@ -1241,8 +1248,9 @@ assistive-technology, native-language or physical-device review. Run the reposit
 `pnpm check` before opening a pull request, as required by the contribution guide.
 
 The next work session should select **one ID/checkpoint**, confirm its current baseline and scope,
-assign an owner and define a testable completion target. C2 candidate code is merged in PR #290;
-its human privacy acceptance remains open. The next Survey implementation checkpoint after acceptance is
+assign an owner and define a testable completion target. C2 candidate code is merged in PR #290.
+The [disclosure review brief](survey-branching-disclosure-review.md) is ready for human review.
+The next Survey implementation checkpoint after acceptance is
 **C3 frozen runtime results/readers**, followed by C4 summaries/exports before B3 enables
 writers. **WX-11A Sessions**, **WX-11B Results**, **WX-11C Workspace initialization and recovery**,
 **WX-11D Library recovery**, and **WX-11E availability copy** are merged in PRs #291–295.
@@ -1263,7 +1271,7 @@ permission and audit design awaits product, security, and privacy acceptance. WX
 study still needs observed partner evidence for the fixed-allocation job. WX-10's merged
 comparison proposal needs product, learning-evidence, and human privacy acceptance. WX-12 has
 a first provider recommendation and needs managed-client feasibility and paying-partner evidence.
-WX-13 has a browser-local identity and privacy proposal. Product and privacy acceptance,
+WX-13's browser-local identity and privacy proposal merged in PR #320. Product and privacy acceptance,
 accessible qualification, and observed partner evidence remain open. WX-14's merged curator
 design needs product, organization access, and security acceptance.
 

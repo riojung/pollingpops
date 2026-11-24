@@ -8,9 +8,17 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-08 fixed-budget allocation discovery
+
+The [allocation workflow protocol](allocation-workflow-discovery.md) after PR #317 defines a
+synthetic 100-point task, comparisons against ranking and Board voting, and evidence criteria
+for a recurring decision that depends on each participant's fixed-budget tradeoffs. Partner
+observation and surface selection remain pending before runtime work.
+
 ### WX-14 organization template collection curator design
 
-The [curator design](organization-template-curator-design.md) after PR #316 proposes an
+The [curator design](organization-template-curator-design.md) merged in
+[PR #317](https://github.com/riojung/pollingpops/pull/317) at `7153684` and proposes an
 owner-appointed grant for organization-wide template collections. It keeps publication preview
 and copy under the existing Library authority and defines revocation, scoped discovery, and
 audit. Product, organization access, and security acceptance remain open before runtime work.

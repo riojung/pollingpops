@@ -74,8 +74,11 @@ named WX-04 collection software scope. The WX-07 recurring check-in design merge
 [curator permissions design](organization-template-curator-design.md) merged through
 [PR #317](https://github.com/riojung/pollingpops/pull/317) at `7153684`. The WX-08
 [allocation workflow discovery](allocation-workflow-discovery.md) merged through
-[PR #318](https://github.com/riojung/pollingpops/pull/318) at `871a646`. The next checkpoint
-evaluates [WX-12's first integration provider](integration-provider-evaluation.md).
+[PR #318](https://github.com/riojung/pollingpops/pull/318) at `871a646`. The
+[WX-12 integration provider evaluation](integration-provider-evaluation.md) merged through
+[PR #319](https://github.com/riojung/pollingpops/pull/319) at `0179deb`. The
+[WX-13 learner identity and privacy proposal](learning-sequence-privacy-design.md) defines
+the next discovery checkpoint.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -103,8 +106,8 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-09 | P2       | M                                  | A narrowly scoped moderator invitation                              | Design merged in PR #315; acceptance and runtime pending                        | Realtime + security + frontend  |
 | WX-10 | P2       | M                                  | Comparable session evidence without spreadsheets                    | Design merged in PR #316; acceptance and runtime pending                        | Reporting + learning evidence   |
 | WX-11 | P2       | S/M per surface                    | Consistent density, states and capability explanations              | Named software scope merged through PR #310; native-language acceptance pending | Design system + frontend        |
-| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | PowerPoint desktop first; client tests and partner evidence pending             | Integrations + security         |
-| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Reuse IDEA-008 / R2-04; discovery                                               | Learning delivery + privacy     |
+| WX-12 | P3       | S discovery, then M/L per provider | Native slide/meeting and result-delivery integrations               | Evaluation merged in PR #319; client tests and partner evidence pending         | Integrations + security         |
+| WX-13 | P3       | L                                  | Ordered follow-up learning sequences                                | Identity/privacy proposed; product review and partner observation pending       | Learning delivery + privacy     |
 | WX-14 | P2       | M                                  | Organization-curated reusable template collections                  | Design merged in PR #317; acceptance and runtime pending                        | Library + organization access   |
 
 ## Selected first delivery
@@ -1145,7 +1148,7 @@ retry/idempotency; join-link/QR fallback; no presenter notes in shared displays.
 deployment and product observation remain dependencies. No account signup, provider provisioning
 or outbound notification is performed by this first UI delivery. Owner: integrations + security.
 
-**Provider evaluation after PR #318:** the
+**Provider evaluation merged in PR #319:** the
 [integration evaluation](integration-provider-evaluation.md) recommends testing Microsoft
 PowerPoint desktop first with one synthetic checkpoint in a managed Windows slideshow, an
 explicit browser control flow, and the existing guest join fallback. Office install, native
@@ -1167,6 +1170,14 @@ gradebook synchronization or persistent learner profiles are implied by account-
 between link attempts and unique learners; clear behavior when sources expire or permissions are
 revoked; accessible resume/skip/retry; no claim of long-term retention from one completed sequence.
 Owner: learning delivery + privacy + product research.
+
+**Identity and privacy evaluation after PR #319:** the
+[WX-13 design](learning-sequence-privacy-design.md) proposes an account-free, browser-local
+checklist over pinned Presentation reading and untimed choice practice. Each assignment
+controls its own guest access and attempts. Checklist status is self-marked and unavailable to
+the facilitator. Before selecting runtime work, review shared-browser storage, separate
+assignment withdrawal, accessibility, and observed partner workflows. R2-04's delayed-probe
+research retains its own selection and disclosure gates.
 
 ### WX-14 Organization-curated template collections
 
@@ -1252,8 +1263,9 @@ permission and audit design awaits product, security, and privacy acceptance. WX
 study still needs observed partner evidence for the fixed-allocation job. WX-10's merged
 comparison proposal needs product, learning-evidence, and human privacy acceptance. WX-12 has
 a first provider recommendation and needs managed-client feasibility and paying-partner evidence.
-WX-13 needs an identity and privacy decision. WX-14's merged curator design needs product,
-organization access, and security acceptance.
+WX-13 has a browser-local identity and privacy proposal. Product and privacy acceptance,
+accessible qualification, and observed partner evidence remain open. WX-14's merged curator
+design needs product, organization access, and security acceptance.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),
 hosted capacity/security/legal/backup evidence, customer research, or public launch gates.

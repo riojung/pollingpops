@@ -8,11 +8,26 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-13 ordered learning sequence identity and privacy
+
+The [learner identity and privacy design](learning-sequence-privacy-design.md) proposes a
+browser-local checklist for pinned Presentation reading and untimed choice practice. Each
+assignment retains independent access, attempts, resume, and reporting. The first candidate
+keeps sequence progress self-marked and on the learner's browser. The evaluation compares the
+ordered checklist with separately shared links and specifies expiry, source and assignment
+withdrawal, and accessible resume, skip, and retry.
+
+Focused checks on the existing assignment flows passed (21 server and 11 web tests).
+`pnpm research:check` reported the Phase 0 gate pending. Product, learning delivery,
+privacy and security acceptance, accessibility qualification, and observed partner evidence
+remain open before runtime selection.
+
 ### WX-12 first integration provider evaluation
 
-The [integration evaluation](integration-provider-evaluation.md) after PR #318 recommends
-Microsoft PowerPoint desktop for the first feasibility test. It defines a live in-slide display,
-explicit browser controls, and guest QR/link fallback for an existing Presentation room.
+The [integration evaluation](integration-provider-evaluation.md) merged in
+[PR #319](https://github.com/riojung/pollingpops/pull/319) at `0179deb`. It recommends Microsoft
+PowerPoint desktop for the first feasibility test with a live in-slide display, explicit browser
+controls, and guest QR/link fallback for an existing Presentation room.
 Managed Office validation and paying-partner evidence remain pending before production selection.
 
 ### WX-08 fixed-budget allocation discovery
@@ -338,11 +353,12 @@ PR #305. Visual import explanations merged in PR #306 and the navigator resize l
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and organization
 Board launch explanations merged in PR #309. Round staff availability merged in PR #310,
 completing the named WX-11 software scope. Native-language acceptance remains pending.
-Recurrence and learning sequences need identity and privacy decisions. The moderator pass
-design needs product, security, and privacy acceptance. Round report comparison needs product,
-learning-evidence, and disclosure acceptance. The curator design for organization collections
-needs product, organization access, and security acceptance. Native integrations need
-managed-device feasibility and partner evidence for the recommended PowerPoint candidate.
+Recurring check-ins and the browser-local learning sequence proposal need product and privacy
+acceptance. The moderator pass design needs product, security, and privacy acceptance.
+Round report comparison needs product, learning-evidence, and disclosure acceptance.
+The curator design for organization collections needs product, organization access, and
+security acceptance. Native integrations need managed-device feasibility and partner
+evidence for the recommended PowerPoint candidate.
 Code completion does not advance the release-readiness ledger or human/native-language acceptance.
 
 ### WX-04 Team meetings template collection

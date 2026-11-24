@@ -405,7 +405,7 @@ describe("Survey branching reader and writer compatibility boundary", () => {
     });
   });
 
-  it("blocks new v4 publications/launches and all aggregate/summary exports pending privacy qualification", async () => {
+  it("blocks new v4 publications, launches, results, summary shares and exports pending privacy qualification", async () => {
     const f = await fixture();
     f.store.surveys.set(f.id, { ...f.store.surveys.get(f.id)!, schemaVersion: 4, draft: f.future });
     const versionId = f.published.versionId!;
@@ -437,13 +437,39 @@ describe("Survey branching reader and writer compatibility boundary", () => {
     });
     expect(results.statusCode, results.body).toBe(409);
     expect(results.json().error.code).toBe("SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE");
+    const summaryUrl = `/v1/session-summaries/survey/${f.room.id}`;
     const summary = await f.app.inject({
-      url: `/v1/session-summaries/survey/${f.room.id}`,
+      url: summaryUrl,
       headers: f.headers,
     });
     expect(summary.statusCode, summary.body).toBe(409);
     expect(summary.json().error.code).toBe("SUMMARY_NOT_READY");
     expect(summary.body).not.toContain(f.future.title);
+    const share = await f.app.inject({
+      method: "POST",
+      url: `${summaryUrl}/shares`,
+      headers: f.headers,
+      payload: { idempotencyKey: randomUUID() },
+    });
+    expect(share.statusCode, share.body).toBe(409);
+    expect(share.json().error.code).toBe("SUMMARY_NOT_READY");
+    expect(share.body).not.toContain(f.future.title);
+    for (const payload of [
+      { format: "pdf" },
+      { format: "png" },
+      { format: "png", questionIndex: 0 },
+      { format: "xlsx" },
+    ]) {
+      const download = await f.app.inject({
+        method: "POST",
+        url: `${summaryUrl}/export`,
+        headers: f.headers,
+        payload,
+      });
+      expect(download.statusCode, download.body).toBe(409);
+      expect(download.json().error.code).toBe("SUMMARY_NOT_READY");
+      expect(download.body).not.toContain(f.future.title);
+    }
     expect(f.store.survey_feedback_rooms.get(f.room.id)).toEqual(before);
   });
 });

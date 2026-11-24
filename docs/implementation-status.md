@@ -8,9 +8,19 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-06 conditional Survey disclosure review preparation
+
+The [review brief](survey-branching-disclosure-review.md) records product and privacy decisions
+needed for C3. A reproducible synthetic replay demonstrates when answer variation withholds the
+entire result, including two runs with 210 submissions each that produce different outcomes.
+The current API boundary check covers direct results, summary previews, fresh shares and all
+download formats, including a selected-question image. C3 frozen results, C4 sharing and export
+qualification, and B3 condition authoring remain pending.
+
 ### WX-13 ordered learning sequence identity and privacy
 
-The [learner identity and privacy design](learning-sequence-privacy-design.md) proposes a
+The [learner identity and privacy design](learning-sequence-privacy-design.md) merged in
+[PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`. It proposes a
 browser-local checklist for pinned Presentation reading and untimed choice practice. Each
 assignment retains independent access, attempts, resume, and reporting. The first candidate
 keeps sequence progress self-marked and on the learner's browser. The evaluation compares the

@@ -88,8 +88,10 @@ alongside the existing R2-00 first-use task record.
    and link to the alternate. Publish each Round. In each new room, enable **Ask for confidence
    (optional)** and use timed responses with the same accuracy and visibility settings. In
    Wooclap, place each kit's two MCQs in its own live event, set the matching answer keys, and
-   enable Certainty Check where the frozen setup supports it. Set a 30-second deadline on both
-   questions in each tool. [Wooclap live question setup](https://docs.wooclap.com/en/articles/3190733-how-to-create-multiple-questions-quickly-and-easily)
+   enable Certainty Check where the frozen setup supports it. Turn off **Display answers
+   automatically** in each test event so the host can show the distribution after closure.
+   Set a 30-second deadline on both questions in each tool.
+   [Wooclap live question setup](https://docs.wooclap.com/en/articles/3190733-how-to-create-multiple-questions-quickly-and-easily)
 3. Ask an independent reviewer to check that both kits assess the same objective, use
    unambiguous scoring, and make the alternate a different application of the concept.
    Freeze the questions, settings, task script, target comparison sample by segment, participant
@@ -108,6 +110,17 @@ alongside the existing R2-00 first-use task record.
    linked recheck and concept evidence in the report. In Wooclap, confirm the vote distribution,
    available certainty evidence, and results for both MCQs. Record the observed settings, outputs,
    and any plan or access limitation in the private preflight record.
+
+### Check the Wooclap plan before running five guests
+
+Sign in to the approved host workspace and inspect its actual plan and remaining allowance before
+launching either event. Wooclap documents a Starter allowance of five active questions in a
+30-day period. Three unique responses can activate a question, so the two kits can use four slots
+in a fresh Starter period. Recheck the allowance before the optional revote and AI runs. If the
+account cannot run a kit with all five scripted guests, record the plan limitation and leave that
+kit pending. Use the on-screen reports for the primary task and record export separately.
+[Wooclap Starter limits](https://docs.wooclap.com/en/articles/14402104-what-is-wooclap-s-pricing)
+· [Wooclap live reports](https://docs.wooclap.com/en/articles/674961-how-to-download-or-export-event-results)
 
 ### Use the same synthetic response pattern
 
@@ -134,8 +147,10 @@ using the prepaid tool?”
 Omit the answer annotations in both products. Privately brief the five scripted guests. All five
 select the past-cost misconception on the diagnostic. On the recheck, four select the correct
 answer and one selects the past-cost answer. Use the highest confidence choice where available and
-record differences in scale or visibility separately. Staff use **0 of 5** diagnostic and
-**4 of 5** recheck answers correct as reconciliation targets.
+record differences in scale or visibility separately. When Wooclap Certainty Check is on,
+scripted guests select the answer, press **Submit**, and select **Very confident** before pressing
+**Confirm my certainty**. Use the confirmation as the submission time and verify the saved response.
+Staff use **0 of 5** diagnostic and **4 of 5** recheck answers correct as reconciliation targets.
 [Wooclap MCQ and Certainty Check](https://docs.wooclap.com/en/articles/8513348-mcq)
 
 ### Run and score the task

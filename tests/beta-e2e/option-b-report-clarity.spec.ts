@@ -396,16 +396,38 @@ for (const suffix of ["desktop", "phone @mobile"]) {
       ).toBeVisible();
       await expect(page.getByText(localized("finishedReport"), { exact: true })).toBeVisible();
       await expect(page.getByText(localized("questionType.poll"), { exact: true })).toBeVisible();
-      await expect(
-        page.getByRole("heading", { name: insightsCopy("Session insights"), exact: true }),
-      ).toBeVisible();
+      const sessionInsights = insightsCopy("Session insights");
+      const insights = page.getByRole("region", { name: sessionInsights, exact: true });
+      const tabs = insights.getByRole("tablist", { name: sessionInsights, exact: true });
+      const dashboardTab = (
+        key: "Overview" | "Delivery" | "Response coverage" | "Opinion results" | "Q&A",
+      ) => tabs.getByRole("tab", { name: insightsCopy(key), exact: true });
       for (const key of ["Export coverage CSV", "Refresh insights"] as const) {
         await expect(
-          page.getByRole("button", { name: insightsCopy(key), exact: true }),
+          insights.getByRole("button", { name: insightsCopy(key), exact: true }),
         ).toBeVisible();
       }
+      for (const key of [
+        "Overview",
+        "Delivery",
+        "Response coverage",
+        "Opinion results",
+        "Q&A",
+      ] as const)
+        await expect(dashboardTab(key)).toBeVisible();
+      await expect(dashboardTab("Overview")).toHaveAttribute("aria-selected", "true");
+      await dashboardTab("Delivery").click();
       await expect(
-        page.getByText(insightsCopy("Published version"), { exact: true }),
+        insights
+          .getByRole("tabpanel", { name: insightsCopy("Delivery"), exact: true })
+          .getByRole("heading", { name: insightsCopy("Section delivery"), exact: true }),
+      ).toBeVisible();
+      await dashboardTab("Overview").click();
+      await expect(
+        insights
+          .getByRole("tabpanel", { name: insightsCopy("Overview"), exact: true })
+          .locator("summary")
+          .filter({ hasText: insightsCopy("Published version") }),
       ).toBeVisible();
       await expect(page.getByRole("heading", { name: fixture.cue, exact: true })).toBeVisible();
       expect(await downloadCsv(page, localized("exportEvidenceCsv"))).toEqual(english);

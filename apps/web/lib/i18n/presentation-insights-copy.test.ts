@@ -47,6 +47,7 @@ describe("Presentation insights copy", () => {
         "Response coverage · {purpose}",
         "Quick Check distribution · {block}",
         "Opinion distribution · {block}",
+        "Bars are scaled to the highest weighted score ({maximum}).",
       ].sort(),
     );
     expect(presentationInsightsCopy("ko-KR")("Session insights")).toBe("세션 분석");

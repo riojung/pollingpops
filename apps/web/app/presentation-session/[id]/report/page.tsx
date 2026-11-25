@@ -204,6 +204,7 @@ function PresentationReportContent() {
             </section>
             {summaryReady ? (
               <PresentationSessionInsightsPanel
+                key={report.sessionId}
                 canUseEvidence={read.canUseReport}
                 source={{
                   sessionId: report.sessionId,

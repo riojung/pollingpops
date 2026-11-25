@@ -43,6 +43,21 @@ function question(prompt: string, delivery: "main" | "recheck" = "main") {
     },
   };
 }
+function opinionQuestion(prompt: string, choices: [string, string]) {
+  const base = question(prompt);
+  return {
+    ...base,
+    question: {
+      ...base.question,
+      type: "poll" as const,
+      purpose: "opinion" as const,
+      maxSelections: 1,
+      basePoints: 0,
+      choices: choices.map((label) => ({ id: randomUUID(), label, isCorrect: false })),
+    },
+  };
+}
+
 async function hostSnapshot(page: Page, sessionId: string): Promise<PresentationHostSnapshot> {
   const response = await page.request.get(`${e01ApiUrl}/v1/presentation-sessions/${sessionId}`);
   expect(response.status()).toBe(200);
@@ -133,26 +148,16 @@ for (const suffix of ["", " @mobile"]) {
     const diagnostic = question("Initial evidence checkpoint");
     const recheck = question("Recheck evidence checkpoint", "recheck");
     diagnostic.question.linkedRecheckQuestionId = recheck.question.id;
-    const opinionBase = question("Which next step?");
-    const opinion = {
-      ...opinionBase,
-      question: {
-        ...opinionBase.question,
-        type: "poll" as const,
-        purpose: "opinion" as const,
-        maxSelections: 1,
-        basePoints: 0,
-        choices: [
-          { id: randomUUID(), label: "Prefer first", isCorrect: false },
-          { id: randomUUID(), label: "Prefer second", isCorrect: false },
-        ],
-      },
-    };
+    const opinion = opinionQuestion("Which next step?", ["Prefer first", "Prefer second"]);
+    const smallOpinion = opinionQuestion("Single response opinion", [
+      "PRIVATE E09 suppressed first option",
+      "PRIVATE E09 suppressed second option",
+    ]);
     const skipped = question("Never presented checkpoint");
     const closing = e01Slide("Reporting closing");
     const record = await createE01Deck(
       page,
-      [opening, diagnostic, recheck, opinion, skipped, closing],
+      [opening, diagnostic, recheck, opinion, smallOpinion, skipped, closing],
       13,
     );
     const sectionTitle = "=SUM(1,2) <script>section</script>";
@@ -161,7 +166,7 @@ for (const suffix of ["", " @mobile"]) {
       {
         id: randomUUID(),
         title: "Discussion and close",
-        blockIds: [opinion.id, skipped.id, closing.id],
+        blockIds: [opinion.id, smallOpinion.id, skipped.id, closing.id],
       },
     ];
     const sectionSave = await page.request.put(`${e01ApiUrl}/v1/presentations/${record.id}/draft`, {
@@ -303,6 +308,12 @@ for (const suffix of ["", " @mobile"]) {
       for (const [index, token] of tokens.slice(1).entries())
         await submit(page, sessionId, token, opinion.question.choices[index < 2 ? 0 : 1]!.id);
       await page.getByRole("button", { name: "Reveal and close question", exact: true }).click();
+      await page.getByRole("button", { name: "Next block", exact: true }).click();
+      await expect(
+        guest.getByRole("heading", { name: smallOpinion.question.prompt, exact: true }),
+      ).toBeVisible();
+      await submit(page, sessionId, tokens[0]!, smallOpinion.question.choices[0]!.id);
+      await page.getByRole("button", { name: "Reveal and close question", exact: true }).click();
       await page.getByRole("button", { name: "Open navigation", exact: true }).click();
       await page
         .getByRole("dialog", { name: "Presentation navigation", exact: true })
@@ -314,9 +325,8 @@ for (const suffix of ["", " @mobile"]) {
       await expect
         .poll(async () => (await (await page.request.get(reportUrl)).json()).reportStatus)
         .toBe("ready");
-      const response = await page.request.get(
-        `${e01ApiUrl}/v1/presentation-sessions/${sessionId}/insights`,
-      );
+      const insightsUrl = `${e01ApiUrl}/v1/presentation-sessions/${sessionId}/insights`;
+      const response = await page.request.get(insightsUrl);
       expect(response.status()).toBe(200);
       const raw = await response.json();
       const envelope = PresentationSessionInsightsEnvelopeSchema.parse(raw);
@@ -328,18 +338,28 @@ for (const suffix of ["", " @mobile"]) {
       expect(insights.publishedVersion).toBe(1);
       expect(insights.contentScope).toBe("frozen_session");
       expect(insights.delivery.totals).toEqual({
-        totalBlocks: 6,
-        presentedBlocks: 5,
+        totalBlocks: 7,
+        presentedBlocks: 6,
         skippedBlocks: 1,
         unknownBlocks: 0,
-        coveragePercent: 83.3,
+        coveragePercent: 85.7,
       });
       expect(insights.delivery.sections.map((section) => section.coveragePercent)).toEqual([
-        100, 66.7,
+        100, 75,
       ]);
       expect(insights.participation).toMatchObject({
         joinedParticipantCount: 7,
-        acceptedResponseCount: 15,
+        acceptedResponseCount: 16,
+      });
+      expect(
+        insights.participation.questions.find((row) => row.blockId === smallOpinion.id),
+      ).toMatchObject({
+        status: "suppressed",
+        acceptedRespondents: null,
+        joinedByRevealCount: null,
+        responseRatePercent: null,
+        distributionStatus: "suppressed",
+        results: [],
       });
       expect(
         insights.participation.questions.find((row) => row.blockId === diagnostic.id),
@@ -385,26 +405,193 @@ for (const suffix of ["", " @mobile"]) {
         unansweredQuestionCount: 3,
         upvoteCount: 2,
       });
-      const denied = await guest.request.get(
-        `${e01ApiUrl}/v1/presentation-sessions/${sessionId}/insights`,
-        { headers: { authorization: `Bearer ${guestToken}` } },
-      );
+      const denied = await guest.request.get(insightsUrl, {
+        headers: { authorization: `Bearer ${guestToken}` },
+      });
       expect(denied.status()).toBe(401);
 
+      let insightsPending = true;
+      let insightsReads = 0;
+      await page.route(insightsUrl, (route) => {
+        insightsReads++;
+        return insightsPending
+          ? route.fulfill({ status: 202, json: { status: "pending", insights: null } })
+          : route.continue();
+      });
       await page.goto(`/presentation-session/${sessionId}/report`);
       const panel = page.getByRole("region", { name: "Session insights", exact: true });
-      await expect(panel).toBeVisible();
+      const tabs = panel.getByRole("tablist", { name: "Session insights", exact: true });
+      const exportCoverage = panel.getByRole("button", {
+        name: "Export coverage CSV",
+        exact: true,
+      });
+      const reportEvidence = page.getByRole("region", { name: "Block evidence", exact: true });
       await expect(
-        panel.getByRole("button", { name: "Export coverage CSV", exact: true }),
+        panel.getByRole("status").filter({ hasText: "still being reconciled" }),
+      ).toBeVisible();
+      await expect(tabs).toHaveCount(0);
+      await expect(exportCoverage).toHaveCount(0);
+      await expect(
+        reportEvidence.getByRole("heading", { name: diagnostic.question.prompt }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Export evidence CSV", exact: true }),
       ).toBeEnabled();
-      await expect(panel.getByText(sectionTitle, { exact: true }).first()).toBeVisible();
-      expect((await panel.textContent())?.match(/PRIVATE E09|NEWER E09/)).toBeNull();
+      if (process.env.BETA_E2E_SESSION_SUMMARIES === "true") {
+        await expect(
+          page.getByRole("button", { name: "Share summary", exact: true }),
+        ).toBeEnabled();
+      }
+      const pendingReads = insightsReads;
+      insightsPending = false;
+      await panel.getByRole("button", { name: "Retry insights", exact: true }).click();
+      await expect(exportCoverage).toBeEnabled();
+      const readsBeforeTabs = insightsReads;
+      expect(readsBeforeTabs).toBeGreaterThan(pendingReads);
+      const snapshotTime = panel.getByText(/^Insights calculated ·/).locator("time");
+      await expect(snapshotTime).toBeVisible();
+      const calculatedAt = await snapshotTime.getAttribute("datetime");
+
+      const tab = (name: string) => tabs.getByRole("tab", { name, exact: true });
+      const activeView = async (name: string) => {
+        await expect(tab(name)).toHaveAttribute("aria-selected", "true");
+        await expect(tab(name)).toHaveAttribute("tabindex", "0");
+        await expect(panel.getByRole("tabpanel")).toHaveCount(1);
+        const view = panel.getByRole("tabpanel", { name, exact: true });
+        await expect(view).toBeVisible();
+        expect(await view.innerText()).not.toMatch(/PRIVATE E09|NEWER E09/);
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+        ).toBe(true);
+        return view;
+      };
+
+      await expect(tabs.getByRole("tab")).toHaveCount(5);
+      const overview = await activeView("Overview");
+      await expect(tab("Delivery")).toHaveAttribute("tabindex", "-1");
+      await expect(
+        overview.getByText("Participant identities joined", { exact: true }),
+      ).toBeVisible();
+      await expect(overview.getByText("7", { exact: true })).toBeVisible();
+      await expect(overview.getByText("Accepted response records", { exact: true })).toBeVisible();
+      await expect(overview.getByText("16", { exact: true })).toBeVisible();
+      await expect(overview.getByText("6 of 7", { exact: true })).toBeVisible();
+      await expect(overview.getByText(/Published version/).first()).toContainText("Version 1");
+      const version = overview.getByText("Published version · Version 1", { exact: true });
+      await version.click();
+      await expect(
+        overview.getByText(
+          "Frozen session content. See Delivery for items added during this session.",
+          {
+            exact: true,
+          },
+        ),
+      ).toBeVisible();
+      await version.click();
+      await expect(overview.getByText("Reading these insights", { exact: true })).toBeVisible();
+      await expect(overview.getByRole("table")).toHaveCount(0);
+      await panel.screenshot({
+        path: info.outputPath("session-insights-overview-light.png"),
+        animations: "disabled",
+        scale: "css",
+      });
       expect(
         (await new AxeBuilder({ page }).include("[aria-labelledby]").analyze()).violations,
       ).toEqual([]);
+
+      await tab("Overview").focus();
+      await page.keyboard.press("ArrowLeft");
+      await expect(tab("Q&A")).toBeFocused();
+      const qna = await activeView("Q&A");
+      await expect(qna.getByRole("heading", { name: "Q&A outcomes", exact: true })).toBeVisible();
+      await expect(qna.getByText("Public questions", { exact: true })).toBeVisible();
+      await expect(qna.getByText(/^Q&A data as of ·/).locator("time")).toBeVisible();
+      await page.keyboard.press("Home");
+      await expect(tab("Overview")).toBeFocused();
+      await activeView("Overview");
+      await page.keyboard.press("ArrowRight");
+      await expect(tab("Delivery")).toBeFocused();
+      const delivery = await activeView("Delivery");
+      await expect(delivery.getByText("85.7%", { exact: true })).toBeVisible();
+      await expect(
+        delivery
+          .getByRole("table", { name: "Section delivery", exact: true })
+          .getByRole("rowheader", { name: sectionTitle, exact: true }),
+      ).toBeVisible();
+      await expect(
+        delivery
+          .getByRole("table", { name: "Block delivery", exact: true })
+          .getByRole("row", { name: /Never presented checkpoint.*Skipped/ }),
+      ).toBeVisible();
+      await page.keyboard.press("End");
+      await expect(tab("Q&A")).toBeFocused();
+      await activeView("Q&A");
+
+      await tab("Response coverage").click();
+      const coverage = await activeView("Response coverage");
+      const assessed = coverage.getByRole("table", {
+        name: "Response coverage · Assessed activities",
+        exact: true,
+      });
+      await expect(
+        assessed.getByRole("columnheader", { name: "Participants joined by reveal", exact: true }),
+      ).toBeVisible();
+      const initial = assessed.getByRole("row", { name: /Initial evidence checkpoint/ });
+      await expect(initial.getByRole("cell", { name: "6", exact: true })).toBeVisible();
+      await expect(initial.getByRole("cell", { name: "83.3%", exact: true })).toBeVisible();
+      await expect(
+        coverage
+          .getByRole("table", { name: "Recovery evidence", exact: true })
+          .getByRole("cell", { name: "80%", exact: true }),
+      ).toBeVisible();
+      await expect(
+        coverage
+          .getByRole("row", { name: /Single response opinion/ })
+          .getByRole("cell", { name: "Hidden · fewer than 5 responses", exact: true }),
+      ).toBeVisible();
+      await panel.screenshot({
+        path: info.outputPath("session-insights-coverage-light.png"),
+        animations: "disabled",
+        scale: "css",
+      });
+
+      await tab("Opinion results").click();
+      const opinionResults = await activeView("Opinion results");
+      const leadingOption = opinionResults.getByRole("row", {
+        name: "Prefer first 3",
+        exact: true,
+      });
+      await expect(leadingOption).toBeVisible();
+      await expect(
+        opinionResults.getByText(
+          "Bars show the share of accepted respondents who selected each option.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(leadingOption.locator('span[aria-hidden="true"] > span')).toHaveAttribute(
+        "style",
+        /width:\s*60%/,
+      );
+      await expect(
+        opinionResults.getByText("Hidden · fewer than five responses", { exact: true }),
+      ).toBeVisible();
+      await expect(exportCoverage).toBeEnabled();
+      await expect(reportEvidence).toBeVisible();
+      await expect(snapshotTime).toHaveAttribute("datetime", calculatedAt!);
+      expect(insightsReads).toBe(readsBeforeTabs);
+
+      await tab("Overview").click();
+      await page.emulateMedia({ colorScheme: "dark" });
+      await expect(page.locator("html")).toHaveAttribute("data-color-mode", "dark");
+      await panel.screenshot({
+        path: info.outputPath("session-insights-overview-dark.png"),
+        animations: "disabled",
+        scale: "css",
+      });
       expect(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
-      ).toBe(true);
+        (await new AxeBuilder({ page }).include("[aria-labelledby]").analyze()).violations,
+      ).toEqual([]);
+      await page.emulateMedia({ colorScheme: "light" });
       const files = new Map<string, string>();
       for (const [label, extension] of [
         ["Export coverage CSV", "csv"],
@@ -426,6 +613,7 @@ for (const suffix of ["", " @mobile"]) {
       expect(csv).toContain('"5","6","1","83.3%","Recorded"');
       expect(csv).toContain("Opinion distribution");
       expect(csv).toContain('"Prefer first","3"');
+      expect(csv).toContain('"Hidden · fewer than five responses"');
       expect(html.match(privateData)).toBeNull();
       expect(html.match(/<script\b/i)).toBeNull();
       const readable = await page.context().newPage();
@@ -468,7 +656,7 @@ for (const suffix of ["", " @mobile"]) {
         await readable.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
       ).toBe(true);
       await readable.screenshot({ path: info.outputPath("readable-insights.png"), fullPage: true });
-      await page.screenshot({ path: info.outputPath("session-insights.png"), fullPage: true });
+      expect(insightsReads).toBe(readsBeforeTabs);
       await readable.close();
     } finally {
       await guestContext.close();

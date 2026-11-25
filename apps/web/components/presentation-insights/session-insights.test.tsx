@@ -1,7 +1,11 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PresentationSessionInsightsEnvelope, SupportedLocale } from "@openround/contracts";
+import {
+  supportedLocales,
+  type PresentationSessionInsightsEnvelope,
+  type SupportedLocale,
+} from "@openround/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "../../lib/api";
 import type * as Client from "../../lib/presentation-session-insights-client";
@@ -16,6 +20,23 @@ import {
   presentationInsightsFixture,
 } from "../../lib/presentation-session-insights.test-fixtures";
 import { PresentationInsightsDetails, PresentationSessionInsightsPanel } from "./session-insights";
+
+type InsightsDetailsProps = Parameters<typeof PresentationInsightsDetails>[0];
+
+function details(
+  insights: InsightsDetailsProps["insights"],
+  activeTab: InsightsDetailsProps["activeTab"],
+  locale?: SupportedLocale,
+) {
+  return renderToStaticMarkup(
+    <PresentationInsightsDetails
+      insights={insights}
+      locale={locale}
+      activeTab={activeTab}
+      onSelectTab={() => undefined}
+    />,
+  );
+}
 
 interface Hooks {
   cursor: number;
@@ -125,6 +146,14 @@ function mount(canUseEvidence?: () => boolean) {
       (button!.props.onClick as () => void)();
       view.render();
     },
+    selectTab(tab: InsightsDetailsProps["activeTab"]) {
+      const dashboard = elements(view.render()).find(
+        (node) => node.type === PresentationInsightsDetails,
+      );
+      expect(dashboard).toBeDefined();
+      (dashboard!.props.onSelectTab as InsightsDetailsProps["onSelectTab"])(tab);
+      view.render();
+    },
     close() {
       for (const cleanup of hooks.cleanups.values()) cleanup?.();
       hooks.cleanups.clear();
@@ -189,6 +218,7 @@ describe("additive Session insights panel", () => {
     const value = presentationInsightsFixture();
     request.resolve({ status: "ready", insights: value });
     await settle();
+    view.selectTab("coverage");
     let markup = view.markup();
     expect(markup).toContain('lang="ko-KR"');
     expect(markup).toContain(copy("Session insights"));
@@ -224,19 +254,18 @@ describe("additive Session insights panel", () => {
         (question) => question.purpose === "opinion",
       )!.results[0]!.label = "Not recorded";
       const copy = presentationInsightsCopy(locale);
-      const markup = renderToStaticMarkup(
-        <PresentationInsightsDetails insights={value} locale={locale} />,
-      );
+      const markup = details(value, "delivery", locale);
       expect(markup).toContain(`lang="${locale}"`);
       expect(markup).toContain('<th scope="row" lang="">1. Content</th>');
       expect(markup).toContain('<th scope="row" lang="">Presented</th>');
       expect(markup).toContain('<td lang="">Presented</td>');
       expect(markup).toContain(`<td>${copy("Content")}</td>`);
       expect(markup).toContain(`<td>${copy("Presented")}</td>`);
-      expect(markup).toContain('<th scope="row" lang="">Not recorded</th>');
-      expect(markup).toContain('<span lang="">3. Presented {block} $&amp;</span>');
-      expect(markup).toContain(`<th scope="row">${copy("Not applicable")}</th>`);
-      expect(markup).not.toContain(`<th scope="row" lang="">${copy("Not applicable")}</th>`);
+      const opinion = details(value, "opinion", locale);
+      expect(opinion).toContain('<th scope="row" lang="">Not recorded</th>');
+      expect(opinion).toContain('<span lang="">3. Presented {block} $&amp;</span>');
+      expect(opinion).toContain(`<th scope="row">${copy("Not applicable")}</th>`);
+      expect(opinion).not.toContain(`<th scope="row" lang="">${copy("Not applicable")}</th>`);
     },
   );
 
@@ -280,13 +309,36 @@ describe("additive Session insights panel", () => {
     expect(markup).toContain("Version 2");
     expect(markup).toContain("Report generated");
     expect(markup).toContain("Insights calculated");
-    expect(markup).toContain("Participants joined by reveal");
-    expect(markup).toContain("Not applicable · zero joined by reveal");
-    expect(markup).toContain("Not recorded for this older activity");
-    expect(markup).toContain("Hidden · fewer than 5 responses");
-    expect(markup).toContain("Added during this session");
-    expect(markup).toContain("not measure learner completion");
+    expect(markup).toContain("Participant identities joined");
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).not.toContain("Recorded zero roster");
+    view.selectTab("coverage");
+    const coverage = view.markup();
+    expect(coverage).toContain("Participants joined by reveal");
+    expect(coverage).toContain("Not applicable · zero joined by reveal");
+    expect(coverage).toContain("Not recorded for this older activity");
+    expect(coverage).toContain("Hidden · fewer than 5 responses");
+    expect(coverage).toContain("Recovery evidence");
+    expect(coverage).not.toContain("Section delivery");
+    expect(coverage).not.toContain("Opinion distribution ·");
+    view.selectTab("delivery");
+    const delivery = view.markup();
+    expect(delivery).toContain("Added during this session");
+    expect(delivery).toContain("not measure learner completion");
     expect(mocked.fetch).toHaveBeenCalledExactlyOnceWith(insightsSource, expect.any(AbortSignal));
+  });
+
+  it("keeps the selected view after an explicit snapshot refresh", async () => {
+    setup();
+    const view = mount();
+    await settle();
+    view.selectTab("qna");
+    expect(view.markup()).toContain("Q&amp;A data as of");
+    view.click("Refresh insights");
+    await settle();
+    expect(view.markup()).toContain("Q&amp;A data as of");
+    expect(view.markup()).not.toContain("Participant identities joined</dt>");
+    expect(mocked.fetch).toHaveBeenCalledTimes(2);
   });
   it.each(["pending", "failed"] as const)(
     "offers explicit retry for %s without automatic polling",
@@ -375,6 +427,10 @@ describe("additive Session insights panel", () => {
     for (const [contents] of mocked.download.mock.calls) {
       expect(contents).toContain("Participants joined by reveal");
       expect(contents).toContain("Not recorded for this older activity");
+      expect(contents).toContain("Frozen session content; session additions are marked below.");
+      expect(contents).not.toContain(
+        "Frozen session content. See Delivery for items added during this session.",
+      );
       expect(contents).not.toMatch(/participantId|nickname|tokenHash/);
     }
     expect(release).toHaveBeenCalledTimes(1);
@@ -392,6 +448,25 @@ describe("additive Session insights panel", () => {
     expect(view.markup()).toContain("1 MiB download limit");
     expect(view.markup()).toContain("Response coverage");
   });
+  it.each(supportedLocales)(
+    "points to the localized Delivery tab for session additions in %s",
+    (locale) => {
+      const insights = presentationInsightsFixture();
+      const copy = presentationInsightsCopy(locale);
+      const description = copy(
+        "Frozen session content. See Delivery for items added during this session.",
+      );
+      expect(description).toContain(copy("Delivery"));
+      const overview = details(insights, "overview", locale);
+      expect(overview).toContain(`<dd>${description}</dd>`);
+      expect(overview).not.toContain(
+        copy("Frozen session content; session additions are marked below."),
+      );
+      expect(details(insights, "delivery", locale)).toContain(
+        `<td>${copy("Added during this session")}</td>`,
+      );
+    },
+  );
   it("keeps suppressed Q&A separate from a recorded zero", () => {
     const insights = presentationInsightsFixture();
     insights.qna = {
@@ -403,10 +478,16 @@ describe("additive Session insights panel", () => {
       unansweredQuestionCount: null,
       upvoteCount: null,
     };
-    const markup = renderToStaticMarkup(<PresentationInsightsDetails insights={insights} />);
+    const markup = details(insights, "qna");
     expect(markup).toContain("Q&amp;A totals are hidden");
     expect(markup).not.toContain("Public questions</dt>");
-    expect(markup).toContain("Recorded zero roster");
+    expect(markup).not.toContain("Q&amp;A data as of");
+    const zero = presentationInsightsFixture();
+    zero.qna.publicQuestionCount = 0;
+    zero.qna.answeredQuestionCount = 0;
+    zero.qna.unansweredQuestionCount = 0;
+    zero.qna.upvoteCount = 0;
+    expect(details(zero, "qna")).toContain("Public questions</dt><dd>0</dd>");
   });
   it("shows an explicit unavailable opinion distribution while preserving its recorded response coverage", () => {
     const insights = presentationInsightsFixture();
@@ -415,10 +496,25 @@ describe("additive Session insights panel", () => {
     )!;
     opinion.distributionStatus = "unavailable";
     opinion.results = [];
-    const markup = renderToStaticMarkup(<PresentationInsightsDetails insights={insights} />);
+    const markup = details(insights, "opinion");
     expect(markup).toContain("Opinion distribution is unavailable for this activity.");
-    expect(markup).toContain("Response coverage · Opinion activities");
-    expect(markup).toContain("50%");
     expect(markup).not.toContain("Respondents selecting option");
+    const coverage = details(insights, "coverage");
+    expect(coverage).toContain("Response coverage · Opinion activities");
+    expect(coverage).toContain("50%");
+  });
+
+  it("shows empty coverage and opinion states for a content-only presentation", () => {
+    const insights = presentationInsightsFixture();
+    insights.delivery.blocks = insights.delivery.blocks.map((block) => ({
+      ...block,
+      kind: "content",
+      purpose: "content",
+    }));
+    insights.participation.questions = [];
+    insights.participation.acceptedResponseCount = 0;
+    insights.recovery = [];
+    expect(details(insights, "coverage")).toContain("No response coverage was recorded");
+    expect(details(insights, "opinion")).toContain("No opinion or Quick Check results");
   });
 });

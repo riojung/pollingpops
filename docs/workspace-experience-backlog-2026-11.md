@@ -810,12 +810,17 @@ The **Results analytics** dashboard covers the loaded, filtered results in each 
 It adds a monthly or quarterly history chart and links to eligible reports. Pagination-independent
 totals and cross-session comparisons with qualified cohorts each need further delivery.
 
-| Increment                     | Acceptance                                                                                                                                                                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Presentation analytics layout | Give delivery, response coverage, opinion results, and Q&A dedicated views in the existing Session Insights report. Keep reveal-roster denominators, snapshot time, small-sample suppression, and approved aggregate exports. |
-| Survey and Board analytics    | Chart finalized aggregates in their existing report or host surfaces. Preserve Survey disclosure thresholds and show Board vote results from closed rounds only. Review each format's empty and withheld states.              |
-| Workspace analytics           | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons.                     |
-| Q&A analysis                  | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                            |
+The Presentation report's **Session insights** dashboard provides Overview, Delivery, Response
+coverage, Opinion results, and Q&A views. It uses the frozen session version, recorded reveal
+rosters, separate Q&A snapshot time, and existing small-sample suppression. Coverage rates and
+available opinion distributions have inline bars alongside exact values. Private aggregate CSV
+and HTML downloads still cover the entire snapshot.
+
+| Increment                  | Acceptance                                                                                                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Survey and Board analytics | Chart finalized aggregates in their existing report or host surfaces. Preserve Survey disclosure thresholds and show Board vote results from closed rounds only. Review each format's empty and withheld states. |
+| Workspace analytics        | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons.        |
+| Q&A analysis               | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                               |
 
 ### WX-11 Consistent surfaces and commercial explanations
 

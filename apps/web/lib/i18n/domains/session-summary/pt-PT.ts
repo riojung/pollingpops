@@ -7,6 +7,12 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "Pré-visualize o resumo agregado, transfira-o ou crie uma ligação temporária de partilha.",
   "summary.loading": "A carregar resumo…",
+  "summary.availabilityFailed": "Não foi possível verificar a disponibilidade do resumo.",
+  "summary.retryAvailability": "Verificar novamente a disponibilidade",
+  "summary.previewFailed": "Não foi possível carregar a pré-visualização do resumo.",
+  "summary.retryPreview": "Recarregar a pré-visualização",
+  "summary.linksFailed": "Não foi possível carregar os links de partilha.",
+  "summary.loadingLinks": "A carregar links de partilha…",
   "summary.failed": "Não foi possível atualizar o resumo. Atualize e tente novamente.",
   "summary.unavailable": "Este resumo não está disponível. Peça uma ligação válida ao organizador.",
   "summary.downloads": "Transferir resumo",
@@ -34,7 +40,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "Esta partilha já foi aceite. A ligação original não volta a estar disponível. Reveja as ligações existentes antes de criar outra.",
   "summary.uncertain":
-    "Não foi possível confirmar o pedido. A lista foi atualizada; repetir com os mesmos dados utiliza o mesmo pedido.",
+    "Não foi possível confirmar o pedido. Repetir com os mesmos dados utiliza o mesmo pedido.",
   "summary.saveLink":
     "Guarde esta ligação agora. O seu segredo não é armazenado e esta ligação exata não será apresentada novamente.",
   "summary.link": "Ligação de partilha",

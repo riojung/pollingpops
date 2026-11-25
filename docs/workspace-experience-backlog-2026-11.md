@@ -85,8 +85,8 @@ provider setup explanations merged through [PR #322](https://github.com/riojung/
 at `2d57437`. WX-04 collection review navigation merged through
 [PR #323](https://github.com/riojung/pollingpops/pull/323) at `7d832fa`. WX-11 Source assistance
 availability recovery merged through [PR #324](https://github.com/riojung/pollingpops/pull/324)
-at `16f26c8`. The selected local WX-04 follow-up reports collection review progress without
-recording acceptance decisions.
+at `16f26c8`. WX-04 collection review status merged through
+[PR #325](https://github.com/riojung/pollingpops/pull/325) at `2956341`.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -106,7 +106,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                                       | Frontend + product design       |
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                                       | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                                        | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Collections merged; local status follow-up; human acceptance pending            | Content design + localization   |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Collections and status reports merged; human acceptance pending                 | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
 | WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | C2 merged; review evidence ready and privacy acceptance pending                 | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Design merged in PR #314; product and privacy acceptance pending                | Async delivery + privacy        |
@@ -291,7 +291,7 @@ Each link opens the original English and target-language record. The Event exper
 and Survey reach separate guide contexts and share the Round question reference.
 Human editorial and native-language decisions remain pending. Owner: content design and localization.
 
-**Selected local follow-up — collection review status.** The read-only command validates the
+**Collection review status merged in PR #325.** The read-only command validates the
 complete packet and reports what remains for the selected collection. It links each pending
 entry or change request to the original review article. Human editorial and native-language
 acceptance remain pending. Owner: content design and localization.
@@ -1172,6 +1172,10 @@ Owner: frontend and localization.
 **WX-11 remaining work.** PR #310 completed the named software slices. Native-language acceptance
 remains open across the named slices and the assistance follow-ups.
 
+**Local Session Summary follow-up.** Report creators can retry a failed availability check.
+Summary preview and share history have independent read recovery. Native-language acceptance
+remains pending. Owner: frontend and localization.
+
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;
 no repeated card blur that reintroduces the WebKit memory failure. Distinguish plan limits,
@@ -1224,6 +1228,12 @@ controls its own guest access and attempts. Checklist status is self-marked and 
 the facilitator. Before selecting runtime work, review shared-browser storage, separate
 assignment withdrawal, accessibility, and observed partner workflows. R2-04's delayed-probe
 research retains its own selection and disclosure gates.
+
+**Local synthetic rehearsal.** The development lab compares the checklist with independently
+opened mock activities. It exercises ordered navigation, start and resume, optional skip,
+unavailable-step retry, and reset in tab memory. The
+[rehearsal guide](learning-sequence-privacy-design.md#synthetic-browser-rehearsal)
+records what still needs qualification.
 
 ### WX-14 Organization-curated template collections
 
@@ -1304,8 +1314,8 @@ organization Board launch explanations merged in PR #309. Round staff availabili
 PR #310, completing the named WX-11 software scope. Source assistance availability recovery
 merged in PR #324 at `16f26c8`. Native-language acceptance remains pending.
 Training and onboarding merged in PR #311, Workshops in PR #312, and Event feedback in PR #313.
-All named WX-04 collection software is merged. Collection review-status reporting is the selected
-local follow-up; human editorial and native-language decisions remain pending.
+The four WX-04 collections and collection review status are merged through PR #325.
+Human editorial and native-language decisions remain pending.
 The public-site work merged in PR #288.
 WX-07's merged discovery candidate awaits product and privacy approval. WX-09's merged
 permission and audit design awaits product, security, and privacy acceptance. WX-08's merged

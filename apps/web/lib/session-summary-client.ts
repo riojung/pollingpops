@@ -21,11 +21,16 @@ export function sessionSummaryPath(source: SummarySource) {
 export async function fetchSummaryAvailability(source: SummarySource, signal: AbortSignal) {
   const parsed = SummarySourceSchema.parse(source);
   const query = new URLSearchParams({ kind: parsed.kind, id: parsed.id });
-  const result = await apiFetch<{ enabled: boolean }>(`/v1/session-summaries/features?${query}`, {
-    cache: "no-store",
-    signal,
-  });
-  return result.enabled === true;
+  const result = await apiFetch<{ enabled?: unknown } | null>(
+    `/v1/session-summaries/features?${query}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+  );
+  if (!result || typeof result.enabled !== "boolean")
+    throw new Error("Session summary availability could not be verified.");
+  return result.enabled;
 }
 
 export async function fetchSummaryPreview(source: SummarySource, signal: AbortSignal) {

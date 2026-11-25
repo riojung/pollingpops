@@ -7,6 +7,12 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "Visualizza il riepilogo aggregato, scaricalo o crea un link temporaneo per condividerlo.",
   "summary.loading": "Caricamento del riepilogo…",
+  "summary.availabilityFailed": "Impossibile verificare la disponibilità del riepilogo.",
+  "summary.retryAvailability": "Verifica di nuovo la disponibilità",
+  "summary.previewFailed": "Impossibile caricare l’anteprima del riepilogo.",
+  "summary.retryPreview": "Ricarica l’anteprima",
+  "summary.linksFailed": "Impossibile caricare i link di condivisione.",
+  "summary.loadingLinks": "Caricamento dei link di condivisione…",
   "summary.failed": "Impossibile aggiornare il riepilogo. Aggiorna e riprova.",
   "summary.unavailable":
     "Questo riepilogo non è disponibile. Chiedi all’organizzatore un link valido.",
@@ -36,7 +42,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "Questa condivisione è già stata accettata. Il link originale non è più disponibile. Controlla i link esistenti prima di crearne un altro.",
   "summary.uncertain":
-    "La richiesta non è stata confermata. L’elenco è stato aggiornato; riprovare con gli stessi dati usa la stessa richiesta.",
+    "La richiesta non è stata confermata. Riprovare con gli stessi dati usa la stessa richiesta.",
   "summary.saveLink":
     "Salva questo link ora. Il suo segreto non viene conservato e questo link esatto non sarà mostrato di nuovo.",
   "summary.link": "Link di condivisione",

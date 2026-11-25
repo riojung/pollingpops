@@ -62,6 +62,18 @@ describe("session summary client privacy and write intent", () => {
     ).rejects.toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  it.each([null, {}, { enabled: "false" }, { enabled: 1 }])(
+    "rejects unverifiable availability instead of treating it as disabled",
+    async (response) => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(response)));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(
+        fetchSummaryAvailability(summarySource, new AbortController().signal),
+      ).rejects.toThrow("could not be verified");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]![1]).toMatchObject({ cache: "no-store" });
+    },
+  );
   it("validates sources and binds the preview to the requested session", async () => {
     expect(sessionSummaryPath(summarySource)).toBe(
       `/v1/session-summaries/round/${summarySource.id}`,

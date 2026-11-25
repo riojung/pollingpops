@@ -64,6 +64,21 @@ interface SummaryFixture {
   privateIds: string[];
 }
 
+function deferredRead() {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { pending, release };
+}
+
+interface SummaryReadLifecycle {
+  path: string;
+  read: number;
+  event: "start" | "abort";
+}
+type SummaryProbeWindow = Window & { __summaryReadLifecycle?: SummaryReadLifecycle[] };
+
 async function post(
   request: APIRequestContext,
   path: string,
@@ -517,7 +532,320 @@ async function accessibleAt320px(page: Page, dialog?: Locator) {
   expect(violations).toEqual([]);
 }
 
+test("session summary dev Strict Mode replay keeps deferred preview and links readable", async ({
+  page,
+  request,
+}) => {
+  test.skip(process.env.BETA_E2E_SESSION_SUMMARIES !== "true", "Opt-in session summaries");
+  test.skip(
+    process.env.PLAYWRIGHT_PRODUCTION === "true",
+    "React effect replay requires the real Next dev route",
+  );
+  test.setTimeout(120_000);
+  await signInBeta(page);
+  const fixture = await createFinishedRound(page, request);
+  const path = `/v1/session-summaries/${fixture.source.kind}/${fixture.source.id}`;
+  // Observe real browser fetch starts/cancellation, including calls cancelled before routing.
+  // With no navigation or retry after opening, these aborted/restarted reads qualify dev replay.
+  await page.addInitScript(
+    ({ previewPath }) => {
+      const target = window as SummaryProbeWindow;
+      const events: SummaryReadLifecycle[] = [];
+      target.__summaryReadLifecycle = events;
+      let nextRead = 0;
+      const fetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if ([previewPath, `${previewPath}/shares`].includes(url.pathname)) {
+          const read = ++nextRead;
+          events.push({ path: url.pathname, read, event: "start" });
+          const signal = init?.signal ?? (input instanceof Request ? input.signal : null);
+          const aborted = () => events.push({ path: url.pathname, read, event: "abort" });
+          if (signal?.aborted) aborted();
+          else signal?.addEventListener("abort", aborted, { once: true });
+        }
+        return fetch(input, init);
+      };
+    },
+    { previewPath: path },
+  );
+  const preview = deferredRead(),
+    links = deferredRead();
+  await page.route(`${api}${path}`, async (route) => {
+    if (route.request().method() === "GET") await preview.pending;
+    await route.continue();
+  });
+  await page.route(`${api}${path}/shares`, async (route) => {
+    if (route.request().method() === "GET") await links.pending;
+    await route.continue();
+  });
+  try {
+    await page.goto(fixture.pagePath);
+    await page.getByRole("button", { name: "Share summary", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share summary", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Loading summary…", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Loading share links…", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("textbox", { name: "Next steps", exact: true })).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate((previewPath) => {
+          const events = (window as SummaryProbeWindow).__summaryReadLifecycle ?? [];
+          return [previewPath, `${previewPath}/shares`].every((path) => {
+            const cancelled = events.filter(
+              (event) => event.path === path && event.event === "abort",
+            );
+            return cancelled.some((event) =>
+              events.some(
+                (later) =>
+                  later.path === path && later.event === "start" && later.read > event.read,
+              ),
+            );
+          });
+        }, path),
+      )
+      .toBe(true);
+    preview.release();
+    await expect(dialog.getByRole("heading", { name: fixture.title, exact: true })).toBeVisible();
+    await expect(dialog.getByRole("textbox", { name: "Next steps", exact: true })).toBeVisible();
+    await expect(dialog.getByText("Loading share links…", { exact: true })).toBeVisible();
+    links.release();
+    await expect(
+      dialog.getByText("No share links have been created.", { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Refresh links", exact: true })).toBeEnabled();
+  } finally {
+    preview.release();
+    links.release();
+  }
+});
+
 for (const mobile of [false, true]) {
+  test(`${mobile ? "@mobile " : ""}session summary retains the accepted link and edited notes when new sharing is paused`, async ({
+    page,
+    request,
+  }) => {
+    test.skip(process.env.BETA_E2E_SESSION_SUMMARIES !== "true", "Opt-in session summaries");
+    test.setTimeout(120_000);
+    await signInBeta(page);
+    const fixture = await createFinishedRound(page, request);
+    const path = `/v1/session-summaries/${fixture.source.kind}/${fixture.source.id}`;
+    const posts: Array<{ nextSteps: string; idempotencyKey: string }> = [];
+    let paused = false,
+      refreshedCapabilities = 0;
+    await page.route(`${api}${path}`, async (route) => {
+      if (route.request().method() !== "GET" || !paused) return route.continue();
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      const preview = await response.json();
+      refreshedCapabilities += 1;
+      await route.fulfill({
+        response,
+        json: {
+          ...preview,
+          capabilities: {
+            ...preview.capabilities,
+            canCreateShare: false,
+            reasonCodes: ["feature_disabled"],
+          },
+        },
+      });
+    });
+    await page.route(`${api}${path}/shares`, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      posts.push(route.request().postDataJSON());
+      if (posts.length === 1) return route.continue();
+      paused = true;
+      await route.fulfill({
+        status: 404,
+        json: {
+          error: {
+            code: "SUMMARY_SHARING_UNAVAILABLE",
+            message: "Synthetic new summary sharing pause",
+          },
+        },
+      });
+    });
+    await page.goto(fixture.pagePath);
+    await page.getByRole("button", { name: "Share summary", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share summary", exact: true });
+    const nextSteps = dialog.getByRole("textbox", { name: "Next steps", exact: true });
+    const create = dialog.getByRole("button", { name: "Create share link", exact: true });
+    await nextSteps.fill("Synthetic first accepted next steps.");
+    const [response] = await Promise.all([
+      waitForSummaryResponse(page, "POST", `${path}/shares`),
+      create.click(),
+    ]);
+    expect(response.status()).toBe(201);
+    const first = CreatedSummaryShareSchema.parse(await response.json());
+    expect(first.url).not.toBeNull();
+    const acceptedLink = dialog.getByRole("textbox", { name: "Share link", exact: true });
+    await expect(acceptedLink).toHaveValue(first.url!);
+    await expect(create).toBeEnabled();
+    const edited = "Synthetic revised next steps retained after new sharing is paused.";
+    await nextSteps.fill(edited);
+    const [denial] = await Promise.all([
+      waitForSummaryResponse(page, "POST", `${path}/shares`),
+      create.click(),
+    ]);
+    expect(denial.status()).toBe(404);
+    await expect(
+      dialog.getByText("New summary sharing is paused. Existing links can still be managed.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(create).toBeDisabled();
+    await expect(nextSteps).toHaveValue(edited);
+    await expect(nextSteps).toBeEnabled();
+    await expect(acceptedLink).toHaveValue(first.url!);
+    await expect(dialog.getByRole("button", { name: "Copy link", exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("heading", { name: fixture.title, exact: true })).toBeVisible();
+    expect(refreshedCapabilities).toBeGreaterThan(0);
+    expect(posts).toHaveLength(2);
+    expect(posts.map(({ nextSteps }) => nextSteps)).toEqual([
+      "Synthetic first accepted next steps.",
+      edited,
+    ]);
+    expect(posts[0]!.idempotencyKey).not.toBe(posts[1]!.idempotencyKey);
+  });
+
+  test(`${mobile ? "@mobile " : ""}session summary keyboard link refresh keeps focus through deferred failure and success`, async ({
+    page,
+    request,
+  }) => {
+    test.skip(process.env.BETA_E2E_SESSION_SUMMARIES !== "true", "Opt-in session summaries");
+    test.setTimeout(120_000);
+    await signInBeta(page);
+    const fixture = await createFinishedRound(page, request);
+    const path = `/v1/session-summaries/${fixture.source.kind}/${fixture.source.id}`;
+    await page.goto(fixture.pagePath);
+    await page.getByRole("button", { name: "Share summary", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Share summary", exact: true });
+    const refresh = dialog.getByRole("button", { name: "Refresh links", exact: true });
+    const nextSteps = dialog.getByRole("textbox", { name: "Next steps", exact: true });
+    await expect(
+      dialog.getByText("No share links have been created.", { exact: true }),
+    ).toBeVisible();
+    await nextSteps.fill("Synthetic next steps retained through keyboard refresh.");
+    const holds = [deferredRead(), deferredRead()];
+    let reads = 0;
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith(path) && request.method() !== "GET")
+        writes.push(request.method());
+    });
+    // Install after initial reads settle, so counts concern only explicit keyboard refreshes.
+    await page.route(`${api}${path}/shares`, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const read = ++reads;
+      await holds[read - 1]?.pending;
+      if (read === 1)
+        await route.fulfill({
+          status: 503,
+          json: { error: { message: "Synthetic links refresh failure" } },
+        });
+      else await route.continue();
+    });
+    try {
+      await refresh.focus();
+      for (const [index, hold] of holds.entries()) {
+        await page.keyboard.press("Enter");
+        await expect.poll(() => reads).toBe(index + 1);
+        await expect(refresh).toHaveAttribute("aria-disabled", "true");
+        await expect(refresh).toBeFocused();
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("Space");
+        await expect(refresh).toBeFocused();
+        expect(reads).toBe(index + 1);
+        hold.release();
+        await expect(refresh).toBeEnabled();
+        await expect(refresh).toBeFocused();
+        if (index === 0)
+          await expect(
+            dialog.getByText("Could not load share links.", { exact: true }),
+          ).toBeVisible();
+        else
+          await expect(
+            dialog.getByText("Could not load share links.", { exact: true }),
+          ).toBeHidden();
+        await expect(nextSteps).toHaveValue(
+          "Synthetic next steps retained through keyboard refresh.",
+        );
+        expect(reads).toBe(index + 1);
+      }
+      expect(reads).toBe(2);
+      expect(writes).toEqual([]);
+    } finally {
+      holds.forEach((hold) => hold.release());
+    }
+  });
+
+  test(`${mobile ? "@mobile " : ""}session summary read failures recover without replaying writes`, async ({
+    page,
+    request,
+  }) => {
+    test.skip(process.env.BETA_E2E_SESSION_SUMMARIES !== "true", "Opt-in session summaries");
+    await signInBeta(page);
+    const fixture = await createFinishedRound(page, request);
+    const path = `/v1/session-summaries/${fixture.source.kind}/${fixture.source.id}`;
+    const writes: string[] = [];
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.startsWith(path) && request.method() !== "GET") writes.push(request.method());
+    });
+    const reads = { availability: 0, preview: 0, links: 0 };
+    for (const [url, key] of [
+      [`${api}/v1/session-summaries/features?**`, "availability"],
+      [`${api}${path}`, "preview"],
+      [`${api}${path}/shares`, "links"],
+    ] as const) {
+      await page.route(url, async (route) => {
+        if (route.request().method() === "GET" && ++reads[key] === 1) {
+          await route.fulfill({
+            status: 503,
+            json: { error: { message: "Synthetic read failure" } },
+          });
+          return;
+        }
+        await route.continue();
+      });
+    }
+
+    await page.goto(fixture.pagePath);
+    const open = page.getByRole("button", { name: "Share summary", exact: true });
+    await expect(open).toBeHidden();
+    await page
+      .getByRole("button", { name: "Retry summary availability", exact: true })
+      .press("Enter");
+    await expect(open).toBeFocused();
+    await open.click();
+    const dialog = page.getByRole("dialog", { name: "Share summary", exact: true });
+    await expect(
+      dialog.getByText("Could not load the summary preview.", { exact: true }),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Retry preview", exact: true }).press("Enter");
+    await expect(dialog.getByRole("heading", { name: fixture.title, exact: true })).toBeVisible();
+    await expect(
+      dialog.getByRole("region", { name: "Session summary", exact: true }),
+    ).toBeFocused();
+    await expect(dialog.getByText("Could not load share links.", { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByText("No share links have been created.", { exact: true }),
+    ).toBeHidden();
+    const nextSteps = dialog.getByRole("textbox", { name: "Next steps", exact: true });
+    await nextSteps.fill("Synthetic next steps to retain during the links retry.");
+    await dialog.getByRole("button", { name: "Refresh links", exact: true }).click();
+    await expect(
+      dialog.getByText("No share links have been created.", { exact: true }),
+    ).toBeVisible();
+    await expect(nextSteps).toHaveValue("Synthetic next steps to retain during the links retry.");
+    await expect(dialog.getByRole("heading", { name: fixture.title, exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(open).toBeFocused();
+    expect(reads).toEqual({ availability: 2, preview: 2, links: 2 });
+    expect(writes).toEqual([]);
+  });
+
   test(`${mobile ? "@mobile " : ""}session summaries publish real Round, Presentation and closed Survey evidence with private capabilities`, async ({
     page,
     browser,

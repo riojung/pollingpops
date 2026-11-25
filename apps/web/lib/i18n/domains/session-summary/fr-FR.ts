@@ -7,6 +7,12 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "Prévisualisez le résumé agrégé, téléchargez-le ou créez un lien de partage temporaire.",
   "summary.loading": "Chargement du résumé…",
+  "summary.availabilityFailed": "Impossible de vérifier la disponibilité du résumé.",
+  "summary.retryAvailability": "Vérifier à nouveau la disponibilité",
+  "summary.previewFailed": "Impossible de charger l’aperçu du résumé.",
+  "summary.retryPreview": "Recharger l’aperçu",
+  "summary.linksFailed": "Impossible de charger les liens de partage.",
+  "summary.loadingLinks": "Chargement des liens de partage…",
   "summary.failed": "Impossible de mettre à jour le résumé. Actualisez et réessayez.",
   "summary.unavailable": "Ce résumé est indisponible. Demandez un lien valide à l’organisateur.",
   "summary.downloads": "Télécharger le résumé",
@@ -35,7 +41,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "Ce partage a déjà été accepté. Son lien original ne peut plus être affiché. Consultez les liens existants avant d’en créer un autre.",
   "summary.uncertain":
-    "La demande n’a pas pu être confirmée. La liste des liens a été actualisée ; réessayer avec les mêmes détails utilise la même demande.",
+    "La demande n’a pas pu être confirmée. Réessayer avec les mêmes détails utilise la même demande.",
   "summary.saveLink":
     "Enregistrez ce lien maintenant. Son secret n’est pas conservé et ce lien exact ne sera plus affiché.",
   "summary.link": "Lien de partage",

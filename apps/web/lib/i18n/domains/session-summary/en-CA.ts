@@ -5,6 +5,12 @@ export const sessionSummaryEnglishMessages = {
   "summary.description":
     "Preview the aggregate summary, download it, or create an expiring share link.",
   "summary.loading": "Loading summary…",
+  "summary.availabilityFailed": "Could not check summary availability.",
+  "summary.retryAvailability": "Retry summary availability",
+  "summary.previewFailed": "Could not load the summary preview.",
+  "summary.retryPreview": "Retry preview",
+  "summary.linksFailed": "Could not load share links.",
+  "summary.loadingLinks": "Loading share links…",
   "summary.failed": "The summary could not be updated. Refresh and try again.",
   "summary.unavailable": "This summary is unavailable. Ask the organizer for a current share link.",
   "summary.downloads": "Download summary",
@@ -32,7 +38,7 @@ export const sessionSummaryEnglishMessages = {
   "summary.replayed":
     "This share was already accepted. Its original link is not available again. Review existing links before creating another.",
   "summary.uncertain":
-    "The request could not be confirmed. The share list has been refreshed; retrying unchanged details uses the same request.",
+    "The request could not be confirmed. Retrying unchanged details uses the same request.",
   "summary.saveLink":
     "Save this link now. Its secret is not stored and this exact link will not be shown again.",
   "summary.link": "Share link",

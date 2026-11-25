@@ -83,7 +83,10 @@ through [PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`.
 [PR #321](https://github.com/riojung/pollingpops/pull/321) at `9b04ac8`. WX-11 Presentation
 provider setup explanations merged through [PR #322](https://github.com/riojung/pollingpops/pull/322)
 at `2d57437`. WX-04 collection review navigation merged through
-[PR #323](https://github.com/riojung/pollingpops/pull/323) at `7d832fa`.
+[PR #323](https://github.com/riojung/pollingpops/pull/323) at `7d832fa`. WX-11 Source assistance
+availability recovery merged through [PR #324](https://github.com/riojung/pollingpops/pull/324)
+at `16f26c8`. The selected local WX-04 follow-up reports collection review progress without
+recording acceptance decisions.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -103,7 +106,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 | WX-01 | P1       | S                                  | Home foregrounds starting and continuing work                       | Merged in PR #271; local acceptance below                                       | Frontend + product design       |
 | WX-02 | P1       | M                                  | Templates are directly reachable, previewable and usable in context | Merged in PR #271; local acceptance below                                       | Frontend + accessibility        |
 | WX-03 | P1       | M                                  | One honest, searchable Library across content kinds                 | Merged in PR #272; All content discovery                                        | Library API + frontend          |
-| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Four collections and review navigation merged; human acceptance pending         | Content design + localization   |
+| WX-04 | P1       | S per collection                   | Job-based, editorially reviewed starter collections                 | Collections merged; local status follow-up; human acceptance pending            | Content design + localization   |
 | WX-05 | P1       | S/M per method                     | One clear creation and source-intake journey                        | Merged through PR #283                                                          | Authoring + frontend            |
 | WX-06 | P2       | L, staged checkpoints              | Survey pages and answer-based branching                             | C2 merged; review evidence ready and privacy acceptance pending                 | Surveys + contracts + reporting |
 | WX-07 | P2       | L, three checkpoints               | Recurring, privacy-preserving team check-ins                        | Design merged in PR #314; product and privacy acceptance pending                | Async delivery + privacy        |
@@ -117,7 +120,7 @@ remaining work. Candidate priorities indicate evaluation order, not a release pr
 
 ## Selected first delivery
 
-As of 2026-11-24, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
+As of 2026-11-25, the selected deliveries in all five P1 areas (WX-01–05) are merged. WX-06 is
 in progress: ordered-page readers and authoring are merged, while conditional pages have not
 been enabled in the product. C1's internal counting and withheld-only contract are merged.
 C2's candidate whole-report policy is merged; human privacy acceptance, C3/C4 runtime
@@ -133,9 +136,10 @@ availability explanations in PR #304. Checkpoint-set export reasons merged in PR
 import explanations in PR #306. The Presentation navigator resize landmark fix merged in PR #307.
 Board creation feature-policy explanations merged in PR #308. Operational and organization Board
 launch explanations merged in PR #309. Round staff availability merged in PR #310. Presentation
-provider setup explanations merged in PR #322. Native-language acceptance, WX-07–10 and
-WX-12–14 remain open. Training and onboarding merged in PR #311, Workshops in PR #312,
-and Event feedback in PR #313. Collection review navigation merged in PR #323.
+provider setup explanations merged in PR #322, and Source availability recovery in PR #324.
+Native-language acceptance, WX-07–10 and WX-12–14 remain open. Training and onboarding merged
+in PR #311, Workshops in PR #312, and Event feedback in PR #313. Collection review navigation
+merged in PR #323.
 
 ### WX-01 Home: start and resume work
 
@@ -286,6 +290,12 @@ provide direct links for four collections, 20 templates and 62 existing review e
 Each link opens the original English and target-language record. The Event experience Round
 and Survey reach separate guide contexts and share the Round question reference.
 Human editorial and native-language decisions remain pending. Owner: content design and localization.
+
+**Selected local follow-up — collection review status.** The read-only command validates the
+complete packet and reports what remains for the selected collection. It links each pending
+entry or change request to the original review article. Human editorial and native-language
+acceptance remain pending. Owner: content design and localization.
+See the [command and report semantics](evidence/native-language-review.md#check-one-collections-progress).
 
 ### WX-05 Creation: consolidate methods and source intake
 
@@ -1151,8 +1161,8 @@ Existing saved-request recovery and reviewed Apply or Insert retain their condit
 locales have the new guidance. Owner: frontend and localization.
 [Verification record](implementation-status.md#wx-11-presentation-provider-setup-explanations)
 
-**WX-11 Source assistance availability recovery.** The shared panel checks new proposal
-availability independently of saved proposals and their review actions. Creators can retry
+**WX-11 Source assistance availability recovery merged in PR #324 at `16f26c8`.** The shared panel
+checks new proposal availability independently of saved proposals and their review actions. Creators can retry
 the availability read and retain pasted text or a selected source file through a failed check
 or a late provider, allowance or scanner rejection. Provider and file-scanner guidance follows
 the status response. The retry never submits a source. All ten locales have the new guidance.
@@ -1291,9 +1301,11 @@ LTI availability explanations merged in PR #304. Checkpoint-set export reasons m
 and Presentation visual import reasons in PR #306. The navigator resize landmark fix merged in
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
 organization Board launch explanations merged in PR #309. Round staff availability merged in
-PR #310, completing the named WX-11 software scope. Native-language acceptance remains pending.
+PR #310, completing the named WX-11 software scope. Source assistance availability recovery
+merged in PR #324 at `16f26c8`. Native-language acceptance remains pending.
 Training and onboarding merged in PR #311, Workshops in PR #312, and Event feedback in PR #313.
-All named WX-04 collection software is merged.
+All named WX-04 collection software is merged. Collection review-status reporting is the selected
+local follow-up; human editorial and native-language decisions remain pending.
 The public-site work merged in PR #288.
 WX-07's merged discovery candidate awaits product and privacy approval. WX-09's merged
 permission and audit design awaits product, security, and privacy acceptance. WX-08's merged

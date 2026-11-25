@@ -11,6 +11,7 @@ import {
   PresentationRestV1ParticipantSnapshotResponseSchema,
   PresentationRestV1ResponseAckSchema,
   PresentationRestV1SessionListResponseSchema,
+  PresentationRestV1SessionListWithReportStatusResponseSchema,
   type PresentationContent,
 } from "@openround/contracts";
 import { MemoryRepository, type PresentationSessionRecord } from "@openround/db";
@@ -20,6 +21,7 @@ import { ConfigSchema } from "../src/config.js";
 
 let app: FastifyInstance | undefined;
 const BETA_WORKSPACE_ID = "10000000-0000-4000-8000-000000000002";
+const REPORT_STATUS_LIST_URL = "/v1/presentation-sessions?includeReportStatus=true";
 
 class RecordingSessionCache extends MemorySessionCache {
   readonly admissionKeys: string[] = [];
@@ -57,6 +59,16 @@ async function signIn(target: FastifyInstance) {
   );
   const setCookie = verified.headers["set-cookie"]!;
   return (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
+}
+
+async function listSessionsWithReportStatus(target: FastifyInstance, cookie: string) {
+  const response = await target.inject({ url: REPORT_STATUS_LIST_URL, headers: { cookie } });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.headers["cache-control"]).toContain("no-store");
+  const { sessions } = PresentationRestV1SessionListWithReportStatusResponseSchema.parse(
+    response.json(),
+  );
+  return sessions;
 }
 
 afterEach(async () => {
@@ -310,6 +322,7 @@ describe("live Presentation sessions", () => {
       url: "/v1/presentation-sessions",
       headers: { cookie },
     });
+    expect(listed.statusCode).toBe(200);
     const listedBody = PresentationRestV1SessionListResponseSchema.parse(listed.json());
     expect(listedBody.sessions).toEqual([
       expect.objectContaining({
@@ -324,6 +337,12 @@ describe("live Presentation sessions", () => {
         ]),
       }),
     ]);
+    expect(await listSessionsWithReportStatus(app, cookie)).toEqual([
+      { ...listedBody.sessions[0]!, reportStatus: null },
+    ]);
+    const unauthorizedList = await app.inject(REPORT_STATUS_LIST_URL);
+    expect(unauthorizedList.statusCode).toBe(401);
+    expect(unauthorizedList.headers["cache-control"]).toContain("no-store");
 
     const futureFence = await app.inject({
       method: "POST",
@@ -662,6 +681,9 @@ describe("live Presentation sessions", () => {
     expect(
       finishedSession!.retentionExpiresAt.getTime() - finishedSession!.finishedAt!.getTime(),
     ).toBeGreaterThanOrEqual(30 * 24 * 60 * 60 * 1_000 - 1_000);
+    expect(await listSessionsWithReportStatus(app, cookie)).toEqual([
+      expect.objectContaining({ id: lobby.id, status: "finished", reportStatus: "pending" }),
+    ]);
 
     const pendingReport = await app.inject({
       method: "GET",
@@ -684,6 +706,41 @@ describe("live Presentation sessions", () => {
       "completed",
       "idle",
     ]);
+    const failedSession = await built.presentationSessions.createSession({
+      ...finishedSession!,
+      id: randomUUID(),
+      code: "7000000",
+    });
+    const failedJob = await built.presentationSessions.claimReportJob(
+      new Date(),
+      new Date(Date.now() + 60_000),
+    );
+    expect(failedJob).toMatchObject({ sessionId: failedSession.id });
+    await built.presentationSessions.retryReportJob(
+      failedJob!,
+      "Fixture failure",
+      new Date(),
+      true,
+    );
+    await built.presentationSessions.createSession({
+      ...finishedSession!,
+      id: randomUUID(),
+      workspaceId: randomUUID(),
+      code: "7000001",
+    });
+    const finishedList = await listSessionsWithReportStatus(app, cookie);
+    expect(
+      Object.fromEntries(finishedList.map(({ id, reportStatus }) => [id, reportStatus])),
+    ).toEqual({ [lobby.id]: "ready", [failedSession.id]: "failed" });
+    const legacyFinishedList = await app.inject({
+      url: "/v1/presentation-sessions",
+      headers: { cookie },
+    });
+    expect(legacyFinishedList.statusCode).toBe(200);
+    expect(
+      PresentationRestV1SessionListResponseSchema.parse(legacyFinishedList.json()).sessions,
+    ).toEqual(finishedList.map(({ reportStatus: _reportStatus, ...session }) => session));
+
     const report = await app.inject({
       method: "GET",
       url: `/v1/presentation-sessions/${lobby.id}/report`,

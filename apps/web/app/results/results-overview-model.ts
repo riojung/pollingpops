@@ -1,3 +1,4 @@
+import type { PresentationReportStatus } from "@openround/contracts";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 
@@ -6,12 +7,50 @@ export interface PresentationResultSummary {
   presentationId: string;
   title: string;
   status: "active" | "finished";
+  reportStatus?: PresentationReportStatus | null;
   phase: string;
   participantCount: number;
   responseCount: number;
   blockCount: number;
   createdAt: string;
   finishedAt?: string | null;
+}
+
+export type ResultsActivityGrouping = "month" | "quarter";
+
+/** Returns the most recent represented periods using inclusive local calendar days. */
+export function resultsActivity(dates: readonly string[], grouping: ResultsActivityGrouping) {
+  const monthsPerPeriod = grouping === "month" ? 1 : 3;
+  const buckets = new Map<number, { start: Date; end: Date; count: number }>();
+  for (const value of dates) {
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const date = new Date(dateOnly ? `${value}T00:00:00` : value);
+    if (
+      !Number.isFinite(date.getTime()) ||
+      (dateOnly && date.getDate() !== Number(value.slice(-2)))
+    )
+      continue;
+
+    const year = date.getFullYear();
+    const month = Math.floor(date.getMonth() / monthsPerPeriod) * monthsPerPeriod;
+    const key = year * 12 + month;
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.count += 1;
+    } else {
+      const start = new Date(date);
+      start.setFullYear(year, month, 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setFullYear(year, month + monthsPerPeriod, 0);
+      end.setHours(0, 0, 0, 0);
+      buckets.set(key, { start, end, count: 1 });
+    }
+  }
+
+  return [...buckets.values()]
+    .sort((left, right) => left.start.getTime() - right.start.getTime())
+    .slice(-6);
 }
 
 /** Zero opportunities means no rate evidence, rather than a measured zero percent. */
@@ -55,11 +94,11 @@ export function practiceOverview(
 }
 
 export function presentationOverview(
-  items: readonly Pick<PresentationResultSummary, "status" | "responseCount">[],
+  items: readonly Pick<PresentationResultSummary, "status" | "participantCount">[],
 ) {
   return {
     count: items.length,
-    responses: items.reduce((sum, item) => sum + item.responseCount, 0),
+    joins: items.reduce((sum, item) => sum + item.participantCount, 0),
     finished: items.filter((item) => item.status === "finished").length,
     active: items.filter((item) => item.status === "active").length,
   };

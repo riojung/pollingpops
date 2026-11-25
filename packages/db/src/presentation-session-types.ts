@@ -399,6 +399,10 @@ export interface PresentationSessionRepository extends PresentationTextRepositor
     workspaceId: string,
     sessionId: string,
   ): Promise<PresentationSessionReportRecord | null>;
+  listReportStatuses(
+    workspaceId: string,
+    sessionIds: readonly string[],
+  ): Promise<Map<string, PresentationSessionReportStatus>>;
   claimReportJob(now: Date, leaseUntil: Date): Promise<PresentationSessionReportJob | null>;
   completeReportJob(
     job: PresentationSessionReportJob,

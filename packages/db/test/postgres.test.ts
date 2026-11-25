@@ -1461,6 +1461,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 115, name: "round_import_receipts" },
       { version: 116, name: "starter_copy_receipts" },
       { version: 117, name: "survey_pages_readers" },
+      { version: 118, name: "survey_branching_readers" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -7420,6 +7421,12 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     });
 
     await expect(sessions.getReport(outsider.workspaceId, session.id)).resolves.toBeNull();
+    await expect(sessions.listReportStatuses(outsider.workspaceId, [session.id])).resolves.toEqual(
+      new Map(),
+    );
+    await expect(sessions.listReportStatuses(owner.workspaceId, [session.id])).resolves.toEqual(
+      new Map([[session.id, "pending"]]),
+    );
     await expect(sessions.getReport(owner.workspaceId, session.id)).resolves.toMatchObject({
       id: session.id,
       workspaceId: owner.workspaceId,
@@ -7482,6 +7489,14 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     await expect(
       sessions.getReport(owner.workspaceId, failedFixture.session.id),
     ).resolves.toMatchObject({ status: "failed", payload: null, generatedAt: null });
+    await expect(
+      sessions.listReportStatuses(owner.workspaceId, [session.id, failedFixture.session.id]),
+    ).resolves.toEqual(
+      new Map([
+        [session.id, "ready"],
+        [failedFixture.session.id, "failed"],
+      ]),
+    );
   });
 
   it("fences a reclaimed Presentation report job from its expired PostgreSQL worker", async () => {

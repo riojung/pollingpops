@@ -26,19 +26,27 @@ describe("Results overview widgets", () => {
     expect(absent).toContain("No evidence recorded");
     expect(absent).not.toContain("0%");
   });
-  it("keeps finished and active Presentation counts alongside their lifecycle signals", () => {
+  it("shows Presentation participant joins and links to finished reports", () => {
     const items = (["finished", "active"] as const).map((status) => ({
       id: status,
       presentationId: "presentation",
       title: "Presentation",
       status,
+      reportStatus: status === "finished" ? ("ready" as const) : null,
       phase: status === "finished" ? "finished" : "lobby",
-      participantCount: 0,
-      responseCount: 0,
+      participantCount: status === "finished" ? 5 : 7,
+      responseCount: 50,
       blockCount: 1,
       createdAt: "2026-10-01",
     }));
-    const markup = renderToStaticMarkup(<ResultsOverview kind="presentations" items={items} />);
+    const markup = renderToStaticMarkup(
+      <ResultsOverview
+        kind="presentations"
+        items={items}
+        grouping="month"
+        onGroupingChange={() => undefined}
+      />,
+    );
     expect(markup).toContain('data-status="finished" data-tone="neutral"');
     expect(markup).toContain('data-status="active" data-tone="active"');
     expect(markup).toContain('aria-hidden="true" data-status="finished"');
@@ -47,8 +55,37 @@ describe("Results overview widgets", () => {
     expect(markup).toContain("Active<strong>1</strong>");
     expect(markup).toContain('aria-valuenow="50"');
     expect(markup).toContain('aria-valuetext="1 / 2"');
-    expect(markup).toContain("0<p>Across the Presentation sessions shown");
+    expect(markup).toMatch(/<dt>Participant joins<\/dt><dd[^>]*>12</);
+    expect(markup).toContain('href="/presentation-session/finished/report"');
+    expect(markup).not.toContain('href="/presentation-session/active/report"');
     expect(markup).not.toContain('data-tone="danger"');
+  });
+  it("keeps ready and readable pending Presentation reports in the shortcuts despite newer failures", () => {
+    const statuses = ["ready", "pending", "failed", "failed", "failed", null, undefined] as const;
+    const items = statuses.map((reportStatus, index) => ({
+      id: `session-${index + 1}`,
+      presentationId: "presentation",
+      title: `Presentation ${index + 1}`,
+      status: "finished" as const,
+      reportStatus,
+      phase: "finished",
+      participantCount: 5,
+      responseCount: 50,
+      blockCount: 1,
+      createdAt: `2026-10-0${index + 1}`,
+    }));
+    const markup = renderToStaticMarkup(
+      <ResultsOverview
+        kind="presentations"
+        items={items}
+        grouping="month"
+        onGroupingChange={() => undefined}
+      />,
+    );
+    expect(markup.match(/href="\/presentation-session\/session-\d\/report"/g)).toEqual([
+      'href="/presentation-session/session-2/report"',
+      'href="/presentation-session/session-1/report"',
+    ]);
   });
   it("labels Survey metadata as shown runs and identifies report-level response evidence", () => {
     const items = [
@@ -62,11 +99,20 @@ describe("Results overview widgets", () => {
         expiresAt: "2099-10-01",
       },
     ];
-    const markup = renderToStaticMarkup(<ResultsOverview kind="surveys" items={items} hasMore />);
-    expect(markup).toContain('aria-label="At a glance"');
+    const markup = renderToStaticMarkup(
+      <ResultsOverview
+        kind="surveys"
+        items={items}
+        hasMore
+        grouping="month"
+        onGroupingChange={() => undefined}
+      />,
+    );
+    expect(markup).toContain("Results analytics");
     expect(markup).toContain("current filters");
     expect(markup).toContain("Survey runs shown");
     expect(markup).toContain("Response counts are available inside each Survey report.");
+    expect(markup).toContain('href="/results/surveys/run"');
     expect(markup).toContain("Load more to expand this overview");
     expect(markup).not.toContain('role="meter"');
     expect(markup).not.toContain("participants");

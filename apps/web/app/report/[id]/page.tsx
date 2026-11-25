@@ -35,8 +35,10 @@ import {
 } from "../../../lib/i18n/delivery-primary-copy";
 import { formatDate, formatDateTime, formatNumber } from "../../../lib/i18n/format";
 import { followupCopy, localizeFollowupMessage } from "../../../lib/i18n/followup-copy";
+import { roundReportAnalyticsCopy } from "../../../lib/i18n/round-report-analytics-copy";
 import { roundReportWorkspaceCopy } from "../../../lib/i18n/round-report-workspace-copy";
 import { roundReportOverview } from "../../../lib/round-report-overview";
+import { ReportAnalytics } from "./report-analytics";
 import styles from "./report-workspace.module.css";
 
 interface ReportContext {
@@ -48,6 +50,7 @@ interface ReportContext {
 
 type ReportTab =
   | "overview"
+  | "analytics"
   | "evidence"
   | "decision_replay"
   | "questions"
@@ -1178,7 +1181,16 @@ function ReportOverview({
           </span>
         </div>
       </section>
-      <p className={styles.coverageNote}>{coverageDescription}</p>
+      <div className={styles.coverageRow}>
+        <p className={styles.coverageNote}>{coverageDescription}</p>
+        <button
+          className={styles.textButton}
+          type="button"
+          onClick={() => onSelectTab("analytics")}
+        >
+          {roundReportAnalyticsCopy(locale)("viewAnalytics")} <span aria-hidden="true">→</span>
+        </button>
+      </div>
 
       {!overview.hasResponses ? (
         <section className={styles.emptyState} aria-labelledby="report-no-responses">
@@ -1330,6 +1342,11 @@ export default function ReportPage() {
   const authority = useRef({ canEdit: false, canDelete: false, generation: 0 });
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location?.search).get("view");
+    setActiveTab(tab === "analytics" ? "analytics" : "overview");
+  }, [id]);
+
+  useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const generation = authority.current.generation;
@@ -1444,6 +1461,7 @@ export default function ReportPage() {
   const workspaceCopy = roundReportWorkspaceCopy(locale);
   const detailTabs: { id: ReportTab; label: string; count?: number }[] = [
     { id: "overview", label: workspaceCopy("overview") },
+    { id: "analytics", label: roundReportAnalyticsCopy(locale)("analytics") },
     { id: "questions", label: copy("Questions"), count: report?.questions.length },
     {
       id: "participants",
@@ -1610,6 +1628,20 @@ export default function ReportPage() {
                   uxBeta={uxBeta}
                 />
               ) : null}
+            </div>
+            <div
+              aria-labelledby="report-tab-analytics"
+              id="report-panel-analytics"
+              role="tabpanel"
+              hidden={selectedTab !== "analytics"}
+              tabIndex={0}
+            >
+              <ReportAnalytics
+                key={report.id}
+                report={report}
+                active={selectedTab === "analytics"}
+                onSelectTab={selectTab}
+              />
             </div>
             {evidence ? (
               <div

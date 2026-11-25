@@ -160,8 +160,17 @@
   line-height: 1.45;
 }
 
-.coverageNote {
+.coverageRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px 18px;
   margin: 10px 0 22px;
+}
+
+.coverageNote {
+  margin: 0;
   color: var(--ui-text-muted);
   font-size: 0.75rem;
   line-height: 1.5;

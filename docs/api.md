@@ -1231,7 +1231,9 @@ Presentation REST endpoints additionally include:
 
 - `GET|POST /v1/presentation-sessions` — creation accepts `presentationId` and optional
   `timeMode`; the private list returns `{ sessions }` with an additive `liveExpiresAt` field,
-  including retained expired rooms.
+  including retained expired rooms. `GET` with `includeReportStatus=true` adds `reportStatus`
+  to each item. It is `pending`, `ready`, or `failed` for a finished session with a report
+  record, and `null` otherwise. Pending reports can serve evidence while processing continues.
 - `GET /v1/presentation-sessions/{id}` — creator host snapshot.
 - `POST /v1/presentation-sessions/{id}/advance` with `expectedRevision`.
 - `POST /v1/presentation-sessions/{id}/control-pass`;

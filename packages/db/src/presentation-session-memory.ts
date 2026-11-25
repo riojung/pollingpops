@@ -76,6 +76,7 @@ import {
   type PresentationSessionReportCompletion,
   type PresentationSessionReportJob,
   type PresentationSessionReportRecord,
+  type PresentationSessionReportStatus,
   type PresentationSessionRepository,
   type PresentationSessionResponseRecord,
   type PresentationSessionTimelineRecord,
@@ -991,6 +992,17 @@ export class MemoryPresentationSessionRepository
       (candidate) => candidate.sessionId === sessionId,
     );
     return report ? clone(report) : null;
+  }
+
+  async listReportStatuses(workspaceId: string, sessionIds: readonly string[]) {
+    const selected = new Set(sessionIds);
+    const statuses = new Map<string, PresentationSessionReportStatus>();
+    for (const report of this.reports.values()) {
+      if (report.workspaceId === workspaceId && selected.has(report.sessionId)) {
+        statuses.set(report.sessionId, report.status);
+      }
+    }
+    return statuses;
   }
 
   async claimReportJob(now: Date, leaseUntil: Date) {

@@ -36,7 +36,11 @@ import signals from "../../components/workspace/workspace-signals.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
-import { evidencePercent, type PresentationResultSummary } from "./results-overview-model";
+import {
+  evidencePercent,
+  type PresentationResultSummary,
+  type ResultsActivityGrouping,
+} from "./results-overview-model";
 
 type ReportStatusFilter = "all" | ReportSummary["status"];
 type FollowupStatusFilter = "all" | FollowupSummary["status"];
@@ -425,6 +429,7 @@ function followupLifecycleLabel(report: ReportSummary, t: ReturnType<typeof useL
 function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
+  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [status, setStatus] = useState<ReportStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -484,7 +489,13 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         toDate={toDate}
       />
       {!loading && reports.length > 0 ? (
-        <ResultsOverview kind="rounds" items={reports} hasMore={Boolean(nextCursor)} />
+        <ResultsOverview
+          kind="rounds"
+          items={reports}
+          hasMore={Boolean(nextCursor)}
+          grouping={grouping}
+          onGroupingChange={setGrouping}
+        />
       ) : null}
       {error && !loading && !loadingMore ? (
         <ResultsLoadError
@@ -618,6 +629,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
 function PracticeList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
+  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [status, setStatus] = useState<FollowupStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -679,7 +691,13 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         toDate={toDate}
       />
       {!loading && followups.length > 0 ? (
-        <ResultsOverview kind="practice" items={followups} hasMore={Boolean(nextCursor)} />
+        <ResultsOverview
+          kind="practice"
+          items={followups}
+          hasMore={Boolean(nextCursor)}
+          grouping={grouping}
+          onGroupingChange={setGrouping}
+        />
       ) : null}
       {error && !loading && !loadingMore ? (
         <ResultsLoadError
@@ -831,6 +849,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
 function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
+  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
   const activeWorkspace = useRef(workspaceId);
@@ -859,9 +878,10 @@ function PresentationResultList(listControls: ListControls) {
     setSnapshot((current) =>
       current.workspaceId === workspaceId ? { ...current, error: "" } : current,
     );
-    void apiFetch<{ sessions: PresentationResultSummary[] }>("/v1/presentation-sessions", {
-      signal: controller.signal,
-    })
+    void apiFetch<{ sessions: PresentationResultSummary[] }>(
+      "/v1/presentation-sessions?includeReportStatus=true",
+      { signal: controller.signal },
+    )
       .then((response) => {
         if (isCurrent())
           setSnapshot({ workspaceId, sessions: response.sessions, error: "", loaded: true });
@@ -947,7 +967,12 @@ function PresentationResultList(listControls: ListControls) {
         onClear={clearFilters}
       />
       {!loading && !error && visible.length > 0 ? (
-        <ResultsOverview kind="presentations" items={visible} />
+        <ResultsOverview
+          kind="presentations"
+          items={visible}
+          grouping={grouping}
+          onGroupingChange={setGrouping}
+        />
       ) : null}
       {loading ? (
         <ResultsLoading
@@ -1020,10 +1045,13 @@ function PresentationResultList(listControls: ListControls) {
                 <strong>{session.participantCount}</strong>
                 <span>{t("pages.common.participants")}</span>
               </div>
-              <div className={styles.metric}>
-                <strong>{session.responseCount}</strong>
-                <span>{t("pages.results.responses")}</span>
-              </div>
+              {session.status === "active" &&
+              (session.phase === "question_open" || session.phase === "question_reveal") ? (
+                <div className={styles.metric}>
+                  <strong>{session.responseCount}</strong>
+                  <span>{t("resultsOverview.currentQuestionResponses")}</span>
+                </div>
+              ) : null}
               <div className={styles.metric}>
                 <strong>
                   <SessionPhaseLabel phase={session.phase} />
@@ -1032,13 +1060,15 @@ function PresentationResultList(listControls: ListControls) {
               </div>
             </div>
             <div className={`${styles.listCardActions} ${resultStyles.actions}`}>
-              <Link
-                className={`button small-button ${signals.action}`}
-                data-action="result"
-                href={`/presentation-session/${session.id}/report`}
-              >
-                {t("pages.results.openReport")}
-              </Link>
+              {session.status === "finished" ? (
+                <Link
+                  className={`button small-button ${signals.action}`}
+                  data-action="result"
+                  href={`/presentation-session/${session.id}/report`}
+                >
+                  {t("pages.results.openReport")}
+                </Link>
+              ) : null}
               <Link
                 className={`button-quiet small-button ${signals.action}`}
                 data-action="view"
@@ -1057,6 +1087,7 @@ function PresentationResultList(listControls: ListControls) {
 function SurveyResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
+  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
   const activeWorkspace = useRef(workspaceId);
@@ -1206,7 +1237,13 @@ function SurveyResultList(listControls: ListControls) {
         onClear={clearFilters}
       />
       {!loading && !error && visible.length > 0 ? (
-        <ResultsOverview kind="surveys" items={visible} hasMore={hasMore} />
+        <ResultsOverview
+          kind="surveys"
+          items={visible}
+          hasMore={hasMore}
+          grouping={grouping}
+          onGroupingChange={setGrouping}
+        />
       ) : null}
       {loading ? (
         <ResultsLoading

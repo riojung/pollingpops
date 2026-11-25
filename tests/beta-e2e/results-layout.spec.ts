@@ -27,6 +27,7 @@ async function mockHistory(page: Page) {
   const otherQuizId = randomUUID();
   const versionId = randomUUID();
   const createdAt = "2026-10-01T12:00:00.000Z";
+  const recentReportDate = "2026-11-01T12:00:00.000Z";
   const expiresAt = "2099-10-01T12:00:00.000Z";
   const reports: ReportSummary[] = Array.from({ length: 28 }, (_, index) => ({
     id: randomUUID(),
@@ -47,8 +48,8 @@ async function mockHistory(page: Page) {
     interventionCount: 2,
     followupId: index === 0 ? randomUUID() : null,
     followupStatus: index === 0 ? "open" : null,
-    generatedAt: index < 26 ? createdAt : null,
-    createdAt,
+    generatedAt: index === 0 ? recentReportDate : index < 26 ? createdAt : null,
+    createdAt: index === 0 ? recentReportDate : createdAt,
     expiresAt,
   }));
   const followups: FollowupSummary[] = Array.from({ length: 26 }, (_, index) => {
@@ -89,6 +90,7 @@ async function mockHistory(page: Page) {
     presentationId: randomUUID(),
     title: `Synthetic ${status} Presentation`,
     status,
+    reportStatus: status === "finished" ? "ready" : null,
     phase: status === "finished" ? "finished" : "revealed",
     participantCount: 12,
     responseCount: 24,
@@ -96,6 +98,26 @@ async function mockHistory(page: Page) {
     createdAt,
     finishedAt: status === "finished" ? createdAt : null,
   }));
+  const surveys = [
+    {
+      id: randomUUID(),
+      surveyId: randomUUID(),
+      title: "Synthetic closed Survey",
+      code: "123456",
+      closed: true,
+      closesAt: createdAt,
+      expiresAt,
+    },
+    {
+      id: randomUUID(),
+      surveyId: randomUUID(),
+      title: "Synthetic collecting Survey",
+      code: "654321",
+      closed: false,
+      closesAt: "2099-09-01T12:00:00.000Z",
+      expiresAt,
+    },
+  ];
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
   let presentationReads = 0;
   await page.route(`${api}/v1/quizzes?*`, (route) =>
@@ -138,15 +160,19 @@ async function mockHistory(page: Page) {
       });
     });
   }
-  await page.route(`${api}/v1/presentation-sessions`, (route) => {
+  await page.route(`${api}/v1/presentation-sessions?includeReportStatus=true`, (route) => {
     presentationReads += 1;
     return route.fulfill({ json: { sessions: presentations } });
   });
+  await page.route(`${api}/v1/survey-rooms?*`, (route) =>
+    route.fulfill({ json: { rooms: surveys, nextCursor: null } }),
+  );
   return {
     quizId,
     reports,
     followups,
     presentations,
+    surveys,
     reads,
     presentationReadCount: () => presentationReads,
   };
@@ -200,7 +226,35 @@ for (const mobile of [false, true]) {
     ).toHaveAttribute("href", "/library?type=rounds");
     const collection = page.getByRole("region", { name: "Results", exact: true });
     await expect(collection.getByRole("article")).toHaveCount(25);
-    const overview = page.getByRole("region", { name: "At a glance", exact: true });
+    const overview = page.getByRole("region", { name: "Results analytics", exact: true });
+    const activity = overview.getByRole("region", { name: "Activity over time", exact: true });
+    await expect(activity).toContainText("Grouped by report creation date.");
+    const periods = activity.getByRole("listitem");
+    const grouping = activity.getByRole("combobox", { name: "Group by", exact: true });
+    await expect(grouping).toHaveValue("month");
+    await expect(periods).toHaveCount(2);
+    await expect(
+      periods.filter({ hasText: /Oct.*2026/ }).getByText("24", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      periods.filter({ hasText: /Nov.*2026/ }).getByText("1", { exact: true }),
+    ).toBeVisible();
+    const loadedReads = fixture.reads.length;
+    await grouping.selectOption({ label: "Quarter" });
+    await expect(periods).toHaveCount(1);
+    await expect(periods.getByText("25", { exact: true })).toBeVisible();
+    expect(fixture.reads).toHaveLength(loadedReads);
+    const reportLinks = overview.getByRole("region", { name: "Reports to open", exact: true });
+    await expect(reportLinks.getByRole("link")).toHaveCount(3);
+    await expect(
+      reportLinks.getByRole("link", { name: fixture.reports[0]!.title, exact: true }),
+    ).toHaveAttribute("href", `/report/${fixture.reports[0]!.id}?view=analytics`);
+    const joins = overview
+      .getByText("Participant joins", { exact: true })
+      .locator("..")
+      .locator("dd")
+      .first();
+    await expect(joins).toContainText("300");
     await expect(overview).toContainText("75 recovered of 100 eligible");
     await expect(
       overview.getByRole("meter", { name: "Paired response recovery", exact: true }),
@@ -222,15 +276,18 @@ for (const mobile of [false, true]) {
       await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
       expect(
         (await new AxeBuilder({ page }).analyze()).violations,
-        `Results overview in ${mode}`,
+        `Results analytics in ${mode}`,
       ).toEqual([]);
-      await page.screenshot({ path: test.info().outputPath(`results-overview-${mode}.png`) });
+      await overview.screenshot({ path: test.info().outputPath(`results-overview-${mode}.png`) });
     }
     await page.emulateMedia({ colorScheme: "light" });
     if (!mobile) await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
     await page.getByRole("button", { name: "Load More", exact: true }).click();
     await expect(collection.getByRole("article")).toHaveCount(28);
     await expect(overview).toContainText("78 recovered of 104 eligible");
+    await expect(joins).toContainText("312");
+    await expect(reportLinks.getByRole("link")).toHaveCount(3);
+    await expect(periods.getByText("28", { exact: true })).toBeVisible();
     await expect(overview).not.toContainText("More results are available.");
     await expect(page.getByText("28 results shown", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Load More", exact: true })).toHaveCount(0);
@@ -253,8 +310,13 @@ for (const mobile of [false, true]) {
     ]);
     await resultStatus.selectOption("pending");
     await expect(collection.getByRole("article")).toHaveCount(1);
+    await expect(grouping).toHaveValue("quarter");
     await expect(overview).toContainText("No paired response recovery evidence");
     await expect(overview.getByRole("meter")).toHaveCount(0);
+    await expect(joins).toContainText("—");
+    await expect(reportLinks.getByRole("link")).toHaveCount(0);
+    await expect(reportLinks).toContainText("No ready reports in the results shown.");
+    await expect(periods.getByText("1", { exact: true })).toBeVisible();
     await expect(
       collection.getByRole("heading", { name: "Synthetic processing evidence" }),
     ).toBeVisible();
@@ -264,13 +326,21 @@ for (const mobile of [false, true]) {
     await toolbarClear(page).click();
     await expect(resultStatus).toHaveValue("all");
     const search = page.getByRole("searchbox", { name: "Search Round results", exact: true });
+    await search.fill("No matching Round evidence");
+    await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
+    await expect(grouping).toHaveCount(0);
     await search.fill("Round evidence 26");
     await expect(collection.getByRole("article")).toHaveCount(1);
+    await expect(grouping).toHaveValue("quarter");
     await expect(
       collection.getByRole("heading", { name: "Synthetic Round evidence 26" }),
     ).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("Round evidence 26");
     expect(fixture.reads.at(-1)?.query.get("search")).toBe("Round evidence 26");
+    await expect(reportLinks.getByRole("link")).toHaveCount(1);
+    await expect(
+      reportLinks.getByRole("link", { name: fixture.reports[25]!.title, exact: true }),
+    ).toHaveAttribute("href", `/report/${fixture.reports[25]!.id}?view=analytics`);
     await page.getByRole("combobox", { name: "Round", exact: true }).selectOption(fixture.quizId);
     await page.getByLabel("From", { exact: true }).fill("2026-09-01");
     await page.getByLabel("To", { exact: true }).fill("2026-10-31");
@@ -303,6 +373,11 @@ for (const mobile of [false, true]) {
     });
     await expect(practice.getByRole("article")).toHaveCount(25);
     await expect(overview).toContainText("225 completed of 300 attempts");
+    const practiceLinks = overview.getByRole("region", { name: "Practice to review", exact: true });
+    await expect(practiceLinks.getByRole("link")).toHaveCount(3);
+    await expect(
+      practiceLinks.getByRole("link", { name: fixture.followups[0]!.title, exact: true }),
+    ).toHaveAttribute("href", `/practice/${fixture.followups[0]!.id}`);
     await expect(practice).toHaveAttribute("data-view", "list");
     await expect(
       page.getByText("25 practice items shown · More available", { exact: true }),
@@ -338,12 +413,22 @@ for (const mobile of [false, true]) {
     await expect(recovery).toBeVisible();
     await toolbarClear(page).click();
 
+    await views.getByRole("link", { name: "Surveys", exact: true }).click();
+    await expect(page).toHaveURL(/\/results\?view=surveys$/);
+    await expect(reportLinks.getByRole("link")).toHaveCount(1);
+    await expect(
+      reportLinks.getByRole("link", { name: fixture.surveys[0]!.title, exact: true }),
+    ).toHaveAttribute("href", `/results/surveys/${fixture.surveys[0]!.id}`);
+
     await views.getByRole("link", { name: "Presentations", exact: true }).click();
     await expect(page).toHaveURL(/\/results\?view=presentations$/);
     const presentations = page.getByRole("region", { name: "Presentation Results", exact: true });
     await expect(presentations.getByRole("article")).toHaveCount(2);
-    await expect(overview).toContainText("Responses recorded");
-    await expect(overview.locator("dd").filter({ hasText: "48" })).toHaveCount(1);
+    await expect(joins).toContainText("24");
+    await expect(reportLinks.getByRole("link")).toHaveCount(1);
+    await expect(
+      reportLinks.getByRole("link", { name: fixture.presentations[0]!.title, exact: true }),
+    ).toHaveAttribute("href", `/presentation-session/${fixture.presentations[0]!.id}/report`);
     await expect(
       page.getByRole("link", { name: "Back to Presentation library", exact: true }),
     ).toHaveAttribute("href", "/library?type=presentations");
@@ -356,12 +441,21 @@ for (const mobile of [false, true]) {
     await expect(
       presentation.getByRole("link", { name: "View Presentation", exact: true }),
     ).toHaveAttribute("href", `/presentation/${fixture.presentations[0]!.presentationId}`);
+    const activePresentation = presentations.getByRole("article").filter({
+      has: page.getByRole("heading", { name: "Synthetic active Presentation", exact: true }),
+    });
+    await expect(
+      activePresentation.getByRole("link", { name: "Open Report", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      activePresentation.getByRole("link", { name: "View Presentation", exact: true }),
+    ).toHaveAttribute("href", `/presentation/${fixture.presentations[1]!.presentationId}`);
     const presentationReads = fixture.presentationReadCount();
     await page
       .getByRole("searchbox", { name: "Search Presentation results", exact: true })
       .fill("finished");
     await expect(presentations.getByRole("article")).toHaveCount(1);
-    await expect(overview.locator("dd").filter({ hasText: "24" })).toHaveCount(1);
+    await expect(joins).toContainText("12");
     await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
     await toolbarClear(page).click();

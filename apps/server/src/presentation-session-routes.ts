@@ -17,6 +17,7 @@ import {
   PresentationRestV1ResponseAckSchema,
   PresentationRestV1SessionListItemSchema,
   PresentationRestV1SessionListResponseSchema,
+  PresentationRestV1SessionListWithReportStatusResponseSchema,
   PresentationRestResponseSubmitSchema,
   PresentationTextModerationRequestSchema,
   PresentationTextModerationQuerySchema,
@@ -51,6 +52,9 @@ const SessionMediaParamsSchema = z.object({
 const ControlPassParamsSchema = z.object({
   id: z.string().uuid(),
   credentialId: z.string().uuid(),
+});
+const PresentationSessionListQuerySchema = z.object({
+  includeReportStatus: z.literal("true").optional(),
 });
 const PresentationReportQuerySchema = z
   .object({
@@ -311,9 +315,21 @@ export async function registerPresentationSessionRoutes(
     noStore(reply);
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    const { includeReportStatus } = PresentationSessionListQuerySchema.parse(request.query);
     const snapshots = await service.listHostSnapshots(creator.workspaceId);
-    return PresentationRestV1SessionListResponseSchema.parse({
-      sessions: snapshots.map(restCompatibleListItem),
+    const sessions = snapshots.map(restCompatibleListItem);
+    if (!includeReportStatus)
+      return PresentationRestV1SessionListResponseSchema.parse({ sessions });
+
+    const statuses = await dependencies.presentationSessions.listReportStatuses(
+      creator.workspaceId,
+      sessions.filter((session) => session.status === "finished").map((session) => session.id),
+    );
+    return PresentationRestV1SessionListWithReportStatusResponseSchema.parse({
+      sessions: sessions.map((session) => ({
+        ...session,
+        reportStatus: statuses.get(session.id) ?? null,
+      })),
     });
   });
 

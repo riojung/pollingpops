@@ -17,6 +17,7 @@ import { withEnglishLocale } from "../../../test-utils/english-locale";
 import ReportPage from "./page";
 import { followupCopy } from "../../../lib/i18n/followup-copy";
 import { API_URL, AUTH_CHANGE_EVENT } from "../../../lib/api";
+import { roundReportAnalyticsCopy } from "../../../lib/i18n/round-report-analytics-copy";
 import { roundReportWorkspaceCopy } from "../../../lib/i18n/round-report-workspace-copy";
 
 interface ReportHooks {
@@ -560,6 +561,7 @@ describe("Round report workspace", () => {
     expect(tab(tree, "overview").props["aria-selected"]).toBe(true);
     expect(panel(tree, "overview").props.hidden).toBe(false);
     for (const id of [
+      "analytics",
       "questions",
       "participants",
       "evidence",
@@ -580,6 +582,47 @@ describe("Round report workspace", () => {
     expect(overview).not.toContain("Not measured");
     view.cleanup();
   });
+
+  it.each([
+    ["en-CA", "5 of 8", "1 of 2"],
+    ["fr-FR", "5 sur 8", "1 sur 2"],
+    ["de-DE", "5 von 8", "1 von 2"],
+    ["es-ES", "5 de 8", "1 de 2"],
+    ["it-IT", "5 su 8", "1 su 2"],
+    ["pt-PT", "5 de 8", "1 de 2"],
+    ["ja-JP", "8人中5人", "2問中1問"],
+    ["ko-KR", "8명 중 5명", "2개 중 1개"],
+    ["zh-CN", "8 位中有 5 位", "2 个中有 1 个"],
+    ["zh-TW", "8 位中有 5 位", "2 個中有 1 個"],
+  ] as const)(
+    "formats participant and question coverage in %s",
+    async (locale, people, questions) => {
+      fixtures.locale = locale;
+      const source = opinionReport(undefined, 5);
+      const report = ReportV7Schema.parse({
+        ...source,
+        metrics: { ...source.metrics, participantCount: 8, completedCount: 5 },
+        participation: { participants: 8, respondents: 5, percent: 62.5 },
+        questions: [
+          source.questions[0],
+          {
+            ...source.questions[0],
+            questionId: "00000000-0000-4000-8000-000000000004",
+            responses: 0,
+          },
+        ],
+      });
+      const view = await load(report);
+      (tab(view.page.render(), "analytics").props.onClick as () => void)();
+      const analytics = markup(panel(view.page.render(), "analytics"));
+      const copy = roundReportAnalyticsCopy(locale);
+      expect(analytics).toContain(`<dt>${copy("responded")}</dt><dd>${people}</dd>`);
+      expect(analytics).toContain(
+        `<dt>${copy("questionsWithResponses")}</dt><dd>${questions}</dd>`,
+      );
+      view.cleanup();
+    },
+  );
 
   it("places tab navigation before metrics and keeps recovery narrative collapsed", async () => {
     const view = await load(opinionReport());
@@ -615,9 +658,15 @@ describe("Round report workspace", () => {
     };
     press("overview", "ArrowRight");
     let tree = view.page.render();
+    expect(tab(tree, "analytics").props.tabIndex).toBe(0);
+    expect(panel(tree, "analytics").props.hidden).toBe(false);
+    expect(panel(tree, "overview").props.hidden).toBe(true);
+    expect(getElementById).toHaveBeenLastCalledWith("report-tab-analytics");
+    press("analytics", "ArrowRight");
+    tree = view.page.render();
     expect(tab(tree, "questions").props.tabIndex).toBe(0);
     expect(panel(tree, "questions").props.hidden).toBe(false);
-    expect(panel(tree, "overview").props.hidden).toBe(true);
+    expect(panel(tree, "analytics").props.hidden).toBe(true);
     expect(getElementById).toHaveBeenLastCalledWith("report-tab-questions");
     press("questions", "End");
     expect(tab(view.page.render(), "manage").props["aria-selected"]).toBe(true);
@@ -627,7 +676,7 @@ describe("Round report workspace", () => {
     tree = view.page.render();
     expect(tab(tree, "manage").props["aria-selected"]).toBe(true);
     expect(panel(tree, "manage").props.hidden).toBe(false);
-    expect(focus).toHaveBeenCalledTimes(4);
+    expect(focus).toHaveBeenCalledTimes(5);
     view.cleanup();
   });
 
@@ -648,6 +697,7 @@ describe("Round report workspace", () => {
       const view = await load(report, false);
       const tree = view.page.render();
       expect(panel(tree, "overview").props.hidden).toBe(false);
+      expect(panel(tree, "analytics").props.hidden).toBe(true);
       expect(Boolean(panel(tree, "evidence"))).toBe(schemaVersion >= 2);
       expect(Boolean(panel(tree, "interactions"))).toBe(schemaVersion >= 3);
       expect(Boolean(panel(tree, "decision_replay"))).toBe(schemaVersion >= 4);

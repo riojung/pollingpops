@@ -57,9 +57,11 @@ import {
 import { templateGuideCopy, templateGuideCopyKeys } from "../apps/web/lib/i18n/template-guide-copy";
 import { templateCollectionCopy } from "../apps/web/lib/i18n/template-collection-copy";
 import {
+  parseTemplateCollection,
   templateCollectionGuide,
   templateCollectionIds,
   templateCollectionMemberships,
+  type TemplateCollectionId,
 } from "../apps/web/lib/template-collections";
 import {
   presentationWorkspaceCopy,
@@ -994,11 +996,7 @@ export function checkReviewDecisions(bundle: ReviewBundle, input: unknown, now =
   };
 }
 
-export async function validateCurrentReview(
-  bundleInput: unknown,
-  decisions: unknown,
-  root = process.cwd(),
-) {
+async function loadValidatedReview(bundleInput: unknown, decisions: unknown, root = process.cwd()) {
   const input = object(bundleInput, "bundle");
   const binding = object(input.sourceBinding, "source binding");
   if (
@@ -1013,7 +1011,16 @@ export async function validateCurrentReview(
   const current = await buildReviewBundle(input.locale as SupportedLocale, binding.sourceRef, root);
   if (canonicalJson(current) !== canonicalJson(input))
     fail("bundle is stale, malformed or changed; regenerate from current sources");
-  return checkReviewDecisions(current, decisions);
+  const result = checkReviewDecisions(current, decisions);
+  return { bundle: current, decisions: decisions as ReviewDecisions, result };
+}
+
+export async function validateCurrentReview(
+  bundleInput: unknown,
+  decisions: unknown,
+  root = process.cwd(),
+) {
+  return (await loadValidatedReview(bundleInput, decisions, root)).result;
 }
 
 export function escapeHtml(value: string) {
@@ -1055,19 +1062,106 @@ const templateReviewLinks = {
   },
 } as const;
 
-function renderCollectionReviewNavigation(items: ReviewItem[]) {
+type ReviewLink = readonly [itemId: string, label: string];
+const sharedCollectionReviewLinks = [
+  ["ui/template-collection/label", "Collections label"],
+  ["ui/template-collection/allTemplates", "All templates label"],
+  ["ui/template-collection/chooseCollection", "Collection selector label"],
+] as const satisfies readonly ReviewLink[];
+
+function indexReviewItems(items: ReviewItem[]) {
   const indexed = new Map(items.map((item, index) => [item.id, { item, index }]));
+  return (id: string) => indexed.get(id) ?? fail(`missing review item ${id}`);
+}
+
+function englishReviewField(item: ReviewItem, field: string) {
+  const value = item.english;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    fail(`missing English review fields for ${item.id}`);
+  const fieldValue = value[field];
+  if (typeof fieldValue !== "string") fail(`missing review field ${field} for ${item.id}`);
+  return fieldValue;
+}
+
+function collectionReviewGroup(
+  id: TemplateCollectionId,
+  entry: ReturnType<typeof indexReviewItems>,
+) {
+  const [title, description] = collectionReviewLabels[id];
+  const titleId = `ui/template-collection/${title}`;
+  const links: ReviewLink[] = [
+    [titleId, "Collection title"],
+    [`ui/template-collection/${description}`, "Description"],
+    [`collection/${id}/memberships`, "Membership"],
+  ];
+  const templates = templateCollectionMemberships
+    .filter(({ collectionId }) => collectionId === id)
+    .map(({ kind, templateId }) => {
+      const path = `${kind}/${templateId}`;
+      const { label, entries } = templateReviewLinks[kind];
+      const firstItemId = `${path}/${entries[0][0]}`;
+      const title = englishReviewField(entry(firstItemId).item, "title");
+      const links: ReviewLink[] = entries.map(([suffix, label]) => [`${path}/${suffix}`, label]);
+      if (kind === "survey")
+        links.push([
+          englishReviewField(entry(firstItemId).item, "questionContentReference"),
+          "Shared Round questions",
+        ]);
+      return { title: `${label}: ${title}`, links };
+    });
+  return { title: englishReviewField(entry(titleId).item, "template"), links, templates };
+}
+
+function collectionReviewStatus(
+  collection: TemplateCollectionId,
+  { bundle, decisions, result }: Awaited<ReturnType<typeof loadValidatedReview>>,
+) {
+  const entry = indexReviewItems(bundle.items);
+  const group = collectionReviewGroup(collection, entry);
+  const itemIds = new Set(
+    [
+      ...sharedCollectionReviewLinks,
+      ...group.links,
+      ...group.templates.flatMap(({ links }) => links),
+    ].map(([id]) => id),
+  );
+  const byItemId = new Map(decisions.entries.map((decision) => [decision.itemId, decision]));
+  let needsChange = 0;
+  const unresolved = [...itemIds].flatMap((itemId) => {
+    const { item, index } = entry(itemId);
+    const { decision, issue } = byItemId.get(itemId)!;
+    if (decision === "accepted") return [];
+    if (decision === "needs-change") needsChange++;
+    return [
+      {
+        itemId,
+        context: item.context,
+        reviewFragment: `#${reviewItemAnchor(index)}`,
+        decision,
+        issue,
+      },
+    ];
+  });
+  return {
+    locale: bundle.locale,
+    collection,
+    sourceRef: bundle.sourceBinding.sourceRef,
+    bundleHash: bundle.bundleHash,
+    total: itemIds.size,
+    accepted: itemIds.size - unresolved.length,
+    pending: unresolved.length - needsChange,
+    needsChange,
+    fullPacketComplete: result.complete,
+    referenceOnly: result.referenceOnly,
+    nativeAcceptance: result.nativeAcceptance,
+    unresolved,
+  };
+}
+
+function renderCollectionReviewNavigation(items: ReviewItem[]) {
+  const entry = indexReviewItems(items);
   const root = { heading: "collection-review-title", title: "Template collections" };
   const returnTargets = new Map<string, Map<string, string>>();
-  const entry = (id: string) => indexed.get(id) ?? fail(`missing review item ${id}`);
-  const englishField = (id: string, field: string) => {
-    const value = entry(id).item.english;
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      fail(`missing English review fields for ${id}`);
-    const fieldValue = value[field];
-    if (typeof fieldValue !== "string") fail(`missing review field ${field} for ${id}`);
-    return fieldValue;
-  };
   const link = (id: string, label: string, target: typeof root, collectionTitle?: string) => {
     const targets = returnTargets.get(id) ?? new Map<string, string>();
     targets.set(target.heading, target.title);
@@ -1078,45 +1172,27 @@ function renderCollectionReviewNavigation(items: ReviewItem[]) {
     return `<li><a href="#${reviewItemAnchor(entry(id).index)}" aria-label="${escapeHtml(name)}">${escapeHtml(label)}</a></li>`;
   };
   const collectionCards = templateCollectionIds.map((id) => {
-    const [title, description] = collectionReviewLabels[id];
-    const titleId = `ui/template-collection/${title}`;
+    const group = collectionReviewGroup(id, entry);
     const collection = {
       heading: `collection-review-${id}`,
-      title: englishField(titleId, "template"),
+      title: group.title,
     };
-    const templates = templateCollectionMemberships
-      .filter(({ collectionId }) => collectionId === id)
-      .map(({ kind, templateId }, index) => {
-        const path = `${kind}/${templateId}`;
-        const { label, entries } = templateReviewLinks[kind];
-        const title = englishField(`${path}/${entries[0][0]}`, "title");
-        const template = {
-          heading: `${collection.heading}-template-${index + 1}`,
-          title: `${label}: ${title}`,
-        };
-        const links = entries.map(([suffix, label]) =>
-          link(`${path}/${suffix}`, label, template, collection.title),
-        );
-        if (kind === "survey")
-          links.push(
-            link(
-              englishField(`${path}/context`, "questionContentReference"),
-              "Shared Round questions",
-              template,
-              collection.title,
-            ),
-          );
-        return `<li><h4 id="${template.heading}" tabindex="-1">${escapeHtml(template.title)}</h4><ul class="review-links">${links.join("")}</ul></li>`;
-      });
+    const templates = group.templates.map(({ title, links }, index) => {
+      const template = { heading: `${collection.heading}-template-${index + 1}`, title };
+      const templateLinks = links.map(([itemId, label]) =>
+        link(itemId, label, template, collection.title),
+      );
+      return `<li><h4 id="${template.heading}" tabindex="-1">${escapeHtml(template.title)}</h4><ul class="review-links">${templateLinks.join("")}</ul></li>`;
+    });
     return `<section class="review-collection" aria-labelledby="${collection.heading}">
 <h3 id="${collection.heading}" tabindex="-1">${escapeHtml(collection.title)}</h3>
-<ul class="review-links">${link(titleId, "Collection title", collection)}${link(`ui/template-collection/${description}`, "Description", collection)}${link(`collection/${id}/memberships`, "Membership", collection)}</ul>
+<ul class="review-links">${group.links.map(([itemId, label]) => link(itemId, label, collection)).join("")}</ul>
 <ul class="review-templates">${templates.join("")}</ul></section>`;
   });
   const html = `<nav aria-labelledby="${root.heading}">
 <h2 id="${root.heading}" tabindex="-1">Review by template collection</h2>
 <p>Open an entry to review its English reference and target-language copy. Survey questions link to the Round draft that supplies them.</p>
-<ul class="review-links">${link("ui/template-collection/label", "Collections label", root)}${link("ui/template-collection/allTemplates", "All templates label", root)}${link("ui/template-collection/chooseCollection", "Collection selector label", root)}</ul>
+<ul class="review-links">${sharedCollectionReviewLinks.map(([itemId, label]) => link(itemId, label, root)).join("")}</ul>
 <div class="review-collections">${collectionCards.join("\n")}</div></nav>`;
   return { html, returnTargets };
 }
@@ -1172,7 +1248,9 @@ export async function runLocalizationReview(argv: string[], root = process.cwd()
       ? ["locale", "source-ref", "out"]
       : mode === "check"
         ? ["bundle", "decisions"]
-        : [];
+        : mode === "collection-status"
+          ? ["bundle", "decisions", "collection"]
+          : [];
   const options = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
     const flag = rest[index];
@@ -1191,7 +1269,7 @@ export async function runLocalizationReview(argv: string[], root = process.cwd()
   }
   if (!allowed.length || allowed.some((key) => !options.has(key)))
     fail(
-      "usage: export --locale <locale> --source-ref <40hex> --out <directory> | check --bundle <bundle.json> --decisions <decisions.json>",
+      "usage: export --locale <locale> --source-ref <40hex> --out <directory> | check --bundle <bundle.json> --decisions <decisions.json> | collection-status --bundle <bundle.json> --decisions <decisions.json> --collection <collection-id>",
     );
   if (mode === "export") {
     const bundle = await buildReviewBundle(
@@ -1214,9 +1292,20 @@ export async function runLocalizationReview(argv: string[], root = process.cwd()
       message: `Exported ${bundle.items.length} pending review items for ${bundle.locale} to ${out}. No acceptance recorded.`,
     };
   }
+  const collection =
+    mode === "collection-status"
+      ? (parseTemplateCollection(options.get("collection")) ??
+        fail(`unknown template collection; choose ${templateCollectionIds.join(", ")}`))
+      : null;
   const bundle = JSON.parse(await readFile(resolve(root, options.get("bundle")!), "utf8"));
   const decisions = JSON.parse(await readFile(resolve(root, options.get("decisions")!), "utf8"));
-  const result = await validateCurrentReview(bundle, decisions, root);
+  const review = await loadValidatedReview(bundle, decisions, root);
+  if (collection)
+    return {
+      exitCode: 0,
+      message: JSON.stringify(collectionReviewStatus(collection, review), null, 2),
+    };
+  const { result } = review;
   return {
     exitCode: result.complete ? 0 : 2,
     message: `${result.accepted} accepted / ${result.pending} pending / ${result.needsChange} needs change. ${result.referenceOnly ? "English reference only." : "Recorded human decisions only."} Native quality and release acceptance are not established; no gates updated.`,

@@ -8,8 +8,21 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-04 collection review status — local follow-up
+
+The read-only `collection-status` command validates the current packet and every decision before
+reporting progress for one of the four template collections. It lists pending entries and change
+requests with their item IDs and links into the original `review.html`. Both the report and review
+navigation use the same collection membership. Human editorial and native-language acceptance
+remain pending. See the [reviewer workflow](evidence/native-language-review.md#check-one-collections-progress).
+
+All 43 localization review tests passed. Fresh CLI exports for all ten locales each reported
+17 pending Event feedback entries. The Korean full-packet check still reported 804 pending
+entries and exited with status 2. Script type checks, lint and formatting passed.
+
 ### WX-11 Source assistance availability recovery
 
+Merged in [PR #324](https://github.com/riojung/pollingpops/pull/324) at `16f26c8`.
 The shared Source assistance panel gives Round and Presentation creators, including those
 inserting into an existing Presentation, and Recovery Pack creators a **Retry availability**
 action. It reads current provider, file-scanner and monthly allowance status independently

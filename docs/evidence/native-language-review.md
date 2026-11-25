@@ -69,6 +69,41 @@ heading. Shared entries offer a return link for each template that references th
 decisions against the existing item IDs in `decisions.json`. The index opens the same articles
 and decision entries used by the complete packet.
 
+### Check one collection's progress
+
+After recording decisions, inspect the selected collection without changing either input file:
+
+```sh
+pnpm --silent run localization:review collection-status \
+  --bundle artifacts/localization-review/CANDIDATE/ko-KR/bundle.json \
+  --decisions artifacts/localization-review/CANDIDATE/ko-KR/decisions.json \
+  --collection event-feedback
+```
+
+The supported slugs are `team-meetings`, `training-onboarding`, `workshops` and
+`event-feedback`. The command validates the full packet against current sources and checks
+every decision, including entries outside the selected collection.
+
+The JSON report identifies the locale, collection and source-bound bundle. It counts accepted
+entries, pending entries and change requests. Each unresolved entry includes its item ID, context,
+decision, issue and `reviewFragment`. Append that fragment to the original packet's `review.html`
+path to open the review article.
+
+Each collection includes the three shared selector labels. Event feedback has **17 entries**
+because its Round and Survey share the Event experience draft. The other collections each have
+**18 entries**.
+
+`fullPacketComplete` reflects recorded decisions across the whole packet. `referenceOnly`
+identifies English reference material and `nativeAcceptance` is always `false`.
+Human editorial and native-language acceptance still require the existing review process.
+
+| Exit | Meaning                                                                                |
+| ---- | -------------------------------------------------------------------------------------- |
+| `0`  | Valid collection progress report, including pending or needs-change entries.           |
+| `1`  | Invalid collection, malformed decisions, or stale/mismatched packet or source binding. |
+
+Use the full-packet `check` command below for a completion exit code.
+
 ## Record and check decisions
 
 Read the [localization glossary](../localization-glossary.md), then review the wording

@@ -74,6 +74,18 @@ function completedReview() {
   return review;
 }
 
+function collectionStatusArgs(bundlePath: string, decisionsPath: string, collection: string) {
+  return [
+    "collection-status",
+    "--bundle",
+    bundlePath,
+    "--decisions",
+    decisionsPath,
+    "--collection",
+    collection,
+  ];
+}
+
 describe("native-language review preparation", () => {
   it("exports every supported locale with full scoped content and conservative human decisions", async () => {
     for (const locale of supportedLocales) {
@@ -1165,6 +1177,174 @@ describe("native-language review preparation", () => {
         ["check", "--wat", "value"],
       ])
         await expect(runLocalizationReview(args)).rejects.toThrow(/CLI option|usage/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("reports each collection's exact review links and preserves decisions as progress changes", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "localization-collection-status-"));
+    const bundlePath = resolve(directory, "bundle.json");
+    const decisionsPath = resolve(directory, "decisions.json");
+    const bundleBytes = canonicalJson(bundle);
+    const review = createReviewDecisions(bundle);
+    const html = renderReviewHtml(bundle);
+    const navigation = html.match(
+      /<nav aria-labelledby="collection-review-title">([\s\S]*?)<\/nav>/,
+    )![1]!;
+    const fragments = (part: string) =>
+      [...part.matchAll(/href="(#[^"]+)"/g)].map(([, href]) => href!);
+    const commonFragments = fragments(navigation.split('<div class="review-collections">')[0]!);
+    const readStatus = async (collection: string) => {
+      const result = await runLocalizationReview(
+        collectionStatusArgs(bundlePath, decisionsPath, collection),
+      );
+      expect(result.exitCode).toBe(0);
+      return JSON.parse(result.message) as {
+        unresolved: { itemId: string; reviewFragment: string }[];
+      };
+    };
+
+    try {
+      await writeFile(bundlePath, bundleBytes);
+      const pendingBytes = canonicalJson(review);
+      await writeFile(decisionsPath, pendingBytes);
+
+      const eventItems = new Set<string>();
+      for (const collection of templateCollectionIds) {
+        const status = await readStatus(collection);
+        const section = [...navigation.matchAll(/<section\b[^>]*>([\s\S]*?)<\/section>/g)].find(
+          ([markup]) => markup.includes(`aria-labelledby="collection-review-${collection}"`),
+        )![1]!;
+        const expectedFragments = new Set([...commonFragments, ...fragments(section)]);
+        const total = collection === "event-feedback" ? 17 : 18;
+        expect(status).toEqual({
+          locale: "ko-KR",
+          collection,
+          sourceRef,
+          bundleHash: bundle.bundleHash,
+          total,
+          accepted: 0,
+          pending: total,
+          needsChange: 0,
+          fullPacketComplete: false,
+          referenceOnly: false,
+          nativeAcceptance: false,
+          unresolved: expect.any(Array),
+        });
+        expect(status.unresolved).toHaveLength(total);
+        expect(new Set(status.unresolved.map(({ reviewFragment }) => reviewFragment))).toEqual(
+          expectedFragments,
+        );
+        for (const item of status.unresolved) {
+          expect(item).toMatchObject({
+            context: expect.stringMatching(/\S/),
+            decision: "pending",
+            issue: null,
+          });
+          expect(html).toContain(
+            `<article id="${item.reviewFragment.slice(1)}" tabindex="-1"><h2>${escapeHtml(item.itemId)}</h2>`,
+          );
+          if (collection === "event-feedback") eventItems.add(item.itemId);
+        }
+      }
+      expect(await readFile(decisionsPath, "utf8")).toBe(pendingBytes);
+
+      expect(eventItems.size).toBe(17);
+      expect(eventItems.has("round/event-feedback/draft")).toBe(true);
+      expect(eventItems.has("survey/event-feedback/context")).toBe(true);
+      const completed = completedReview();
+      const issue = "Synthetic test issue: check the Survey wording in context.";
+      review.entries = review.entries.map((entry, index) =>
+        eventItems.has(entry.itemId) ? { ...completed.entries[index]! } : entry,
+      );
+      const draft = review.entries.find(({ itemId }) => itemId === "round/event-feedback/draft")!;
+      draft.decision = "needs-change";
+      draft.issue = issue;
+      const oneIssueBytes = canonicalJson(review);
+      await writeFile(decisionsPath, oneIssueBytes);
+      expect(await readStatus("event-feedback")).toMatchObject({
+        accepted: 16,
+        pending: 0,
+        needsChange: 1,
+        fullPacketComplete: false,
+        unresolved: [{ itemId: draft.itemId, decision: "needs-change", issue }],
+      });
+      expect(await readFile(decisionsPath, "utf8")).toBe(oneIssueBytes);
+
+      draft.decision = "accepted";
+      draft.issue = null;
+      const selectedCompleteBytes = canonicalJson(review);
+      await writeFile(decisionsPath, selectedCompleteBytes);
+      expect(await readStatus("event-feedback")).toMatchObject({
+        accepted: 17,
+        pending: 0,
+        needsChange: 0,
+        fullPacketComplete: false,
+        nativeAcceptance: false,
+        unresolved: [],
+      });
+      const check = await runLocalizationReview([
+        "check",
+        "--bundle",
+        bundlePath,
+        "--decisions",
+        decisionsPath,
+      ]);
+      expect(check.exitCode).toBe(2);
+      expect(check.message).toContain(
+        `17 accepted / ${bundle.items.length - 17} pending / 0 needs change.`,
+      );
+      expect(await readFile(bundlePath, "utf8")).toBe(bundleBytes);
+      expect(await readFile(decisionsPath, "utf8")).toBe(selectedCompleteBytes);
+
+      await writeFile(decisionsPath, canonicalJson(completed));
+      expect(await readStatus("event-feedback")).toMatchObject({
+        accepted: 17,
+        fullPacketComplete: true,
+        nativeAcceptance: false,
+        unresolved: [],
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("rejects an invalid collection and invalid records outside the selected collection", async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), "localization-collection-validation-"));
+    const bundlePath = resolve(directory, "bundle.json");
+    const decisionsPath = resolve(directory, "decisions.json");
+    const original = canonicalJson(bundle);
+    const review = createReviewDecisions(bundle);
+    const selected = collectionStatusArgs(bundlePath, decisionsPath, "event-feedback");
+    try {
+      await writeFile(bundlePath, original);
+      await writeFile(decisionsPath, canonicalJson(review));
+      await expect(
+        runLocalizationReview(collectionStatusArgs(bundlePath, decisionsPath, "Event feedback")),
+      ).rejects.toThrow(/collection/i);
+
+      const outsideId = "collection/workshops/memberships";
+      const outside = review.entries.find(({ itemId }) => itemId === outsideId)!;
+      outside.issue = "Synthetic test issue: pending records cannot retain an issue.";
+      const malformed = canonicalJson(review);
+      await writeFile(decisionsPath, malformed);
+      await expect(runLocalizationReview(selected)).rejects.toThrow(/pending decisions/);
+      expect(await readFile(decisionsPath, "utf8")).toBe(malformed);
+
+      outside.issue = null;
+      const valid = canonicalJson(review);
+      await writeFile(decisionsPath, valid);
+      const stale = structuredClone(bundle);
+      stale.items.find(({ id }) => id === outsideId)!.target = "Changed outside the collection";
+      const staleBytes = canonicalJson(stale);
+      await writeFile(bundlePath, staleBytes);
+      await expect(runLocalizationReview(selected)).rejects.toThrow(/stale/);
+      expect(await readFile(bundlePath, "utf8")).toBe(staleBytes);
+
+      await writeFile(bundlePath, original);
+      await writeFile(decisionsPath, canonicalJson({ ...review, locale: "fr-FR" }));
+      await expect(runLocalizationReview(selected)).rejects.toThrow(/locale mismatch/);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

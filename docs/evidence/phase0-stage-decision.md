@@ -149,3 +149,38 @@ is tied or no accepted candidate has a valid denominator, keep the branch pendin
 - Decision rationale and evidence references:
 - Research owner decision (accepted/rejected/pending): Pending
 - Independent reviewer decision (accepted/rejected/pending): Pending
+
+## R2-00 candidate dispositions
+
+Use a private copy to index each ticket considered under
+[R2-00](../competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment).
+Reference the existing interview's
+[ticket evaluation](design-partner-interview.md#r2-00-ticket-evaluation) and observation's
+[workflow task records](session-observation.md#r2-00-workflow-task-records); do not create a second
+intake or copy raw notes here. Repository-safe references must be reviewed checksums or opaque
+handles; keep customer identities, quotes, answers, and private workspace URLs outside Git.
+
+For every candidate, retain supporting **and contrary** evidence, including accepted observations
+that show the existing feature or workaround already solves the job. Record the eligible
+population and numerator/denominator for each claimed rate, assistance and exclusions, observed
+frequency and consequence, and the missing-versus-undiscovered capability finding. Reference the
+current workaround/alternative, procurement constraint, and willingness-to-pilot/pay evidence
+from the interview. Do not rank unlike populations or invent prevalence from public requests.
+
+| R2 ticket and parent idea | Stable partner/workflow references | Supporting evidence references | Contrary evidence references | Affected/eligible and population definition | Current workaround and consequence | Missing capability / discoverability / unresolved | Proposed disposition | Independent review and rationale reference |
+| ------------------------- | ---------------------------------- | ------------------------------ | ---------------------------- | ------------------------------------------- | ---------------------------------- | ------------------------------------------------- | -------------------- | ------------------------------------------ |
+|                           |                                    |                                |                              |                                             |                                    | Unresolved                                        | Pending              | Pending                                    |
+
+- All considered ticket references and final/pending review status:
+- Three-workflow coverage and omitted/not-run task reasons:
+- Supporting and contrary evidence reconciliation reference:
+- Research owner recommendation: Pending
+- Independent reviewer decision: Pending
+- Product-owner implementation selection/reference: Pending
+
+Proposed dispositions are select, revise, retain, or reject only after the required evidence is
+reviewed; otherwise use pending. These recommendations do not select a segment, authorize a Phase 1
+branch, or change a Deferred backlog status. Apply the ordered decision above, keep every dependent
+decision pending while prerequisites are unresolved, and obtain a separate implementation
+selection before funding a feature increment. This index does not add fields to or relax the
+machine-readable aggregate schema or the release-readiness criteria.

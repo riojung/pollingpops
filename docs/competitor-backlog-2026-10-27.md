@@ -79,6 +79,17 @@ pseudonymous partner/workflow references, the observed workaround, frequency, co
 requested outcome, current alternative, procurement constraint, and willingness to pilot/pay.
 Use the existing feedback collection and operator triage rather than building another intake form.
 
+**Execution preparation:** use the campaign's
+[R2-00 checklist](runbooks/phase0-evidence-campaign.md#r2-00-execution-checklist), the existing
+interview's [ticket evaluation](evidence/design-partner-interview.md#r2-00-ticket-evaluation), the
+observation's [three-workflow records](evidence/session-observation.md#r2-00-workflow-task-records),
+and the decision record's [candidate dispositions](evidence/phase0-stage-decision.md#r2-00-candidate-dispositions).
+These blank sections prepare collection and review; they do not complete R2-00 or any release gate.
+
+Use the [Wooclap head-to-head Recovery Loop test](runbooks/phase0-evidence-campaign.md#wooclap-head-to-head-recovery-loop-test)
+to compare the first-use workflow on matched tasks. Track comparison attempts separately from the
+campaign gate counts.
+
 **Acceptance criteria:**
 
 - The existing campaign's twelve-facilitator cohort, repeat-partner, ten-session, usability,

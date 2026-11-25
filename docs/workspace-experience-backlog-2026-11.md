@@ -1172,7 +1172,7 @@ Owner: frontend and localization.
 **WX-11 remaining work.** PR #310 completed the named software slices. Native-language acceptance
 remains open across the named slices and the assistance follow-ups.
 
-**Local Session Summary follow-up.** Report creators can retry a failed availability check.
+**Session Summary follow-up merged in PR #328.** Report creators can retry a failed availability check.
 Summary preview and share history have independent read recovery. Native-language acceptance
 remains pending. Owner: frontend and localization.
 
@@ -1229,7 +1229,7 @@ the facilitator. Before selecting runtime work, review shared-browser storage, s
 assignment withdrawal, accessibility, and observed partner workflows. R2-04's delayed-probe
 research retains its own selection and disclosure gates.
 
-**Local synthetic rehearsal.** The development lab compares the checklist with independently
+**Synthetic rehearsal merged in PR #328.** The development lab compares the checklist with independently
 opened mock activities. It exercises ordered navigation, start and resume, optional skip,
 unavailable-step retry, and reset in tab memory. The
 [rehearsal guide](learning-sequence-privacy-design.md#synthetic-browser-rehearsal)
@@ -1312,7 +1312,8 @@ and Presentation visual import reasons in PR #306. The navigator resize landmark
 PR #307. Board creation feature-policy explanations merged in PR #308. Operational and
 organization Board launch explanations merged in PR #309. Round staff availability merged in
 PR #310, completing the named WX-11 software scope. Source assistance availability recovery
-merged in PR #324 at `16f26c8`. Native-language acceptance remains pending.
+merged in PR #324 at `16f26c8`, and Session Summary read recovery merged in PR #328 at
+`47781fb`. Native-language acceptance remains pending.
 Training and onboarding merged in PR #311, Workshops in PR #312, and Event feedback in PR #313.
 The four WX-04 collections and collection review status are merged through PR #325.
 Human editorial and native-language decisions remain pending.
@@ -1322,9 +1323,10 @@ permission and audit design awaits product, security, and privacy acceptance. WX
 study still needs observed partner evidence for the fixed-allocation job. WX-10's merged
 comparison proposal needs product, learning-evidence, and human privacy acceptance. WX-12 has
 a first provider recommendation and needs managed-client feasibility and paying-partner evidence.
-WX-13's browser-local identity and privacy proposal merged in PR #320. Product and privacy acceptance,
-accessible qualification, and observed partner evidence remain open. WX-14's merged curator
-design needs product, organization access, and security acceptance.
+WX-13's browser-local identity and privacy proposal merged in PR #320, and its development-only
+rehearsal merged in PR #328. Product and privacy acceptance, accessible qualification, and observed
+partner evidence remain open. WX-14's merged curator design needs product, organization access,
+and security acceptance.
 
 Local product polish does not close the [release-readiness ledger](release-readiness.json),
 hosted capacity/security/legal/backup evidence, customer research, or public launch gates.

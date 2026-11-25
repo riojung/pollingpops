@@ -27,6 +27,208 @@ Before recruitment begins:
 The build may remain allowlisted and feature-flagged. Repository presence or local automation does
 not make a pilot eligible.
 
+## R2-00 execution checklist
+
+Use this checklist for [R2-00](../competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment).
+Complete a private copy using the existing interview, observation, usability, and decision records;
+this is not another intake form. The blank checklist records preparation work, not study results or
+release approval. Keep names, recruitment details, schedules, and private workspace addresses out
+of Git.
+
+| Preparation                                                          | Responsible role                        | Required private record or reviewed reference                                                                                          | Status  |
+| -------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Assign the research owner and a reviewer independent of facilitation | Product research                        | Owner/reviewer assignments and independence confirmation                                                                               | Pending |
+| Approve the private evidence workspace                               | Research owner                          | Access, consent, retention, and deletion arrangements                                                                                  | Pending |
+| Establish an eligible pilot build                                    | Engineering and gate owners             | Represented commit/image digests, enabled features, and applicable release evidence                                                    | Pending |
+| Freeze the protocol before observing outcomes                        | Research owner and independent reviewer | Eligibility, assistance/exclusion rules, task populations, timing method, success thresholds, cohort/cutoff, and primary/reserve order | Pending |
+| Prepare ticket-linked evidence capture                               | Research owner                          | Existing interview and observation records with R2 ticket and stable partner/workflow references                                       | Pending |
+| Arrange the three R2-00 workflow tasks                               | Research owner                          | Recovery-loop, multi-site standalone-practice, and accessible-summary tasks with predeclared eligible populations                      | Pending |
+| Plan repeat pilots and independent review                            | Research owner and independent reviewer | Private recruitment/session schedule and review capacity against the existing campaign minimums                                        | Pending |
+
+Record each considered candidate in the interview's
+[R2-00 ticket evaluation](../evidence/design-partner-interview.md#r2-00-ticket-evaluation).
+Collect supporting **and contrary** observations, the current workaround, frequency/consequence,
+and the eligible denominator. Distinguish a missing capability from an existing capability that
+participants could not discover or use. A public feature request or synthetic browser result is
+not a Polling Pops customer observation.
+
+Use the observation's
+[R2-00 workflow task records](../evidence/session-observation.md#r2-00-workflow-task-records)
+to test all three backlog workflows. Freeze which users and opportunities are eligible for each
+task before observing outcomes; retain assistance, failures, exclusions, and tasks not run.
+Task completion and download success alone do not establish recheck validity, accessibility, or
+learning effectiveness. Keep these task populations separate from the existing campaign and
+usability denominators; do not add them to the aggregate JSON as new fields or count them twice.
+
+After independent review, index each considered ticket in the existing
+[R2-00 candidate disposition record](../evidence/phase0-stage-decision.md#r2-00-candidate-dispositions).
+A proposed select/revise/retain/reject disposition does not approve implementation or replace the
+ordered segment and Phase 1 decision. Unresolved evidence stays pending, and all current candidates
+remain Deferred until a separate product-owner selection meets the existing gates.
+
+## Wooclap head-to-head Recovery Loop test
+
+Compare whether a facilitator can diagnose a misconception, deliver a relevant intervention,
+open a different question on the same concept, and explain the session evidence. Record
+completion, elapsed time, and any help or manual steps. Use the
+[comparison record](../evidence/session-observation.md#wooclap-recovery-loop-comparison)
+alongside the existing R2-00 first-use task record.
+
+### Prepare the two arms
+
+1. Freeze the Polling Pops commit, build, feature settings, and Wooclap plan, settings, and
+   observed UI date or version. Use comparable supported browsers, devices, networks, host
+   permissions, and no-account participant entry. Record the facilitator's prior use of
+   both products before assigning an order.
+2. Prepare an answer-keyed diagnostic and alternate for each kit. In Polling Pops, make two
+   independent copies of the Misconception check Recovery starter. Keep Kit A as authored.
+   For Kit B, replace the prompts and choices in place and adapt the authored explanations.
+   Keep choice 1 correct in both items, keep the diagnostic misconception tag on choice 2,
+   and preserve the shared concept key, diagnostic and practice purposes, question confidence,
+   and link to the alternate. Publish each Round. In each new room, enable **Ask for confidence
+   (optional)** and use timed responses with the same accuracy and visibility settings. In
+   Wooclap, place each kit's two MCQs in its own live event, set the matching answer keys, and
+   enable Certainty Check where the frozen setup supports it. Set a 30-second deadline on both
+   questions in each tool. [Wooclap live question setup](https://docs.wooclap.com/en/articles/3190733-how-to-create-multiple-questions-quickly-and-easily)
+3. Ask an independent reviewer to check that both kits assess the same objective, use
+   unambiguous scoring, and make the alternate a different application of the concept.
+   Freeze the questions, settings, task script, target comparison sample by segment, participant
+   eligibility, time caps and exclusion rules before recording outcomes. If a required capability
+   is unavailable on the tested account, retain the attempt and record it with the plan and reason.
+4. Counterbalance product order and fixture assignment within each segment. Rotate the
+   predeclared schedules of Polling Pops A then Wooclap B, Wooclap A then Polling Pops B,
+   Polling Pops B then Wooclap A, and Wooclap B then Polling Pops A. Give facilitators the same
+   neutral task brief and ordinary tools in each arm. Keep the answer key, scripted totals and
+   alternate content out of that brief. Use a fresh room and separate notes for each arm, and
+   retain incomplete pairs.
+5. Have staff rehearse each kit in both tools before facilitator sessions. Verify guest entry,
+   response receipt, the closed diagnostic distribution before revealing the answer, and timed
+   closure for the alternate. In both Polling Pops kits, confirm the confident-misconception
+   recommendation after reveal, the **Open linked recheck** action after intervention, and the
+   linked recheck and concept evidence in the report. In Wooclap, confirm the vote distribution,
+   available certainty evidence, and results for both MCQs. Record the observed settings, outputs,
+   and any plan or access limitation in the private preflight record.
+
+### Use the same synthetic response pattern
+
+Both fixtures address whether a past, unrecoverable cost should decide what to do next.
+
+**Kit A.** Use the exact [Misconception check starter](../../apps/server/src/starters.ts#L138-L183)
+in both products. It begins with a project that is unlikely to meet its goal and rechecks the
+concept with a prepaid course that no longer fits the learner's goals.
+
+**Kit B diagnostic.** “A team paid a nonrefundable deposit for an in-person workshop. Most
+attendees now need to join remotely. What should guide the team's decision about using the venue?”
+
+1. Compare the remaining costs and benefits of using the venue with the remote alternatives. (Correct)
+2. Use the venue because the team already paid the deposit. (Scripted misconception)
+3. Keep the original plan regardless of the new information.
+
+**Kit B recheck.** “A team prepaid for a reporting tool. Its reports are now produced
+automatically elsewhere. What should guide the decision about doing the extra work to keep
+using the prepaid tool?”
+
+1. Compare the future value of both approaches and the effort each one takes. (Correct)
+2. Keep using the prepaid tool so the original payment is worthwhile. (Scripted misconception)
+
+Omit the answer annotations in both products. Privately brief the five scripted guests. All five
+select the past-cost misconception on the diagnostic. On the recheck, four select the correct
+answer and one selects the past-cost answer. Use the highest confidence choice where available and
+record differences in scale or visibility separately. Staff use **0 of 5** diagnostic and
+**4 of 5** recheck answers correct as reconciliation targets.
+[Wooclap MCQ and Certainty Check](https://docs.wooclap.com/en/articles/8513348-mcq)
+
+### Run and score the task
+
+Start the clock when the facilitator can see the response distribution for the closed diagnostic.
+Ask what pattern the responses show, what evidence in this arm supports it, and what they would
+do next. Record their diagnosis before using the tool's answer reveal or handing them the study
+explanation. When that diagnosis is recorded, give each facilitator the same explanation to
+deliver. “Time or money already spent cannot be recovered. Compare the future costs, benefits,
+and alternatives of each option.” Ask them to perform the intervention, open the different
+recheck, then explain the evidence using the tool's normal controls and any predeclared manual
+notes from the current arm. Record any product-provided guidance the facilitator used.
+
+Use one observer clock throughout. Record preparation and joining separately from these phases.
+
+1. Allow **five minutes** from diagnostic distribution visibility to recheck opening. Open the
+   alternate after the intervention. At the facilitator's request, the observer may repeat a
+   task prompt once verbatim. Additional content or navigation cues count as assistance.
+2. Cue the scripted guests privately when the alternate starts accepting answers. Each guest
+   submits once between **5 and 15 seconds** after opening. The product's timer closes responses
+   at **30 seconds**. The facilitator leaves the timer running and keeps the vote closed after
+   the deadline. Record opening and observed closure separately. If the tool still shows voting
+   open after **35 seconds**, the observer stops the vote with the host controls and records a
+   missed closure deadline. End the attempt if voting cannot be stopped. The five seconds allow
+   for the closed state to appear. Keep the response deadline at 30 seconds. Record a pause,
+   early closure, or reopen as a departure from the common window.
+   [Wooclap question timer](https://docs.wooclap.com/en/articles/674942-can-i-set-a-timer)
+3. Allow **three minutes** from observed closure for the facilitator to explain the report. Have
+   them point to the diagnostic and recheck results from the current arm and identify where each
+   count came from. The observer keeps the expected counts private.
+
+| Stage                 | Record                                                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnose              | Time, the stated diagnosis, current-arm response evidence, and any product cues or early reveal.                                                                                                                                  |
+| Intervene             | Study script release, intervention start and finish, action, and whether the product or facilitator notes record it.                                                                                                              |
+| Recheck               | Open and close timestamps, scripted submission timing, receipt, timer outcome or observer stop, and whether the prepared question assesses the same concept with a keyed answer.                                                  |
+| Reconcile and explain | Time, current-arm evidence the facilitator identifies for response and correct counts, and how they connect the two checkpoints to the intervention. Record pairing coverage where available, manual joins, and context switches. |
+
+An unassisted completion requires identification of the misconception, delivery of the
+intervention, the common recheck window, and a correct report explanation within the frozen
+caps. The diagnosis and report explanation must cite evidence from the current arm. Count an
+eligible arm as a failure if it misses a cap or departs from the common recheck window. Apply
+exclusions only under the frozen criteria. Preserve assisted completions, failures, exclusions,
+and pending records with their observed times. Record who provided help, what they supplied,
+and when. Report started and eligible denominators for both arms and count the attempts that
+missed each stage.
+
+Record eligible, submitted, evaluated, and correct counts for each question. Use the private scripted
+reference to check displayed evidence. Report any missing or withheld counts as unavailable.
+When the product cannot establish matched responders, accept a correct aggregate explanation
+and record the pairing limit. The synthetic change in correct answers checks report
+reconciliation. The comparison measures facilitator workflow and in-session interpretation.
+
+Have the independent reviewer reconcile each arm's disposition against the scorecard. Review
+completion, report interpretation, elapsed time, assistance, and manual work together. For the
+primary first-use estimate, use only the first arm of facilitators new to both tools. Keep
+first-arm failures and exclusions in that view, even if the second arm succeeds. Report by
+assigned product, kit, and segment. For the separate paired analysis, show the number of
+completed and incomplete pairs, paired timing differences, and the effect of kit, arm order,
+and prior exposure. Record supporting and contrary observations in the existing ticket evaluation.
+Treat small or conflicting samples as unresolved when deciding which workflow to improve.
+
+### Keep optional paths and campaign results separate
+
+- **Same-item revote.** In a fresh optional run, give Wooclap credit for duplicating the MCQ
+  after peer discussion and showing its before-and-after results. Record discovery, speed,
+  and interpretation separately from the different-question task.
+  [Live duplication](https://docs.wooclap.com/en/articles/3557734-how-to-duplicate-a-question-in-real-time)
+  · [Comparison mode](https://docs.wooclap.com/en/articles/1268260-what-is-the-comparison-mode)
+- **AI-generated alternate.** If the frozen Wooclap account has Learning Consolidator access,
+  rehearse it using synthetic content in a separate run. Record whether the facilitator can
+  inspect and approve the generated question before showing it. Review concept fit, reasoning
+  difference, answer cues and scoring. Preserve unfit suggestions in the private record.
+  [Learning Consolidator](https://docs.wooclap.com/en/articles/14019335-learning-consolidator)
+- **Report access.** Use comparable live report access for the primary task. If export is
+  tested, record format, plan and what fields the export contains as a separate result.
+  [Wooclap report access and export](https://docs.wooclap.com/en/articles/674961-how-to-download-or-export-event-results)
+
+Keep filled records and provider evidence in the approved private research system. Use reviewed
+aggregate counts and redacted evidence handles in Git. The technical check for the Polling Pops
+arm is the existing Recovery Loop browser fixture:
+
+```sh
+node scripts/build/browser.mjs build beta
+PLAYWRIGHT_PRODUCTION=true pnpm test:e2e:beta tests/beta-e2e/ux-beta.spec.ts \
+  --project=chromium-beta --grep 'creator and participants complete a beta Recovery loop through report'
+```
+
+The fixture exercises Kit A, including response acknowledgement after reload, intervention,
+recheck, and report reconciliation. Record it as technical calibration for one arm. The
+head-to-head task remains a separately reviewed R2-00 comparison. Use the existing campaign
+workflow for real sessions, usability results, and gate decisions.
+
 ## Counting rules
 
 - An in-scope record is every interview, observation, or usability task started for the frozen

@@ -8,15 +8,34 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### R2-00 Recovery Loop comparison
+
+The [comparison protocol](runbooks/phase0-evidence-campaign.md#wooclap-head-to-head-recovery-loop-test)
+and [private scorecard](evidence/session-observation.md#wooclap-recovery-loop-comparison) are ready
+for research-owner and independent review. The primary task uses matched, authored diagnostic
+and recheck questions with a common response deadline. It measures first use from the first arm
+of facilitators new to both tools and requires evidence from the current run. Separate optional
+runs cover Wooclap's same-question revote and AI-generated follow-up. The production beta build
+and one Chromium Recovery Loop case passed
+on the PR #328 baseline. Five scripted guests answered the diagnostic and a different recheck.
+The host recorded an intervention, and the report showed four of five recoveries.
+
+The Wooclap run, facilitator sessions, and independent review remain pending. The comparison
+has its own scorecard and denominators. R2-00 still requires the frozen Phase 0 campaign,
+including real sessions and accepted usability evidence before acquisition-segment and Phase 1
+selection. See the [R2-00 backlog item](competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment).
+
 ### Session Summary recovery and learning-sequence rehearsal
 
-The local WX-11 update gives Round, Presentation and Survey reports a way to retry failed
+Merged in [PR #328](https://github.com/riojung/pollingpops/pull/328) at `47781fb`.
+
+The WX-11 update gives Round, Presentation and Survey reports a way to retry failed
 Session Summary availability checks. The dialog loads preview and link history independently.
 Creators can retry either read while retaining the preview and draft notes when link history
 fails. Authority and source changes discard stale responses. The retry controls use read
 requests and the existing share commands keep their exact-request behavior.
 
-The local WX-13 [development lab](learning-sequence-privacy-design.md#synthetic-browser-rehearsal)
+The WX-13 [development lab](learning-sequence-privacy-design.md#synthetic-browser-rehearsal)
 compares an ordered checklist with independently opened activities over the same synthetic
 Presentation reading and practice. The lab uses pinned fixtures and tab-local state. Real
 assignment handoffs, shared-browser storage and partner observations remain pending.
@@ -31,12 +50,11 @@ The lab passed 12 browser cases covering keyboard navigation, 320px reflow and a
 accessibility, interrupted access, and tab-local state. Its development route returned 404
 in the production beta server.
 
-The local production smoke workflow waits for the scanner's active signature database to
-be fresh before testing media uploads. The main run after PR #325 failed because ClamAV
-still had its older database loaded after FreshClam updated the files on disk. The disposable
-CI job now requests a reload and verifies freshness through the API's scanner metric.
-Seven simulated startup scenarios passed. Real Compose verification remains pending.
-[Main production smoke run](https://github.com/riojung/pollingpops/actions/runs/45565275147)
+The production smoke workflow verifies the active ClamAV signature database through the API
+scanner metric before testing uploads. Seven simulated startup scenarios passed. On the exact
+PR #328 merge, the main run passed the scanner freshness step and API and dependency smoke.
+The later Browser media smoke step failed, so the full production smoke is still open.
+[PR #328 main production smoke run](https://github.com/riojung/pollingpops/actions/runs/45641356978)
 
 ### WX-04 collection review status
 

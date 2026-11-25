@@ -77,6 +77,16 @@ not pass a release or roadmap gate by itself.
 Use the [Phase 0 evidence campaign runbook](../runbooks/phase0-evidence-campaign.md) to sequence
 recruitment, observation, independent review, aggregation, and the ordered branch decision.
 
+The current research P0, [R2-00](../competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment),
+has an [execution checklist](../runbooks/phase0-evidence-campaign.md#r2-00-execution-checklist) and
+ticket-linked sections inside the existing interview, observation, and decision records. Use them
+to retain supporting and contrary evidence and the three required workflow tasks. Their blank
+Pending state is preparation, not observed evidence or a change to any gate or Deferred candidate.
+
+For the first-use workflow comparison, pair the
+[Wooclap head-to-head protocol](../runbooks/phase0-evidence-campaign.md#wooclap-head-to-head-recovery-loop-test)
+with a private copy of the [comparison scorecard](session-observation.md#wooclap-recovery-loop-comparison).
+
 The [Phase 0 research aggregate schema](phase0-research-aggregate.schema.json) and deliberately
 empty [pending example](phase0-research-aggregate.example.json) provide a machine-readable handoff
 for independently reviewed counts. Copy the example to the approved private working location and

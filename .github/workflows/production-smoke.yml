@@ -35,6 +35,33 @@ jobs:
         run: >-
           docker compose -f compose.yaml -f compose.media.yaml
           run --rm --no-deps server node dist/migrate.js
+      - name: Wait for fresh active ClamAV signatures
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          compose=(docker compose -f compose.yaml -f compose.media.yaml)
+          deadline=$((SECONDS + 90))
+          next_reload=0
+          scanner_metrics=
+          while (( SECONDS < deadline )); do
+            if scanner_metrics=$(timeout --kill-after=2s 5s "${compose[@]}" exec -T server wget -qO- http://127.0.0.1:4000/metrics); then
+              if grep -Fxq 'openround_malware_scanner_fresh 1' <<< "$scanner_metrics"; then
+                exit 0
+              fi
+              if (( SECONDS >= next_reload )) &&
+                grep -Fxq 'openround_malware_scanner_available 1' <<< "$scanner_metrics" &&
+                grep -Fxq 'openround_malware_scanner_fresh 0' <<< "$scanner_metrics"; then
+                # FreshClam can update the database before clamd can receive its notification.
+                next_reload=$((SECONDS + 20))
+                timeout --kill-after=2s 10s "${compose[@]}" exec -T clamav clamdscan --reload ||
+                  echo "::warning::ClamAV reload request failed. Waiting for fresh signatures."
+              fi
+            fi
+            sleep 5
+          done
+          grep -E '^openround_malware_(scanner_(available|fresh)|signature_database_(version|timestamp_seconds)) [0-9]+(\.[0-9]+)?$' <<< "$scanner_metrics" || true
+          echo "::error::ClamAV did not load fresh signatures. Check scanner connectivity, FreshClam updates, and clamd reloads in the Compose failure artifact."
+          exit 1
       - name: API and dependency smoke
         run: pnpm smoke:compose
       - name: Browser media smoke

@@ -8,7 +8,39 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
-### WX-04 collection review status — local follow-up
+### Session Summary recovery and learning-sequence rehearsal
+
+The local WX-11 update gives Round, Presentation and Survey reports a way to retry failed
+Session Summary availability checks. The dialog loads preview and link history independently.
+Creators can retry either read while retaining the preview and draft notes when link history
+fails. Authority and source changes discard stale responses. The retry controls use read
+requests and the existing share commands keep their exact-request behavior.
+
+The local WX-13 [development lab](learning-sequence-privacy-design.md#synthetic-browser-rehearsal)
+compares an ordered checklist with independently opened activities over the same synthetic
+Presentation reading and practice. The lab uses pinned fixtures and tab-local state. Real
+assignment handoffs, shared-browser storage and partner observations remain pending.
+
+The production beta build and 94 focused tests passed. The initial eight Summary browser cases
+covered failed-read recovery, keyboard focus, and publication, download and revocation across
+Round, Presentation and Survey. The review follow-up passed eight browser cases for the
+sharing pause and keyboard link refresh. A Next development browser case observed Strict Mode
+abort and restart both Summary reads, then verified that the preview and link list loaded.
+
+The lab passed 12 browser cases covering keyboard navigation, 320px reflow and automated
+accessibility, interrupted access, and tab-local state. Its development route returned 404
+in the production beta server.
+
+The local production smoke workflow waits for the scanner's active signature database to
+be fresh before testing media uploads. The main run after PR #325 failed because ClamAV
+still had its older database loaded after FreshClam updated the files on disk. The disposable
+CI job now requests a reload and verifies freshness through the API's scanner metric.
+Seven simulated startup scenarios passed. Real Compose verification remains pending.
+[Main production smoke run](https://github.com/riojung/pollingpops/actions/runs/45565275147)
+
+### WX-04 collection review status
+
+Merged in [PR #325](https://github.com/riojung/pollingpops/pull/325) at `2956341`.
 
 The read-only `collection-status` command validates the current packet and every decision before
 reporting progress for one of the four template collections. It lists pending entries and change

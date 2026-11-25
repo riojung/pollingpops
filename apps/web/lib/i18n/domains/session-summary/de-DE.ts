@@ -7,6 +7,13 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "Prüfen Sie die aggregierte Zusammenfassung, laden Sie sie herunter oder erstellen Sie einen befristeten Freigabelink.",
   "summary.loading": "Zusammenfassung wird geladen…",
+  "summary.availabilityFailed":
+    "Die Verfügbarkeit der Zusammenfassung konnte nicht geprüft werden.",
+  "summary.retryAvailability": "Verfügbarkeit erneut prüfen",
+  "summary.previewFailed": "Die Vorschau der Zusammenfassung konnte nicht geladen werden.",
+  "summary.retryPreview": "Vorschau erneut laden",
+  "summary.linksFailed": "Freigabelinks konnten nicht geladen werden.",
+  "summary.loadingLinks": "Freigabelinks werden geladen…",
   "summary.failed":
     "Die Zusammenfassung konnte nicht aktualisiert werden. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
   "summary.unavailable":
@@ -37,7 +44,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "Diese Freigabe wurde bereits angenommen. Der ursprüngliche Link ist nicht erneut verfügbar. Prüfen Sie bestehende Links, bevor Sie einen weiteren erstellen.",
   "summary.uncertain":
-    "Die Anfrage konnte nicht bestätigt werden. Die Linkliste wurde aktualisiert; ein erneuter Versuch mit unveränderten Angaben verwendet dieselbe Anfrage.",
+    "Die Anfrage konnte nicht bestätigt werden. Ein erneuter Versuch mit unveränderten Angaben verwendet dieselbe Anfrage.",
   "summary.saveLink":
     "Speichern Sie diesen Link jetzt. Sein Geheimnis wird nicht gespeichert und dieser genaue Link wird nicht erneut angezeigt.",
   "summary.link": "Freigabelink",

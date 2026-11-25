@@ -6,6 +6,12 @@ const messages: SessionSummaryMessages = {
   "summary.close": "닫기",
   "summary.description": "집계 요약을 미리 보고 다운로드하거나 만료되는 공유 링크를 만드세요.",
   "summary.loading": "요약 불러오는 중…",
+  "summary.availabilityFailed": "요약을 사용할 수 있는지 확인하지 못했습니다.",
+  "summary.retryAvailability": "요약 사용 가능 여부 다시 확인",
+  "summary.previewFailed": "요약 미리보기를 불러오지 못했습니다.",
+  "summary.retryPreview": "미리보기 다시 불러오기",
+  "summary.linksFailed": "공유 링크를 불러오지 못했습니다.",
+  "summary.loadingLinks": "공유 링크 불러오는 중…",
   "summary.failed": "요약을 업데이트하지 못했습니다. 새로고침하고 다시 시도하세요.",
   "summary.unavailable": "이 요약을 사용할 수 없습니다. 진행자에게 유효한 공유 링크를 요청하세요.",
   "summary.downloads": "요약 다운로드",
@@ -33,7 +39,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "이 공유 요청은 이미 승인되었습니다. 원래 링크를 다시 표시할 수 없습니다. 다른 링크를 만들기 전에 기존 링크를 확인하세요.",
   "summary.uncertain":
-    "요청을 확인하지 못했습니다. 링크 목록을 새로고침했습니다. 내용을 바꾸지 않고 재시도하면 같은 요청을 사용합니다.",
+    "요청을 확인하지 못했습니다. 내용을 바꾸지 않고 재시도하면 같은 요청을 사용합니다.",
   "summary.saveLink":
     "지금 링크를 저장하세요. 비밀 값은 저장되지 않으며 이 링크를 다시 표시할 수 없습니다.",
   "summary.link": "공유 링크",

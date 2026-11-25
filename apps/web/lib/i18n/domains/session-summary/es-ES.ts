@@ -7,6 +7,12 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "Revisa el resumen agregado, descárgalo o crea un enlace temporal para compartirlo.",
   "summary.loading": "Cargando resumen…",
+  "summary.availabilityFailed": "No se pudo comprobar la disponibilidad del resumen.",
+  "summary.retryAvailability": "Volver a comprobar la disponibilidad",
+  "summary.previewFailed": "No se pudo cargar la vista previa del resumen.",
+  "summary.retryPreview": "Volver a cargar la vista previa",
+  "summary.linksFailed": "No se pudieron cargar los enlaces compartidos.",
+  "summary.loadingLinks": "Cargando enlaces compartidos…",
   "summary.failed": "No se pudo actualizar el resumen. Actualiza y vuelve a intentarlo.",
   "summary.unavailable": "Este resumen no está disponible. Pide al organizador un enlace válido.",
   "summary.downloads": "Descargar resumen",
@@ -35,7 +41,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "Este enlace ya se aceptó. El enlace original no vuelve a estar disponible. Revisa los enlaces existentes antes de crear otro.",
   "summary.uncertain":
-    "No se pudo confirmar la solicitud. La lista se ha actualizado; reintentar sin cambiar los datos usa la misma solicitud.",
+    "No se pudo confirmar la solicitud. Reintentar sin cambiar los datos usa la misma solicitud.",
   "summary.saveLink":
     "Guarda este enlace ahora. Su secreto no se almacena y este enlace exacto no volverá a mostrarse.",
   "summary.link": "Enlace para compartir",

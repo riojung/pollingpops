@@ -146,3 +146,16 @@ the browser, disclosure, and access boundaries. Accessibility checks and approve
 observation qualify the candidate before selecting runtime work. Verified completion,
 certificates, automated enrollment, gradebook delivery, and persistent learner identity stay
 outside the candidate.
+
+## Synthetic browser rehearsal
+
+In a loopback development server, open `/dev/presentation-scene/learning-sequence`. Compare
+**Ordered checklist** with **Independent activities** using the same pinned handoff reading
+and optional untimed practice. Try leaving an activity before and after starting its mock
+attempt, returning to it, and using **Clear this checklist**. Use **Simulate reading unavailable**
+to rehearse access loss for the required step.
+
+The prototype isolates self-marked flags from mock activity attempts. Reloading resets both.
+This rehearsal covers the workflow and copy. Shared-browser remember and cross-tab clearing,
+current authorization for real assignments, accessibility acceptance and partner observation
+remain pending for runtime selection.

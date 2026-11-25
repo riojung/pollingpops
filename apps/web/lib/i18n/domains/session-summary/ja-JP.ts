@@ -7,6 +7,12 @@ const messages: SessionSummaryMessages = {
   "summary.description":
     "集計した要約を確認してダウンロードするか、有効期限付きの共有リンクを作成できます。",
   "summary.loading": "要約を読み込み中…",
+  "summary.availabilityFailed": "要約を利用できるか確認できませんでした。",
+  "summary.retryAvailability": "要約の利用可否を再確認",
+  "summary.previewFailed": "要約のプレビューを読み込めませんでした。",
+  "summary.retryPreview": "プレビューを再読み込み",
+  "summary.linksFailed": "共有リンクを読み込めませんでした。",
+  "summary.loadingLinks": "共有リンクを読み込み中…",
   "summary.failed": "要約を更新できませんでした。更新してもう一度お試しください。",
   "summary.unavailable": "この要約は利用できません。主催者に有効な共有リンクを依頼してください。",
   "summary.downloads": "要約をダウンロード",
@@ -34,7 +40,7 @@ const messages: SessionSummaryMessages = {
   "summary.replayed":
     "この共有はすでに受け付けられています。元のリンクは再表示できません。別のリンクを作成する前に既存のリンクを確認してください。",
   "summary.uncertain":
-    "リクエストを確認できませんでした。リンク一覧を更新しました。同じ内容で再試行すると同じリクエストを使用します。",
+    "リクエストを確認できませんでした。同じ内容で再試行すると同じリクエストを使用します。",
   "summary.saveLink":
     "今すぐリンクを保存してください。秘密の値は保存されず、このリンクを再表示することはできません。",
   "summary.link": "共有リンク",

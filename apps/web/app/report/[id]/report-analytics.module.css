@@ -1,0 +1,359 @@
+.dashboard {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 18px 22px;
+  border: 1px solid var(--ui-border);
+  border-inline-start: 4px solid var(--ui-accent-ink);
+  border-radius: 12px;
+  background: linear-gradient(110deg, var(--ui-accent-soft), var(--ui-surface) 65%);
+}
+
+.header h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.5rem, 2vw, 1.85rem);
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.cardHeading p {
+  margin: 5px 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.metrics,
+.learningMetrics,
+.responseTotals {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+}
+
+.metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.metrics .metric {
+  padding: 17px 18px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+
+.metrics .metric:nth-child(2) {
+  background: var(--ui-accent-soft);
+}
+
+.metric dt {
+  color: var(--ui-text-subtle);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.metric dd {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.2rem, 2.2vw, 1.9rem);
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.metric .metricDetail {
+  color: var(--ui-text-muted);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.45;
+  letter-spacing: normal;
+}
+
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(240px, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.sidebar {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.card {
+  min-width: 0;
+  padding: 19px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+
+.cardHeading h3 {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.responseTotals {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 18px;
+  margin: 16px 0 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-block: 18px 12px;
+}
+
+.controls label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--ui-text-subtle);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.controls select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  font-size: 0.8rem;
+}
+
+.questionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.question {
+  display: grid;
+  gap: 8px;
+  padding: 13px 0;
+  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.question:last-child {
+  padding-block-end: 2px;
+}
+
+.questionHeader,
+.questionLabels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 9px;
+  color: var(--ui-text-subtle);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.questionHeader {
+  justify-content: space-between;
+}
+
+.questionHeader strong {
+  color: var(--ui-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.questionKind {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-ink);
+  font-weight: 650;
+}
+
+.questionKind[data-kind="opinion"] {
+  background: var(--ui-violet-bg);
+  color: var(--ui-violet-text);
+}
+
+.question p {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-accent-ink);
+}
+
+.bar[data-kind="opinion"] span {
+  background: var(--ui-violet-text);
+}
+
+.breakdown {
+  margin-top: 13px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.breakdown h4 {
+  margin: 0 0 5px;
+  color: var(--ui-text-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.breakdown dl,
+.breakdown p {
+  margin: 0;
+}
+
+.breakdownRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding-block: 4px;
+  color: var(--ui-text-subtle);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.breakdownRow dd {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty,
+.breakdown p {
+  color: var(--ui-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.empty {
+  margin: 12px 0 0;
+}
+
+.learning {
+  border-top: 3px solid var(--ui-accent-ink);
+}
+
+.learningMetrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 15px;
+}
+
+.metric .sampleNote {
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--ui-warning-bg);
+  color: var(--ui-warning-text);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+.detailLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin-top: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-accent-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: start;
+}
+
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidenceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .header,
+  .card {
+    padding: 14px;
+  }
+
+  .metrics .metric {
+    padding: 12px;
+  }
+
+  .responseTotals,
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (forced-colors: active) {
+  .bar {
+    border: 1px solid CanvasText;
+  }
+
+  .bar span {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

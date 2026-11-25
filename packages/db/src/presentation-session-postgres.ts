@@ -87,6 +87,7 @@ import {
   type PresentationSessionRecord,
   type PresentationSessionReportCompletion,
   type PresentationSessionReportJob,
+  type PresentationSessionReportStatus,
   type PresentationSessionRepository,
   type PresentationSessionResponseRecord,
   type PresentationSessionTransitionInput,
@@ -1182,6 +1183,21 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         [workspaceId, sessionId],
       );
       return result.rows[0] ? mapReport(result.rows[0]) : null;
+    });
+  }
+
+  async listReportStatuses(workspaceId: string, sessionIds: readonly string[]) {
+    if (!sessionIds.length) return new Map<string, PresentationSessionReportStatus>();
+    return this.transaction(workspaceId, async (client) => {
+      const { rows } = await client.query<{
+        session_id: string;
+        status: PresentationSessionReportStatus;
+      }>(
+        `SELECT session_id, status FROM presentation_session_reports
+         WHERE workspace_id = $1 AND session_id = ANY($2::uuid[])`,
+        [workspaceId, sessionIds],
+      );
+      return new Map(rows.map((row) => [row.session_id, row.status]));
     });
   }
 

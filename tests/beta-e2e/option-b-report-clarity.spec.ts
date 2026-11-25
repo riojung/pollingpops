@@ -23,13 +23,35 @@ async function quality(page: Page) {
   ).toEqual([]);
 }
 
-async function finishedRound(page: Page, answerIncorrectly: boolean) {
-  const title = `Synthetic ${answerIncorrectly ? "measured zero" : "missing evidence"} ${randomUUID().slice(0, 8)}`;
+const assessmentPrompt = "Synthetic assessed statement";
+const opinionPrompt = "What should we discuss next?";
+
+async function finishedRound(
+  page: Page,
+  scenario: "missing evidence" | "measured zero" | "mixed engagement",
+) {
+  const title = `Synthetic ${scenario} ${randomUUID().slice(0, 8)}`;
   const created = await page.request.post(`${api}/v1/quizzes`, { data: { title } });
   expect(created.status()).toBe(201);
   const quiz = (await created.json()).quiz;
   const correctChoice = randomUUID();
   const wrongChoice = randomUUID();
+  const unansweredOpinion = {
+    id: randomUUID(),
+    type: "poll",
+    prompt: opinionPrompt,
+    choices: [
+      { id: randomUUID(), label: "Examples", isCorrect: false },
+      { id: randomUUID(), label: "Practice", isCorrect: false },
+    ],
+    purpose: "opinion",
+    confidence: "off",
+    timeLimitSeconds: 300,
+    basePoints: 0,
+    explanation: "",
+    mediaId: null,
+    mediaAlt: null,
+  };
   expect(
     (
       await page.request.patch(`${api}/v1/quizzes/${quiz.id}`, {
@@ -37,10 +59,11 @@ async function finishedRound(page: Page, answerIncorrectly: boolean) {
           title,
           description: "Synthetic report clarity fixture",
           questions: [
+            ...(scenario === "mixed engagement" ? [unansweredOpinion] : []),
             {
               id: randomUUID(),
               type: "true_false",
-              prompt: "Synthetic assessed statement",
+              prompt: assessmentPrompt,
               choices: [
                 { id: correctChoice, label: "True", isCorrect: true },
                 { id: wrongChoice, label: "False", isCorrect: false },
@@ -75,13 +98,20 @@ async function finishedRound(page: Page, answerIncorrectly: boolean) {
   const room = await hosted.json();
   const headers = { authorization: `Bearer ${room.hostToken}` };
   let participantToken: string | undefined;
-  if (answerIncorrectly) {
+  if (scenario !== "missing evidence") {
     const joined = await joinBetaParticipant(page.request, api, {
       code: room.code,
       nickname: "Synthetic evidence participant",
     });
     expect(joined.status()).toBe(201);
     participantToken = (await joined.json()).participantToken;
+  }
+  if (scenario === "mixed engagement") {
+    const observer = await joinBetaParticipant(page.request, api, {
+      code: room.code,
+      nickname: "Synthetic observer",
+    });
+    expect(observer.status()).toBe(201);
   }
   async function command(action: "start" | "lock" | "reveal" | "next") {
     const current = await page.request.get(
@@ -100,7 +130,12 @@ async function finishedRound(page: Page, answerIncorrectly: boolean) {
     expect(response.status()).toBe(200);
     return (await response.json()).snapshot;
   }
-  const opened = await command("start");
+  let opened = await command("start");
+  if (scenario === "mixed engagement") {
+    await command("lock");
+    await command("reveal");
+    opened = await command("next");
+  }
   if (participantToken) {
     const accepted = await page.request.post(`${api}/v1/sessions/${room.sessionId}/answers`, {
       headers: { authorization: `Bearer ${participantToken}` },
@@ -215,8 +250,8 @@ for (const suffix of ["desktop", "phone @mobile"]) {
     await page.setViewportSize({ width: suffix.includes("mobile") ? 320 : 1366, height: 1000 });
     await signInBeta(page, undefined, { returnTo: "/home" });
     await specialistLocale(page, "en-CA");
-    const empty = await finishedRound(page, false);
-    const zero = await finishedRound(page, true);
+    const empty = await finishedRound(page, "missing evidence");
+    const zero = await finishedRound(page, "measured zero");
     const summaryResponse = await page.request.get(`${api}/v1/home/summary`);
     expect(summaryResponse.status()).toBe(200);
     const rows = (await summaryResponse.json()).resultHighlights as {
@@ -236,6 +271,82 @@ for (const suffix of ["desktop", "phone @mobile"]) {
     await expect(missing).not.toContainText("0%");
     await expect(measured).toContainText("0%");
     await quality(page);
+  });
+
+  test(`Round report Analytics shows participation and filters question activity ${suffix}`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: suffix.includes("mobile") ? 320 : 1366, height: 1000 });
+    await signInBeta(page);
+    await specialistLocale(page, "en-CA");
+    const { reportId } = await finishedRound(page, "mixed engagement");
+    await page.goto(`/report/${reportId}`);
+
+    const overview = page.getByRole("tab", { name: "Overview", exact: true });
+    const analyticsTab = page.getByRole("tab", { name: "Analytics", exact: true });
+    const analytics = page.getByRole("tabpanel", { name: "Analytics", exact: true });
+    await expect(overview).toHaveAttribute("aria-selected", "true");
+    await overview.press("ArrowRight");
+    await expect(analyticsTab).toBeFocused();
+    await expect(analytics).toBeVisible();
+    await page.keyboard.press("ArrowLeft");
+    await expect(overview).toBeFocused();
+    await page.getByRole("button", { name: "View analytics", exact: true }).click();
+    await expect(analytics.getByRole("heading", { name: "Session analytics" })).toBeVisible();
+
+    const metric = (label: string) =>
+      analytics.getByText(label, { exact: true }).locator("..").locator("dd").first();
+    await expect(metric("Joined participants")).toHaveText("2");
+    await expect(metric("Participants who answered")).toHaveText("1 of 2");
+    await expect(metric("Accepted responses")).toHaveText("1");
+    await expect(metric("Questions with responses")).toHaveText("1 of 2");
+    await expect(metric("Initial accuracy")).toHaveText("0%");
+
+    const activity = analytics.getByRole("region", { name: "Response activity" });
+    const filter = activity.getByRole("combobox", { name: "Show questions" });
+    const rows = activity.getByRole("listitem");
+    const opinion = rows.filter({ hasText: opinionPrompt });
+    const assessment = rows.filter({ hasText: assessmentPrompt });
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText(opinionPrompt);
+    await expect(opinion.getByText("0 responses", { exact: true })).toBeVisible();
+    await expect(assessment.getByText("1 response", { exact: true })).toBeVisible();
+    await activity.getByRole("combobox", { name: "Order", exact: true }).selectOption({
+      label: "Most responses",
+    });
+    await expect(rows.first()).toContainText(assessmentPrompt);
+    await filter.selectOption({ label: "Assessments" });
+    await expect(opinion).toHaveCount(0);
+    await expect(assessment).toBeVisible();
+    await filter.selectOption({ label: "Opinion questions" });
+    await expect(opinion).toBeVisible();
+    await expect(assessment).toHaveCount(0);
+    await filter.selectOption({ label: "All questions" });
+    await expect(rows).toHaveCount(2);
+
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      await expect(page.locator("html")).toHaveAttribute("data-color-mode", colorScheme);
+      await quality(page);
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.screenshot({
+        path: info.outputPath(`round-analytics-${colorScheme}.png`),
+        fullPage: true,
+      });
+    }
+
+    await filter.selectOption({ label: "Opinion questions" });
+    await analytics.getByRole("button", { name: "View all questions", exact: true }).click();
+    await expect(page.getByRole("tabpanel", { name: "Questions", exact: true })).toBeVisible();
+    await analyticsTab.click();
+    await expect(filter).toHaveValue("opinion");
+    await expect(activity.getByRole("combobox", { name: "Order", exact: true })).toHaveValue(
+      "responses",
+    );
+    await page.goto(`/report/${reportId}?view=analytics`);
+    await expect(analyticsTab).toHaveAttribute("aria-selected", "true");
+    await expect(analytics.getByRole("heading", { name: "Session analytics" })).toBeVisible();
   });
 
   test(`Option B Presentation report retries exhausted reads and preserves localized exports ${suffix}`, async ({

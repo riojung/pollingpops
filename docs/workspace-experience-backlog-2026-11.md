@@ -799,6 +799,24 @@ Health, summaries, and exports.
   and attrition reporting.
 - Disclosure and lifecycle qualification for any shared, downloaded, or saved comparison.
 
+#### Session analytics delivery
+
+The Round report's **Analytics** tab covers one finished session. It combines retained participation,
+question activity, Q&A, Pulse, chat, and Recovery Loop evidence. The dashboard uses the existing
+report authority and detail paths. Its question chart compares response counts in authored order
+or by volume, with filters for assessments and opinion questions.
+
+The **Results analytics** dashboard covers the loaded, filtered results in each activity view.
+It adds a monthly or quarterly history chart and links to eligible reports. Pagination-independent
+totals and cross-session comparisons with qualified cohorts each need further delivery.
+
+| Increment                     | Acceptance                                                                                                                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Presentation analytics layout | Give delivery, response coverage, opinion results, and Q&A dedicated views in the existing Session Insights report. Keep reveal-roster denominators, snapshot time, small-sample suppression, and approved aggregate exports. |
+| Survey and Board analytics    | Chart finalized aggregates in their existing report or host surfaces. Preserve Survey disclosure thresholds and show Board vote results from closed rounds only. Review each format's empty and withheld states.              |
+| Workspace analytics           | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons.                     |
+| Q&A analysis                  | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                            |
+
 ### WX-11 Consistent surfaces and commercial explanations
 
 **Selected WX-11A — Sessions recovery and action hierarchy:** while Survey privacy acceptance

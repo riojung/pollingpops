@@ -1868,19 +1868,33 @@ and the next useful review action. Coverage always names its denominator; retain
 without unique participation data show question coverage instead. No-response reports show a clear
 empty state without treating missing accuracy or recovery evidence as a measured zero.
 
+Choose **View analytics** or the **Analytics** tab for the finished Round dashboard. The dashboard
+shows joined participants, participants who answered, accepted responses, and questions with
+responses. The participation rate uses the report's recorded participant denominator. Accepted
+responses include rechecks and revotes. **Response activity** shows counts for main questions, with
+filters for assessments and opinion questions and sorting by response count. The conversation cards
+show recorded Q&A, Pulse, and chat totals. **Learning evidence** shows initial accuracy and paired
+recovery with their own denominators. Use the dashboard's detail links to inspect the underlying
+question and evidence views.
+
 Use **Questions**, **Participants**, **Evidence**, **Conversation**, **Decision replay**, and
 **Manage data** to inspect details. Evidence interpretation and the recovery story are collapsible,
 while missing or small-sample evidence remains explicitly labelled. Tab navigation retains form
 state. Exports, summary sharing, follow-up creation, retention and deletion keep their existing
 permissions and confirmation steps.
 
-The **Results** page includes an **At a glance** overview for the selected activity. Its widgets
-summarize the results currently shown with your filters; **Load More** expands that scope.
+The **Results** page includes a **Results analytics** dashboard for Rounds, Presentations,
+Surveys, and practice. Its totals and activity chart use the results currently shown with your
+filters. **Load More** expands the scope. Group the chart by month or quarter. It uses the creation
+date of each Round report, Presentation session, or practice run, and the scheduled collection
+deadline for Surveys. Shortcuts open ready Round Analytics, available Presentation reports,
+retained Survey results, or practice details.
+
 Round recovery combines recovered and eligible opportunities from ready reports. Practice shows
-completed attempts out of all recorded attempts. Presentation response counts sum the sessions
-shown. These counts do not identify unique people across runs. Survey widgets show runs and
-the Surveys they represent; open an individual report for response counts and question results.
-No-evidence states remain separate from a measured zero.
+completed attempts out of all recorded attempts. Round and Presentation join counts add participant
+records across the included sessions. Survey widgets show runs and the Surveys they represent.
+Open an individual Survey report for response counts and question results. No-evidence states remain
+separate from a measured zero.
 
 Finished Presentation reports include **Session insights** for the session's frozen published
 version. Section and block delivery show what the facilitator presented, skipped, or did not

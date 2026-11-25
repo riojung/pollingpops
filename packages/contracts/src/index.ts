@@ -7313,6 +7313,16 @@ export type PresentationRestResponseAck = PresentationRestV1ResponseAck;
 export const PresentationReportStatusSchema = z.enum(["pending", "ready", "failed"]);
 export type PresentationReportStatus = z.infer<typeof PresentationReportStatusSchema>;
 
+export const PresentationRestV1SessionListWithReportStatusResponseSchema = z
+  .object({
+    sessions: z.array(
+      PresentationRestV1SessionListItemSchema.safeExtend({
+        reportStatus: PresentationReportStatusSchema.nullable(),
+      }),
+    ),
+  })
+  .strict();
+
 export const PresentationReportTimelineEventTypeSchema = z.enum([
   "presentation.started",
   "content.presented",

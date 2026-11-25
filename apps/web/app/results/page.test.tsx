@@ -187,11 +187,13 @@ function practice(id = "practice-first", title = "First practice") {
     createdAt: "2026-10-01T12:00:00Z",
   };
 }
+const presentationResultsPath = "/v1/presentation-sessions?includeReportStatus=true";
 const presentation = {
   id: "presentation-first",
   presentationId: "presentation-source",
   title: "First Presentation result",
   status: "finished",
+  reportStatus: "ready",
   phase: "finished",
   participantCount: 5,
   responseCount: 5,
@@ -220,7 +222,7 @@ function response(path: string) {
     return path.includes("cursor=")
       ? { items: [practice("practice-later", "Later practice")], nextCursor: null }
       : { items: [practice()], nextCursor: "practice-next" };
-  if (path === "/v1/presentation-sessions") return { sessions: [presentation] };
+  if (path === presentationResultsPath) return { sessions: [presentation] };
   if (path.startsWith("/v1/survey-rooms?")) return { rooms: [survey()], nextCursor: null };
   throw new Error(`Unexpected request: ${path}`);
 }
@@ -338,7 +340,7 @@ describe("Results workspace", () => {
     { view: "practice", path: "/v1/followups", title: "First practice" },
     {
       view: "presentations",
-      path: "/v1/presentation-sessions",
+      path: presentationResultsPath,
       title: "First Presentation result",
     },
     { view: "surveys", path: "/v1/survey-rooms", title: "First Survey result" },
@@ -420,7 +422,7 @@ describe("Results workspace", () => {
     { view: "practice", path: "/v1/followups", empty: "No practice yet", destination: null },
     {
       view: "presentations",
-      path: "/v1/presentation-sessions",
+      path: presentationResultsPath,
       empty: "No Presentation results yet",
       destination: "/library?type=presentations",
     },
@@ -472,7 +474,7 @@ describe("Results workspace", () => {
     },
     {
       view: "presentations",
-      path: "/v1/presentation-sessions",
+      path: presentationResultsPath,
       title: "First Presentation result",
       source: "Presentation",
       sourceId: "presentation-source",
@@ -489,7 +491,7 @@ describe("Results workspace", () => {
       statusValue: "",
     },
   ])(
-    "recovers filtered empty $view from either reset with search focus and the saved view",
+    "recovers filtered empty $view from either reset with search focus, layout, and chart grouping",
     async ({ view, path, title, source, sourceId, status, statusValue }) => {
       fixtures.query = `view=${view}`;
       fixtures.apiFetch.mockImplementation(async (url: string) => {
@@ -504,6 +506,10 @@ describe("Results workspace", () => {
       const harness = resultsHarness();
       await harness.settle();
       clickButton("List view");
+      expect(field("Group by")?.props.value).toBe("month");
+      changeField("Group by", "quarter");
+      harness.render();
+      expect(field("Group by")?.props.value).toBe("quarter");
       const search = elements(fixtures.tree).find(
         (node) => node.type === "input" && node.props.type === "search",
       )!;
@@ -514,7 +520,13 @@ describe("Results workspace", () => {
         changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
         changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
         changeSearch("missing");
+        if (view === "results" || view === "practice") {
+          harness.render();
+          expect(resultsPanel().props["aria-busy"]).toBe(true);
+          expect(field("Group by")).toBeUndefined();
+        }
         const markup = await harness.settle();
+        expect(field("Group by")).toBeUndefined();
         expect(headings()).toEqual([
           view === "practice"
             ? "No practice matches these filters."
@@ -537,11 +549,13 @@ describe("Results workspace", () => {
         const restored = await harness.settle();
         expect(restored).toContain(`<h2 lang="">${title}</h2>`);
         expect(restored).toContain('data-view="list"');
+        expect(field("Group by")?.props.value).toBe("quarter");
         expect(new URLSearchParams(fixtures.query).get("view")).toBe(view);
         expect(new URLSearchParams(fixtures.query).has("q")).toBe(false);
-        const filterFields = elements(fixtures.tree).filter(
+        const filterFields = elements(historyFilters()).filter(
           (node) => node.type === "select" || (node.type === "input" && node.props.type === "date"),
         );
+        expect(filterFields).toHaveLength(status ? 4 : 3);
         expect(
           filterFields.every((node) => node.props.value === (node.type === "select" ? "all" : "")),
         ).toBe(true);
@@ -656,7 +670,7 @@ describe("Results workspace", () => {
   it.each([
     { view: "results", path: "/v1/reports" },
     { view: "practice", path: "/v1/followups" },
-    { view: "presentations", path: "/v1/presentation-sessions" },
+    { view: "presentations", path: presentationResultsPath },
     { view: "surveys", path: "/v1/survey-rooms" },
   ])("ignores an obsolete $view retry after the workspace changes", async ({ view, path }) => {
     fixtures.query = `view=${view}&q=First`;
@@ -753,7 +767,7 @@ describe("Results workspace", () => {
     const pending = deferred<unknown>();
     let reads = 0;
     fixtures.apiFetch.mockImplementation((url: string) => {
-      if (url === "/v1/presentation-sessions") {
+      if (url === presentationResultsPath) {
         reads++;
         return reads === 1
           ? pending.promise
@@ -798,7 +812,7 @@ describe("Results workspace", () => {
     },
     {
       view: "presentations",
-      path: "/v1/presentation-sessions",
+      path: presentationResultsPath,
       title: "First Presentation result",
       search: "Search Presentation results",
       library: "presentations",
@@ -819,7 +833,7 @@ describe("Results workspace", () => {
       for (const other of [
         "/v1/reports",
         "/v1/followups",
-        "/v1/presentation-sessions",
+        presentationResultsPath,
         "/v1/survey-rooms",
       ])
         expect(paths.some((url) => url.startsWith(other))).toBe(other === path);
@@ -845,9 +859,9 @@ describe("Results workspace", () => {
     const markup = await resultsHarness().settle();
     expect(markup).toContain('placeholder="Search Round results"');
     expect(markup).not.toContain('href="/results?view=presentations"');
-    expect(
-      fixtures.apiFetch.mock.calls.some(([path]) => path === "/v1/presentation-sessions"),
-    ).toBe(false);
+    expect(fixtures.apiFetch.mock.calls.some(([path]) => path === presentationResultsPath)).toBe(
+      false,
+    );
     expect(
       new URLSearchParams(historyCalls("/v1/reports")[0]![0].split("?")[1]).get("search"),
     ).toBe("needle");
@@ -909,7 +923,7 @@ describe("Results workspace", () => {
     expect(markup).not.toContain('href="/surveys/rooms/');
     expect(markup).not.toContain("Survey runs and results");
     expect(
-      elements(fixtures.tree)
+      elements(historyFilters())
         .filter((element) => element.type === "select")
         .map((element) => element.props.value),
     ).toEqual(["all"]);
@@ -1222,7 +1236,7 @@ describe("Results workspace", () => {
   it("filters Presentation snapshots locally by title, status, source, and inclusive dates", async () => {
     fixtures.query = "view=presentations";
     fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path === "/v1/presentation-sessions"
+      path === presentationResultsPath
         ? {
             sessions: [
               presentation,
@@ -1259,7 +1273,7 @@ describe("Results workspace", () => {
     expect(headings()).toEqual(["First Presentation result"]);
     expect(markup).toContain("1 results shown");
     expect(
-      fixtures.apiFetch.mock.calls.filter(([path]) => path === "/v1/presentation-sessions"),
+      fixtures.apiFetch.mock.calls.filter(([path]) => path === presentationResultsPath),
     ).toHaveLength(1);
     changeSearch("absent");
     markup = await harness.settle();
@@ -1269,7 +1283,7 @@ describe("Results workspace", () => {
     await harness.settle();
     expect(headings()).toHaveLength(4);
     expect(
-      fixtures.apiFetch.mock.calls.filter(([path]) => path === "/v1/presentation-sessions"),
+      fixtures.apiFetch.mock.calls.filter(([path]) => path === presentationResultsPath),
     ).toHaveLength(1);
   });
 
@@ -1278,14 +1292,14 @@ describe("Results workspace", () => {
     const stale = deferred<unknown>();
     let reads = 0;
     fixtures.apiFetch.mockImplementation((path: string) =>
-      path === "/v1/presentation-sessions" && ++reads === 1
+      path === presentationResultsPath && ++reads === 1
         ? stale.promise
         : Promise.resolve(response(path)),
     );
     const harness = resultsHarness();
     await harness.settle();
     const request = fixtures.apiFetch.mock.calls.find(
-      ([path]) => path === "/v1/presentation-sessions",
+      ([path]) => path === presentationResultsPath,
     )!;
     fixtures.workspaceId = "workspace-b";
     expect(harness.render()).not.toContain("First Presentation result");
@@ -1426,14 +1440,14 @@ function changeSearch(value: string) {
   );
 }
 function changeField(name: string, value: string) {
+  changeControl(field(name), value);
+}
+function field(name: string) {
   const label = elements(fixtures.tree).find(
     (element) =>
       element.type === "label" && elementText(element.props.children as ReactNode).startsWith(name),
   );
-  changeControl(
-    elements(label).find((element) => element.type === "select" || element.type === "input"),
-    value,
-  );
+  return elements(label).find((element) => element.type === "select" || element.type === "input");
 }
 function changeControl(node: ReactElement<Record<string, unknown>> | undefined, value: string) {
   if (!node) throw new Error(`Missing control for: ${value}`);
@@ -1442,7 +1456,13 @@ function changeControl(node: ReactElement<Record<string, unknown>> | undefined, 
 function headings() {
   return elements(fixtures.tree)
     .filter((element) => element.type === "h2")
-    .map((element) => elementText(element.props.children as ReactNode));
+    .map((element) => elementText(element.props.children as ReactNode))
+    .filter((text) => text !== "Results analytics");
+}
+function historyFilters() {
+  return elements(fixtures.tree).find(
+    (element) => element.type === "section" && element.props["aria-label"] === "History filters",
+  );
 }
 function resultsPanel() {
   return elements(fixtures.tree).find((node) => node.props.id === "results-panel")!;

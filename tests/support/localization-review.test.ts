@@ -373,7 +373,7 @@ describe("native-language review preparation", () => {
     }
   });
 
-  it("includes all 164 exact report and insights phrases with bound sources and pending decisions", () => {
+  it("includes all 173 exact report and insights phrases with bound sources and pending decisions", () => {
     const groups = [
       {
         group: "presentation-report",
@@ -388,7 +388,7 @@ describe("native-language review preparation", () => {
       {
         group: "presentation-insights",
         helper: "presentationInsightsCopy",
-        count: 120,
+        count: 129,
         phrases: presentationInsightsCopyKeys.map((key) => ({
           key,
           english: presentationInsightsCopy()(key),
@@ -429,7 +429,7 @@ describe("native-language review preparation", () => {
       }
       phraseCount += items.length;
     }
-    expect(phraseCount).toBe(164);
+    expect(phraseCount).toBe(173);
     expect(checkReviewDecisions(bundle, decisions)).toMatchObject({
       complete: false,
       nativeAcceptance: false,
@@ -793,7 +793,7 @@ describe("native-language review preparation", () => {
     const articles = [
       ...html.matchAll(/<article id="(review-item-\d+)" tabindex="-1">\s*<h2>([^<]+)<\/h2>/g),
     ];
-    expect(articles).toHaveLength(804);
+    expect(articles).toHaveLength(813);
     expect(articles.map(([, anchor, heading]) => [anchor, heading])).toEqual(
       bundle.items.map(({ id }, index) => [`review-item-${index + 1}`, escapeHtml(id)]),
     );

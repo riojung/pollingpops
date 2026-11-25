@@ -336,8 +336,13 @@ export default {
   "delivery.assistant.allowanceLimited":
     "{used} von {limit} quellengestützten Aufträgen diesen Monat verwendet",
   "delivery.assistant.loadingAvailability": "Verfügbarkeit der Autorenhilfe wird geladen…",
+  "delivery.assistant.retryAvailability": "Verfügbarkeit erneut prüfen",
+  "delivery.assistant.availabilityUnavailable":
+    "Die Verfügbarkeit der Autorenhilfe muss überprüft werden.",
   "delivery.assistant.disabled":
-    "Die Autorenhilfe ist in dieser Bereitstellung deaktiviert. Ein Betreiber kann einen genehmigten OpenAI-kompatiblen Anbieter aktivieren; solange sie deaktiviert ist, wird keine Quelle gesendet.",
+    "Für neue quellengestützte Vorschläge ist ein zugelassener Anbieter erforderlich. Bitten Sie den Betreiber Ihrer Installation, einen Anbieter einzurichten.",
+  "delivery.assistant.allowanceExhausted":
+    "Ihr monatliches Kontingent für quellengestützte Vorschläge ist aufgebraucht. Sie können vorhandene Vorschläge prüfen oder es erneut versuchen, sobald das Kontingent zurückgesetzt wurde.",
   "delivery.assistant.sourceType": "Quellentyp",
   "delivery.assistant.pasteText": "Text einfügen",
   "delivery.assistant.uploadPrivateFile": "Private Datei hochladen",

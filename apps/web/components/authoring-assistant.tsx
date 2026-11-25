@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AuthoringJob, AuthoringSourceType } from "@openround/contracts";
-import { apiFetch, humanError } from "../lib/api";
+import { ApiClientError, apiFetch, humanError } from "../lib/api";
 import { clientUuid } from "../lib/uuid";
 import {
   authoringProposalSelectionCount,
@@ -15,6 +15,7 @@ import {
 } from "../lib/authoring-proposals";
 import { recordAuthoringEvent, recordCreationEvent } from "./workspace/product-events";
 import { useLocale } from "./locale-provider";
+import { useWorkspace } from "./workspace/workspace-provider";
 import {
   RecoveryPackSourceProposalPanel,
   type RecoveryPackSourceTarget,
@@ -28,6 +29,20 @@ interface AuthoringStatus {
   monthlyLimit: number | null;
   used: number;
   remaining: number | null;
+}
+
+type AuthoringAvailability =
+  | { kind: "checking" }
+  | { kind: "ready"; status: AuthoringStatus }
+  | { kind: "needs-check"; detail: string };
+type SourceMode = "pasted_text" | "file";
+
+function canSubmitSource(status: AuthoringStatus | null, sourceMode: SourceMode) {
+  return (
+    status?.enabled === true &&
+    status.remaining !== 0 &&
+    (sourceMode !== "file" || status.fileUploadAvailable !== false)
+  );
 }
 
 interface AuthoringAssistantProps {
@@ -81,7 +96,19 @@ function readBase64(file: File, readError: string, encodeError: string) {
   });
 }
 
-export function AuthoringAssistant({
+export function AuthoringAssistant(props: AuthoringAssistantProps) {
+  const { creator, canEdit } = useWorkspace();
+  if (!creator) return null;
+  return (
+    <WorkspaceAuthoringAssistant
+      {...props}
+      key={`${creator.userId}:${creator.workspaceId}`}
+      canEdit={props.canEdit && canEdit}
+    />
+  );
+}
+
+function WorkspaceAuthoringAssistant({
   canEdit,
   plain = false,
   trackCreation = false,
@@ -93,9 +120,12 @@ export function AuthoringAssistant({
   const router = useRouter();
   const { locale, t } = useLocale();
   const packSourceUi = packSourceCopy(locale);
-  const [status, setStatus] = useState<AuthoringStatus | null>(null);
+  const [availability, setAvailability] = useState<AuthoringAvailability>({ kind: "checking" });
+  const status = availability.kind === "ready" ? availability.status : null;
+  const latestStatus = useRef<AuthoringStatus | null>(null);
   const [jobs, setJobs] = useState<AuthoringJob[]>([]);
-  const [sourceMode, setSourceMode] = useState<"pasted_text" | "file">("pasted_text");
+  const [historyError, setHistoryError] = useState("");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("pasted_text");
   const [sourceName, setSourceName] = useState(() => t("delivery.assistant.pastedSource"));
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -111,14 +141,17 @@ export function AuthoringAssistant({
   const mounted = useRef(true);
   const submitting = useRef(false);
   const submissionGeneration = useRef(0);
-  const refreshGeneration = useRef(0);
-  const fileUploadAllowed = useRef(false);
-  const fileUploadBlocked = status?.fileUploadAvailable === false;
-  const fileSelectionDisabled = !status || fileUploadBlocked;
+  const availabilityGeneration = useRef(0);
+  const historyGeneration = useRef(0);
+  const fileUploadBlocked = status?.enabled === true && status.fileUploadAvailable === false;
+  const fileSelectionDisabled = !status?.enabled || fileUploadBlocked;
   // A Pack action's temporary busy state gates new submissions, not a source
   // request already in flight. Keep permission and source-generation fences.
   const sourcePermission = useRef(canEdit);
-  sourcePermission.current = canEdit;
+  if (sourcePermission.current !== canEdit) {
+    sourcePermission.current = canEdit;
+    submissionGeneration.current += 1;
+  }
 
   function sourceChanged() {
     submissionGeneration.current += 1;
@@ -126,43 +159,57 @@ export function AuthoringAssistant({
     recoveryPackTarget?.onSourceChanged?.();
   }
 
-  const refresh = useCallback(async () => {
-    const generation = ++refreshGeneration.current;
-    const current = () => mounted.current && generation === refreshGeneration.current;
+  const publishAvailability = useCallback((next: AuthoringAvailability) => {
+    latestStatus.current = next.kind === "ready" ? next.status : null;
+    setAvailability(next);
+  }, []);
+
+  const checkAvailability = useCallback(async () => {
+    const generation = ++availabilityGeneration.current;
+    const current = () => mounted.current && generation === availabilityGeneration.current;
+    publishAvailability({ kind: "checking" });
     try {
-      const [, jobResult] = await Promise.all([
-        apiFetch<{ status: AuthoringStatus }>("/v1/authoring/status").then(({ status }) => {
-          if (!current()) return;
-          // Apply upload restrictions without waiting for the proposal history.
-          fileUploadAllowed.current = status.enabled && status.fileUploadAvailable !== false;
-          setStatus(status);
-        }),
-        apiFetch<{ jobs: AuthoringJob[] }>("/v1/authoring/jobs"),
-      ]);
-      if (current()) setJobs(jobResult.jobs);
+      const { status } = await apiFetch<{ status: AuthoringStatus }>("/v1/authoring/status", {
+        cache: "no-store",
+      });
+      if (current()) publishAvailability({ kind: "ready", status });
     } catch (caught) {
-      if (current()) {
-        setError(humanError(caught));
-        setErrorIsLocalized(false);
-      }
+      if (current()) publishAvailability({ kind: "needs-check", detail: humanError(caught) });
+    }
+  }, [publishAvailability]);
+
+  const refreshHistory = useCallback(async () => {
+    const generation = ++historyGeneration.current;
+    const current = () => mounted.current && generation === historyGeneration.current;
+    try {
+      const { jobs } = await apiFetch<{ jobs: AuthoringJob[] }>("/v1/authoring/jobs", {
+        cache: "no-store",
+      });
+      if (!current()) return;
+      setJobs(jobs);
+      setHistoryError("");
+    } catch (caught) {
+      if (current()) setHistoryError(humanError(caught));
     }
   }, []);
 
   useEffect(() => {
     mounted.current = true;
-    void refresh();
+    void checkAvailability();
+    void refreshHistory();
     return () => {
       mounted.current = false;
       submissionGeneration.current += 1;
-      refreshGeneration.current += 1;
+      availabilityGeneration.current += 1;
+      historyGeneration.current += 1;
     };
-  }, [refresh]);
+  }, [checkAvailability, refreshHistory]);
 
   useEffect(() => {
     if (!jobs.some((job) => job.status === "pending" || job.status === "processing")) return;
-    const timer = window.setTimeout(() => void refresh(), 2_000);
+    const timer = window.setTimeout(() => void refreshHistory(), 2_000);
     return () => window.clearTimeout(timer);
-  }, [jobs, refresh]);
+  }, [jobs, refreshHistory]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -170,9 +217,7 @@ export function AuthoringAssistant({
       submitting.current ||
       !canEdit ||
       recoveryPackTarget?.disabled ||
-      !status?.enabled ||
-      status.remaining === 0 ||
-      (sourceMode === "file" && !fileUploadAllowed.current)
+      !canSubmitSource(latestStatus.current, sourceMode)
     )
       return;
     submitting.current = true;
@@ -208,27 +253,40 @@ export function AuthoringAssistant({
         !mounted.current ||
         !sourcePermission.current ||
         generation !== submissionGeneration.current ||
-        (sourceMode === "file" && !fileUploadAllowed.current)
+        !canSubmitSource(latestStatus.current, sourceMode)
       )
         return;
       const result = await apiFetch<{ job: AuthoringJob }>("/v1/authoring/jobs", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      if (
-        !mounted.current ||
-        !sourcePermission.current ||
-        generation !== submissionGeneration.current
-      )
-        return;
+      if (!mounted.current) return;
       setJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
-      setText("");
-      setFile(null);
-      await refresh();
+      if (sourcePermission.current && generation === submissionGeneration.current) {
+        setText("");
+        setFile(null);
+      }
+      void checkAvailability();
+      void refreshHistory();
     } catch (caught) {
-      if (mounted.current && generation === submissionGeneration.current) {
-        setError(humanError(caught));
-        setErrorIsLocalized(caught instanceof LocalizedAuthoringError);
+      if (
+        mounted.current &&
+        sourcePermission.current &&
+        generation === submissionGeneration.current
+      ) {
+        if (
+          caught instanceof ApiClientError &&
+          ((caught.status === 503 && caught.code === "AUTHORING_DISABLED") ||
+            (caught.status === 402 && caught.code === "AUTHORING_LIMIT"))
+        ) {
+          // The same disabled error can describe a provider or a file scanner. Recheck
+          // availability without replaying the submitted source or guessing the restriction.
+          availabilityGeneration.current += 1;
+          publishAvailability({ kind: "needs-check", detail: humanError(caught) });
+        } else {
+          setError(humanError(caught));
+          setErrorIsLocalized(caught instanceof LocalizedAuthoringError);
+        }
       }
     } finally {
       submitting.current = false;
@@ -317,19 +375,26 @@ export function AuthoringAssistant({
     }));
   }
 
-  const allowance = status
-    ? status.monthlyLimit === null
-      ? t(
-          status.used === 1
-            ? "delivery.assistant.allowanceUnlimited.one"
-            : "delivery.assistant.allowanceUnlimited.other",
-          { used: status.used },
-        )
-      : t("delivery.assistant.allowanceLimited", {
-          used: status.used,
-          limit: status.monthlyLimit,
-        })
-    : t("delivery.assistant.loadingAvailability");
+  let availabilityMessage = t("delivery.assistant.loadingAvailability");
+  if (availability.kind === "needs-check") {
+    availabilityMessage = t("delivery.assistant.availabilityUnavailable");
+  } else if (status?.enabled === false) {
+    availabilityMessage = t("delivery.assistant.disabled");
+  } else if (status) {
+    availabilityMessage =
+      status.monthlyLimit === null
+        ? t(
+            status.used === 1
+              ? "delivery.assistant.allowanceUnlimited.one"
+              : "delivery.assistant.allowanceUnlimited.other",
+            { used: status.used },
+          )
+        : t("delivery.assistant.allowanceLimited", {
+            used: status.used,
+            limit: status.monthlyLimit,
+          });
+  }
+  const retryDisabled = busy || availability.kind === "checking";
 
   function localizedStatusLabel(jobStatus: AuthoringJob["status"]) {
     if (jobStatus === "pending") return t("delivery.assistant.status.waiting");
@@ -371,19 +436,46 @@ export function AuthoringAssistant({
               )}{" "}
         {t("delivery.assistant.securityDescription")}
       </p>
-      <p className="notice" aria-live="polite">
-        {allowance}
-      </p>
+      {canEdit ? (
+        <>
+          <div className="notice" role="status">
+            <div>{availabilityMessage}</div>
+            {status?.enabled && status.remaining === 0 ? (
+              <div>{t("delivery.assistant.allowanceExhausted")}</div>
+            ) : null}
+          </div>
+          {availability.kind === "needs-check" ? (
+            <p className="error" lang="en-CA" role="alert">
+              {availability.detail}
+            </p>
+          ) : null}
+          <button
+            className="button-quiet"
+            type="button"
+            aria-disabled={retryDisabled}
+            onClick={() => {
+              if (!retryDisabled) void checkAvailability();
+            }}
+          >
+            {t("delivery.assistant.retryAvailability")}
+          </button>
+        </>
+      ) : null}
       {error ? (
         <p className="error" lang={errorIsLocalized ? undefined : "en-CA"} role="alert">
           {error}
         </p>
       ) : null}
-      {status && !status.enabled ? (
-        <p className="notice">{t("delivery.assistant.disabled")}</p>
-      ) : canEdit ? (
+      {canEdit ? (
         <form onSubmit={submit}>
-          <fieldset disabled={busy || recoveryPackTarget?.disabled || status?.remaining === 0}>
+          <fieldset
+            disabled={
+              busy ||
+              recoveryPackTarget?.disabled ||
+              status?.enabled === false ||
+              status?.remaining === 0
+            }
+          >
             <legend>{t("delivery.assistant.sourceType")}</legend>
             <div
               className="button-row"
@@ -475,7 +567,7 @@ export function AuthoringAssistant({
             )}
             <button
               className="button"
-              disabled={sourceMode === "file" && fileSelectionDisabled}
+              disabled={!canSubmitSource(status, sourceMode)}
               type="submit"
             >
               {busy ? t("delivery.assistant.uploading") : t("delivery.assistant.createProposal")}
@@ -486,6 +578,11 @@ export function AuthoringAssistant({
         <p className="notice">{t("delivery.assistant.viewerNotice")}</p>
       )}
 
+      {historyError ? (
+        <p className="error" lang="en-CA" role="alert">
+          {historyError}
+        </p>
+      ) : null}
       {jobs.length ? (
         <div
           className="authoring-job-list"

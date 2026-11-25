@@ -309,8 +309,11 @@ export default {
   "delivery.assistant.allowanceUnlimited.other": "本月已创建 {used} 个任务；限额由运营方配置",
   "delivery.assistant.allowanceLimited": "本月已使用 {used}/{limit} 个基于来源的任务",
   "delivery.assistant.loadingAvailability": "正在加载创作功能可用性…",
-  "delivery.assistant.disabled":
-    "此部署已禁用创作助手。运营方可以启用获批的 OpenAI 兼容提供商；禁用期间不会发送任何来源。",
+  "delivery.assistant.retryAvailability": "重新检查可用性",
+  "delivery.assistant.availabilityUnavailable": "需要检查创作功能是否可用。",
+  "delivery.assistant.disabled": "根据来源创建新建议需要获批的提供商。请联系部署运营方配置提供商。",
+  "delivery.assistant.allowanceExhausted":
+    "本月基于来源的建议额度已用完。你可以审核现有建议，或在额度重置后重试。",
   "delivery.assistant.sourceType": "来源类型",
   "delivery.assistant.pasteText": "粘贴文本",
   "delivery.assistant.uploadPrivateFile": "上传私有文件",

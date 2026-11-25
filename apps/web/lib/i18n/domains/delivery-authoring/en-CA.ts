@@ -326,8 +326,12 @@ export const deliveryAuthoringEnglishMessages = {
     "{used} jobs created this month; operator-configured allowance",
   "delivery.assistant.allowanceLimited": "{used} of {limit} source-grounded jobs used this month",
   "delivery.assistant.loadingAvailability": "Loading authoring availability…",
+  "delivery.assistant.retryAvailability": "Retry availability",
+  "delivery.assistant.availabilityUnavailable": "Authoring availability needs to be checked.",
   "delivery.assistant.disabled":
-    "The authoring assistant is disabled on this deployment. An operator can enable an approved OpenAI-compatible provider; no source is sent anywhere while it is disabled.",
+    "New source proposals require an approved provider. Ask your deployment operator to configure one.",
+  "delivery.assistant.allowanceExhausted":
+    "Your monthly allowance for source proposals is used. You can review existing proposals or try again after it resets.",
   "delivery.assistant.sourceType": "Source type",
   "delivery.assistant.pasteText": "Paste text",
   "delivery.assistant.uploadPrivateFile": "Upload a private file",

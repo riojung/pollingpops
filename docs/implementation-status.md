@@ -10,20 +10,43 @@ trademark review.
 
 ### R2-00 Recovery Loop comparison
 
+The comparison protocol and scorecard merged in
+[PR #329](https://github.com/riojung/pollingpops/pull/329) at `4aba391`.
+
 The [comparison protocol](runbooks/phase0-evidence-campaign.md#wooclap-head-to-head-recovery-loop-test)
 and [private scorecard](evidence/session-observation.md#wooclap-recovery-loop-comparison) are ready
 for research-owner and independent review. The primary task uses matched, authored diagnostic
 and recheck questions with a common response deadline. It measures first use from the first arm
 of facilitators new to both tools and requires evidence from the current run. Separate optional
-runs cover Wooclap's same-question revote and AI-generated follow-up. The production beta build
-and one Chromium Recovery Loop case passed
-on the PR #328 baseline. Five scripted guests answered the diagnostic and a different recheck.
-The host recorded an intervention, and the report showed four of five recoveries.
+runs cover Wooclap's same-question revote and AI-generated follow-up.
 
-The Wooclap run, facilitator sessions, and independent review remain pending. The comparison
-has its own scorecard and denominators. R2-00 still requires the frozen Phase 0 campaign,
-including real sessions and accepted usability evidence before acquisition-segment and Phase 1
-selection. See the [R2-00 backlog item](competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment).
+The production beta build and Chromium Recovery Loop case passed for Kit A on the PR #328
+baseline. A local production beta build and separate Kit B Chromium rehearsal passed on
+`4aba391`. Five anonymous guests submitted high-confidence answers for each kit. Kit B's host
+visibly locked its diagnostic and linked recheck about 30 seconds after the open command.
+The report verified 0/5 correct on the diagnostic, 4/5 paired recoveries, and one unresolved
+response for the concept.
+
+On November 25, 2026, the live Wooclap Starter workspace showed 0 of 5 active questions used
+before the rehearsal. Staff saved two synthetic events, each with two answer-keyed MCQs,
+Certainty Check, 30-second timers, and host-controlled result display. Kit A's lobby showed
+five anonymous guest connections. The smoke test submitted one high-confidence diagnostic
+and recheck response per event. Both rechecks visibly closed in about 31 seconds from the host
+open command. The live certainty view showed the confident wrong diagnostic answer, and the
+Starter Grid placed both responses on one anonymous row in each event with 0/1 and 1/1 correct.
+
+The five-response Wooclap preflight is pending for each kit. The browser controls could not
+coordinate the five timed submissions in the smoke run. The next preflight needs five
+independent responders through both items, the scripted 0/5 and 4/5 results, and a review of
+response receipts, timing, certainty, report counts, and pairing coverage for the full sample.
+
+Facilitator sessions and independent review remain pending. R2-00 requires the frozen Phase 0
+campaign, including real sessions and accepted usability evidence before acquisition-segment and
+Phase 1 selection. See the [R2-00 backlog item](competitor-backlog-2026-10-27.md#r2-00-establish-demand-and-select-the-next-increment).
+
+On the PR #329 merge, scanner freshness and API/dependency smoke passed. Browser media smoke
+failed and remains a release-readiness follow-up.
+[PR #329 production smoke](https://github.com/riojung/pollingpops/actions/runs/45662651009)
 
 ### Session Summary recovery and learning-sequence rehearsal
 

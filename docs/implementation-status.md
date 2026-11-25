@@ -8,9 +8,29 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-04 collection review navigation
+
+The [native-language packet](evidence/native-language-review.md#review-the-four-template-collections)
+now links directly to existing reviewer items for Team meetings, Training and onboarding,
+Workshops, and Event feedback. The four sections cover 20 format-qualified templates and
+62 existing items, including the separate Event experience Round and Survey guides.
+Review links name their destination in the screen reader's links list, and return links move
+keyboard focus to the named collection or template. The full 804-item packet and decision
+checker retain their scope. Human editorial and native-language acceptance remain pending for
+all four collections.
+
+All 41 localization review tests and the script type check passed. Ten local packets at
+baseline `2d57437` with the navigation changes bound to their source files validated with
+804 pending decisions each. The Korean packet passed checks for 63 distinct navigation names,
+keyboard return to the collection and both Event experience template headings, and reflow
+at 1280px and 320px in Chromium and 320px in WebKit.
+Long item context keys exposed narrow-screen overflow during the first check. The regenerated
+packets wrap those keys.
+
 ### WX-11 Presentation provider setup explanations
 
-Presentation Text assistance and Question suggestions now explain when new requests need an
+Merged in [PR #322](https://github.com/riojung/pollingpops/pull/322) at `2d57437`.
+Presentation Text assistance and Question suggestions explain when new requests need an
 approved provider. Both dialogs point to the deployment operator and the equivalent manual
 editing task. The notice follows a disabled status, a generation preflight that finds the
 provider unavailable, or a definitive `AUTHORING_DISABLED` rejection. Manual guidance appears

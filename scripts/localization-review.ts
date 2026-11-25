@@ -1024,16 +1024,144 @@ export function escapeHtml(value: string) {
   );
 }
 
+const reviewItemAnchor = (index: number) => `review-item-${index + 1}`;
+
+const collectionReviewLabels = {
+  "team-meetings": ["title", "description"],
+  "training-onboarding": ["trainingOnboardingTitle", "trainingOnboardingDescription"],
+  workshops: ["workshopsTitle", "workshopsDescription"],
+  "event-feedback": ["eventFeedbackTitle", "eventFeedbackDescription"],
+} as const;
+
+const templateReviewLinks = {
+  round: {
+    label: "Round",
+    entries: [
+      ["metadata", "Preview and facilitator guide"],
+      ["draft", "Generated draft"],
+    ],
+  },
+  presentation: {
+    label: "Presentation",
+    entries: [
+      ["definition", "Template definition"],
+      ["draft", "Generated draft"],
+      ["guide", "Facilitator guide"],
+    ],
+  },
+  survey: {
+    label: "Survey",
+    entries: [["context", "Survey context and facilitator guide"]],
+  },
+} as const;
+
+function renderCollectionReviewNavigation(items: ReviewItem[]) {
+  const indexed = new Map(items.map((item, index) => [item.id, { item, index }]));
+  const root = { heading: "collection-review-title", title: "Template collections" };
+  const returnTargets = new Map<string, Map<string, string>>();
+  const entry = (id: string) => indexed.get(id) ?? fail(`missing review item ${id}`);
+  const englishField = (id: string, field: string) => {
+    const value = entry(id).item.english;
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      fail(`missing English review fields for ${id}`);
+    const fieldValue = value[field];
+    if (typeof fieldValue !== "string") fail(`missing review field ${field} for ${id}`);
+    return fieldValue;
+  };
+  const link = (id: string, label: string, target: typeof root, collectionTitle?: string) => {
+    const targets = returnTargets.get(id) ?? new Map<string, string>();
+    targets.set(target.heading, target.title);
+    returnTargets.set(id, targets);
+    const name = collectionTitle
+      ? `${label}, ${target.title}, ${collectionTitle}`
+      : `${label}, ${target.title}`;
+    return `<li><a href="#${reviewItemAnchor(entry(id).index)}" aria-label="${escapeHtml(name)}">${escapeHtml(label)}</a></li>`;
+  };
+  const collectionCards = templateCollectionIds.map((id) => {
+    const [title, description] = collectionReviewLabels[id];
+    const titleId = `ui/template-collection/${title}`;
+    const collection = {
+      heading: `collection-review-${id}`,
+      title: englishField(titleId, "template"),
+    };
+    const templates = templateCollectionMemberships
+      .filter(({ collectionId }) => collectionId === id)
+      .map(({ kind, templateId }, index) => {
+        const path = `${kind}/${templateId}`;
+        const { label, entries } = templateReviewLinks[kind];
+        const title = englishField(`${path}/${entries[0][0]}`, "title");
+        const template = {
+          heading: `${collection.heading}-template-${index + 1}`,
+          title: `${label}: ${title}`,
+        };
+        const links = entries.map(([suffix, label]) =>
+          link(`${path}/${suffix}`, label, template, collection.title),
+        );
+        if (kind === "survey")
+          links.push(
+            link(
+              englishField(`${path}/context`, "questionContentReference"),
+              "Shared Round questions",
+              template,
+              collection.title,
+            ),
+          );
+        return `<li><h4 id="${template.heading}" tabindex="-1">${escapeHtml(template.title)}</h4><ul class="review-links">${links.join("")}</ul></li>`;
+      });
+    return `<section class="review-collection" aria-labelledby="${collection.heading}">
+<h3 id="${collection.heading}" tabindex="-1">${escapeHtml(collection.title)}</h3>
+<ul class="review-links">${link(titleId, "Collection title", collection)}${link(`ui/template-collection/${description}`, "Description", collection)}${link(`collection/${id}/memberships`, "Membership", collection)}</ul>
+<ul class="review-templates">${templates.join("")}</ul></section>`;
+  });
+  const html = `<nav aria-labelledby="${root.heading}">
+<h2 id="${root.heading}" tabindex="-1">Review by template collection</h2>
+<p>Open an entry to review its English reference and target-language copy. Survey questions link to the Round draft that supplies them.</p>
+<ul class="review-links">${link("ui/template-collection/label", "Collections label", root)}${link("ui/template-collection/allTemplates", "All templates label", root)}${link("ui/template-collection/chooseCollection", "Collection selector label", root)}</ul>
+<div class="review-collections">${collectionCards.join("\n")}</div></nav>`;
+  return { html, returnTargets };
+}
+
 export function renderReviewHtml(bundle: ReviewBundle): string {
   const text = escapeHtml;
+  const collections = renderCollectionReviewNavigation(bundle.items);
   return `<!doctype html>
 <html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>Native review preparation — ${text(bundle.locale)}</title>
-<style>body{font:16px system-ui;line-height:1.5;margin:2rem;max-width:110rem;color:#17202a;background:#fff}article{border-top:2px solid #617080;margin-top:2rem;padding-top:1rem}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem}.pair>section{min-width:0}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f8;padding:1rem}code{overflow-wrap:anywhere}small{display:block;overflow-wrap:anywhere}h2{font-size:1.1rem;overflow-wrap:anywhere}@media(max-width:700px){body{margin:1rem}.pair{grid-template-columns:minmax(0,1fr)}}</style></head><body>
+<style>
+body{font:16px system-ui;line-height:1.5;margin:2rem;max-width:110rem;color:#17202a;background:#fff;overflow-wrap:anywhere}
+article{border-top:2px solid #617080;margin-top:2rem;padding-top:1rem}
+article:target{border-color:#006174}
+.pair,.review-collections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem}
+.pair>section,.review-collection{min-width:0}
+.review-collection{padding:1rem;border:1px solid #a9b5bd;border-radius:.5rem;overflow-wrap:anywhere}
+.review-collection h3,.review-collection h4{margin:.3rem 0}
+#collection-review-title{font-size:1.35rem}
+.review-templates,.review-links{list-style:none;padding:0}
+.review-templates>li{margin-top:.8rem}
+.review-links{display:flex;flex-wrap:wrap;gap:.15rem 1rem}
+a{color:#005f71}
+a:focus-visible,nav [tabindex="-1"]:focus-visible{outline:2px solid #006174;outline-offset:3px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f8;padding:1rem}
+code{overflow-wrap:anywhere}
+small{display:block;overflow-wrap:anywhere}
+h2{font-size:1.1rem;overflow-wrap:anywhere}
+@media(max-width:700px){body{margin:1rem}.pair,.review-collections{grid-template-columns:minmax(0,1fr)}}
+</style></head><body>
 <h1>Native review preparation: ${text(bundle.locale)}</h1><p>${text(bundle.scope)}</p>
 <p>Use your browser’s Find to search this complete, expanded document. Each JSON object exposes exact field paths and complete copy. Record human decisions in the separate decisions.json; every generated entry begins pending. English packets are reference material. The checker validates records and current source binding; it cannot verify that a reviewer is human or establish native quality.</p>
 <p>Candidate source: <code>${text(bundle.sourceBinding.sourceRef)}</code><br>Source files: <code>${text(bundle.sourceBinding.filesHash)}</code><br>Bundle: <code>${text(bundle.bundleHash)}</code></p>
 <p>Read the repository localization glossary before reviewing terminology. Review full flows, errors, dates, numbers, visible copy and speaker notes in context before recording acceptance. This packet contains synthetic examples only.</p>
-${bundle.items.map((item) => `<article><h2>${text(item.id)}</h2><p>${text(item.context)}</p><p><code>${text(item.source.file)} · ${text(item.source.helper)} · ${text(item.source.contentVersion)}</code></p><div class="pair"><section lang="en-CA"><h3>English reference</h3><pre>${text(canonicalJson(item.english))}</pre><small>${text(item.englishHash)}</small></section><section lang="${text(bundle.locale)}"><h3>${text(bundle.locale)}</h3><pre>${text(canonicalJson(item.target))}</pre><small>${text(item.targetHash)}</small></section></div></article>`).join("\n")}
+${collections.html}
+${bundle.items
+  .map((item, index) => {
+    const targets = collections.returnTargets.get(item.id);
+    const links = targets
+      ? `<ul class="review-links">${[...targets]
+          .map(([heading, title]) => `<li><a href="#${heading}">Back to ${text(title)}</a></li>`)
+          .join("")}</ul>`
+      : "";
+    return `<article id="${reviewItemAnchor(index)}" tabindex="-1"><h2>${text(item.id)}</h2>${links}<p>${text(item.context)}</p><p><code>${text(item.source.file)} · ${text(item.source.helper)} · ${text(item.source.contentVersion)}</code></p><div class="pair"><section lang="en-CA"><h3>English reference</h3><pre>${text(canonicalJson(item.english))}</pre><small>${text(item.englishHash)}</small></section><section lang="${text(bundle.locale)}"><h3>${text(bundle.locale)}</h3><pre>${text(canonicalJson(item.target))}</pre><small>${text(item.targetHash)}</small></section></div></article>`;
+  })
+  .join("\n")}
 </body></html>\n`;
 }
 
@@ -1072,6 +1200,7 @@ export async function runLocalizationReview(argv: string[], root = process.cwd()
       root,
     );
     const out = resolve(root, options.get("out")!);
+    const html = renderReviewHtml(bundle);
     await mkdir(out, { recursive: true });
     // Never overwrite decisions: a rerun must not erase a human's work or quietly rebind it.
     const decisionsPath = resolve(out, "decisions.json");
@@ -1079,7 +1208,7 @@ export async function runLocalizationReview(argv: string[], root = process.cwd()
       fail("decisions.json already exists; choose a fresh output directory");
     await writeFile(decisionsPath, canonicalJson(createReviewDecisions(bundle)), { flag: "wx" });
     await writeFile(resolve(out, "bundle.json"), canonicalJson(bundle));
-    await writeFile(resolve(out, "review.html"), renderReviewHtml(bundle));
+    await writeFile(resolve(out, "review.html"), html);
     return {
       exitCode: 0,
       message: `Exported ${bundle.items.length} pending review items for ${bundle.locale} to ${out}. No acceptance recorded.`,

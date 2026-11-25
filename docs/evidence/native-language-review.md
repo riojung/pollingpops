@@ -24,8 +24,9 @@ Generated packets are ignored build artifacts and excluded from repository forma
 Each locale receives:
 
 - `review.html`: complete, expanded English/target pairs with field paths, context,
-  source helpers and hashes. Use browser Find; no script, form or external resource is
-  needed. Text is escaped, including synthetic HTML and substitution-token examples.
+  source helpers and hashes. **Review by template collection** links directly to the WX-04
+  material. Browser Find works across the full packet. Text is escaped, including
+  synthetic HTML and substitution-token examples.
 - `bundle.json`: deterministic canonical content and source binding.
 - `decisions.json`: a separate human-owned record, initially entirely pending.
 
@@ -52,6 +53,21 @@ See the [Team meetings editorial record](team-meetings-editorial-review-2026-11.
 [Event feedback editorial record](event-feedback-editorial-review-2026-11.md).
 This is a bounded review inventory, not a claim that every product message is included.
 It contains repository copy and synthetic authored examples, not customer records.
+
+## Review the four template collections
+
+Use **Review by template collection** to jump to each collection's title, description and
+membership. The index covers 20 format-qualified templates and links to 62 existing review
+entries. Round links open the preview and facilitator guide or the generated draft.
+Presentation links open the template definition, generated draft or facilitator guide.
+Survey links open the Survey context and guide or the shared Round questions. Event
+experience has separate Round and Survey entries with independent guides.
+
+Each link's accessible name includes its collection or format-qualified template. After
+reviewing an entry, use its **Back to** link to resume at the named collection or template
+heading. Shared entries offer a return link for each template that references them. Record
+decisions against the existing item IDs in `decisions.json`. The index opens the same articles
+and decision entries used by the complete packet.
 
 ## Record and check decisions
 

@@ -333,8 +333,13 @@ export default {
   "delivery.assistant.allowanceLimited":
     "{used} de {limit} tareas basadas en fuentes usadas este mes",
   "delivery.assistant.loadingAvailability": "Cargando disponibilidad de creación…",
+  "delivery.assistant.retryAvailability": "Reintentar disponibilidad",
+  "delivery.assistant.availabilityUnavailable":
+    "Hay que comprobar la disponibilidad del asistente de creación.",
   "delivery.assistant.disabled":
-    "El asistente de creación está desactivado en este despliegue. Un operador puede habilitar un proveedor compatible con OpenAI aprobado; mientras esté desactivado no se envía ninguna fuente.",
+    "Las nuevas propuestas basadas en fuentes requieren un proveedor aprobado. Pide al operador de tu despliegue que configure uno.",
+  "delivery.assistant.allowanceExhausted":
+    "Has agotado tu cuota mensual de propuestas basadas en fuentes. Puedes revisar las propuestas existentes o volver a intentarlo cuando se restablezca la cuota.",
   "delivery.assistant.sourceType": "Tipo de fuente",
   "delivery.assistant.pasteText": "Pegar texto",
   "delivery.assistant.uploadPrivateFile": "Subir un archivo privado",

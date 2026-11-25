@@ -1,9 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { AuthoringJob } from "../../packages/contracts/src/index.ts";
 import korean from "../../apps/web/lib/i18n/domains/delivery-authoring/ko-KR";
 import german from "../../apps/web/lib/i18n/domains/delivery-authoring/de-DE";
 import { sourceWorkflowsCopy } from "../../apps/web/components/presentation/source-workflows-copy";
 import { presentationCommandCopy } from "../../apps/web/components/presentation/presentation-command-copy";
-import { createE01Deck, e01ApiUrl, e01Slide, readE01Record } from "./presentation-e01-support";
+import {
+  clickNavigatorAction,
+  createE01Deck,
+  e01ApiUrl,
+  e01Slide,
+  readE01Record,
+} from "./presentation-e01-support";
 import {
   closeSpecialistInspector,
   specialistLanguage,
@@ -21,6 +28,111 @@ test.use({ actionTimeout: 20_000 });
 async function refreshWorkspace(page: Page) {
   await page.evaluate(() => window.dispatchEvent(new Event("polling-pops:workspace-updated")));
 }
+
+test("Option B trusted-source insertion adopts an accepted proposal after editing access returns", async ({
+  page,
+}) => {
+  await signInBeta(page);
+  await specialistLocale(page, "en-CA");
+  const record = await createE01Deck(page, [e01Slide("Original source workflow slide")], 14);
+  const sourceName = "Synthetic source awaiting a reply";
+  const sourceText =
+    "This synthetic source explains how plants use sunlight to make sugars and release oxygen.";
+  const job: AuthoringJob = {
+    id: "b1000000-0000-4000-8000-000000000001",
+    sourceName,
+    sourceType: "pasted_text",
+    status: "pending",
+    attempts: 0,
+    appliedQuizId: null,
+    output: null,
+    error: null,
+    createdAt: "2026-11-01T12:00:00.000Z",
+    updatedAt: "2026-11-01T12:00:00.000Z",
+  };
+  let viewer = false;
+  await page.route(`${e01ApiUrl}/v1/auth/me`, async (route) => {
+    const response = await route.fetch();
+    const account = await response.json();
+    if (viewer) account.creator.role = "viewer";
+    await route.fulfill({ response, json: account });
+  });
+
+  let releasePost!: () => void;
+  const pendingPost = new Promise<void>((resolve) => {
+    releasePost = resolve;
+  });
+  let releaseHistory!: () => void;
+  const pendingHistory = new Promise<void>((resolve) => {
+    releaseHistory = resolve;
+  });
+  const payloads: unknown[] = [];
+  let used = 0;
+  await page.route(`${e01ApiUrl}/v1/authoring/status`, async (route) => {
+    await route.fulfill({
+      json: { status: { enabled: true, monthlyLimit: 3, used, remaining: 3 - used } },
+    });
+  });
+  await page.route(`${e01ApiUrl}/v1/authoring/jobs`, async (route) => {
+    if (route.request().method() === "POST") {
+      payloads.push(route.request().postDataJSON());
+      await pendingPost;
+      used = 1;
+      await route.fulfill({ status: 202, json: { job } });
+      return;
+    }
+    if (used === 0) {
+      await route.fulfill({ json: { jobs: [] } });
+      return;
+    }
+    await pendingHistory;
+    await route.fulfill({ json: { jobs: [{ ...job, status: "failed", attempts: 1 }] } });
+  });
+
+  try {
+    await page.goto(`/presentation/${record.id}`);
+    await closeSpecialistInspector(page);
+    await clickNavigatorAction(page, "From trusted source");
+    const dialog = page.getByRole("dialog", { name: "Insert from a trusted source", exact: true });
+    const pastedText = dialog.getByRole("textbox", { name: "Trusted source text", exact: true });
+    const allowance = (count: number) =>
+      dialog.getByText(`${count} of 3 source-grounded jobs used this month`, { exact: true });
+    await expect(allowance(0)).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Source name", exact: true }).fill(sourceName);
+    await pastedText.fill(sourceText);
+    await dialog.getByRole("button", { name: "Create review proposal", exact: true }).click();
+    await expect
+      .poll(() => payloads)
+      .toEqual([{ sourceType: "pasted_text", sourceName, text: sourceText }]);
+
+    viewer = true;
+    await refreshWorkspace(page);
+    await expect(
+      dialog.getByText("Viewer access can inspect proposals but cannot create drafts.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(pastedText).toBeHidden();
+    viewer = false;
+    await refreshWorkspace(page);
+    await expect(pastedText).toHaveValue(sourceText);
+    await expect(
+      dialog.getByRole("button", { name: "Uploading source…", exact: true }),
+    ).toBeDisabled();
+
+    const proposal = dialog.getByRole("article").filter({ hasText: sourceName });
+    releasePost();
+    await expect(proposal.getByText("Waiting", { exact: true })).toBeVisible();
+    await expect(allowance(1)).toBeVisible();
+    releaseHistory();
+    await expect(proposal.getByText("Needs attention", { exact: true })).toBeVisible();
+    await expect(pastedText).toHaveValue(sourceText);
+    expect(payloads).toHaveLength(1);
+  } finally {
+    releasePost();
+    releaseHistory();
+  }
+});
 
 for (const suffix of ["desktop", "@mobile"]) {
   test(`Option B trusted-source guidance retains pasted input across locale and current permission changes ${suffix}`, async ({

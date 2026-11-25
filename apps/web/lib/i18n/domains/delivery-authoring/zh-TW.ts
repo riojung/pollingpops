@@ -308,8 +308,12 @@ export default {
   "delivery.assistant.allowanceUnlimited.other": "本月已建立 {used} 個工作；配額由營運者設定",
   "delivery.assistant.allowanceLimited": "本月已使用 {used}/{limit} 個以來源為基礎的工作",
   "delivery.assistant.loadingAvailability": "正在載入創作功能可用性…",
+  "delivery.assistant.retryAvailability": "重新檢查可用性",
+  "delivery.assistant.availabilityUnavailable": "需要檢查創作功能是否可用。",
   "delivery.assistant.disabled":
-    "此部署已停用創作助理。營運者可以啟用已核准的 OpenAI 相容供應商；停用期間不會傳送任何來源。",
+    "新增以來源為基礎的建議需要經核准的供應商。請聯絡部署營運者設定供應商。",
+  "delivery.assistant.allowanceExhausted":
+    "本月以來源為基礎的建議額度已用完。您可以審核現有建議，或在額度重設後再試。",
   "delivery.assistant.sourceType": "來源類型",
   "delivery.assistant.pasteText": "貼上文字",
   "delivery.assistant.uploadPrivateFile": "上傳私人檔案",

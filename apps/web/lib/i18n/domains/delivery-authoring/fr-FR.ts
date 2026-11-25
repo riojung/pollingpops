@@ -336,8 +336,13 @@ export default {
   "delivery.assistant.allowanceLimited":
     "{used} tâches fondées sur une source sur {limit} utilisées ce mois-ci",
   "delivery.assistant.loadingAvailability": "Chargement de la disponibilité de création…",
+  "delivery.assistant.retryAvailability": "Revérifier la disponibilité",
+  "delivery.assistant.availabilityUnavailable":
+    "La disponibilité de l’assistant de création doit être vérifiée.",
   "delivery.assistant.disabled":
-    "L’assistant de création est désactivé sur ce déploiement. Un opérateur peut activer un fournisseur compatible OpenAI approuvé ; aucune source n’est envoyée lorsqu’il est désactivé.",
+    "Les nouvelles propositions fondées sur une source nécessitent un fournisseur approuvé. Demandez à la personne responsable de votre déploiement d’en configurer un.",
+  "delivery.assistant.allowanceExhausted":
+    "Vous avez épuisé votre quota mensuel de propositions fondées sur une source. Vous pouvez examiner les propositions existantes ou réessayer après la réinitialisation de votre quota.",
   "delivery.assistant.sourceType": "Type de source",
   "delivery.assistant.pasteText": "Coller du texte",
   "delivery.assistant.uploadPrivateFile": "Importer un fichier privé",

@@ -323,8 +323,12 @@ export default {
     "이번 달 작업 {used}개 생성 · 운영자가 설정한 한도",
   "delivery.assistant.allowanceLimited": "이번 달 출처 기반 작업 {limit}개 중 {used}개 사용",
   "delivery.assistant.loadingAvailability": "작성 기능 사용 가능 여부를 불러오는 중…",
+  "delivery.assistant.retryAvailability": "사용 가능 여부 다시 확인",
+  "delivery.assistant.availabilityUnavailable": "작성 기능을 사용할 수 있는지 확인해야 합니다.",
   "delivery.assistant.disabled":
-    "이 배포에서는 작성 도우미가 비활성화되어 있습니다. 운영자가 승인된 OpenAI 호환 제공자를 활성화할 수 있으며, 비활성화된 동안에는 어떤 출처도 전송되지 않습니다.",
+    "새 출처 기반 제안을 만들려면 승인된 제공업체가 필요합니다. 배포 환경 운영자에게 제공업체 설정을 요청하세요.",
+  "delivery.assistant.allowanceExhausted":
+    "이번 달 출처 기반 제안 한도를 모두 사용했습니다. 기존 제안을 검토하거나 한도가 초기화된 후 다시 시도할 수 있습니다.",
   "delivery.assistant.sourceType": "출처 유형",
   "delivery.assistant.pasteText": "텍스트 붙여넣기",
   "delivery.assistant.uploadPrivateFile": "비공개 파일 업로드",

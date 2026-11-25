@@ -327,8 +327,12 @@ export default {
   "delivery.assistant.allowanceUnlimited.other": "今月{used}件のジョブを作成済み・運用者設定の上限",
   "delivery.assistant.allowanceLimited": "今月はソースに基づくジョブを{limit}件中{used}件使用済み",
   "delivery.assistant.loadingAvailability": "作成機能の利用状況を読み込み中…",
+  "delivery.assistant.retryAvailability": "利用可否を再確認",
+  "delivery.assistant.availabilityUnavailable": "作成機能の利用可否を確認する必要があります。",
   "delivery.assistant.disabled":
-    "この環境では作成アシスタントが無効です。運用者は承認済みのOpenAI互換プロバイダーを有効にできます。無効な間はソースが送信されることはありません。",
+    "ソースに基づく新しい提案を作成するには、承認済みのプロバイダーが必要です。この環境の運用者に設定を依頼してください。",
+  "delivery.assistant.allowanceExhausted":
+    "ソースに基づく提案の月間利用枠を使い切りました。既存の提案を確認するか、利用枠がリセットされてから再試行できます。",
   "delivery.assistant.sourceType": "ソースの種類",
   "delivery.assistant.pasteText": "テキストを貼り付け",
   "delivery.assistant.uploadPrivateFile": "非公開ファイルをアップロード",

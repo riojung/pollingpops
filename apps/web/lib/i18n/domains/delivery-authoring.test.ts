@@ -25,6 +25,10 @@ const criticalTranslatedKeys = [
   "delivery.join.title",
   "delivery.builder.readyToPreview",
   "delivery.presentationBuilder.emptyTitle",
+  "delivery.assistant.disabled",
+  "delivery.assistant.retryAvailability",
+  "delivery.assistant.availabilityUnavailable",
+  "delivery.assistant.allowanceExhausted",
 ] as const;
 
 describe("delivery and authoring message catalogs", () => {

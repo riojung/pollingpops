@@ -1256,6 +1256,230 @@ test("every remaining response type requires explicit Submit before it is saved"
   }
 });
 
+function sourceReviewJob(sourceName: string) {
+  return {
+    id: randomUUID(),
+    sourceName,
+    sourceType: "pasted_text",
+    status: "ready",
+    attempts: 1,
+    error: null,
+    appliedQuizId: null,
+    output: {
+      checkpointSet: {
+        title: "Source review draft",
+        questions: [
+          {
+            id: randomUUID(),
+            delivery: "main",
+            prompt: "Which statement is supported by the fixture source?",
+          },
+        ],
+      },
+      citations: [],
+      provider: "Playwright fixture",
+      model: "deterministic",
+    },
+  };
+}
+
+for (const suffix of ["desktop", "@mobile"]) {
+  test(`Source assistance retries availability while saved proposals and entered sources stay available ${suffix}`, async ({
+    page,
+  }) => {
+    await signIn(page, betaEmail);
+
+    const statusError = "The fixture could not read authoring status.";
+    const providerError =
+      "The source-grounded authoring assistant is not configured on this deployment";
+    const allowanceError = "This workspace has used its 3-job monthly authoring allowance";
+    const scannerError = "The source security scan is temporarily unavailable";
+    const providerGuidance =
+      "New source proposals require an approved provider. Ask your deployment operator to configure one.";
+    const allowanceGuidance =
+      "Your monthly allowance for source proposals is used. You can review existing proposals or try again after it resets.";
+    const savedJob = sourceReviewJob("Saved source proposal");
+    const requests: string[] = [];
+    const sourcePayloads: Record<string, unknown>[] = [];
+    type AvailabilityRead = "error" | "disabled" | "exhausted" | "ready";
+    let availability: AvailabilityRead = "error";
+    let readyUsage = 1;
+    let refusal = { status: 503, code: "AUTHORING_DISABLED", message: providerError };
+    let acceptedSubmission:
+      { job: ReturnType<typeof sourceReviewJob>; historyReply: Promise<void> } | undefined;
+
+    await page.route("**/v1/authoring/status", async (route) => {
+      requests.push(`${route.request().method()} /v1/authoring/status`);
+      if (availability === "error") {
+        await route.fulfill({ status: 503, json: { error: { message: statusError } } });
+        return;
+      }
+      const enabled = availability !== "disabled";
+      const used = availability === "exhausted" ? 3 : readyUsage;
+      await route.fulfill({
+        json: {
+          status: {
+            enabled,
+            fileUploadAvailable: enabled,
+            monthlyLimit: 3,
+            used,
+            remaining: 3 - used,
+          },
+        },
+      });
+    });
+    await page.route("**/v1/authoring/jobs", async (route) => {
+      const request = route.request();
+      requests.push(`${request.method()} /v1/authoring/jobs`);
+      const accepted = acceptedSubmission;
+      if (request.method() === "POST") {
+        sourcePayloads.push(request.postDataJSON() as Record<string, unknown>);
+        if (accepted) {
+          readyUsage += 1;
+          availability = "error";
+          await route.fulfill({ status: 202, json: { job: accepted.job } });
+          return;
+        }
+        await route.fulfill({
+          status: refusal.status,
+          json: { error: { code: refusal.code, message: refusal.message } },
+        });
+        return;
+      }
+      await accepted?.historyReply;
+      await route.fulfill({ json: { jobs: accepted ? [accepted.job, savedJob] : [savedJob] } });
+    });
+
+    await page.goto("/create#source");
+    const panel = page.getByRole("tabpanel", { name: "Source assistance", exact: true });
+    const alert = panel.getByRole("alert");
+    const submit = panel.getByRole("button", { name: "Create review proposal", exact: true });
+    const retry = panel.getByRole("button", { name: "Retry availability", exact: true });
+    const existingDraft = panel.getByRole("button", {
+      name: "Create unpublished review draft",
+      exact: true,
+    });
+    const providerNotice = panel.getByText(providerGuidance, { exact: true });
+    const allowanceNotice = panel.getByText(allowanceGuidance, { exact: true });
+    const needsCheck = panel.getByText("Authoring availability needs to be checked.", {
+      exact: true,
+    });
+    const sourceName = panel.getByLabel("Source name", { exact: true });
+    const trustedText = panel.getByRole("textbox", { name: "Trusted source text", exact: true });
+    const retryAvailability = async (next: Exclude<AvailabilityRead, "error">) => {
+      availability = next;
+      const beforeRetry = requests.length;
+      await retry.click();
+      if (next === "disabled") await expect(providerNotice).toBeVisible();
+      else if (next === "exhausted") await expect(allowanceNotice).toBeVisible();
+      else await expect(submit).toBeEnabled();
+      expect(requests.slice(beforeRetry)).toEqual(["GET /v1/authoring/status"]);
+    };
+
+    await expect(alert.filter({ hasText: statusError })).toBeVisible();
+    await expect(needsCheck).toBeVisible();
+    await expect(panel.getByText(savedJob.sourceName, { exact: true })).toBeVisible();
+    await expect(existingDraft).toBeEnabled();
+    await expect(submit).toBeDisabled();
+
+    await retryAvailability("disabled");
+    await expect(existingDraft).toBeEnabled();
+    await expect(submit).toBeDisabled();
+    await retryAvailability("ready");
+    await expect(providerNotice).toBeHidden();
+    await expect(alert.filter({ hasText: statusError })).toBeHidden();
+    expect(sourcePayloads).toEqual([]);
+
+    const pastedSource = {
+      sourceType: "pasted_text",
+      sourceName: "Original notes",
+      text: "This fixture has enough trusted source text to submit a new proposal for review.",
+    };
+    await sourceName.fill(pastedSource.sourceName);
+    await trustedText.fill(pastedSource.text);
+
+    await submit.click();
+    await expect(needsCheck).toBeVisible();
+    await expect(alert.filter({ hasText: providerError })).toBeVisible();
+    await expect(submit).toBeDisabled();
+    await expect(existingDraft).toBeEnabled();
+    await expect(sourceName).toHaveValue(pastedSource.sourceName);
+    await expect(trustedText).toHaveValue(pastedSource.text);
+    await retryAvailability("disabled");
+    await expect(submit).toBeDisabled();
+    await retryAvailability("ready");
+    await expect(providerNotice).toBeHidden();
+    expect(sourcePayloads).toEqual([pastedSource]);
+
+    refusal = { status: 402, code: "AUTHORING_LIMIT", message: allowanceError };
+    await submit.click();
+    await expect(needsCheck).toBeVisible();
+    await expect(alert.filter({ hasText: allowanceError })).toBeVisible();
+    await expect(submit).toBeDisabled();
+    await expect(existingDraft).toBeEnabled();
+    await expect(sourceName).toHaveValue(pastedSource.sourceName);
+    await expect(trustedText).toHaveValue(pastedSource.text);
+    await retryAvailability("exhausted");
+    await expect(submit).toBeDisabled();
+    await retryAvailability("ready");
+    await expect(allowanceNotice).toBeHidden();
+    expect(sourcePayloads).toEqual([pastedSource, pastedSource]);
+
+    refusal = { status: 503, code: "AUTHORING_DISABLED", message: scannerError };
+    await panel.getByRole("radio", { name: "Upload a private file", exact: true }).check();
+    const file = panel.locator('input[type="file"]');
+    await file.setInputFiles({
+      name: "fixture.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-synthetic-source"),
+    });
+    await submit.click();
+    await expect(needsCheck).toBeVisible();
+    await expect(alert.filter({ hasText: scannerError })).toBeVisible();
+    await expect(providerNotice).toBeHidden();
+    await expect(submit).toBeDisabled();
+    await expect(existingDraft).toBeEnabled();
+    expect(await file.evaluate((input: HTMLInputElement) => input.files?.[0]?.name)).toBe(
+      "fixture.pdf",
+    );
+    await retryAvailability("ready");
+    await expect(providerNotice).toBeHidden();
+    expect(sourcePayloads).toEqual([
+      pastedSource,
+      pastedSource,
+      expect.objectContaining({ sourceType: "pdf", sourceName: "fixture.pdf" }),
+    ]);
+    await panel.getByRole("radio", { name: "Paste text", exact: true }).check();
+    await expect(trustedText).toHaveValue(pastedSource.text);
+
+    const acceptedJob = sourceReviewJob(pastedSource.sourceName);
+    const acceptedProposal = panel.getByText(acceptedJob.sourceName, { exact: true });
+    let releaseHistory!: () => void;
+    const historyReply = new Promise<void>((resolve) => {
+      releaseHistory = resolve;
+    });
+    const beforeSubmit = requests.length;
+    const beforeAcceptedPayload = sourcePayloads.length;
+    try {
+      acceptedSubmission = { job: acceptedJob, historyReply };
+      await submit.click();
+      await expect(alert.filter({ hasText: statusError })).toBeVisible();
+      await expect.poll(() => requests.slice(beforeSubmit)).toContain("GET /v1/authoring/jobs");
+      await expect(acceptedProposal).toBeVisible();
+
+      await retryAvailability("ready");
+      await expect(
+        panel.getByText("2 of 3 source-grounded jobs used this month", { exact: true }),
+      ).toBeVisible();
+      await expect(alert.filter({ hasText: statusError })).toBeHidden();
+      await expect(acceptedProposal).toBeVisible();
+      expect(sourcePayloads.slice(beforeAcceptedPayload)).toEqual([pastedSource]);
+    } finally {
+      releaseHistory();
+    }
+  });
+}
+
 test("source and import starts reach real review drafts through mocked external gates", async ({
   page,
 }) => {
@@ -1296,32 +1520,8 @@ test("source and import starts reach real review drafts through mocked external 
     });
   });
 
-  const jobId = randomUUID();
-  const sourceQuestionId = randomUUID();
-  const readyJob = {
-    id: jobId,
-    sourceName: "Fixture source",
-    sourceType: "pasted_text",
-    status: "ready",
-    attempts: 1,
-    error: null,
-    appliedQuizId: null,
-    output: {
-      checkpointSet: {
-        title: "Source review draft",
-        questions: [
-          {
-            id: sourceQuestionId,
-            delivery: "main",
-            prompt: "Which statement is supported by the fixture source?",
-          },
-        ],
-      },
-      citations: [],
-      provider: "Playwright fixture",
-      model: "deterministic",
-    },
-  };
+  const readyJob = sourceReviewJob("Fixture source");
+  const jobId = readyJob.id;
   const sourcePayloads: Record<string, unknown>[] = [];
   let pendingHistory: Promise<void> | undefined;
   await page.route("**/v1/authoring/jobs", async (route) => {

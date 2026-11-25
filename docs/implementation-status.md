@@ -8,8 +8,33 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-11 Source assistance availability recovery
+
+The shared Source assistance panel gives Round and Presentation creators, including those
+inserting into an existing Presentation, and Recovery Pack creators a **Retry availability**
+action. It reads current provider, file-scanner and monthly allowance status independently
+of proposal history. A failed check leaves saved proposals available for review and blocks
+new generation until a successful check. A provider or allowance rejection invalidates the
+status used for submission and preserves the pasted text or selected file. The next status
+read determines the appropriate guidance, since a file-scanner error can use the same code
+as a missing provider. Retry only reads availability and never resends the source. A pending
+history request after an accepted submission does not block availability recovery.
+
+The existing Presentation insertion dialog retains pasted text across same-workspace locale
+and permission changes while the dialog stays open. If a submission was accepted during a
+permission change, the panel shows the saved proposal and refreshes its allowance and history.
+A change of workspace or creator starts a new panel. The availability guidance is available
+in all ten locales. Native-language acceptance remains pending.
+
+Local verification passed 112 focused tests, the production beta build, and 16 browser cases
+across desktop Chromium and Firefox, mobile Chromium, and mobile WebKit. Browser coverage
+includes retry while history is pending, accepted proposals across permission changes, source
+and import draft creation, locale changes, and job adoption during a concurrent Recovery Pack
+action.
+
 ### WX-04 collection review navigation
 
+Merged in [PR #323](https://github.com/riojung/pollingpops/pull/323) at `7d832fa`.
 The [native-language packet](evidence/native-language-review.md#review-the-four-template-collections)
 now links directly to existing reviewer items for Team meetings, Training and onboarding,
 Workshops, and Event feedback. The four sections cover 20 format-qualified templates and

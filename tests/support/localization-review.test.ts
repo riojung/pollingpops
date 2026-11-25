@@ -750,17 +750,180 @@ describe("native-language review preparation", () => {
   });
 
   it("renders every source byte as inert text with browser-native Find and language boundaries", () => {
-    const malicious = "</pre><script>alert('x')</script><img src=x onerror=alert(1)>& $& {title}";
+    const malicious = "\"</pre><script>alert('x')</script><img src=x onerror=alert(1)>& $& {title}";
     const changed = structuredClone(bundle);
     changed.items[0]!.target = { text: malicious };
+    changed.items.find(({ id }) => id === "round/event-feedback/metadata")!.english = {
+      title: malicious,
+    };
     const html = renderReviewHtml(changed);
     expect(html).toContain(escapeHtml(malicious));
-    expect(html).not.toMatch(/<script\b|<img\b|\bonclick=/i);
+    expect(html).toContain(`>Round: ${escapeHtml(malicious)}</h4>`);
+    expect(
+      [...html.matchAll(/aria-label="([^"]+)"/g)].some(([, name]) =>
+        name!.includes(`Round: ${escapeHtml(malicious)}`),
+      ),
+    ).toBe(true);
+    expect(/<(?:script|img|form|button|input|iframe)\b/i.test(html)).toBe(false);
+    const openingTags = html.match(/<[a-z](?:[^"'<>]|"[^"]*"|'[^']*')*>/gi) ?? [];
+    expect(
+      openingTags.filter((tag) => /\son\w+\s*=/i.test(tag.replace(/"[^"]*"|'[^']*'/g, ""))),
+    ).toEqual([]);
     expect(html).toContain("default-src 'none'");
     expect(html).toContain('lang="en-CA"');
     expect(html).toContain('lang="ko-KR"');
     expect(html).toContain("browser’s Find");
-    expect(html.match(/<article>/g)).toHaveLength(bundle.items.length);
+    expect(html.match(/<article\b/g)).toHaveLength(bundle.items.length);
+  });
+
+  it("gives all existing review articles unique focusable anchors in bundle order", () => {
+    const html = renderReviewHtml(bundle);
+    const articles = [
+      ...html.matchAll(/<article id="(review-item-\d+)" tabindex="-1">\s*<h2>([^<]+)<\/h2>/g),
+    ];
+    expect(articles).toHaveLength(804);
+    expect(articles.map(([, anchor, heading]) => [anchor, heading])).toEqual(
+      bundle.items.map(({ id }, index) => [`review-item-${index + 1}`, escapeHtml(id)]),
+    );
+  });
+
+  it("links each collection and format-qualified template to its existing review items", () => {
+    const html = renderReviewHtml(bundle);
+    const landmarks = [
+      ...html.matchAll(/<nav aria-labelledby="collection-review-title">([\s\S]*?)<\/nav>/g),
+    ];
+    expect(landmarks).toHaveLength(1);
+    const navigation = landmarks[0]![1]!;
+    expect(navigation).toMatch(/<h2 id="collection-review-title" tabindex="-1">[^<]+<\/h2>/);
+
+    const itemByAnchor = new Map(
+      bundle.items.map(({ id }, index) => [`#review-item-${index + 1}`, id]),
+    );
+    const linksIn = (htmlPart: string) =>
+      [...htmlPart.matchAll(/<a\b([^>]*)>([^<]+)<\/a>/g)].map(([, attributes, text]) => ({
+        href: attributes!.match(/\bhref="([^"]+)"/)?.[1],
+        ariaLabel: attributes!.match(/\baria-label="([^"]+)"/)?.[1],
+        text: text!,
+      }));
+    const navigationLinks = linksIn(navigation);
+    expect(navigationLinks).toHaveLength(63);
+    expect(new Set(navigationLinks.map(({ href }) => href)).size).toBe(62);
+    expect(navigationLinks.every(({ ariaLabel }) => ariaLabel)).toBe(true);
+    expect(new Set(navigationLinks.map(({ ariaLabel }) => ariaLabel)).size).toBe(63);
+
+    const expectedReturnLinks = new Map<string, string[]>();
+    const linkedItems = (htmlPart: string, returnTarget: string, context: string[] = []) =>
+      linksIn(htmlPart).map(({ href, ariaLabel, text }) => {
+        const itemId = itemByAnchor.get(href!);
+        expect(itemId, href).toBeDefined();
+        const accessibleName = ariaLabel!;
+        expect(accessibleName.startsWith(text), accessibleName).toBe(true);
+        let offset = text.length;
+        for (const part of context) {
+          const found = accessibleName.indexOf(part, offset);
+          expect(found, accessibleName).toBeGreaterThanOrEqual(offset);
+          offset = found + part.length;
+        }
+        expectedReturnLinks.set(itemId!, [
+          ...(expectedReturnLinks.get(itemId!) ?? []),
+          returnTarget,
+        ]);
+        return itemId;
+      });
+    const sectionPattern =
+      /<section\b[^>]*\baria-labelledby="collection-review-([^"]+)"[^>]*>([\s\S]*?)<\/section>/g;
+    const sections = [...navigation.matchAll(sectionPattern)];
+    expect(sections.map(([, collectionId]) => collectionId).sort()).toEqual(
+      [...templateCollectionIds].sort(),
+    );
+    expect(
+      linkedItems(navigation.replace(sectionPattern, ""), "#collection-review-title").sort(),
+    ).toEqual([
+      "ui/template-collection/allTemplates",
+      "ui/template-collection/chooseCollection",
+      "ui/template-collection/label",
+    ]);
+
+    const collectionCopyKeys = {
+      "team-meetings": ["title", "description"],
+      "training-onboarding": ["trainingOnboardingTitle", "trainingOnboardingDescription"],
+      workshops: ["workshopsTitle", "workshopsDescription"],
+      "event-feedback": ["eventFeedbackTitle", "eventFeedbackDescription"],
+    } as const;
+    const formatNames = { round: "Round", presentation: "Presentation", survey: "Survey" };
+    for (const collectionId of templateCollectionIds) {
+      const section = sections.find(([, id]) => id === collectionId)![2]!;
+      const [titleKey, descriptionKey] = collectionCopyKeys[collectionId];
+      const title = escapeHtml(templateCollectionCopy("en-CA")[titleKey]);
+      const collectionAnchor = `collection-review-${collectionId}`;
+      expect(section).toContain(`<h3 id="${collectionAnchor}" tabindex="-1">${title}</h3>`);
+
+      const [collectionIntro, ...members] = section.split(/<li>\s*(?=<h4\b)/);
+      expect(linkedItems(collectionIntro!, `#${collectionAnchor}`, [title]).sort()).toEqual(
+        [
+          `collection/${collectionId}/memberships`,
+          `ui/template-collection/${titleKey}`,
+          `ui/template-collection/${descriptionKey}`,
+        ].sort(),
+      );
+      expect(members).toHaveLength(5);
+      const linksByHeading = new Map(
+        members.map((member, index) => {
+          const headingAnchor = `${collectionAnchor}-template-${index + 1}`;
+          const heading = member.match(/^<h4 id="([^"]+)" tabindex="-1">([^<]+)<\/h4>/);
+          expect(heading?.[1]).toBe(headingAnchor);
+          const titleAndFormat = heading![2]!;
+          return [
+            titleAndFormat,
+            linkedItems(member, `#${headingAnchor}`, [titleAndFormat, title]).sort(),
+          ];
+        }),
+      );
+      expect(linksByHeading.size).toBe(5);
+
+      for (const { kind, templateId } of templateCollectionMemberships.filter(
+        (membership) => membership.collectionId === collectionId,
+      )) {
+        const itemIds = {
+          round: [`round/${templateId}/metadata`, `round/${templateId}/draft`],
+          presentation: [
+            `presentation/${templateId}/definition`,
+            `presentation/${templateId}/draft`,
+            `presentation/${templateId}/guide`,
+          ],
+          survey: [`survey/${templateId}/context`, `round/${templateId}/draft`],
+        }[kind];
+        const source = bundle.items.find(({ id }) => id === itemIds[0])!.english as {
+          title: string;
+        };
+        const heading = `${formatNames[kind]}: ${escapeHtml(source.title)}`;
+        expect(linksByHeading.get(heading), `${collectionId} / ${heading}`).toEqual(itemIds.sort());
+      }
+
+      if (collectionId === "event-feedback") {
+        expect(linksByHeading.get("Round: Event experience")).toEqual([
+          "round/event-feedback/draft",
+          "round/event-feedback/metadata",
+        ]);
+        expect(linksByHeading.get("Survey: Event experience")).toEqual([
+          "round/event-feedback/draft",
+          "survey/event-feedback/context",
+        ]);
+      }
+    }
+
+    const returnLinksByItem = new Map<string, string[]>();
+    for (const [, anchor, article] of html.matchAll(
+      /<article id="(review-item-\d+)" tabindex="-1">([\s\S]*?)<\/article>/g,
+    )) {
+      const destinations = linksIn(article!).map(({ href }) => href!);
+      if (destinations.length) returnLinksByItem.set(itemByAnchor.get(`#${anchor}`)!, destinations);
+    }
+    expect(returnLinksByItem).toEqual(expectedReturnLinks);
+    expect(returnLinksByItem.get("round/event-feedback/draft")).toEqual([
+      "#collection-review-event-feedback-template-1",
+      "#collection-review-event-feedback-template-5",
+    ]);
   });
 
   it("keeps pending/issues incomplete and treats complete records as human statements only", () => {
@@ -992,7 +1155,9 @@ describe("native-language review preparation", () => {
         ]),
       ).rejects.toThrow(/already exists/);
       expect(await readFile(decisionPath, "utf8")).toBe(original);
-      expect(await readFile(resolve(directory, "review.html"), "utf8")).toContain("<article>");
+      expect(await readFile(resolve(directory, "review.html"), "utf8")).toContain(
+        '<article id="review-item-1" tabindex="-1">',
+      );
       for (const args of [
         [],
         ["export"],

@@ -80,8 +80,9 @@ named WX-04 collection software scope. The WX-07 recurring check-in design merge
 [WX-13 learner identity and privacy proposal](learning-sequence-privacy-design.md) merged
 through [PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`. The
 [WX-06 Survey disclosure review preparation](survey-branching-disclosure-review.md) merged through
-[PR #321](https://github.com/riojung/pollingpops/pull/321) at `9b04ac8`. The next WX-11
-increment adds Presentation provider setup explanations.
+[PR #321](https://github.com/riojung/pollingpops/pull/321) at `9b04ac8`. WX-11 Presentation
+provider setup explanations merged through [PR #322](https://github.com/riojung/pollingpops/pull/322)
+at `2d57437`. The next checkpoint adds navigation to the WX-04 editorial review packets.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -276,6 +277,13 @@ The collection merged in PR #313 at `0877465`.
 See the [editorial record](evidence/event-feedback-editorial-review-2026-11.md).
 This completes the named WX-04 collection software scope. Human editorial and
 native-language acceptance remain open.
+
+**Collection review navigation after PR #322.** The
+[source-bound review packets](evidence/native-language-review.md#review-the-four-template-collections)
+provide direct links for four collections, 20 templates and 62 existing review entries.
+Each link opens the original English and target-language record. The Event experience Round
+and Survey reach separate guide contexts and share the Round question reference.
+Human editorial and native-language decisions remain pending. Owner: content design and localization.
 
 ### WX-05 Creation: consolidate methods and source intake
 
@@ -1132,7 +1140,7 @@ first availability read.
 The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,544 package tests, 529 support tests, four
 builds, and compiled server startup. Optional integration suites were skipped in the full check.
 
-**WX-11 Presentation provider setup explanations after PR #321.** Text assistance and Question
+**WX-11 Presentation provider setup explanations merged in PR #322.** Text assistance and Question
 suggestions now guide creators to the deployment operator or the manual editing action when
 new generation requires an approved provider. The same localized guidance covers a disabled
 status, a disabled submit preflight, and a definitive provider rejection. Retry availability

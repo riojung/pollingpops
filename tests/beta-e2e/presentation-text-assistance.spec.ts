@@ -133,6 +133,9 @@ async function openText(page: Page, operation: "rewrite" | "shorten", recovering
   } else {
     await closeDrawers(page);
     await selectE01Body(page);
+    const writing = page.locator('details[data-native-inspector-group="writing-assistance"]');
+    await expect(writing).toBeVisible();
+    if ((await writing.getAttribute("open")) === null) await writing.locator("summary").click();
     await page
       .getByRole("button", {
         name: operation === "rewrite" ? "Rewrite text" : "Shorten text",
@@ -412,7 +415,7 @@ for (const suffix of ["", " @mobile"]) {
   }, info) => {
     test.setTimeout(240_000);
     await signInBeta(page);
-    for (const mode of ["preflight", "admission"] as const) {
+    for (const mode of ["preflight", "admission", "provider"] as const) {
       const record = await fixture(page);
       await enterE01Editor(page, record.id, (info.project.use.viewport?.width ?? 1280) <= 700);
       let dialog = await openText(page, "rewrite");
@@ -437,6 +440,13 @@ for (const suffix of ["", " @mobile"]) {
               },
             },
           });
+        else if (mode === "provider")
+          await route.fulfill({
+            status: 503,
+            json: {
+              error: { code: "AUTHORING_DISABLED", message: "AI authoring is disabled" },
+            },
+          });
         else await route.continue();
       });
       if (mode === "preflight")
@@ -455,9 +465,26 @@ for (const suffix of ["", " @mobile"]) {
           }),
         );
       await generate.click();
-      await expect(dialog.getByRole("alert")).toContainText(
-        mode === "preflight" ? "unavailable" : "allowance has been used",
-      );
+      if (mode === "provider") {
+        const guidance = dialog.getByText(
+          "New text requests need an approved AI provider. Ask your deployment operator to configure one.",
+          { exact: true },
+        );
+        await expect(guidance).toBeVisible();
+        await expect(
+          dialog.getByText("You can edit the text directly.", { exact: true }),
+        ).toBeVisible();
+        await noOverflow(page);
+        await dialog.getByRole("button", { name: "Retry availability", exact: true }).click();
+        await expect(
+          dialog.getByRole("status").filter({ hasText: /\d+(?: of \d+)? AI jobs used this month/ }),
+        ).toBeVisible();
+        await expect(guidance).toBeHidden();
+      } else {
+        await expect(dialog.getByRole("alert")).toContainText(
+          mode === "preflight" ? "unavailable" : "allowance has been used",
+        );
+      }
       await expect(
         dialog.getByRole("button", { name: "Discard proposal", exact: true }),
       ).toBeEnabled();

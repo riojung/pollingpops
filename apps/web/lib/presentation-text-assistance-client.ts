@@ -264,6 +264,7 @@ export function createPresentationTextAssistance({
   canEdit,
   persist,
   onState,
+  captureAvailability,
   onApplied,
   request = apiFetch,
 }: {
@@ -272,6 +273,7 @@ export function createPresentationTextAssistance({
   canEdit: () => boolean;
   persist: (value: TextAssistanceRecovery | null) => void;
   onState: (value: TextAssistanceState) => void;
+  captureAvailability?: () => (value: TextAssistanceStatus | "provider-unavailable") => void;
   onApplied: (receipt: TextAssistanceAppliedReceipt) => Promise<void> | void;
   request?: Request;
 }) {
@@ -365,6 +367,7 @@ export function createPresentationTextAssistance({
     const { captured, signal } = begin();
     publish({ ...state, busy: createIfMissing ? "generate" : "refresh", error: "" });
     let attemptedPost = false;
+    let providerUnavailable = false;
     try {
       let result: { job: unknown };
       try {
@@ -376,9 +379,12 @@ export function createPresentationTextAssistance({
         if (!createIfMissing || !(error instanceof ApiClientError && error.status === 404))
           throw error;
         if (!current(captured)) return;
+        const reportAvailability = captureAvailability?.();
         const status = await fetchTextAssistanceStatus(presentationId, signal, request);
         if (!current(captured)) return;
-        if (!status.enabled || status.remaining === 0 || status.active >= status.maxActiveJobs)
+        reportAvailability?.(status);
+        providerUnavailable = !status.enabled;
+        if (providerUnavailable || status.remaining === 0 || status.active >= status.maxActiveJobs)
           throw new Error(
             "AI generation is unavailable with the current allowance. Retry availability later.",
             { cause: error },
@@ -397,11 +403,17 @@ export function createPresentationTextAssistance({
       if (current(captured)) acceptJob(result.job);
     } catch (error) {
       if (!current(captured)) return;
+      const providerRejected =
+        attemptedPost &&
+        error instanceof ApiClientError &&
+        error.status === 503 &&
+        error.code === "AUTHORING_DISABLED";
+      if (providerRejected) captureAvailability?.()("provider-unavailable");
       const admissionRejected =
         attemptedPost &&
         error instanceof ApiClientError &&
         ([400, 401, 403, 404, 409, 410, 413, 415, 422, 429].includes(error.status) ||
-          (error.status === 503 && error.code === "AUTHORING_DISABLED"));
+          providerRejected);
       const definitive =
         !saved.createUncertain && !saved.applyBody && (!attemptedPost || admissionRejected);
       if (definitive) write({ ...saved, createUncertain: false });
@@ -409,7 +421,8 @@ export function createPresentationTextAssistance({
         ...state,
         busy: null,
         pending: definitive ? false : state.pending,
-        error: humanError(error),
+        error:
+          captureAvailability && (providerUnavailable || providerRejected) ? "" : humanError(error),
         message: definitive
           ? attemptedPost
             ? "This request was rejected. Discard it and select the current saved text for a new request."

@@ -335,6 +335,7 @@ function harness(open = true, locale?: SupportedLocale) {
   const props: ComponentProps<typeof PresentationQuestionSuggestions> = {
     presentationId: id(1),
     locale,
+    addQuestionLabel: locale === "ko-KR" ? "질문 추가" : "Add question",
     actorKey: "actor:workspace",
     canEdit: true,
     open,
@@ -693,6 +694,123 @@ describe("optional discussion suggestion review", () => {
     expect(JSON.stringify(h.nodes)).toContain(
       "Free question starters and manual questions remain available",
     );
+    h.unmount();
+  });
+  it.each(["status", "preflight", "admission"])(
+    "localizes provider setup after a disabled %s and permits a later availability check",
+    async (stage) => {
+      const locale = "ko-KR";
+      const t = questionSuggestionsCopy(locale);
+      const guidance = t(
+        "New question suggestions need an approved AI provider. Ask your deployment operator to configure one.",
+      );
+      if (stage === "status") allowance = { ...allowance, enabled: false };
+      const ordinary = fixture.request.getMockImplementation()!;
+      if (stage === "admission")
+        fixture.request.mockImplementation(async (path: string, init: RequestInit = {}) => {
+          if (path.endsWith("/jobs") && init.method === "POST")
+            throw new ApiClientError("Provider failure detail", "AUTHORING_DISABLED", 503);
+          return ordinary(path, init);
+        });
+      const h = harness(true, locale);
+      await h.settle();
+      const generate = t("Generate discussion suggestions");
+      expect(h.button(generate).props.disabled).toBe(stage === "status");
+      if (stage !== "status") {
+        if (stage === "preflight") allowance = { ...allowance, enabled: false, remaining: 0 };
+        await h.click(generate);
+        expect(h.props.onPendingChange).toHaveBeenLastCalledWith(false);
+        expect(h.button(t("Discard proposal")).props.disabled).toBe(false);
+      }
+      expect(h.nodes.some((node) => node.props.children === guidance)).toBe(true);
+      expect(JSON.stringify(h.nodes)).toContain(
+        t("Close this dialog and choose {addQuestion}, or use a free question starter.", {
+          addQuestion: "질문 추가",
+        }),
+      );
+      expect(h.nodes.some((node) => node.props.role === "alert")).toBe(false);
+      expect(fixture.request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+        stage === "admission" ? 1 : 0,
+      );
+
+      allowance = { ...allowance, enabled: true, remaining: 10 };
+      await h.click(t("Retry availability"));
+      expect(JSON.stringify(h.nodes)).toContain(
+        t("{used} of {limit} AI jobs used this month ({remaining} remaining).", {
+          used: 0,
+          limit: 10,
+          remaining: 10,
+        }),
+      );
+      expect(h.nodes.some((node) => node.props.children === guidance)).toBe(false);
+      if (stage === "status") expect(h.button(generate).props.disabled).toBe(false);
+      else expect(h.button(t("Discard proposal")).props.disabled).toBe(false);
+      h.unmount();
+    },
+  );
+  it("keeps the latest provider restriction when an older status read resolves after saved recovery", async () => {
+    storage.set(storageKey, JSON.stringify({ ...validRecovery(), createUncertain: true }));
+    const ordinary = fixture.request.getMockImplementation()!;
+    let resolveOlderStatus!: (value: { status: typeof allowance }) => void;
+    const olderStatus = new Promise<{ status: typeof allowance }>((resolve) => {
+      resolveOlderStatus = resolve;
+    });
+    let initialRead: RequestInit | undefined;
+    fixture.request.mockImplementation(async (path: string, init: RequestInit = {}) => {
+      if (path.includes("/status?") && !initialRead) {
+        initialRead = init;
+        return olderStatus;
+      }
+      return ordinary(path, init);
+    });
+    const h = harness();
+    await h.settle();
+    const priorAllowance = allowance;
+    allowance = { ...allowance, enabled: false };
+    await h.click("Recover saved request");
+    expect(initialRead?.signal?.aborted).toBe(true);
+    resolveOlderStatus({ status: priorAllowance });
+    await h.settle();
+    expect(JSON.stringify(h.nodes)).toContain(
+      "New question suggestions need an approved AI provider",
+    );
+    expect(JSON.stringify(h.nodes)).not.toContain("Close this dialog and choose Add question");
+    expect(JSON.stringify(h.nodes)).not.toContain("Free question starters and manual questions");
+    expect(h.button("Discard proposal").props.disabled).toBe(true);
+    expect(JSON.parse(storage.get(storageKey)!).createUncertain).toBe(true);
+    expect(fixture.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    h.unmount();
+  });
+  it("keeps a newer opening status when an older disabled preflight finishes late", async () => {
+    const ordinary = fixture.request.getMockImplementation()!;
+    let statusReads = 0;
+    let finishPreflight!: (value: { status: typeof allowance }) => void;
+    const preflight = new Promise<{ status: typeof allowance }>((resolve) => {
+      finishPreflight = resolve;
+    });
+    fixture.request.mockImplementation(async (path: string, init: RequestInit = {}) => {
+      if (path.includes("/status?") && ++statusReads === 2) return preflight;
+      return ordinary(path, init);
+    });
+    const h = harness();
+    await h.settle();
+    await h.click("Generate discussion suggestions");
+    expect(statusReads).toBe(2);
+
+    await h.click("Close");
+    h.props.open = true;
+    h.render();
+    await h.settle();
+    expect(statusReads).toBe(3);
+    finishPreflight({ status: { ...allowance, enabled: false } });
+    await h.settle();
+
+    expect(JSON.stringify(h.nodes)).toContain("0 of 10 AI jobs used this month (10 remaining).");
+    expect(JSON.stringify(h.nodes)).not.toContain(
+      "New question suggestions need an approved AI provider.",
+    );
+    expect(h.button("Discard proposal").props.disabled).toBe(false);
+    expect(fixture.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
     h.unmount();
   });
   it("requires complete review and inserts just the selected question", async () => {

@@ -78,8 +78,10 @@ named WX-04 collection software scope. The WX-07 recurring check-in design merge
 [WX-12 integration provider evaluation](integration-provider-evaluation.md) merged through
 [PR #319](https://github.com/riojung/pollingpops/pull/319) at `0179deb`. The
 [WX-13 learner identity and privacy proposal](learning-sequence-privacy-design.md) merged
-through [PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`. The next
-checkpoint prepares the [WX-06 Survey disclosure review](survey-branching-disclosure-review.md).
+through [PR #320](https://github.com/riojung/pollingpops/pull/320) at `0b21465`. The
+[WX-06 Survey disclosure review preparation](survey-branching-disclosure-review.md) merged through
+[PR #321](https://github.com/riojung/pollingpops/pull/321) at `9b04ac8`. The next WX-11
+increment adds Presentation provider setup explanations.
 
 The first delivery changes discovery and reuse, using existing APIs and original Polling Pops
 components. It does not introduce a second authoring engine, a pretend AI composer, competitor
@@ -651,7 +653,7 @@ boundary cases passed; 31 new C2 cases include 625 reference histograms and nume
 Independent read-only review found no actionable issue. Configured optional integration skips
 remain; automated qualification does not replace human privacy acceptance.
 
-**WX-06 disclosure review preparation after PR #320:** the
+**WX-06 disclosure review preparation merged in PR #321:** the
 [review brief](survey-branching-disclosure-review.md) reproduces five synthetic cases,
 including equal-sized runs with different whole-report outcomes. It records the audience and
 utility decisions needed before C3, adds direct API checks for rejected conditional summary
@@ -1130,8 +1132,17 @@ first availability read.
 The full `VITEST_MAX_WORKERS=1 pnpm check` passed with 10,544 package tests, 529 support tests, four
 builds, and compiled server startup. Optional integration suites were skipped in the full check.
 
+**WX-11 Presentation provider setup explanations after PR #321.** Text assistance and Question
+suggestions now guide creators to the deployment operator or the manual editing action when
+new generation requires an approved provider. The same localized guidance covers a disabled
+status, a disabled submit preflight, and a definitive provider rejection. Retry availability
+can clear the notice after setup. Manual guidance appears when recovery allows editing.
+Existing saved-request recovery and reviewed Apply or Insert retain their conditions. All ten
+locales have the new guidance. Owner: frontend and localization.
+[Verification record](implementation-status.md#wx-11-presentation-provider-setup-explanations)
+
 **WX-11 remaining work.** PR #310 completed the named software slices. Native-language acceptance
-remains open. Other provider setup messages remain candidates for selection.
+remains open. Provider setup messaging is scoped to the two Presentation dialogs in this increment.
 
 **Acceptance:** one primary task at each decision point; intentional density with wrapping titles;
 consistent component states; focus/keyboard/320px behavior; dark and high-contrast token use;

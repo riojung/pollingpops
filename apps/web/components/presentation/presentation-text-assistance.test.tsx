@@ -421,6 +421,113 @@ describe("translation language selection and explicit review", () => {
     fixture.hooks = null;
     vi.unstubAllGlobals();
   });
+  it.each(["status", "preflight", "admission"])(
+    "shows localized provider setup guidance after a disabled %s and refreshes availability",
+    async (stage) => {
+      const locale = "fr-FR";
+      const copy = textAssistanceCopy(locale);
+      const guidance = copy(
+        "New text requests need an approved AI provider. Ask your deployment operator to configure one.",
+      );
+      const ordinary = fixture.request.getMockImplementation()!;
+      let enabled = stage !== "status";
+      let reject = stage === "admission";
+      fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path.includes("/status?") && !enabled)
+          return {
+            status: {
+              enabled: false,
+              monthlyLimit: 10,
+              used: 10,
+              remaining: 0,
+              active: 2,
+              maxActiveJobs: 2,
+            },
+          };
+        if (path.endsWith("/jobs") && init?.method === "POST" && reject)
+          throw new ApiClientError("Provider failure detail", "AUTHORING_DISABLED", 503);
+        return ordinary(path, init);
+      });
+
+      const h = translationModal();
+      h.props.target = props.target;
+      h.props.locale = locale;
+      await h.settle();
+      const generate = copy("Generate shorter text proposal");
+      expect(h.button(generate).props.disabled).toBe(stage === "status");
+      if (stage !== "status") {
+        if (stage === "preflight") enabled = false;
+        (h.button(generate).props.onClick as () => void)();
+        await h.settle();
+        expect(h.props.onPendingChange).toHaveBeenLastCalledWith(false);
+        expect(h.button(copy("Discard proposal")).props.disabled).toBe(false);
+      }
+      expect(h.nodes.some((node) => node.props.children === guidance)).toBe(true);
+      expect(
+        h.nodes.some((node) => node.props.children === copy("You can edit the text directly.")),
+      ).toBe(true);
+      expect(h.nodes.some((node) => node.props.role === "alert")).toBe(false);
+      expect(fixture.request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+        stage === "admission" ? 1 : 0,
+      );
+
+      enabled = true;
+      reject = false;
+      (h.button(copy("Retry availability")).props.onClick as () => void)();
+      await h.settle();
+      expect(JSON.stringify(h.nodes)).toContain(
+        copy("{used} of {limit} AI jobs used this month ({remaining} remaining).", {
+          used: 0,
+          limit: 10,
+          remaining: 10,
+        }),
+      );
+      expect(h.nodes.some((node) => node.props.children === guidance)).toBe(false);
+      if (stage === "status") expect(h.button(generate).props.disabled).toBe(false);
+      else expect(h.button(copy("Discard proposal")).props.disabled).toBe(false);
+    },
+  );
+  it("keeps the reopened dialog status when its previous preflight finishes late", async () => {
+    const ordinary = fixture.request.getMockImplementation()!;
+    const allowance = {
+      enabled: true,
+      monthlyLimit: 10,
+      used: 0,
+      remaining: 10,
+      active: 0,
+      maxActiveJobs: 2,
+    };
+    let statusReads = 0;
+    let finishPreflight!: (value: { status: typeof allowance }) => void;
+    const preflight = new Promise<{ status: typeof allowance }>((resolve) => {
+      finishPreflight = resolve;
+    });
+    fixture.request.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path.includes("/status?") && ++statusReads === 2) return preflight;
+      return ordinary(path, init);
+    });
+    const h = translationModal();
+    h.props.target = props.target;
+    await h.settle();
+    (h.button("Generate shorter text proposal").props.onClick as () => void)();
+    await h.settle();
+    expect(statusReads).toBe(2);
+
+    h.props.open = false;
+    await h.settle();
+    h.props.open = true;
+    await h.settle();
+    expect(statusReads).toBe(3);
+    finishPreflight({ status: { ...allowance, enabled: false } });
+    await h.settle();
+
+    expect(JSON.stringify(h.nodes)).toContain("0 of 10 AI jobs used this month (10 remaining).");
+    expect(JSON.stringify(h.nodes)).not.toContain(
+      "New text requests need an approved AI provider.",
+    );
+    expect(h.button("Discard proposal").props.disabled).toBe(false);
+    expect(fixture.request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
   it("requires a canonical explicit target choice, checks allowance, then locks that choice to the generated request", async () => {
     const h = translationModal();
     await h.settle();

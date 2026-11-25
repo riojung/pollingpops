@@ -212,7 +212,11 @@ export function PresentationTextAssistance(props: Props) {
   const copy = textAssistanceCopy(locale);
   const storageKey = `presentation-text-assistance:v1:${actorKey}:${presentationId}`;
   const [state, setState] = useState<TextAssistanceState>(initialTextAssistanceState);
-  const [status, setStatus] = useState<TextAssistanceStatus | null>(null);
+  const [availability, setAvailability] = useState<
+    TextAssistanceStatus | "provider-unavailable" | null
+  >(null);
+  const status = availability === "provider-unavailable" ? null : availability;
+  const availabilityRead = useRef<AbortController | null>(null);
   const [availabilityError, setAvailabilityError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [formError, setFormError] = useState("");
@@ -242,7 +246,10 @@ export function PresentationTextAssistance(props: Props) {
     const session = createPresentationTextAssistance({
       actorKey,
       presentationId,
-      canEdit: () => allowed.current && latest.current.actorKey === actorKey,
+      canEdit: () =>
+        allowed.current &&
+        latest.current.actorKey === actorKey &&
+        latest.current.presentationId === presentationId,
       persist: (value) => {
         if (value) window.sessionStorage.setItem(storageKey, JSON.stringify(value));
         else window.sessionStorage.removeItem(storageKey);
@@ -251,6 +258,16 @@ export function PresentationTextAssistance(props: Props) {
         setState(next);
         latest.current.onPendingChange(next.pending);
         latest.current.onRecoveryChange(Boolean(next.recovery));
+      },
+      captureAvailability: () => {
+        const readAtStart = availabilityRead.current;
+        return (value) => {
+          // A dialog reopened during preflight has started its own status read.
+          if (availabilityRead.current !== readAtStart) return;
+          readAtStart?.abort();
+          setAvailability(value);
+          setAvailabilityError("");
+        };
       },
       onApplied: async (receipt) => {
         await latest.current.onApplied(receipt);
@@ -310,17 +327,18 @@ export function PresentationTextAssistance(props: Props) {
   useEffect(() => {
     if (!open || !canEdit || authInvalid) return;
     const abort = new AbortController();
-    setStatus(null);
+    availabilityRead.current = abort;
+    setAvailability(null);
     setAvailabilityError("");
     void fetchTextAssistanceStatus(presentationId, abort.signal)
       .then((value) => {
-        if (!abort.signal.aborted) setStatus(value);
+        if (!abort.signal.aborted && allowed.current) setAvailability(value);
       })
       .catch((error) => {
-        if (!abort.signal.aborted) setAvailabilityError(humanError(error));
+        if (!abort.signal.aborted && allowed.current) setAvailabilityError(humanError(error));
       });
     return () => abort.abort();
-  }, [open, canEdit, authInvalid, presentationId, attempt]);
+  }, [open, canEdit, authInvalid, actorKey, presentationId, attempt]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -497,6 +515,17 @@ export function PresentationTextAssistance(props: Props) {
             copy("Editor permission is required.")
           ) : authInvalid ? (
             copy("Reload the editor after a sign-in change.")
+          ) : availability === "provider-unavailable" || status?.enabled === false ? (
+            <>
+              <p>
+                {copy(
+                  "New text requests need an approved AI provider. Ask your deployment operator to configure one.",
+                )}
+              </p>
+              {!disabled && !state.pending && !invalidRecovery ? (
+                <p>{copy("You can edit the text directly.")}</p>
+              ) : null}
+            </>
           ) : status ? (
             <>
               <p>
@@ -511,9 +540,7 @@ export function PresentationTextAssistance(props: Props) {
                     })}{" "}
                 {copy("One text proposal uses one job.")}
               </p>
-              {!status.enabled ? (
-                <p>{copy("AI assistance is disabled on this deployment.")}</p>
-              ) : status.remaining === 0 ? (
+              {status.remaining === 0 ? (
                 <p>
                   {copy(
                     "Your monthly AI allowance is used. Continue editing manually or return when your allowance resets.",

@@ -196,6 +196,7 @@ export function createPresentationQuestionSuggestions({
   canEdit,
   persist,
   onState,
+  captureAvailability,
   onInserted,
   request = apiFetch,
 }: {
@@ -204,6 +205,7 @@ export function createPresentationQuestionSuggestions({
   canEdit: () => boolean;
   persist: (saved: QuestionSuggestionsRecovery | null) => void;
   onState: (state: QuestionSuggestionsState) => void;
+  captureAvailability?: () => (value: QuestionSuggestionsStatus | "provider-unavailable") => void;
   onInserted: (receipt: QuestionSuggestionsInsertedReceipt) => Promise<void> | void;
   request?: Request;
 }) {
@@ -290,6 +292,7 @@ export function createPresentationQuestionSuggestions({
     const { captured, signal } = begin();
     publish({ ...state, busy: createIfMissing ? "generate" : "refresh", error: "" });
     let posted = false;
+    let providerUnavailable = false;
     try {
       let result: { job: unknown };
       try {
@@ -301,9 +304,12 @@ export function createPresentationQuestionSuggestions({
         if (!createIfMissing || !(error instanceof ApiClientError && error.status === 404))
           throw error;
         if (!current(captured)) return;
+        const reportAvailability = captureAvailability?.();
         const status = await fetchQuestionSuggestionsStatus(presentationId, signal, request);
         if (!current(captured)) return;
-        if (!status.enabled || status.remaining === 0 || status.active >= status.maxActiveJobs)
+        reportAvailability?.(status);
+        providerUnavailable = !status.enabled;
+        if (providerUnavailable || status.remaining === 0 || status.active >= status.maxActiveJobs)
           throw new Error(
             "AI generation is unavailable with the current allowance. Continue manually or retry availability later.",
             { cause: error },
@@ -320,18 +326,25 @@ export function createPresentationQuestionSuggestions({
       if (current(captured)) acceptJob(result.job);
     } catch (error) {
       if (!current(captured)) return;
+      const providerRejected =
+        posted &&
+        error instanceof ApiClientError &&
+        error.status === 503 &&
+        error.code === "AUTHORING_DISABLED";
+      if (providerRejected) captureAvailability?.()("provider-unavailable");
       const rejected =
         posted &&
         error instanceof ApiClientError &&
         ([400, 401, 403, 404, 409, 410, 413, 415, 422, 429].includes(error.status) ||
-          (error.status === 503 && error.code === "AUTHORING_DISABLED"));
+          providerRejected);
       const definitive = !saved.createUncertain && !saved.insertBody && (!posted || rejected);
       if (definitive) write({ ...saved, createUncertain: false });
       publish({
         ...state,
         busy: null,
         pending: definitive ? false : state.pending,
-        error: humanError(error),
+        error:
+          captureAvailability && (providerUnavailable || providerRejected) ? "" : humanError(error),
         message: definitive
           ? "No generation was accepted. Retry or discard this proposal to continue manually."
           : "The exact saved request is retained. Recover it before starting another.",

@@ -5451,6 +5451,7 @@ function PresentationEditor({ presentationId, startOutline }: PresentationBuilde
       />
       <PresentationQuestionSuggestions
         locale={locale}
+        addQuestionLabel={t("delivery.builder.addQuestion")}
         presentationId={presentationId}
         actorKey={`${creator?.userId ?? ""}:${creator?.workspaceId ?? ""}`}
         canEdit={canEdit}

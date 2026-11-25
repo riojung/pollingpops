@@ -8,11 +8,33 @@ trademark review.
 
 ## Staged implementation plan checkpoint
 
+### WX-11 Presentation provider setup explanations
+
+Presentation Text assistance and Question suggestions now explain when new requests need an
+approved provider. Both dialogs point to the deployment operator and the equivalent manual
+editing task. The notice follows a disabled status, a generation preflight that finds the
+provider unavailable, or a definitive `AUTHORING_DISABLED` rejection. Manual guidance appears
+when editing is available. Question suggestions names the editor's localized Add question
+command and the free question starters. Retrying availability reads the current status.
+A pending submit preflight cannot replace the status of a reopened dialog. Existing proposal
+review, exact-request recovery, and the separate allowance and active-job explanations still
+apply. Both notices are available in all ten locales. Native-language acceptance remains pending.
+
+Local verification passed 187 focused tests, the production beta build, and eight browser cases
+across desktop Chromium and Firefox, mobile Chromium, and mobile WebKit. The text fixture now
+opens Writing assistance before clicking Rewrite text. Mobile WebKit passed in isolation after
+the combined run failed during page setup and sign-in.
+
+The review follow-up passed 244 focused tests, including both reopen races and the localized
+command label. The production beta build passed again. A stronger availability retry
+assertion passed in desktop and mobile Chromium by waiting for the refreshed allowance.
+
 ### WX-06 conditional Survey disclosure review preparation
 
-The [review brief](survey-branching-disclosure-review.md) records product and privacy decisions
-needed for C3. A reproducible synthetic replay demonstrates when answer variation withholds the
-entire result, including two runs with 210 submissions each that produce different outcomes.
+The [review brief](survey-branching-disclosure-review.md) merged in
+[PR #321](https://github.com/riojung/pollingpops/pull/321) at `9b04ac8`. It records the product
+and privacy decisions needed for C3. A synthetic replay demonstrates when answer variation
+withholds the entire result, including two runs with 210 submissions that produce different outcomes.
 The current API boundary check covers direct results, summary previews, fresh shares and all
 download formats, including a selected-question image. C3 frozen results, C4 sharing and export
 qualification, and B3 condition authoring remain pending.

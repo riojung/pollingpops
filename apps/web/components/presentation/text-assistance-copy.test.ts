@@ -27,7 +27,7 @@ describe("selected text assistance copy", () => {
   });
 
   it("defaults to English with a unique inventory and reuses existing catalogs", () => {
-    expect(textAssistanceCopyKeys).toHaveLength(93);
+    expect(textAssistanceCopyKeys).toHaveLength(94);
     expect(new Set(textAssistanceCopyKeys).size).toBe(textAssistanceCopyKeys.length);
     const shared = textAssistanceCopyKeys.filter((key) =>
       (assistanceCopyKeys as readonly string[]).includes(key),

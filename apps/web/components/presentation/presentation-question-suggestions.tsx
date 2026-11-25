@@ -24,6 +24,7 @@ import styles from "./presentation-question-suggestions.module.css";
 
 interface Props {
   locale?: SupportedLocale;
+  addQuestionLabel: string;
   presentationId: string;
   actorKey: string;
   canEdit: boolean;
@@ -186,7 +187,11 @@ export function PresentationQuestionSuggestions(props: Props) {
   const t = questionSuggestionsCopy(locale);
   const storageKey = `presentation-question-suggestions:v1:${actorKey}:${presentationId}`;
   const [state, setState] = useState<QuestionSuggestionsState>(initialQuestionSuggestionsState);
-  const [status, setStatus] = useState<QuestionSuggestionsStatus | null>(null);
+  const [availability, setAvailability] = useState<
+    QuestionSuggestionsStatus | "provider-unavailable" | null
+  >(null);
+  const status = availability === "provider-unavailable" ? null : availability;
+  const availabilityRead = useRef<AbortController | null>(null);
   const [availabilityError, setAvailabilityError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [formError, setFormError] = useState("");
@@ -233,6 +238,16 @@ export function PresentationQuestionSuggestions(props: Props) {
         setState(next);
         latest.current.onPendingChange(next.pending || reloadFlight.current !== null);
         latest.current.onRecoveryChange(Boolean(next.recovery));
+      },
+      captureAvailability: () => {
+        const readAtStart = availabilityRead.current;
+        return (value) => {
+          // A dialog reopened during preflight has started its own status read.
+          if (availabilityRead.current !== readAtStart) return;
+          readAtStart?.abort();
+          setAvailability(value);
+          setAvailabilityError("");
+        };
       },
       onInserted: async (receipt) => {
         await latest.current.onInserted(receipt);
@@ -304,11 +319,12 @@ export function PresentationQuestionSuggestions(props: Props) {
   useEffect(() => {
     if (!open || !canEdit || authInvalid) return;
     const abort = new AbortController();
-    setStatus(null);
+    availabilityRead.current = abort;
+    setAvailability(null);
     setAvailabilityError("");
     void fetchQuestionSuggestionsStatus(presentationId, abort.signal)
       .then((value) => {
-        if (!abort.signal.aborted && allowed.current) setStatus(value);
+        if (!abort.signal.aborted && allowed.current) setAvailability(value);
       })
       .catch((error) => {
         if (!abort.signal.aborted && allowed.current) setAvailabilityError(humanError(error));
@@ -478,6 +494,8 @@ export function PresentationQuestionSuggestions(props: Props) {
   const disabled = Boolean(state.busy) || resetBusy || reloadBusy || !canEdit || authInvalid;
   const unavailable =
     !status?.enabled || status.remaining === 0 || status.active >= status.maxActiveJobs;
+  const providerUnavailable = availability === "provider-unavailable" || status?.enabled === false;
+  const manualAvailable = !disabled && !state.pending && !invalidRecovery;
   const sameSource = Boolean(saved && target && questionSuggestionsTargetMatches(target, saved));
   const sourceMatches = sameSource && target?.expectedRevision === saved?.expectedRevision;
   const availabilityFeedback = questionSuggestionsFeedback(locale, availabilityError);
@@ -515,16 +533,33 @@ export function PresentationQuestionSuggestions(props: Props) {
           "Generate two source-specific English discussion and reflection questions. Review both and choose one to insert after this exact slide. Generation leaves the presentation unchanged.",
         )}
       </p>
-      <p className={styles.help}>
-        {t(
-          "Free question starters and manual questions remain available. This is optional; no generation starts until you choose Generate.",
-        )}
-      </p>
+      {manualAvailable && !providerUnavailable ? (
+        <p className={styles.help}>
+          {t(
+            "Free question starters and manual questions remain available. This is optional; no generation starts until you choose Generate.",
+          )}
+        </p>
+      ) : null}
       <div role="status" aria-live="polite" className={styles.notice}>
         {!canEdit ? (
           t("Editor permission is required.")
         ) : authInvalid ? (
           t("Reload after your sign-in or permission changes.")
+        ) : providerUnavailable ? (
+          <>
+            <p>
+              {t(
+                "New question suggestions need an approved AI provider. Ask your deployment operator to configure one.",
+              )}
+            </p>
+            {manualAvailable ? (
+              <p>
+                {t("Close this dialog and choose {addQuestion}, or use a free question starter.", {
+                  addQuestion: props.addQuestionLabel,
+                })}
+              </p>
+            ) : null}
+          </>
         ) : status ? (
           <>
             <p>
@@ -539,9 +574,7 @@ export function PresentationQuestionSuggestions(props: Props) {
                   })}{" "}
               {t("One generation uses one AI job. Review and insertion use no additional job.")}
             </p>
-            {!status.enabled ? (
-              <p>{t("AI assistance is disabled on this deployment.")}</p>
-            ) : status.remaining === 0 ? (
+            {status.remaining === 0 ? (
               <p>{t("Your monthly AI allowance is used.")}</p>
             ) : status.active >= status.maxActiveJobs ? (
               <p>{t("Two AI jobs are already active. Retry availability after a job finishes.")}</p>

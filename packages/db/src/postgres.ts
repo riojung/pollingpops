@@ -48,6 +48,7 @@ import {
   questionDelivery,
   QuestionSchema,
   type BrandTheme,
+  type FollowupHistoryAnalytics,
   type FolderArtifactType,
   type QuizDraft,
   type Report,
@@ -125,6 +126,7 @@ import type {
   FollowupAnswerRecord,
   FollowupAttemptRecord,
   FollowupRecord,
+  FollowupHistoryFilters,
   FollowupHistoryRecord,
   FollowupHistoryListOptions,
   FederatedAuthTransactionRecord,
@@ -777,19 +779,42 @@ function mapReportHistory(row: QueryResultRow): ReportHistoryRecord {
   };
 }
 
-function mapFollowupHistory(row: QueryResultRow, now: Date): FollowupHistoryRecord {
-  const opensAt = date(row.opens_at);
-  const closesAt = date(row.closes_at);
-  const expiresAt = date(row.expires_at);
-  const closedAt = row.closed_at ? date(row.closed_at) : null;
-  const status: FollowupHistoryRecord["status"] =
-    expiresAt <= now
-      ? "expired"
-      : closedAt || closesAt <= now
-        ? "closed"
-        : opensAt > now
-          ? "scheduled"
-          : "open";
+const FOLLOWUP_HISTORY_SOURCE = `FROM followups
+  LEFT JOIN quiz_versions
+    ON quiz_versions.id = followups.source_quiz_version_id
+   AND quiz_versions.workspace_id = followups.workspace_id
+  CROSS JOIN LATERAL (
+    SELECT CASE
+             WHEN followups.expires_at <= $7::timestamptz THEN 'expired'
+             WHEN followups.closed_at IS NOT NULL OR followups.closes_at <= $7 THEN 'closed'
+             WHEN followups.opens_at > $7 THEN 'scheduled'
+             ELSE 'open'
+           END AS status
+  ) AS lifecycle`;
+const FOLLOWUP_HISTORY_WHERE = `WHERE followups.workspace_id = $1
+  AND ($2::text IS NULL OR followups.purpose = $2)
+  AND ($3::uuid IS NULL OR quiz_versions.quiz_id = $3)
+  AND ($4::timestamptz IS NULL OR followups.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR followups.created_at <= $5)
+  AND ($6::text IS NULL OR lifecycle.status = $6)
+  AND ($8::text IS NULL OR strpos(lower(followups.title), lower($8)) > 0)`;
+const FOLLOWUP_HISTORY_ATTEMPT_COUNTS = `count(*) AS attempt_count,
+  count(*) FILTER (WHERE followup_attempts.status = 'completed') AS completed_attempt_count`;
+
+function followupHistoryFilterParams(workspaceId: string, filters: FollowupHistoryFilters) {
+  return [
+    workspaceId,
+    filters.purpose ?? null,
+    filters.quizId ?? null,
+    filters.from ?? null,
+    filters.to ?? null,
+    filters.status ?? null,
+    filters.now,
+    filters.search?.trim() || null,
+  ];
+}
+
+function mapFollowupHistory(row: QueryResultRow): FollowupHistoryRecord {
   const content = row.content as QuizDraft;
   const source =
     row.purpose === "assignment"
@@ -813,14 +838,14 @@ function mapFollowupHistory(row: QueryResultRow, now: Date): FollowupHistoryReco
       : null,
     trustMode: TrustModeSchema.parse(row.trust_mode ?? "learning"),
     title: String(row.title),
-    status,
+    status: row.history_status,
     conceptKeys: Array.isArray(row.concept_keys) ? row.concept_keys.map(String) : [],
     checkpointCount: content.questions.length,
     attemptCount: Number(row.attempt_count ?? 0),
     completedAttemptCount: Number(row.completed_attempt_count ?? 0),
-    opensAt,
-    closesAt,
-    expiresAt,
+    opensAt: date(row.opens_at),
+    closesAt: date(row.closes_at),
+    expiresAt: date(row.expires_at),
     createdAt: date(row.created_at),
     cursorCreatedAt: row.cursor_created_at ? String(row.cursor_created_at) : undefined,
   } as FollowupHistoryRecord;
@@ -7147,66 +7172,111 @@ export class PostgresRepository implements Repository {
     return result.rows[0] ? mapFollowup(result.rows[0]) : null;
   }
 
+  async getFollowupHistoryAnalytics(
+    workspaceId: string,
+    filters: FollowupHistoryFilters,
+  ): Promise<FollowupHistoryAnalytics> {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      `WITH matching_followups AS (
+         SELECT followups.id, lifecycle.status,
+                followups.created_at AT TIME ZONE 'UTC' AS created_at_utc
+         ${FOLLOWUP_HISTORY_SOURCE}
+         ${FOLLOWUP_HISTORY_WHERE}
+       ), periods AS (
+         SELECT status, date_trunc('month', created_at_utc) AS month_start,
+                date_trunc('quarter', created_at_utc) AS quarter_start
+         FROM matching_followups
+       ), grouped AS (
+         SELECT CASE
+                  WHEN GROUPING(month_start) = 0 THEN 'month'
+                  WHEN GROUPING(quarter_start) = 0 THEN 'quarter'
+                  ELSE 'total'
+                END AS period,
+                coalesce(month_start, quarter_start) AS start,
+                count(*) AS count,
+                count(*) FILTER (WHERE status = 'open') AS open,
+                count(*) FILTER (WHERE status = 'scheduled') AS scheduled,
+                count(*) FILTER (WHERE status = 'closed') AS closed,
+                count(*) FILTER (WHERE status = 'expired') AS expired
+         FROM periods
+         GROUP BY GROUPING SETS ((), (month_start), (quarter_start))
+       ), ranked AS (
+         SELECT *, row_number() OVER (PARTITION BY period ORDER BY start DESC) AS bucket_number
+         FROM grouped
+       ), attempt_totals AS (
+         SELECT ${FOLLOWUP_HISTORY_ATTEMPT_COUNTS}
+         FROM matching_followups
+         JOIN followup_attempts
+           ON followup_attempts.followup_id = matching_followups.id
+          AND followup_attempts.workspace_id = $1
+       )
+       SELECT period, to_char(start, 'YYYY-MM-DD') AS start, count,
+              open, scheduled, closed, expired, attempt_count, completed_attempt_count
+       FROM ranked
+       LEFT JOIN attempt_totals ON ranked.period = 'total'
+       WHERE bucket_number <= $9
+       ORDER BY ranked.start ASC`,
+      [...followupHistoryFilterParams(workspaceId, filters), REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT],
+    );
+    const analytics: FollowupHistoryAnalytics = {
+      open: 0,
+      scheduled: 0,
+      closed: 0,
+      expired: 0,
+      attemptCount: 0,
+      completedAttemptCount: 0,
+      activity: { month: [], quarter: [] },
+    };
+    for (const row of result.rows) {
+      if (row.period === "total") {
+        analytics.open = Number(row.open);
+        analytics.scheduled = Number(row.scheduled);
+        analytics.closed = Number(row.closed);
+        analytics.expired = Number(row.expired);
+        analytics.attemptCount = Number(row.attempt_count);
+        analytics.completedAttemptCount = Number(row.completed_attempt_count);
+      } else {
+        const period = row.period as keyof FollowupHistoryAnalytics["activity"];
+        analytics.activity[period].push({ start: String(row.start), count: Number(row.count) });
+      }
+    }
+    return analytics;
+  }
+
   async listFollowupHistory(workspaceId: string, options: FollowupHistoryListOptions) {
     const result = await this.workspaceQuery(
       workspaceId,
-      `SELECT followups.*,
-              quiz_versions.quiz_id,
-              to_char(
-                followups.created_at AT TIME ZONE 'UTC',
-                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
-              ) AS cursor_created_at,
-              count(followup_attempts.id)::integer AS attempt_count,
-              count(followup_attempts.id) FILTER (
-                WHERE followup_attempts.status = 'completed'
-              )::integer AS completed_attempt_count
-       FROM followups
-       LEFT JOIN quiz_versions
-         ON quiz_versions.id = followups.source_quiz_version_id
-        AND quiz_versions.workspace_id = followups.workspace_id
-       LEFT JOIN followup_attempts
-         ON followup_attempts.followup_id = followups.id
-        AND followup_attempts.workspace_id = followups.workspace_id
-       WHERE followups.workspace_id = $1
-         AND ($2::timestamptz IS NULL OR (followups.created_at, followups.id) < ($2, $3::uuid))
-         AND ($4::text IS NULL OR followups.purpose = $4)
-         AND ($5::uuid IS NULL OR quiz_versions.quiz_id = $5)
-         AND ($6::timestamptz IS NULL OR followups.created_at >= $6)
-         AND ($7::timestamptz IS NULL OR followups.created_at <= $7)
-         AND (
-           $8::text IS NULL
-           OR ($8 = 'expired' AND followups.expires_at <= $9)
-           OR ($8 = 'closed' AND followups.expires_at > $9
-               AND (followups.closed_at IS NOT NULL OR followups.closes_at <= $9))
-           OR ($8 = 'scheduled' AND followups.expires_at > $9
-               AND followups.closed_at IS NULL AND followups.closes_at > $9
-               AND followups.opens_at > $9)
-           OR ($8 = 'open' AND followups.expires_at > $9
-               AND followups.closed_at IS NULL AND followups.closes_at > $9
-               AND followups.opens_at <= $9)
-         )
-         AND ($11::text IS NULL OR strpos(lower(followups.title), lower($11)) > 0)
-       GROUP BY followups.id, quiz_versions.quiz_id
-       ORDER BY followups.created_at DESC, followups.id DESC
-       LIMIT $10`,
+      `SELECT page.*, attempt_counts.*
+       FROM (
+         SELECT followups.*, quiz_versions.quiz_id, lifecycle.status AS history_status,
+                to_char(
+                  followups.created_at AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                ) AS cursor_created_at
+         ${FOLLOWUP_HISTORY_SOURCE}
+         ${FOLLOWUP_HISTORY_WHERE}
+           AND ($9::timestamptz IS NULL OR (followups.created_at, followups.id) < ($9, $10::uuid))
+         ORDER BY followups.created_at DESC, followups.id DESC
+         LIMIT $11
+       ) AS page
+       CROSS JOIN LATERAL (
+         SELECT ${FOLLOWUP_HISTORY_ATTEMPT_COUNTS}
+         FROM followup_attempts
+         WHERE followup_attempts.followup_id = page.id
+           AND followup_attempts.workspace_id = page.workspace_id
+       ) AS attempt_counts
+       ORDER BY page.created_at DESC, page.id DESC`,
       [
-        workspaceId,
+        ...followupHistoryFilterParams(workspaceId, options),
         options.cursor?.cursorCreatedAt ?? options.cursor?.createdAt ?? null,
         options.cursor?.id ?? null,
-        options.purpose ?? null,
-        options.quizId ?? null,
-        options.from ?? null,
-        options.to ?? null,
-        options.status ?? null,
-        options.now,
         options.limit + 1,
-        options.search?.trim() || null,
       ],
     );
-    const hasMore = result.rows.length > options.limit;
     return {
-      items: result.rows.slice(0, options.limit).map((row) => mapFollowupHistory(row, options.now)),
-      hasMore,
+      items: result.rows.slice(0, options.limit).map(mapFollowupHistory),
+      hasMore: result.rows.length > options.limit,
     };
   }
 

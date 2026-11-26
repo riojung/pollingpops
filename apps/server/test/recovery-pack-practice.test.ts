@@ -504,6 +504,21 @@ describe("Recovery Pack delayed-probe practice", () => {
         recoveryPackSource: expect.objectContaining({ packId: pack.id }),
       }),
     );
+    const analytics = await paused.inject({
+      method: "GET",
+      url: `/v1/followups/analytics?purpose=assignment&expectedWorkspaceId=${workspaceId}`,
+      headers: { cookie },
+    });
+    expect(analytics.statusCode).toBe(200);
+    expect(analytics.json()).toMatchObject({
+      open: 1,
+      scheduled: 0,
+      closed: 0,
+      expired: 0,
+      attemptCount: 0,
+      completedAttemptCount: 0,
+      activity: { month: [{ count: 1 }], quarter: [{ count: 1 }] },
+    });
     const token = new URLSearchParams(new URL(replay.json().genericUrl).hash.slice(1)).get(
       "token",
     )!;

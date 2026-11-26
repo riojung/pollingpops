@@ -1,4 +1,4 @@
-import type { ReportHistoryAnalytics } from "@openround/contracts";
+import type { FollowupHistoryAnalytics, ReportHistoryAnalytics } from "@openround/contracts";
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useLocale } from "../../components/locale-provider";
@@ -12,11 +12,12 @@ import type { SurveySessionSummary } from "../../lib/session-controls";
 import {
   evidencePercent,
   practiceOverview,
+  practiceTotalsOverview,
   presentationOverview,
   resultsActivity,
   roundOverview,
-  roundReportActivity,
   surveyOverview,
+  utcHistoryActivity,
   type PresentationResultSummary,
   type ResultsActivityGrouping,
   type ResultsActivityPeriod,
@@ -91,7 +92,12 @@ type Props = ActivityGroupingControls & { hasMore?: boolean } & (
         analytics: ReportHistoryAnalytics | "loading" | "unavailable";
         onAnalyticsRetry: () => void;
       }
-    | { kind: "practice"; items: readonly FollowupSummary[] }
+    | {
+        kind: "practice";
+        items: readonly FollowupSummary[];
+        analytics: FollowupHistoryAnalytics | "loading" | "unavailable";
+        onAnalyticsRetry: () => void;
+      }
     | { kind: "presentations"; items: readonly PresentationResultSummary[] }
     | { kind: "surveys"; items: readonly SurveySessionSummary[] }
   );
@@ -206,13 +212,15 @@ export function ResultsOverview(props: Props) {
   let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
   let shownCount = props.items.length;
-  const analytics = props.kind === "rounds" ? props.analytics : undefined;
+  const isPractice = props.kind === "practice";
+  const usesHistoryAnalytics = props.kind === "rounds" || isPractice;
+  const analytics = usesHistoryAnalytics ? props.analytics : undefined;
   const hasFullAnalytics = typeof analytics === "object";
-  const hasLoadedEvidence = props.kind !== "rounds" || props.items.length > 0;
+  const hasLoadedEvidence = !usesHistoryAnalytics || props.items.length > 0;
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
-    const statusCounts = hasFullAnalytics ? analytics : summary;
+    const statusCounts = typeof props.analytics === "object" ? props.analytics : summary;
     const ready = props.items.filter((item) => item.status === "ready");
     dateBasis = t("resultsOverview.roundDateBasis");
     links = ready.map((item) => ({
@@ -233,9 +241,9 @@ export function ResultsOverview(props: Props) {
         status: "failed",
       },
     ];
-    if (hasFullAnalytics) {
+    if (typeof props.analytics === "object") {
       shownLabel = t("resultsOverview.matchingReports");
-      shownCount = analytics.ready + analytics.pending + analytics.failed;
+      shownCount = statusCounts.ready + statusCounts.pending + statusCounts.failed;
     }
     primary = (
       <>
@@ -265,8 +273,14 @@ export function ResultsOverview(props: Props) {
       </>
     );
   } else if (props.kind === "practice") {
-    const summary = practiceOverview(props.items);
-    dates = props.items.map((item) => item.createdAt);
+    const summary =
+      typeof props.analytics === "object"
+        ? practiceTotalsOverview(props.analytics)
+        : practiceOverview(props.items);
+    if (hasFullAnalytics) {
+      shownLabel = t("resultsOverview.matchingPractice");
+      shownCount = summary.count;
+    }
     links = props.items.map((item) => ({
       title: item.title,
       date: item.createdAt,
@@ -360,7 +374,7 @@ export function ResultsOverview(props: Props) {
   }
 
   const periods = hasFullAnalytics
-    ? roundReportActivity(analytics.activity, props.grouping)
+    ? utcHistoryActivity(analytics.activity, props.grouping)
     : resultsActivity(dates, props.grouping);
 
   return (
@@ -378,22 +392,26 @@ export function ResultsOverview(props: Props) {
       aria-label={t("resultsOverview.title")}
     >
       <div className={styles.header}>
-        <h2 ref={headingRef} tabIndex={props.kind === "rounds" ? -1 : undefined}>
+        <h2 ref={headingRef} tabIndex={usesHistoryAnalytics ? -1 : undefined}>
           {t("resultsOverview.title")}
         </h2>
-        <p role={props.kind === "rounds" ? "status" : undefined}>
+        <p role={usesHistoryAnalytics ? "status" : undefined}>
           {hasFullAnalytics
-            ? t("resultsOverview.allReportsScope")
+            ? t(isPractice ? "resultsOverview.allPracticeScope" : "resultsOverview.allReportsScope")
             : hasLoadedEvidence
               ? t("resultsOverview.scope", { count: number(props.items.length) })
               : null}
-          {hasFullAnalytics && hasLoadedEvidence
+          {props.kind === "rounds" && hasFullAnalytics && hasLoadedEvidence
             ? ` ${t("resultsOverview.loadedReportsEvidence")}`
             : null}
-          {analytics === "loading" ? ` ${t("resultsOverview.reportTotalsLoading")}` : null}
-          {analytics === "unavailable" ? ` ${t("resultsOverview.reportTotalsUnavailable")}` : null}
+          {analytics === "loading"
+            ? ` ${t(isPractice ? "resultsOverview.practiceAnalyticsLoading" : "resultsOverview.reportTotalsLoading")}`
+            : null}
+          {analytics === "unavailable"
+            ? ` ${t(isPractice ? "resultsOverview.practiceAnalyticsUnavailable" : "resultsOverview.reportTotalsUnavailable")}`
+            : null}
         </p>
-        {props.kind === "rounds" && analytics === "unavailable" ? (
+        {usesHistoryAnalytics && analytics === "unavailable" ? (
           <button
             className="button-quiet"
             type="button"
@@ -402,7 +420,11 @@ export function ResultsOverview(props: Props) {
               props.onAnalyticsRetry();
             }}
           >
-            {t("resultsOverview.retryReportTotals")}
+            {t(
+              isPractice
+                ? "resultsOverview.retryPracticeAnalytics"
+                : "resultsOverview.retryReportTotals",
+            )}
           </button>
         ) : null}
       </div>
@@ -417,9 +439,7 @@ export function ResultsOverview(props: Props) {
               <div
                 className={styles.distribution}
                 role="group"
-                aria-label={t(
-                  hasFullAnalytics ? "resultsOverview.matchingReports" : "resultsOverview.status",
-                )}
+                aria-label={hasFullAnalytics ? shownLabel : t("resultsOverview.status")}
               >
                 <div className={styles.statusTrack} aria-hidden="true">
                   {distribution.map((part) => (
@@ -447,7 +467,7 @@ export function ResultsOverview(props: Props) {
               </div>
             ) : null}
           </div>
-          {hasLoadedEvidence ? (
+          {hasLoadedEvidence || (isPractice && hasFullAnalytics) ? (
             <>
               <div className={styles.widget}>{primary}</div>
               <dl className={styles.widget}>{secondary}</dl>
@@ -461,7 +481,15 @@ export function ResultsOverview(props: Props) {
             periods={periods}
             dateBasis={dateBasis}
             timeZone={hasFullAnalytics ? "UTC" : undefined}
-            empty={hasFullAnalytics ? t("resultsOverview.noMatchingReportActivity") : undefined}
+            empty={
+              hasFullAnalytics
+                ? t(
+                    isPractice
+                      ? "resultsOverview.noMatchingPracticeActivity"
+                      : "resultsOverview.noMatchingReportActivity",
+                  )
+                : undefined
+            }
             grouping={props.grouping}
             onGroupingChange={props.onGroupingChange}
           />
@@ -471,7 +499,11 @@ export function ResultsOverview(props: Props) {
       {props.hasMore ? (
         <p className={styles.more}>
           {t(
-            props.kind === "rounds" ? "resultsOverview.moreRoundEvidence" : "resultsOverview.more",
+            props.kind === "rounds"
+              ? "resultsOverview.moreRoundEvidence"
+              : isPractice
+                ? "resultsOverview.morePracticeItems"
+                : "resultsOverview.more",
           )}
         </p>
       ) : null}

@@ -40,7 +40,7 @@ import signals from "../../components/workspace/workspace-signals.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
-import { RoundResultsOverview } from "./round-results-overview";
+import { PracticeResultsOverview, RoundResultsOverview } from "./history-results-overview";
 import {
   evidencePercent,
   type PresentationResultSummary,
@@ -640,12 +640,36 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
 
 function PracticeList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
+  const { creator } = useWorkspace();
+  const workspaceId = creator?.workspaceId;
+  const search = listControls.search.trim();
   const panel = useRef<HTMLElement>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [status, setStatus] = useState<FollowupStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+
+  useEffect(() => {
+    if (search === debouncedSearch) return;
+    if (!search) {
+      setDebouncedSearch("");
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
+
+  const filters = {
+    status,
+    quizId,
+    fromDate,
+    toDate,
+    search: search ? debouncedSearch : "",
+    expectedWorkspaceId: workspaceId,
+  };
+  const analyticsQuery = buildHistoryFilterQuery(filters);
   const {
     items: followups,
     loaded,
@@ -655,13 +679,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
     error,
     retry,
     more,
-  } = useHistoryPage<FollowupSummary>("/v1/followups", {
-    status,
-    quizId,
-    fromDate,
-    toDate,
-    search: listControls.search,
-  });
+  } = useHistoryPage<FollowupSummary>("/v1/followups", filters);
   const hasFilters = Boolean(
     status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
   );
@@ -675,7 +693,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
   }
 
   return (
-    <ResultsPanel view="practice" busy={loading || loadingMore} panelRef={panel}>
+    <ResultsPanel view="practice" panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={followups.length}
@@ -702,9 +720,10 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         ]}
         toDate={toDate}
       />
-      {!loading && followups.length > 0 ? (
-        <ResultsOverview
-          kind="practice"
+      {workspaceId ? (
+        <PracticeResultsOverview
+          key={analyticsQuery}
+          query={analyticsQuery}
           items={followups}
           hasMore={Boolean(nextCursor)}
           grouping={grouping}
@@ -744,6 +763,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
         className={resultStyles.collection}
         data-view={listControls.layout}
         aria-label={t("pages.results.practiceListLabel")}
+        aria-busy={loading || loadingMore}
       >
         {followups.map((followup) => (
           <article

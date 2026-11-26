@@ -1,4 +1,8 @@
-import type { PresentationReportStatus, ReportHistoryAnalytics } from "@openround/contracts";
+import type {
+  FollowupHistoryAnalytics,
+  PresentationReportStatus,
+  ReportHistoryAnalytics,
+} from "@openround/contracts";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 
@@ -24,8 +28,8 @@ export interface ResultsActivityPeriod {
   count: number;
 }
 
-/** The report analytics endpoint groups creation dates by UTC calendar periods. */
-export function roundReportActivity(
+/** History analytics groups creation dates by UTC calendar periods. */
+export function utcHistoryActivity(
   activity: ReportHistoryAnalytics["activity"],
   grouping: ResultsActivityGrouping,
 ): ResultsActivityPeriod[] {
@@ -99,17 +103,39 @@ export function roundOverview(
 export function practiceOverview(
   items: readonly Pick<FollowupSummary, "status" | "attemptCount" | "completedAttemptCount">[],
 ) {
-  const attempts = items.reduce((sum, item) => sum + item.attemptCount, 0);
-  const completed = items.reduce((sum, item) => sum + item.completedAttemptCount, 0);
+  const totals = {
+    open: 0,
+    scheduled: 0,
+    closed: 0,
+    expired: 0,
+    attemptCount: 0,
+    completedAttemptCount: 0,
+  };
+  for (const item of items) {
+    totals[item.status] += 1;
+    totals.attemptCount += item.attemptCount;
+    totals.completedAttemptCount += item.completedAttemptCount;
+  }
+  return practiceTotalsOverview(totals);
+}
+
+export function practiceTotalsOverview({
+  attemptCount: attempts,
+  completedAttemptCount: completed,
+  open,
+  scheduled,
+  closed,
+  expired,
+}: Omit<FollowupHistoryAnalytics, "activity">) {
   return {
-    count: items.length,
+    count: open + scheduled + closed + expired,
     attempts,
     completed,
     percent: evidencePercent(completed, attempts),
-    open: items.filter((item) => item.status === "open").length,
-    scheduled: items.filter((item) => item.status === "scheduled").length,
-    closed: items.filter((item) => item.status === "closed").length,
-    expired: items.filter((item) => item.status === "expired").length,
+    open,
+    scheduled,
+    closed,
+    expired,
   };
 }
 

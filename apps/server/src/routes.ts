@@ -44,6 +44,8 @@ import {
   HostCommandSchema,
   FollowupAnswerSubmitSchema,
   FollowupAdvanceSchema,
+  FollowupHistoryAnalyticsSchema,
+  FollowupHistoryStatusSchema,
   FollowupPurposeSchema,
   FederatedIdentitySchema,
   OidcStartSchema,
@@ -273,13 +275,14 @@ const ReportHistoryQuerySchema = ReportHistoryFiltersSchema.extend(HistoryPagina
 const ReportHistoryTotalsQuerySchema = ReportHistoryFiltersSchema.extend({
   includeActivity: z.enum(["true", "false"]).optional(),
 });
-const FollowupHistoryQuerySchema = z.object({
-  ...HistoryQueryBase,
+const FollowupHistoryFiltersSchema = z.object({
+  ...HistoryDateRangeQuery,
   search: SessionHistorySearchSchema.optional(),
   purpose: FollowupPurposeSchema.optional(),
-  status: z.enum(["scheduled", "open", "closed", "expired"]).optional(),
+  status: FollowupHistoryStatusSchema.optional(),
   quizId: z.string().uuid().optional(),
 });
+const FollowupHistoryQuerySchema = FollowupHistoryFiltersSchema.extend(HistoryPaginationQuery);
 
 function reportHistoryFilters(query: z.infer<typeof ReportHistoryFiltersSchema>) {
   return {
@@ -288,6 +291,18 @@ function reportHistoryFilters(query: z.infer<typeof ReportHistoryFiltersSchema>)
     ...(query.quizId ? { quizId: query.quizId } : {}),
     ...(query.from ? { from: new Date(query.from) } : {}),
     ...(query.to ? { to: new Date(query.to) } : {}),
+  };
+}
+
+function followupHistoryFilters(query: z.infer<typeof FollowupHistoryFiltersSchema>) {
+  return {
+    ...(query.search ? { search: query.search } : {}),
+    ...(query.purpose ? { purpose: query.purpose } : {}),
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.quizId ? { quizId: query.quizId } : {}),
+    ...(query.from ? { from: new Date(query.from) } : {}),
+    ...(query.to ? { to: new Date(query.to) } : {}),
+    now: new Date(),
   };
 }
 
@@ -3455,12 +3470,14 @@ export async function registerRoutes(
   });
 
   app.get("/v1/followups", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const query = FollowupHistoryQuerySchema.parse(request.query);
     const page = await repository.listFollowupHistory(creator.workspaceId, {
       limit: query.limit,
-      ...(query.search ? { search: query.search } : {}),
+      ...followupHistoryFilters(query),
       ...(query.cursor
         ? {
             cursor: {
@@ -3470,12 +3487,6 @@ export async function registerRoutes(
             },
           }
         : {}),
-      ...(query.purpose ? { purpose: query.purpose } : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.quizId ? { quizId: query.quizId } : {}),
-      ...(query.from ? { from: new Date(query.from) } : {}),
-      ...(query.to ? { to: new Date(query.to) } : {}),
-      now: new Date(),
     });
     const last = page.items.at(-1);
     return FollowupSummaryPageSchema.parse({
@@ -3488,6 +3499,20 @@ export async function registerRoutes(
       })),
       nextCursor: page.hasMore && last ? historyCursor(last) : null,
     });
+  });
+
+  app.get("/v1/followups/analytics", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    const query = FollowupHistoryFiltersSchema.parse(request.query);
+    return FollowupHistoryAnalyticsSchema.parse(
+      await repository.getFollowupHistoryAnalytics(
+        creator.workspaceId,
+        followupHistoryFilters(query),
+      ),
+    );
   });
 
   app.get("/v1/followups/:id", async (request, reply) => {

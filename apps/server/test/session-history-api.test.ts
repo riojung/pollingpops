@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
+  FollowupHistoryAnalyticsSchema,
   ReportHistoryAnalyticsSchema,
   ReportHistoryTotalsSchema,
   SessionCountsResponseSchema,
@@ -142,7 +143,7 @@ async function fixture(presentationsEnabled = true) {
       });
       rounds.push({ id, code: state.code });
     }
-    return { quizId: quiz.id, rounds };
+    return { quizId: quiz.id, versionId: version.id, rounds };
   }
   async function seedOtherKinds(actor: CreatorContext) {
     const presentation = await built.presentationSessions.createSession({
@@ -218,7 +219,7 @@ async function fixture(presentationsEnabled = true) {
     await surveys.close(actor.workspaceId, surveyRoom.id);
     return { presentation, surveyRoom, surveys };
   }
-  return { ...built, repository, owner, outsider, seedRounds, seedOtherKinds };
+  return { ...built, repository, owner, outsider, content, seedRounds, seedOtherKinds };
 }
 
 describe("Sessions Library history APIs", () => {
@@ -326,6 +327,8 @@ describe("Results history search APIs", () => {
       query: "&includeActivity=true",
       method: "getReportHistoryAnalytics",
     },
+    { path: "/v1/followups", query: "", method: "listFollowupHistory" },
+    { path: "/v1/followups/analytics", query: "", method: "getFollowupHistoryAnalytics" },
   ] as const)("checks the expected workspace before $method", async ({ path, query, method }) => {
     const f = await fixture();
     const read = vi.spyOn(f.repository, method);
@@ -341,12 +344,166 @@ describe("Results history search APIs", () => {
     expect(mismatch.json()).toMatchObject({
       error: { code: "CONFLICT", message: "The active workspace changed" },
     });
+    expect(mismatch.headers["cache-control"]).toBe("private, no-store");
     expect(read).not.toHaveBeenCalled();
 
     const matching = await get(f.owner.creator.workspaceId);
     expect(matching.statusCode).toBe(200);
     expect(matching.headers["cache-control"]).toBe("private, no-store");
     expect(read).toHaveBeenCalledExactlyOnceWith(f.owner.creator.workspaceId, expect.any(Object));
+  });
+
+  it("returns private Practice Results analytics across pages using the list filters", async () => {
+    const f = await fixture();
+    const seeded = await f.seedRounds(f.owner.creator, 1);
+    const foreign = await f.seedRounds(f.outsider.creator, 1);
+    const now = new Date();
+    const closesAt = new Date(now.getTime() + 86_400_000);
+    const older = "2025-03-31T23:59:59.999Z";
+    const recent = "2025-04-01T00:00:00.000Z";
+    async function seedAssignment(
+      actor: CreatorContext,
+      source: typeof seeded,
+      createdAt: string,
+      title: string,
+    ) {
+      const id = randomUUID();
+      expect(
+        await f.repository.createPracticeAssignment(
+          source.quizId,
+          {
+            id,
+            workspaceId: actor.workspaceId,
+            purpose: "assignment",
+            sourceSessionId: null,
+            sourceReportId: null,
+            sourceQuizVersionId: source.versionId,
+            title,
+            content: f.content,
+            conceptKeys: [],
+            timeMode: "flex",
+            genericTokenHash: randomUUID(),
+            opensAt: now,
+            closesAt,
+            expiresAt: closesAt,
+            closedAt: null,
+            createdBy: actor.userId,
+            createdAt: new Date(createdAt),
+          },
+          [],
+        ),
+      ).toBe(true);
+      return id;
+    }
+    const oldId = await seedAssignment(f.owner.creator, seeded, older, "Practice 50%_");
+    const latestId = await seedAssignment(f.owner.creator, seeded, recent, "New practice");
+    await f.repository.closeFollowup(f.owner.creator.workspaceId, latestId, now);
+    await seedAssignment(f.outsider.creator, foreign, older, "Practice 50%_");
+    for (const completed of [true, true, false]) {
+      await f.repository.createOrGetFollowupAttempt({
+        id: randomUUID(),
+        workspaceId: f.owner.creator.workspaceId,
+        followupId: oldId,
+        accessTokenId: null,
+        sourceParticipantId: null,
+        attemptTokenHash: randomUUID(),
+        status: completed ? "completed" : "in_progress",
+        phase: completed ? "completed" : "question_open",
+        currentIndex: 0,
+        version: 0,
+        timeMultiplier: 1,
+        questionOpenedAt: now,
+        deadlineAt: null,
+        completedAt: completed ? now : null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const analyticsPath = "/v1/followups/analytics";
+    const request = (url: string, params: Record<string, string> = {}, headers = f.owner.headers) =>
+      f.app.inject({
+        method: "GET",
+        url: `${url}?${new URLSearchParams(params)}`,
+        headers,
+      });
+    const analytics = vi.spyOn(f.repository, "getFollowupHistoryAnalytics");
+    const list = vi.spyOn(f.repository, "listFollowupHistory");
+    expect((await f.app.inject({ method: "GET", url: analyticsPath })).statusCode).toBe(401);
+    expect(analytics).not.toHaveBeenCalled();
+
+    const totals = await request(analyticsPath);
+    expect(totals.statusCode).toBe(200);
+    expect(totals.headers["cache-control"]).toBe("private, no-store");
+    expect(FollowupHistoryAnalyticsSchema.safeParse(totals.json()).success).toBe(true);
+    expect(totals.json()).toEqual({
+      open: 1,
+      scheduled: 0,
+      closed: 1,
+      expired: 0,
+      attemptCount: 3,
+      completedAttemptCount: 2,
+      activity: {
+        month: [
+          { start: "2025-03-01", count: 1 },
+          { start: "2025-04-01", count: 1 },
+        ],
+        quarter: [
+          { start: "2025-01-01", count: 1 },
+          { start: "2025-04-01", count: 1 },
+        ],
+      },
+    });
+    expect(list).not.toHaveBeenCalled();
+
+    const page = await request("/v1/followups", { limit: "1" });
+    expect(page.json().items).toMatchObject([{ id: latestId, status: "closed", attemptCount: 0 }]);
+    expect(page.json().nextCursor).toEqual(expect.any(String));
+    const pagination = { limit: "1", cursor: page.json().nextCursor };
+    expect((await request(analyticsPath, pagination)).json()).toEqual(totals.json());
+
+    const filters = {
+      search: "  PRACTICE 50%_  ",
+      purpose: "assignment",
+      status: "open",
+      quizId: seeded.quizId,
+      from: older,
+      to: older,
+    };
+    expect((await request("/v1/followups", filters)).json().items).toMatchObject([
+      { id: oldId, status: "open", attemptCount: 3, completedAttemptCount: 2 },
+    ]);
+    expect((await request(analyticsPath, filters)).json()).toEqual({
+      ...totals.json(),
+      closed: 0,
+      activity: {
+        month: [{ start: "2025-03-01", count: 1 }],
+        quarter: [{ start: "2025-01-01", count: 1 }],
+      },
+    });
+    expect(analytics).toHaveBeenLastCalledWith(f.owner.creator.workspaceId, {
+      ...filters,
+      search: "PRACTICE 50%_",
+      from: new Date(older),
+      to: new Date(older),
+      now: expect.any(Date),
+    });
+    expect((await request(analyticsPath, { quizId: foreign.quizId })).json()).toEqual({
+      open: 0,
+      scheduled: 0,
+      closed: 0,
+      expired: 0,
+      attemptCount: 0,
+      completedAttemptCount: 0,
+      activity: { month: [], quarter: [] },
+    });
+    expect((await request(analyticsPath, {}, f.outsider.headers)).json()).toMatchObject({
+      open: 1,
+      closed: 0,
+      attemptCount: 0,
+    });
+    expect((await request(analyticsPath, { search: "x".repeat(161) })).statusCode).toBe(400);
+    expect((await request(analyticsPath, { status: "ready" })).statusCode).toBe(400);
   });
 
   it("returns private report totals and optional activity across all pages with the report history filters", async () => {

@@ -1,6 +1,7 @@
 import {
   DEFAULT_SESSION_POLICY,
   SessionPolicySchema,
+  type FollowupHistoryAnalytics,
   type FolderArtifactType,
   type ReportHistoryAnalytics,
   type ReportHistoryTotals,
@@ -9,10 +10,7 @@ import {
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
 import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
-import {
-  countReportHistoryActivity,
-  reportHistoryInitialAccuracyPercent,
-} from "./report-history.js";
+import { countHistoryActivity, reportHistoryInitialAccuracyPercent } from "./report-history.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
@@ -65,6 +63,7 @@ import type {
   FollowupAnswerRecord,
   FollowupAttemptRecord,
   FollowupRecord,
+  FollowupHistoryFilters,
   FollowupHistoryRecord,
   FollowupHistoryListOptions,
   FederatedAuthTransactionRecord,
@@ -4719,11 +4718,7 @@ export class MemoryRepository implements Repository {
     };
     for (const { report, createdAt } of this.matchingReportHistory(workspaceId, filters)) {
       analytics[report.status] += 1;
-      const month = createdAt.toISOString().slice(0, 7);
-      const quarterMonth = Math.floor(createdAt.getUTCMonth() / 3) * 3 + 1;
-      const quarter = `${month.slice(0, 4)}-${String(quarterMonth).padStart(2, "0")}`;
-      countReportHistoryActivity(analytics.activity.month, `${month}-01`);
-      countReportHistoryActivity(analytics.activity.quarter, `${quarter}-01`);
+      countHistoryActivity(analytics.activity, createdAt);
     }
     return analytics;
   }
@@ -5036,84 +5031,108 @@ export class MemoryRepository implements Repository {
     return followup ? structuredClone(followup) : null;
   }
 
+  private followupHistoryMatcher(workspaceId: string, filters: FollowupHistoryFilters) {
+    const search = filters.search?.trim().toLowerCase();
+    return (followup: FollowupRecord): Pick<FollowupHistoryRecord, "quizId" | "status"> | null => {
+      if (followup.workspaceId !== workspaceId) return null;
+      if (search && !followup.title.toLowerCase().includes(search)) return null;
+      if (filters.purpose && followup.purpose !== filters.purpose) return null;
+      const afterFrom = !filters.from || followup.createdAt >= filters.from;
+      const beforeTo = !filters.to || followup.createdAt <= filters.to;
+      if (!afterFrom || !beforeTo) return null;
+      const version = followup.sourceQuizVersionId
+        ? this.versions.get(followup.sourceQuizVersionId)
+        : undefined;
+      const quizId = version?.quizId ?? null;
+      if (
+        (!version && !followup.recoveryPackSource) ||
+        (filters.quizId && quizId !== filters.quizId)
+      )
+        return null;
+
+      const status =
+        followup.expiresAt <= filters.now
+          ? "expired"
+          : followup.closedAt || followup.closesAt <= filters.now
+            ? "closed"
+            : followup.opensAt > filters.now
+              ? "scheduled"
+              : "open";
+      return filters.status && status !== filters.status ? null : { quizId, status };
+    };
+  }
+
+  async getFollowupHistoryAnalytics(workspaceId: string, filters: FollowupHistoryFilters) {
+    const analytics: FollowupHistoryAnalytics = {
+      open: 0,
+      scheduled: 0,
+      closed: 0,
+      expired: 0,
+      attemptCount: 0,
+      completedAttemptCount: 0,
+      activity: { month: [], quarter: [] },
+    };
+    const match = this.followupHistoryMatcher(workspaceId, filters);
+    for (const followup of this.followups.values()) {
+      const entry = match(followup);
+      if (!entry) continue;
+      analytics[entry.status] += 1;
+      countHistoryActivity(analytics.activity, followup.createdAt);
+    }
+    for (const attempt of this.followupAttempts.values()) {
+      if (attempt.workspaceId !== workspaceId) continue;
+      const followup = this.followups.get(attempt.followupId);
+      if (!followup || !match(followup)) continue;
+      analytics.attemptCount += 1;
+      if (attempt.status === "completed") analytics.completedAttemptCount += 1;
+    }
+    return analytics;
+  }
+
   async listFollowupHistory(workspaceId: string, options: FollowupHistoryListOptions) {
-    const search = options.search?.trim().toLowerCase();
+    const match = this.followupHistoryMatcher(workspaceId, options);
     const records = [...this.followups.values()]
-      .filter((followup) => followup.workspaceId === workspaceId)
-      .filter((followup) => !search || followup.title.toLowerCase().includes(search))
-      .filter((followup) => !options.purpose || followup.purpose === options.purpose)
-      .flatMap((followup): FollowupHistoryRecord[] => {
-        const version = followup.sourceQuizVersionId
-          ? this.versions.get(followup.sourceQuizVersionId)
-          : undefined;
-        if (
-          (!version && !followup.recoveryPackSource) ||
-          (options.quizId && version?.quizId !== options.quizId)
-        )
-          return [];
-        const attempts = [...this.followupAttempts.values()].filter(
-          (attempt) => attempt.followupId === followup.id,
-        );
-        const status: FollowupHistoryRecord["status"] =
-          followup.expiresAt <= options.now
-            ? "expired"
-            : followup.closedAt || followup.closesAt <= options.now
-              ? "closed"
-              : followup.opensAt > options.now
-                ? "scheduled"
-                : "open";
-        const source =
-          followup.purpose === "assignment"
-            ? ({
-                purpose: "assignment" as const,
-                sourceSessionId: null,
-                sourceReportId: null,
-              } as const)
-            : ({
-                purpose: "recovery" as const,
-                sourceSessionId: followup.sourceSessionId,
-                sourceReportId: followup.sourceReportId,
-              } as const);
-        return [
-          {
-            id: followup.id,
-            ...source,
-            quizId: version?.quizId ?? null,
-            sourceQuizVersionId: followup.sourceQuizVersionId,
-            recoveryPackSource: followup.recoveryPackSource ?? null,
-            trustMode: followup.trustMode ?? "learning",
-            title: followup.title,
-            status,
-            conceptKeys: [...followup.conceptKeys],
-            checkpointCount: followup.content.questions.length,
-            attemptCount: attempts.length,
-            completedAttemptCount: attempts.filter((attempt) => attempt.status === "completed")
-              .length,
-            opensAt: new Date(followup.opensAt),
-            closesAt: new Date(followup.closesAt),
-            expiresAt: new Date(followup.expiresAt),
-            createdAt: new Date(followup.createdAt),
-          } as FollowupHistoryRecord,
-        ];
+      .flatMap((followup) => {
+        const entry = match(followup);
+        return entry ? [{ followup, ...entry }] : [];
       })
-      .filter((item) => !options.status || item.status === options.status)
-      .filter((item) => !options.from || item.createdAt.getTime() >= options.from.getTime())
-      .filter((item) => !options.to || item.createdAt.getTime() <= options.to.getTime())
       .filter(
-        (item) =>
+        ({ followup }) =>
           !options.cursor ||
-          item.createdAt.getTime() < options.cursor.createdAt.getTime() ||
-          (item.createdAt.getTime() === options.cursor.createdAt.getTime() &&
-            item.id < options.cursor.id),
+          followup.createdAt.getTime() < options.cursor.createdAt.getTime() ||
+          (followup.createdAt.getTime() === options.cursor.createdAt.getTime() &&
+            followup.id < options.cursor.id),
       )
       .sort(
-        (left, right) =>
+        ({ followup: left }, { followup: right }) =>
           right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
       );
-    return {
-      items: structuredClone(records.slice(0, options.limit)),
-      hasMore: records.length > options.limit,
-    };
+    const items = records.slice(0, options.limit).map(({ followup, quizId, status }) => {
+      const attempts = [...this.followupAttempts.values()].filter(
+        (attempt) => attempt.workspaceId === workspaceId && attempt.followupId === followup.id,
+      );
+      return {
+        id: followup.id,
+        purpose: followup.purpose,
+        sourceSessionId: followup.sourceSessionId,
+        sourceReportId: followup.sourceReportId,
+        quizId,
+        sourceQuizVersionId: followup.sourceQuizVersionId,
+        recoveryPackSource: followup.recoveryPackSource ?? null,
+        trustMode: followup.trustMode ?? "learning",
+        title: followup.title,
+        status,
+        conceptKeys: followup.conceptKeys,
+        checkpointCount: followup.content.questions.length,
+        attemptCount: attempts.length,
+        completedAttemptCount: attempts.filter((attempt) => attempt.status === "completed").length,
+        opensAt: followup.opensAt,
+        closesAt: followup.closesAt,
+        expiresAt: followup.expiresAt,
+        createdAt: followup.createdAt,
+      } as FollowupHistoryRecord;
+    });
+    return { items: structuredClone(items), hasMore: records.length > options.limit };
   }
 
   async getFollowupByGenericToken(followupId: string, tokenHash: string, now: Date) {

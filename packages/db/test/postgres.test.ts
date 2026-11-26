@@ -1974,7 +1974,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
   });
 
-  it("searches retained Round and practice results and aggregates matching reports under restricted PostgreSQL permissions", async () => {
+  it("searches and aggregates retained Round and practice results under restricted PostgreSQL permissions", async () => {
     const nonUtcUrl = new URL(runtimeUrl!);
     nonUtcUrl.searchParams.set("options", "-c timezone=America/Edmonton");
     const nonUtcRepository = new PostgresRepository(nonUtcUrl.toString());

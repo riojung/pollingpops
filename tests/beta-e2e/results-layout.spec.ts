@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { FollowupSummary, ReportSummary } from "@openround/contracts";
+import type {
+  FollowupHistoryAnalytics,
+  FollowupSummary,
+  ReportSummary,
+} from "@openround/contracts";
 import { signInBeta } from "./sign-in";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
@@ -38,10 +42,10 @@ function historyFilter(query: URLSearchParams) {
     (!to || new Date(item.createdAt) <= new Date(to));
 }
 
-function activityPeriods(reports: readonly ReportSummary[], grouping: "month" | "quarter") {
+function activityPeriods(items: readonly { createdAt: string }[], grouping: "month" | "quarter") {
   const counts = new Map<string, number>();
-  for (const report of reports) {
-    const date = new Date(report.createdAt);
+  for (const item of items) {
+    const date = new Date(item.createdAt);
     const month = date.getUTCMonth();
     const startMonth = grouping === "month" ? month : Math.floor(month / 3) * 3;
     const start = new Date(Date.UTC(date.getUTCFullYear(), startMonth, 1))
@@ -68,6 +72,24 @@ async function expectMatchingReports(
     new RegExp(`^Ready\\s*${ready}$`),
     new RegExp(`^Processing\\s*${pending}$`),
     new RegExp(`^Needs attention\\s*${failed}$`),
+  ]);
+}
+
+async function expectMatchingPractice(
+  overview: Locator,
+  counts: Pick<FollowupHistoryAnalytics, "open" | "scheduled" | "closed" | "expired">,
+) {
+  const label = "Matching practice items";
+  const count = overview.getByText(label, { exact: true }).locator("..").locator("dd");
+  await expect(count).toHaveText(
+    String(counts.open + counts.scheduled + counts.closed + counts.expired),
+  );
+  const distribution = overview.getByRole("group", { name: label, exact: true });
+  await expect(distribution.getByRole("listitem")).toHaveText([
+    new RegExp(`^Open\\s*${counts.open}$`),
+    new RegExp(`^Scheduled\\s*${counts.scheduled}$`),
+    new RegExp(`^Closed\\s*${counts.closed}$`),
+    new RegExp(`^Expired\\s*${counts.expired}$`),
   ]);
 }
 
@@ -108,39 +130,78 @@ async function mockHistory(page: Page) {
             : "2026-08-31T12:00:00.000Z",
     expiresAt,
   }));
-  const followups: FollowupSummary[] = Array.from({ length: 26 }, (_, index) => {
-    const common = {
-      id: randomUUID(),
-      sourceQuizVersionId: versionId,
-      quizId,
-      recoveryPackSource: null,
-      trustMode: "learning" as const,
-      title: index === 0 ? "Synthetic recovery practice" : `Synthetic assignment practice ${index}`,
-      status: index === 25 ? ("closed" as const) : ("open" as const),
-      checkpointCount: 2,
-      attemptCount: 12,
-      completedAttemptCount: 9,
-      opensAt: createdAt,
-      closesAt: "2099-09-01T12:00:00.000Z",
-      expiresAt,
-      createdAt,
-    };
-    return index === 0
-      ? {
-          ...common,
-          purpose: "recovery",
-          sourceSessionId: reports[0]!.sessionId,
-          sourceReportId: reports[0]!.id,
-          conceptKeys: ["handover"],
-        }
-      : {
-          ...common,
-          purpose: "assignment",
-          sourceSessionId: null,
-          sourceReportId: null,
-          conceptKeys: [],
-        };
-  });
+  const olderPractice = [
+    {
+      createdAt: "2026-09-30T12:00:00.000Z",
+      status: "closed",
+      attemptCount: 80,
+      completedAttemptCount: 0,
+    },
+    {
+      createdAt: "2026-07-01T00:15:00.000Z",
+      status: "scheduled",
+      attemptCount: 0,
+      completedAttemptCount: 0,
+    },
+    {
+      createdAt: "2026-04-01T00:15:00.000Z",
+      status: "expired",
+      attemptCount: 15,
+      completedAttemptCount: 10,
+    },
+    {
+      createdAt: "2026-01-01T00:15:00.000Z",
+      status: "open",
+      attemptCount: 5,
+      completedAttemptCount: 5,
+    },
+    ...["2025-10-01", "2025-07-01", "2025-04-01"].map((date) => ({
+      createdAt: `${date}T00:15:00.000Z`,
+      status: "open" as const,
+      attemptCount: 0,
+      completedAttemptCount: 0,
+    })),
+  ] satisfies Array<
+    Pick<FollowupSummary, "createdAt" | "status" | "attemptCount" | "completedAttemptCount">
+  >;
+  const followups: FollowupSummary[] = Array.from(
+    { length: 25 + olderPractice.length },
+    (_, index) => {
+      const older = olderPractice[index - 25];
+      const common = {
+        id: randomUUID(),
+        sourceQuizVersionId: versionId,
+        quizId: older ? otherQuizId : quizId,
+        recoveryPackSource: null,
+        trustMode: "learning" as const,
+        title:
+          index === 0 ? "Synthetic recovery practice" : `Synthetic assignment practice ${index}`,
+        status: older?.status ?? "open",
+        checkpointCount: 2,
+        attemptCount: older?.attemptCount ?? 12,
+        completedAttemptCount: older?.completedAttemptCount ?? 9,
+        opensAt: createdAt,
+        closesAt: "2099-09-01T12:00:00.000Z",
+        expiresAt,
+        createdAt: older?.createdAt ?? (index === 0 ? recentReportDate : createdAt),
+      };
+      return index === 0
+        ? {
+            ...common,
+            purpose: "recovery",
+            sourceSessionId: reports[0]!.sessionId,
+            sourceReportId: reports[0]!.id,
+            conceptKeys: ["handover"],
+          }
+        : {
+            ...common,
+            purpose: "assignment",
+            sourceSessionId: null,
+            sourceReportId: null,
+            conceptKeys: [],
+          };
+    },
+  );
   const presentations = ["finished", "active"].map((status) => ({
     id: randomUUID(),
     presentationId: randomUUID(),
@@ -176,6 +237,7 @@ async function mockHistory(page: Page) {
   ];
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
   const totalsReads: URLSearchParams[] = [];
+  const practiceAnalyticsReads: URLSearchParams[] = [];
   let presentationReads = 0;
   await page.route(`${api}/v1/quizzes?*`, (route) =>
     route.fulfill({
@@ -227,6 +289,32 @@ async function mockHistory(page: Page) {
       });
     },
   );
+  await page.route(
+    (url) => url.origin === api && url.pathname === "/v1/followups/analytics",
+    (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      practiceAnalyticsReads.push(query);
+      const filtered = followups.filter(historyFilter(query));
+      const analytics: FollowupHistoryAnalytics = {
+        open: 0,
+        scheduled: 0,
+        closed: 0,
+        expired: 0,
+        attemptCount: 0,
+        completedAttemptCount: 0,
+        activity: {
+          month: activityPeriods(filtered, "month"),
+          quarter: activityPeriods(filtered, "quarter"),
+        },
+      };
+      for (const item of filtered) {
+        analytics[item.status]++;
+        analytics.attemptCount += item.attemptCount;
+        analytics.completedAttemptCount += item.completedAttemptCount;
+      }
+      return route.fulfill({ json: analytics });
+    },
+  );
   await page.route(`${api}/v1/presentation-sessions?includeReportStatus=true`, (route) => {
     presentationReads += 1;
     return route.fulfill({ json: { sessions: presentations } });
@@ -243,6 +331,7 @@ async function mockHistory(page: Page) {
     surveys,
     reads,
     totalsReads,
+    practiceAnalyticsReads,
     presentationReadCount: () => presentationReads,
   };
 }
@@ -502,8 +591,61 @@ for (const mobile of [false, true]) {
       name: "Practice assignments and follow-ups",
       exact: true,
     });
+    const practiceReads = () =>
+      fixture.reads
+        .filter(({ path }) => path === "/v1/followups")
+        .map(({ query }) => Object.fromEntries(query));
+    const practiceAnalyticsReads = () =>
+      fixture.practiceAnalyticsReads.map((query) => Object.fromEntries(query));
+    const allPracticeStatuses = { open: 29, scheduled: 1, closed: 1, expired: 1 };
+    const practiceActivity = overview.getByRole("region", {
+      name: "Activity over time",
+      exact: true,
+    });
+    const practicePeriods = practiceActivity.getByRole("listitem");
+    const practiceGrouping = practiceActivity.getByRole("combobox", {
+      name: "Group by",
+      exact: true,
+    });
+    const practiceCompletion = overview.getByRole("meter", {
+      name: "Completed attempts",
+      exact: true,
+    });
+    const practiceMonthCounts = [
+      /Jan.*2026\s*1$/,
+      /Apr.*2026\s*1$/,
+      /Jul.*2026\s*1$/,
+      /Sep.*2026\s*1$/,
+      /Oct.*2026\s*24$/,
+      /Nov.*2026\s*1$/,
+    ];
+    const practiceQuarterCounts = [
+      /Jul.*Sep.*2025\s*1$/,
+      /Oct.*Dec.*2025\s*1$/,
+      /Jan.*Mar.*2026\s*1$/,
+      /Apr.*Jun.*2026\s*1$/,
+      /Jul.*Sep.*2026\s*2$/,
+      /Oct.*Dec.*2026\s*25$/,
+    ];
     await expect(practice.getByRole("article")).toHaveCount(25);
-    await expect(overview).toContainText("225 completed of 300 attempts");
+    await expectMatchingPractice(overview, allPracticeStatuses);
+    await expect(overview).toContainText(
+      "Practice totals and activity include every page matching your filters.",
+    );
+    await expect(practiceCompletion).toHaveAttribute(
+      "aria-valuetext",
+      "240 completed of 400 attempts",
+    );
+    await expect(practiceCompletion).toHaveAttribute("aria-valuenow", "60");
+    await expect(practiceActivity).toContainText("Grouped by practice creation date in UTC.");
+    await expect(practiceGrouping).toHaveValue("month");
+    await expect(practicePeriods).toHaveText(practiceMonthCounts);
+    expect(practiceReads()).toEqual([{ limit: "25", expectedWorkspaceId }]);
+    expect(practiceAnalyticsReads()).toEqual([{ expectedWorkspaceId }]);
+    await practiceGrouping.selectOption("quarter");
+    await expect(practicePeriods).toHaveText(practiceQuarterCounts);
+    expect(practiceReads()).toHaveLength(1);
+    expect(practiceAnalyticsReads()).toHaveLength(1);
     const practiceLinks = overview.getByRole("region", { name: "Practice to review", exact: true });
     await expect(practiceLinks.getByRole("link")).toHaveCount(3);
     await expect(
@@ -513,9 +655,29 @@ for (const mobile of [false, true]) {
     await expect(
       page.getByText("25 practice items shown · More available", { exact: true }),
     ).toBeVisible();
+    const morePractice = overview.getByText("Load more to see more practice items.", {
+      exact: true,
+    });
+    await expect(morePractice).toBeVisible();
     await page.getByRole("button", { name: "Load More Practice", exact: true }).click();
-    await expect(practice.getByRole("article")).toHaveCount(26);
-    await expect(page.getByText("26 practice items shown", { exact: true })).toBeVisible();
+    await expect(practice.getByRole("article")).toHaveCount(32);
+    await expect(page.getByText("32 practice items shown", { exact: true })).toBeVisible();
+    await expect(morePractice).toHaveCount(0);
+    await expectMatchingPractice(overview, allPracticeStatuses);
+    await expect(practiceCompletion).toHaveAttribute(
+      "aria-valuetext",
+      "240 completed of 400 attempts",
+    );
+    await expect(practicePeriods).toHaveText(practiceQuarterCounts);
+    await practiceGrouping.selectOption("month");
+    await expect(practicePeriods).toHaveText(practiceMonthCounts);
+    await practiceGrouping.selectOption("quarter");
+    await expect(practicePeriods).toHaveText(practiceQuarterCounts);
+    expect(practiceReads()).toEqual([
+      { limit: "25", expectedWorkspaceId },
+      { limit: "25", expectedWorkspaceId, cursor: "25" },
+    ]);
+    expect(practiceAnalyticsReads()).toEqual([{ expectedWorkspaceId }]);
     const recovery = practice.getByRole("article").filter({
       has: page.getByRole("heading", { name: "Synthetic recovery practice", exact: true }),
     });
@@ -538,10 +700,54 @@ for (const mobile of [false, true]) {
     await expect(
       practice.getByRole("heading", { name: "Synthetic assignment practice 25" }),
     ).toBeVisible();
+    const practiceSearch = page.getByRole("searchbox", { name: "Search practice", exact: true });
+    await practiceSearch.fill("assignment practice");
+    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("assignment practice");
+    const practiceSource = page.getByRole("combobox", { name: "Round", exact: true });
+    await practiceSource.selectOption(fixture.otherQuizId);
+    await from.fill("2026-09-01");
+    await page.getByLabel("To", { exact: true }).fill("2026-10-31");
+    const practiceFilters = {
+      expectedWorkspaceId,
+      status: "closed",
+      quizId: fixture.otherQuizId,
+      search: "assignment practice",
+      ...dateBoundaries,
+    };
+    await expect.poll(() => practiceAnalyticsReads().at(-1)).toEqual(practiceFilters);
+    await expect.poll(() => practiceReads().at(-1)).toEqual({ limit: "25", ...practiceFilters });
+    await expectMatchingPractice(overview, { open: 0, scheduled: 0, closed: 1, expired: 0 });
+    await expect(practiceCompletion).toHaveAttribute(
+      "aria-valuetext",
+      "0 completed of 80 attempts",
+    );
+    await expect(practiceCompletion).toHaveAttribute("aria-valuenow", "0");
+    await expect(practiceGrouping).toHaveValue("quarter");
+    await expect(practicePeriods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
+    await from.fill("2026-10-01");
+    await expect(
+      practiceActivity.getByText("No practice items match these filters.", { exact: true }),
+    ).toBeVisible();
+    await expectMatchingPractice(overview, { open: 0, scheduled: 0, closed: 0, expired: 0 });
+    await expect(practice.getByRole("article")).toHaveCount(0);
+    await expect(practiceCompletion).toHaveCount(0);
+    await expect(practicePeriods).toHaveCount(0);
+    await expect(practiceGrouping).toHaveCount(0);
     await toolbarClear(page).click();
-    await page.getByRole("searchbox", { name: "Search practice", exact: true }).fill("recovery");
+    await practiceSearch.fill("recovery");
     await expect(practice.getByRole("article")).toHaveCount(1);
     await expect(recovery).toBeVisible();
+    await expectMatchingPractice(overview, { open: 1, scheduled: 0, closed: 0, expired: 0 });
+    await expect(practiceCompletion).toHaveAttribute("aria-valuenow", "75");
+    await expect(practiceGrouping).toHaveValue("quarter");
+    await expect(practicePeriods).toHaveText([/Oct.*Dec.*2026\s*1$/]);
+    if (mobile) await page.setViewportSize({ width: 320, height: 844 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+    expect((await new AxeBuilder({ page }).include("#results-panel").analyze()).violations).toEqual(
+      [],
+    );
     await toolbarClear(page).click();
 
     await views.getByRole("link", { name: "Surveys", exact: true }).click();

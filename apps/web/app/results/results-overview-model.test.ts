@@ -5,8 +5,8 @@ import {
   presentationOverview,
   resultsActivity,
   roundOverview,
-  roundReportActivity,
   surveyOverview,
+  utcHistoryActivity,
 } from "./results-overview-model";
 
 describe("summaries of shown Results evidence", () => {
@@ -130,12 +130,12 @@ it("keeps the server's Round counts and uses UTC month and quarter boundaries", 
       { start: "2028-01-01", count: 13 },
     ],
   };
-  expect(roundReportActivity(activity, "month")).toEqual([
+  expect(utcHistoryActivity(activity, "month")).toEqual([
     { start: new Date("2028-02-01T00:00:00Z"), end: new Date("2028-02-29T00:00:00Z"), count: 9 },
   ]);
-  expect(roundReportActivity(activity, "quarter")).toEqual([
+  expect(utcHistoryActivity(activity, "quarter")).toEqual([
     { start: new Date("2027-10-01T00:00:00Z"), end: new Date("2027-12-31T00:00:00Z"), count: 18 },
     { start: new Date("2028-01-01T00:00:00Z"), end: new Date("2028-03-31T00:00:00Z"), count: 13 },
   ]);
-  expect(roundReportActivity({ month: [], quarter: [] }, "quarter")).toEqual([]);
+  expect(utcHistoryActivity({ month: [], quarter: [] }, "quarter")).toEqual([]);
 });

@@ -4,7 +4,7 @@ import { createGameState } from "@openround/game-engine";
 import type { QuizDraft } from "@openround/contracts";
 import type { CreatorContext, Repository } from "../../src/index.js";
 
-/** Search and report analytics use retained history across pages. */
+/** Search and analytics use retained history across pages. */
 export async function expectResultsHistorySearchConformance(
   repository: Repository,
   owner: CreatorContext,
@@ -13,6 +13,17 @@ export async function expectResultsHistorySearchConformance(
 ) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 86_400_000);
+  const dates = [
+    "2023-12-31T23:59:59.999Z",
+    "2024-01-01T00:00:00.000Z",
+    "2024-03-31T23:59:59.999Z",
+    "2024-04-01T00:00:00.000Z",
+    "2024-07-01T00:00:00.000Z",
+    "2024-10-01T00:00:00.000Z",
+    "2025-01-31T23:59:59.999Z",
+    "2025-02-01T00:00:00.000Z",
+  ];
+  const latest = new Date("2025-04-01T00:00:00.000Z");
   let nextCode = randomInt(1_000_000, 9_000_000);
   const content: QuizDraft = {
     title: "Library source",
@@ -98,6 +109,7 @@ export async function expectResultsHistorySearchConformance(
         participants: [],
       });
       reports.push(reportId);
+      const practiceDate = dates[index];
       const base = {
         id: randomUUID(),
         workspaceId: actor.workspaceId,
@@ -107,12 +119,12 @@ export async function expectResultsHistorySearchConformance(
         conceptKeys: index === 0 ? ["history-search"] : [],
         timeMode: "flex" as const,
         genericTokenHash: randomUUID(),
-        opensAt: new Date(now.getTime() + (index === 0 ? 60_000 : -60_000)),
-        closesAt: expiresAt,
-        expiresAt,
-        closedAt: null,
+        opensAt: new Date(now.getTime() + (index === 0 ? 60_000 : index === 1 ? 0 : -60_000)),
+        closesAt: index === 2 || index === 3 ? now : expiresAt,
+        expiresAt: index === 3 ? now : expiresAt,
+        closedAt: index === 3 || index === 4 ? now : null,
         createdBy: actor.userId,
-        createdAt,
+        createdAt: practiceDate ? new Date(practiceDate) : latest,
       };
       if (index === 0) {
         await repository.createFollowup(
@@ -135,6 +147,32 @@ export async function expectResultsHistorySearchConformance(
 
   const owned = await seed(owner, 28);
   const foreign = await seed(outsider, 2);
+  for (const [actor, followupId, completed] of [
+    [owner, owned.followups[1]!, true],
+    [owner, owned.followups[1]!, false],
+    [owner, owned.followups[2]!, true],
+    [owner, owned.followups[5]!, false],
+    [outsider, foreign.followups[1]!, true],
+  ] as const) {
+    await repository.createOrGetFollowupAttempt({
+      id: randomUUID(),
+      workspaceId: actor.workspaceId,
+      followupId,
+      accessTokenId: null,
+      sourceParticipantId: null,
+      attemptTokenHash: randomUUID(),
+      status: completed ? "completed" : "in_progress",
+      phase: completed ? "completed" : "question_open",
+      currentIndex: 0,
+      version: 0,
+      timeMultiplier: 1,
+      questionOpenedAt: now,
+      deadlineAt: null,
+      completedAt: completed ? now : null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
   await repository.updateQuiz(owner.workspaceId, owned.quizId, {
     ...content,
     title: "Renamed library source",
@@ -218,17 +256,6 @@ export async function expectResultsHistorySearchConformance(
   ).toEqual([owned.followups[0]]);
   expect((await followups({ search: "needle", status: "closed" })).items).toEqual([]);
 
-  const dates = [
-    "2023-12-31T23:59:59.999Z",
-    "2024-01-01T00:00:00.000Z",
-    "2024-03-31T23:59:59.999Z",
-    "2024-04-01T00:00:00.000Z",
-    "2024-07-01T00:00:00.000Z",
-    "2024-10-01T00:00:00.000Z",
-    "2025-01-31T23:59:59.999Z",
-    "2025-02-01T00:00:00.000Z",
-  ];
-  const latest = new Date("2025-04-01T00:00:00.000Z");
   await setReportDates(
     owner.workspaceId,
     owned.reports,
@@ -239,28 +266,29 @@ export async function expectResultsHistorySearchConformance(
   const analytics = (filters: Parameters<Repository["getReportHistoryAnalytics"]>[1] = {}) =>
     repository.getReportHistoryAnalytics(owner.workspaceId, filters);
   expect((await reports()).items.some(({ id }) => id === owned.reports[0])).toBe(false);
+  const activity = {
+    month: [
+      { start: "2024-04-01", count: 1 },
+      { start: "2024-07-01", count: 1 },
+      { start: "2024-10-01", count: 1 },
+      { start: "2025-01-01", count: 1 },
+      { start: "2025-02-01", count: 1 },
+      { start: "2025-04-01", count: 20 },
+    ],
+    quarter: [
+      { start: "2024-01-01", count: 2 },
+      { start: "2024-04-01", count: 1 },
+      { start: "2024-07-01", count: 1 },
+      { start: "2024-10-01", count: 1 },
+      { start: "2025-01-01", count: 2 },
+      { start: "2025-04-01", count: 20 },
+    ],
+  };
   expect(await analytics()).toEqual({
     ready: 26,
     pending: 1,
     failed: 1,
-    activity: {
-      month: [
-        { start: "2024-04-01", count: 1 },
-        { start: "2024-07-01", count: 1 },
-        { start: "2024-10-01", count: 1 },
-        { start: "2025-01-01", count: 1 },
-        { start: "2025-02-01", count: 1 },
-        { start: "2025-04-01", count: 20 },
-      ],
-      quarter: [
-        { start: "2024-01-01", count: 2 },
-        { start: "2024-04-01", count: 1 },
-        { start: "2024-07-01", count: 1 },
-        { start: "2024-10-01", count: 1 },
-        { start: "2025-01-01", count: 2 },
-        { start: "2025-04-01", count: 20 },
-      ],
-    },
+    activity,
   });
   const firstDate = new Date(dates[0]!);
   expect(
@@ -307,5 +335,92 @@ export async function expectResultsHistorySearchConformance(
       failed: 0,
       activity: { month: [], quarter: [] },
     });
+  }
+
+  const practiceAnalytics = (
+    filters: Omit<Parameters<Repository["getFollowupHistoryAnalytics"]>[1], "now"> = {},
+  ) => repository.getFollowupHistoryAnalytics(owner.workspaceId, { now, ...filters });
+  const emptyPractice = {
+    open: 0,
+    scheduled: 0,
+    closed: 0,
+    expired: 0,
+    attemptCount: 0,
+    completedAttemptCount: 0,
+    activity: { month: [], quarter: [] },
+  };
+  expect(await practiceAnalytics()).toEqual({
+    open: 24,
+    scheduled: 1,
+    closed: 2,
+    expired: 1,
+    attemptCount: 4,
+    completedAttemptCount: 2,
+    activity,
+  });
+  const openDate = new Date(dates[1]!);
+  const openFilter = {
+    search: "  PrAcTiCe needle  ",
+    quizId: owned.quizId,
+    purpose: "assignment",
+    status: "open",
+    from: openDate,
+    to: openDate,
+  } as const;
+  expect(await practiceAnalytics(openFilter)).toEqual({
+    ...emptyPractice,
+    open: 1,
+    attemptCount: 2,
+    completedAttemptCount: 1,
+    activity: {
+      month: [{ start: "2024-01-01", count: 1 }],
+      quarter: [{ start: "2024-01-01", count: 1 }],
+    },
+  });
+  expect((await followups(openFilter)).items).toMatchObject([
+    { id: owned.followups[1], status: "open", attemptCount: 2, completedAttemptCount: 1 },
+  ]);
+  expect(await practiceAnalytics({ search: " 50%_ ", purpose: "recovery" })).toEqual({
+    ...emptyPractice,
+    scheduled: 1,
+    activity: {
+      month: [{ start: "2023-12-01", count: 1 }],
+      quarter: [{ start: "2023-10-01", count: 1 }],
+    },
+  });
+  expect(await practiceAnalytics({ status: "closed" })).toEqual({
+    ...emptyPractice,
+    closed: 2,
+    attemptCount: 1,
+    completedAttemptCount: 1,
+    activity: {
+      month: [
+        { start: "2024-03-01", count: 1 },
+        { start: "2024-07-01", count: 1 },
+      ],
+      quarter: [
+        { start: "2024-01-01", count: 1 },
+        { start: "2024-07-01", count: 1 },
+      ],
+    },
+  });
+  expect((await followups({ status: "expired" })).items).toMatchObject([
+    { id: owned.followups[3], status: "expired" },
+  ]);
+  expect(await practiceAnalytics({ status: "expired" })).toEqual({
+    ...emptyPractice,
+    expired: 1,
+    activity: {
+      month: [{ start: "2024-04-01", count: 1 }],
+      quarter: [{ start: "2024-04-01", count: 1 }],
+    },
+  });
+  for (const filters of [
+    { quizId: foreign.quizId },
+    { search: "Renamed library source" },
+    { search: "%_", from: new Date(firstDate.getTime() + 1) },
+    { to: new Date(firstDate.getTime() - 1) },
+  ]) {
+    expect(await practiceAnalytics(filters)).toEqual(emptyPractice);
   }
 }

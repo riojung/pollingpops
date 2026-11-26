@@ -50,6 +50,7 @@ import {
   type FolderArtifactType,
   type QuizDraft,
   type Report,
+  type ReportHistoryTotals,
   type SupportedLocale,
   type SessionPolicy,
 } from "@openround/contracts";
@@ -165,6 +166,8 @@ import type {
   QuizVersionRecord,
   RuntimeDatabasePrincipalSecurity,
   ReportJob,
+  ReportHistoryFilters,
+  ReportHistoryListOptions,
   ReportHistoryRecord,
   Repository,
   Segment,
@@ -713,6 +716,29 @@ function normalizeAccountExportReport(metrics: unknown, sourceTrustMode: unknown
         ? storedTrust.data
         : "learning",
   });
+}
+
+const REPORT_HISTORY_SOURCE = `FROM reports
+  JOIN game_sessions ON game_sessions.id = reports.session_id
+  JOIN quiz_versions ON quiz_versions.id = game_sessions.quiz_version_id`;
+
+const REPORT_HISTORY_WHERE = `WHERE reports.workspace_id = $1
+  AND ($2::text IS NULL OR reports.status = $2)
+  AND ($3::uuid IS NULL OR quiz_versions.quiz_id = $3)
+  AND ($4::timestamptz IS NULL OR reports.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR reports.created_at <= $5)
+  AND ($6::text IS NULL
+    OR strpos(lower(game_sessions.state_snapshot #>> '{quiz,title}'), lower($6)) > 0)`;
+
+function reportHistoryFilterParams(workspaceId: string, filters: ReportHistoryFilters) {
+  return [
+    workspaceId,
+    filters.status ?? null,
+    filters.quizId ?? null,
+    filters.from ?? null,
+    filters.to ?? null,
+    filters.search?.trim() || null,
+  ];
 }
 
 function mapReportHistory(row: QueryResultRow): ReportHistoryRecord {
@@ -6744,19 +6770,28 @@ export class PostgresRepository implements Repository {
     return { reports, hasMoreReports: result.rows.length > limit };
   }
 
-  async listReportHistory(
+  async getReportHistoryTotals(
     workspaceId: string,
-    options: {
-      cursor?: HistoryCursor;
-      limit: number;
-      search?: string;
-      status?: Report["status"];
-      quizId?: string;
-      from?: Date;
-      to?: Date;
-      now: Date;
-    },
-  ) {
+    filters: ReportHistoryFilters,
+  ): Promise<ReportHistoryTotals> {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      `SELECT count(*) FILTER (WHERE reports.status = 'ready') AS ready,
+              count(*) FILTER (WHERE reports.status = 'pending') AS pending,
+              count(*) FILTER (WHERE reports.status = 'failed') AS failed
+       ${REPORT_HISTORY_SOURCE}
+       ${REPORT_HISTORY_WHERE}`,
+      reportHistoryFilterParams(workspaceId, filters),
+    );
+    const row = result.rows[0]!;
+    return {
+      ready: Number(row.ready),
+      pending: Number(row.pending),
+      failed: Number(row.failed),
+    };
+  }
+
+  async listReportHistory(workspaceId: string, options: ReportHistoryListOptions) {
     const result = await this.workspaceQuery(
       workspaceId,
       `SELECT reports.*, game_sessions.retention_expires_at, quiz_versions.quiz_id,
@@ -6768,36 +6803,23 @@ export class PostgresRepository implements Repository {
               ) AS cursor_created_at,
               CASE
                 WHEN followups.id IS NULL THEN NULL
-                WHEN followups.expires_at <= $8 THEN 'expired'
-                WHEN followups.closed_at IS NOT NULL OR followups.closes_at <= $8 THEN 'closed'
-                WHEN followups.opens_at > $8 THEN 'scheduled'
+                WHEN followups.expires_at <= $9 THEN 'expired'
+                WHEN followups.closed_at IS NOT NULL OR followups.closes_at <= $9 THEN 'closed'
+                WHEN followups.opens_at > $9 THEN 'scheduled'
                 ELSE 'open'
               END AS followup_status
-       FROM reports
-       JOIN game_sessions ON game_sessions.id = reports.session_id
-       JOIN quiz_versions ON quiz_versions.id = game_sessions.quiz_version_id
+       ${REPORT_HISTORY_SOURCE}
        LEFT JOIN followups ON followups.source_report_id = reports.id
-       WHERE reports.workspace_id = $1
-         AND ($2::timestamptz IS NULL OR (reports.created_at, reports.id) < ($2, $3::uuid))
-         AND ($4::text IS NULL OR reports.status = $4)
-         AND ($5::uuid IS NULL OR quiz_versions.quiz_id = $5)
-       AND ($6::timestamptz IS NULL OR reports.created_at >= $6)
-       AND ($7::timestamptz IS NULL OR reports.created_at <= $7)
-       AND ($10::text IS NULL
-         OR strpos(lower(game_sessions.state_snapshot #>> '{quiz,title}'), lower($10)) > 0)
+       ${REPORT_HISTORY_WHERE}
+         AND ($7::timestamptz IS NULL OR (reports.created_at, reports.id) < ($7, $8::uuid))
        ORDER BY reports.created_at DESC, reports.id DESC
-       LIMIT $9`,
+       LIMIT $10`,
       [
-        workspaceId,
+        ...reportHistoryFilterParams(workspaceId, options),
         options.cursor?.cursorCreatedAt ?? options.cursor?.createdAt ?? null,
         options.cursor?.id ?? null,
-        options.status ?? null,
-        options.quizId ?? null,
-        options.from ?? null,
-        options.to ?? null,
         options.now,
         options.limit + 1,
-        options.search?.trim() || null,
       ],
     );
     const hasMore = result.rows.length > options.limit;

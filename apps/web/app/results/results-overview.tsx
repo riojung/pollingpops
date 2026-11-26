@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import type { ReportHistoryTotals } from "@openround/contracts";
+import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useLocale } from "../../components/locale-provider";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
@@ -82,7 +83,12 @@ interface ActivityGroupingControls {
 }
 
 type Props = ActivityGroupingControls & { hasMore?: boolean } & (
-    | { kind: "rounds"; items: readonly ReportSummary[] }
+    | {
+        kind: "rounds";
+        items: readonly ReportSummary[];
+        totals: ReportHistoryTotals | "loading" | "unavailable";
+        onTotalsRetry: () => void;
+      }
     | { kind: "practice"; items: readonly FollowupSummary[] }
     | { kind: "presentations"; items: readonly PresentationResultSummary[] }
     | { kind: "surveys"; items: readonly SurveySessionSummary[] }
@@ -175,6 +181,7 @@ function ResultLinks({ links, label }: { links: readonly ResultLink[]; label: st
 
 export function ResultsOverview(props: Props) {
   const { locale, t } = useLocale();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const number = (value: number) => formatNumber(locale, value);
   let primary: ReactNode;
   let secondary: ReactNode;
@@ -184,9 +191,14 @@ export function ResultsOverview(props: Props) {
   let linksLabel = t("resultsOverview.reportsToOpen");
   let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
+  let shownCount = props.items.length;
+  const totals = props.kind === "rounds" ? props.totals : undefined;
+  const hasFullTotals = typeof totals === "object";
+  const hasLoadedEvidence = props.kind !== "rounds" || props.items.length > 0;
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
+    const statusCounts = hasFullTotals ? totals : summary;
     const ready = props.items.filter((item) => item.status === "ready");
     dateBasis = t("resultsOverview.roundDateBasis");
     dates = props.items.map((item) => item.createdAt);
@@ -196,10 +208,22 @@ export function ResultsOverview(props: Props) {
       href: `/report/${item.id}?view=analytics`,
     }));
     distribution = [
-      { label: t("pages.common.status.ready"), count: summary.ready, status: "ready" },
-      { label: t("pages.common.status.processing"), count: summary.pending, status: "pending" },
-      { label: t("pages.common.status.needsAttention"), count: summary.failed, status: "failed" },
+      { label: t("pages.common.status.ready"), count: statusCounts.ready, status: "ready" },
+      {
+        label: t("pages.common.status.processing"),
+        count: statusCounts.pending,
+        status: "pending",
+      },
+      {
+        label: t("pages.common.status.needsAttention"),
+        count: statusCounts.failed,
+        status: "failed",
+      },
     ];
+    if (hasFullTotals) {
+      shownLabel = t("resultsOverview.matchingReports");
+      shownCount = totals.ready + totals.pending + totals.failed;
+    }
     primary = (
       <>
         <p className={styles.qualifier}>{t("resultsOverview.readyOnly")}</p>
@@ -337,59 +361,94 @@ export function ResultsOverview(props: Props) {
       aria-label={t("resultsOverview.title")}
     >
       <div className={styles.header}>
-        <h2>{t("resultsOverview.title")}</h2>
-        <p>{t("resultsOverview.scope", { count: number(props.items.length) })}</p>
+        <h2 ref={headingRef} tabIndex={props.kind === "rounds" ? -1 : undefined}>
+          {t("resultsOverview.title")}
+        </h2>
+        <p role={props.kind === "rounds" ? "status" : undefined}>
+          {hasFullTotals
+            ? t("resultsOverview.allReportsScope")
+            : hasLoadedEvidence
+              ? t("resultsOverview.scope", { count: number(props.items.length) })
+              : null}
+          {hasFullTotals && hasLoadedEvidence
+            ? ` ${t("resultsOverview.loadedReportsEvidence")}`
+            : null}
+          {totals === "loading" ? ` ${t("resultsOverview.reportTotalsLoading")}` : null}
+          {totals === "unavailable" ? ` ${t("resultsOverview.reportTotalsUnavailable")}` : null}
+        </p>
+        {props.kind === "rounds" && totals === "unavailable" ? (
+          <button
+            className="button-quiet"
+            type="button"
+            onClick={() => {
+              headingRef.current?.focus();
+              props.onTotalsRetry();
+            }}
+          >
+            {t("resultsOverview.retryReportTotals")}
+          </button>
+        ) : null}
       </div>
-      <div className={styles.widgets}>
-        <div className={`${styles.widget} ${styles.countWidget}`}>
-          <dl>
-            <dt>{shownLabel}</dt>
-            <dd>{number(props.items.length)}</dd>
-          </dl>
-          {distribution.length ? (
-            <div
-              className={styles.distribution}
-              role="group"
-              aria-label={t("resultsOverview.status")}
-            >
-              <div className={styles.statusTrack} aria-hidden="true">
-                {distribution.map((part) => (
-                  <span
-                    key={part.label}
-                    data-status={part.status}
-                    data-tone={workspaceStateTone(part.status)}
-                    style={{ flex: part.count }}
-                  />
-                ))}
-              </div>
-              <ul>
-                {distribution.map((part) => (
-                  <li key={part.label}>
+      {hasFullTotals || hasLoadedEvidence ? (
+        <div className={styles.widgets}>
+          <div className={`${styles.widget} ${styles.countWidget}`}>
+            <dl>
+              <dt>{shownLabel}</dt>
+              <dd>{number(shownCount)}</dd>
+            </dl>
+            {distribution.length ? (
+              <div
+                className={styles.distribution}
+                role="group"
+                aria-label={t(
+                  hasFullTotals ? "resultsOverview.matchingReports" : "resultsOverview.status",
+                )}
+              >
+                <div className={styles.statusTrack} aria-hidden="true">
+                  {distribution.map((part) => (
                     <span
-                      aria-hidden="true"
+                      key={part.label}
                       data-status={part.status}
                       data-tone={workspaceStateTone(part.status)}
+                      style={{ flex: part.count }}
                     />
-                    {part.label}
-                    <strong>{number(part.count)}</strong>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                  ))}
+                </div>
+                <ul>
+                  {distribution.map((part) => (
+                    <li key={part.label}>
+                      <span
+                        aria-hidden="true"
+                        data-status={part.status}
+                        data-tone={workspaceStateTone(part.status)}
+                      />
+                      {part.label}
+                      <strong>{number(part.count)}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+          {hasLoadedEvidence ? (
+            <>
+              <div className={styles.widget}>{primary}</div>
+              <dl className={styles.widget}>{secondary}</dl>
+            </>
           ) : null}
         </div>
-        <div className={styles.widget}>{primary}</div>
-        <dl className={styles.widget}>{secondary}</dl>
-      </div>
-      <div className={styles.activityGrid}>
-        <ResultsActivity
-          dates={dates}
-          dateBasis={dateBasis}
-          grouping={props.grouping}
-          onGroupingChange={props.onGroupingChange}
-        />
-        <ResultLinks label={linksLabel} links={links} />
-      </div>
+      ) : null}
+      {hasLoadedEvidence ? (
+        <div className={styles.activityGrid}>
+          <ResultsActivity
+            dates={dates}
+            dateBasis={dateBasis}
+            grouping={props.grouping}
+            onGroupingChange={props.onGroupingChange}
+          />
+          <ResultLinks label={linksLabel} links={links} />
+        </div>
+      ) : null}
       {props.hasMore ? <p className={styles.more}>{t("resultsOverview.more")}</p> : null}
     </section>
   );

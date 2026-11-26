@@ -145,6 +145,12 @@ vi.mock("../../components/workspace/workspace-shell", () => ({
 
 import ResultsPage from "./page";
 
+const reportTotalsPath = "/v1/reports/totals";
+
+function matchesRequest(path: string, endpoint: string) {
+  return path === endpoint || path.startsWith(`${endpoint}?`);
+}
+
 function report(id = "report-first", title = "First Round result") {
   return {
     id,
@@ -214,6 +220,7 @@ function survey(id = "survey-first", title = "First Survey result") {
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
     return { quizzes: [{ id: "round-source", title: "Source Round" }] };
+  if (matchesRequest(path, reportTotalsPath)) return { ready: 2, pending: 0, failed: 0 };
   if (path.startsWith("/v1/reports?"))
     return path.includes("cursor=")
       ? { items: [report("report-later", "Later Round result")], nextCursor: null }
@@ -254,6 +261,119 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
+  it("keeps all-page Round counts stable while loading more rows expands the evidence", async () => {
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      matchesRequest(path, reportTotalsPath)
+        ? { ready: 28, pending: 3, failed: 1 }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    const before = await harness.settle();
+    expect(before).toContain("Report totals include every page matching your filters.");
+    expect(before).toContain(
+      "The activity chart, participant joins, recovery, and follow-ups use loaded reports.",
+    );
+    expect(before).toContain("<dt>Matching reports</dt><dd>32</dd>");
+    expect(before).toContain("Ready<strong>28</strong>");
+    expect(before).toContain("Processing<strong>3</strong>");
+    expect(before).toContain("Needs attention<strong>1</strong>");
+    expect(before).toContain("<dt>Participant joins</dt><dd>5<");
+    expect(before).toContain("1 results shown · More available");
+
+    clickButton("Load More");
+    const after = await harness.settle();
+    expect(after).toContain("<dt>Matching reports</dt><dd>32</dd>");
+    expect(after).toContain("<dt>Participant joins</dt><dd>10<");
+    expect(after).toContain("Later Round result");
+    expect(historyCalls(reportTotalsPath)).toHaveLength(1);
+    const pagination = new URLSearchParams(historyCalls("/v1/reports").at(-1)![0].split("?")[1]);
+    expect(pagination.get("expectedWorkspaceId")).toBe("workspace-a");
+    expect(pagination.get("cursor")).toBe("report-next");
+    harness.dispose();
+  });
+
+  it("uses the Round list filters for totals and ignores obsolete workspace responses", async () => {
+    const previousTotals = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, reportTotalsPath)) {
+        const params = new URLSearchParams(path.split("?")[1]);
+        if (!params.has("search")) return previousTotals.promise;
+        return {
+          ready: params.get("expectedWorkspaceId") === "workspace-a" ? 29 : 7,
+          pending: 0,
+          failed: 0,
+        };
+      }
+      return response(path);
+    });
+    const harness = resultsHarness();
+    expect(await harness.settle()).toContain("Loading totals for all matching reports…");
+    const first = historyCalls(reportTotalsPath)[0]!;
+    changeField("Result Status", "ready");
+    changeField("Round", "round-source");
+    changeField("From", "2026-10-01");
+    changeField("To", "2026-10-31");
+    changeSearch("First");
+    expect(await harness.settle()).toContain("<dt>Matching reports</dt><dd>29</dd>");
+    expect(first[1].signal?.aborted).toBe(true);
+    const listUrl = historyCalls("/v1/reports").at(-1)![0];
+    const totalsUrl = historyCalls(reportTotalsPath).at(-1)![0];
+    const listParams = new URLSearchParams(listUrl.split("?")[1]);
+    expect(listParams.get("limit")).toBe("25");
+    listParams.delete("limit");
+    expect(new URLSearchParams(totalsUrl.split("?")[1]).toString()).toBe(listParams.toString());
+    expect(listParams.get("search")).toBe("First");
+    expect(listParams.get("expectedWorkspaceId")).toBe("workspace-a");
+    expect(listParams.get("status")).toBe("ready");
+    expect(listParams.get("quizId")).toBe("round-source");
+    expect(listParams.get("from")).toBe(new Date("2026-10-01T00:00:00").toISOString());
+    expect(listParams.get("to")).toBe(new Date("2026-10-31T23:59:59.999").toISOString());
+
+    fixtures.workspaceId = "workspace-b";
+    expect(harness.render()).not.toContain("<dt>Matching reports</dt><dd>29</dd>");
+    previousTotals.resolve({ ready: 88, pending: 0, failed: 0 });
+    const after = await harness.settle();
+    expect(after).toContain("<dt>Matching reports</dt><dd>7</dd>");
+    expect(after).not.toContain("<dt>Matching reports</dt><dd>88</dd>");
+    for (const endpoint of ["/v1/reports", reportTotalsPath]) {
+      const params = new URLSearchParams(historyCalls(endpoint).at(-1)![0].split("?")[1]);
+      expect(params.get("expectedWorkspaceId")).toBe("workspace-b");
+    }
+    harness.dispose();
+  });
+
+  it("retries a failed totals request independently while keeping Round results usable", async () => {
+    let totalsReads = 0;
+    const pendingRetry = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, reportTotalsPath)) {
+        if (++totalsReads === 1) throw new Error("Totals unavailable");
+        return pendingRetry.promise;
+      }
+      return response(path);
+    });
+    const harness = resultsHarness();
+    const before = await harness.settle();
+    expect(before).toContain("Full report totals could not load.");
+    expect(before).toContain("<dt>Results shown</dt><dd>1</dd>");
+    expect(before).toContain('href="/report/report-first"');
+    expect(before).not.toContain("Matching reports");
+
+    const heading = elements(fixtures.tree).find(
+      (node) =>
+        node.type === "h2" && elementText(node.props.children as ReactNode) === "Results analytics",
+    )!;
+    const focus = attachFocus(heading);
+    clickButton("Retry report totals");
+    expect(focus).toHaveBeenCalledOnce();
+    expect(await harness.settle()).toContain("Loading totals for all matching reports…");
+    expect(historyCalls("/v1/reports")).toHaveLength(1);
+    pendingRetry.resolve({ ready: 27, pending: 0, failed: 0 });
+    expect(await harness.settle()).toContain("<dt>Matching reports</dt><dd>27</dd>");
+    expect(totalsReads).toBe(2);
+    harness.dispose();
+  });
+
   it.each([
     { status: "ready", tone: "positive", label: "Ready", action: "result" },
     { status: "pending", tone: "warning", label: "Processing", action: "view" },
@@ -353,7 +473,7 @@ describe("Results workspace", () => {
       const pendingRetry = deferred<unknown>();
       let reads = 0;
       fixtures.apiFetch.mockImplementation((url: string) => {
-        if (url.startsWith(path)) {
+        if (matchesRequest(url, path)) {
           reads++;
           return reads === 1 ? initial.promise : pendingRetry.promise;
         }
@@ -372,6 +492,10 @@ describe("Results workspace", () => {
         ],
       ).toBe("page");
       expect(loadingMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
+      if (view === "results") {
+        expect(loadingMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
+        expect(loadingMarkup).not.toContain("<dt>Participant joins</dt>");
+      }
       const placeholders = elements(fixtures.tree).find(
         (node) => node.props["aria-hidden"] === "true" && node.props["data-view"] === "list",
       );
@@ -384,6 +508,10 @@ describe("Results workspace", () => {
       initial.reject(new Error("Connection interrupted"));
       const failedMarkup = await harness.settle();
       expect(failedMarkup).toContain("Connection interrupted");
+      if (view === "results") {
+        expect(failedMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
+        expect(failedMarkup).not.toContain("<dt>Participant joins</dt>");
+      }
       expect(failedMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
       expect(resultsPanel().props["aria-busy"]).toBe(false);
       expect(failedMarkup).not.toContain(`<h2 lang="">${title}</h2>`);
@@ -395,7 +523,7 @@ describe("Results workspace", () => {
       const pendingMarkup = await harness.settle();
       expect(pendingMarkup).not.toContain("Try again");
       expect(pendingMarkup).not.toMatch(/0 (?:results|practice items) shown/);
-      const requests = fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path));
+      const requests = fixtures.apiFetch.mock.calls.filter(([url]) => matchesRequest(url, path));
       expect(requests).toHaveLength(2);
       expect(requests[1]![0]).toBe(requests[0]![0]);
       expect(requests.every(([, options]) => !options.method || options.method === "GET")).toBe(
@@ -412,6 +540,7 @@ describe("Results workspace", () => {
         ),
       ).toBe(false);
       expect(markup).toContain('data-view="list"');
+      if (view === "results") expect(historyCalls(reportTotalsPath)).toHaveLength(1);
       expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
       harness.dispose();
     },
@@ -437,7 +566,8 @@ describe("Results workspace", () => {
     async ({ view, path, empty, destination }) => {
       fixtures.query = `view=${view}`;
       fixtures.apiFetch.mockImplementation(async (url: string) => {
-        if (!url.startsWith(path)) return response(url);
+        if (matchesRequest(url, reportTotalsPath)) return { ready: 0, pending: 0, failed: 0 };
+        if (!matchesRequest(url, path)) return response(url);
         if (view === "presentations") return { sessions: [] };
         if (view === "surveys") return { rooms: [], nextCursor: null };
         return { items: [], nextCursor: null };
@@ -497,7 +627,7 @@ describe("Results workspace", () => {
       fixtures.apiFetch.mockImplementation(async (url: string) => {
         if (
           (view === "results" || view === "practice") &&
-          url.startsWith(path) &&
+          matchesRequest(url, path) &&
           new URLSearchParams(url.split("?")[1]).get("search") === "missing"
         )
           return { items: [], nextCursor: null };
@@ -561,9 +691,9 @@ describe("Results workspace", () => {
         ).toBe(true);
       }
       if (view === "presentations" || view === "surveys")
-        expect(fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path))).toHaveLength(
-          1,
-        );
+        expect(
+          fixtures.apiFetch.mock.calls.filter(([url]) => matchesRequest(url, path)),
+        ).toHaveLength(1);
       harness.dispose();
     },
   );
@@ -590,7 +720,7 @@ describe("Results workspace", () => {
       let failed = false;
       const pendingRetry = deferred<unknown>();
       fixtures.apiFetch.mockImplementation(async (url: string) => {
-        if (url.startsWith(path) && url.includes("cursor=")) {
+        if (matchesRequest(url, path) && url.includes("cursor=")) {
           if (!failed) {
             failed = true;
             throw new Error("Next page unavailable");
@@ -652,7 +782,7 @@ describe("Results workspace", () => {
     async ({ view, path, more, count }) => {
       fixtures.query = `view=${view}`;
       fixtures.apiFetch.mockImplementation(async (url: string) => {
-        if (!url.startsWith(path)) return response(url);
+        if (!matchesRequest(url, path)) return response(url);
         if (url.includes("cursor=")) throw new Error("Later page unavailable");
         return { items: [], nextCursor: "later-page" };
       });
@@ -677,7 +807,7 @@ describe("Results workspace", () => {
     const pendingRetry = deferred<unknown>();
     let reads = 0;
     fixtures.apiFetch.mockImplementation(async (url: string) => {
-      if (url.startsWith(path)) {
+      if (matchesRequest(url, path)) {
         reads++;
         if (reads === 1) throw new Error("First workspace unavailable");
         if (reads === 2) return pendingRetry.promise;
@@ -688,7 +818,9 @@ describe("Results workspace", () => {
     await harness.settle();
     clickButton("Try again");
     await harness.settle();
-    const obsolete = fixtures.apiFetch.mock.calls.filter(([url]) => url.startsWith(path)).at(-1)!;
+    const obsolete = fixtures.apiFetch.mock.calls
+      .filter(([url]) => matchesRequest(url, path))
+      .at(-1)!;
     fixtures.workspaceId = "workspace-b";
     const markup = harness.render();
     expect(markup).not.toMatch(/0 (?:results|practice items) shown|First workspace unavailable/);
@@ -836,7 +968,7 @@ describe("Results workspace", () => {
         presentationResultsPath,
         "/v1/survey-rooms",
       ])
-        expect(paths.some((url) => url.startsWith(other))).toBe(other === path);
+        expect(paths.some((url) => matchesRequest(url, other))).toBe(other === path);
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`placeholder="${search}"`);
       expect(markup).toContain(`href="/library?type=${library}"`);
@@ -1164,8 +1296,10 @@ describe("Results workspace", () => {
       const filters = Object.fromEntries(
         new URLSearchParams(historyCalls(path).at(-1)![0].split("?")[1]),
       );
+      const scope = view === "results" ? { expectedWorkspaceId: "workspace-a" } : {};
       expect(filters).toEqual({
         limit: "25",
+        ...scope,
         search: "NeEdLe %_",
         status,
         quizId: "round-source",
@@ -1185,7 +1319,7 @@ describe("Results workspace", () => {
       expect(new URLSearchParams(fixtures.query).has("q")).toBe(false);
       expect(
         Object.fromEntries(new URLSearchParams(historyCalls(path).at(-1)![0].split("?")[1])),
-      ).toEqual({ limit: "25" });
+      ).toEqual({ limit: "25", ...scope });
     },
   );
 
@@ -1473,9 +1607,9 @@ function attachFocus(node: ReactElement<Record<string, unknown>>) {
   return focus;
 }
 function historyCalls(path: string) {
-  return fixtures.apiFetch.mock.calls.filter(([url]) =>
-    String(url).startsWith(`${path}?`),
-  ) as Array<[string, { signal?: AbortSignal }]>;
+  return fixtures.apiFetch.mock.calls.filter(([url]) => matchesRequest(String(url), path)) as Array<
+    [string, { signal?: AbortSignal }]
+  >;
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;

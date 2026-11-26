@@ -2,7 +2,11 @@ import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { SessionCountsResponseSchema, type QuizDraft } from "@openround/contracts";
+import {
+  ReportHistoryTotalsSchema,
+  SessionCountsResponseSchema,
+  type QuizDraft,
+} from "@openround/contracts";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
 import { MemoryRepository, createSurveyRepository, type CreatorContext } from "@openround/db";
 import { createGameState } from "@openround/game-engine";
@@ -313,6 +317,113 @@ describe("Sessions Library history APIs", () => {
 });
 
 describe("Results history search APIs", () => {
+  it.each([
+    { path: "/v1/reports", method: "listReportHistory" },
+    { path: "/v1/reports/totals", method: "getReportHistoryTotals" },
+  ] as const)("checks the expected workspace before reading $path", async ({ path, method }) => {
+    const f = await fixture();
+    const read = vi.spyOn(f.repository, method);
+    const get = (expectedWorkspaceId: string) =>
+      f.app.inject({
+        method: "GET",
+        url: `${path}?expectedWorkspaceId=${expectedWorkspaceId}`,
+        headers: f.owner.headers,
+      });
+
+    const mismatch = await get(f.outsider.creator.workspaceId);
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      error: { code: "CONFLICT", message: "The active workspace changed" },
+    });
+    expect(read).not.toHaveBeenCalled();
+
+    const matching = await get(f.owner.creator.workspaceId);
+    expect(matching.statusCode).toBe(200);
+    expect(matching.headers["cache-control"]).toBe("private, no-store");
+    expect(read).toHaveBeenCalledExactlyOnceWith(f.owner.creator.workspaceId, expect.any(Object));
+  });
+
+  it("returns private report totals across all pages with the report history filters", async () => {
+    const f = await fixture();
+    const owned = await f.seedRounds(f.owner.creator, 28);
+    const foreign = await f.seedRounds(f.outsider.creator, 1);
+    const from = new Date();
+    const expiresAt = new Date(from.getTime() + 86_400_000).toISOString();
+    const seedReport = (
+      workspaceId: string,
+      sessionId: string,
+      status: "ready" | "pending" | "failed",
+    ) =>
+      f.repository.saveReport(workspaceId, {
+        id: randomUUID(),
+        sessionId,
+        status,
+        generatedAt: status === "ready" ? from.toISOString() : null,
+        expiresAt,
+        metrics: { participantCount: 0, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
+        questions: [],
+        participants: [],
+      });
+    for (const [index, { id }] of owned.rounds.entries()) {
+      await seedReport(
+        f.owner.creator.workspaceId,
+        id,
+        index === 0 ? "pending" : index === 1 ? "failed" : "ready",
+      );
+    }
+    await seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready");
+
+    const path = "/v1/reports/totals";
+    const getTotals = (query = "", headers = f.owner.headers) =>
+      f.app.inject({ method: "GET", url: `${path}${query}`, headers });
+    const totals = vi.spyOn(f.repository, "getReportHistoryTotals");
+    expect((await f.app.inject({ method: "GET", url: path })).statusCode).toBe(401);
+    expect(totals).not.toHaveBeenCalled();
+    const history = vi.spyOn(f.repository, "listReportHistory");
+    const response = await getTotals();
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
+    expect(response.json()).toEqual({ ready: 26, pending: 1, failed: 1 });
+    expect(ReportHistoryTotalsSchema.safeParse(response.json()).success).toBe(true);
+    expect(history).not.toHaveBeenCalled();
+
+    const page = await f.app.inject({
+      method: "GET",
+      url: "/v1/reports",
+      headers: f.owner.headers,
+    });
+    expect(page.json().items).toHaveLength(25);
+    expect(page.json().nextCursor).toEqual(expect.any(String));
+    const pagination = new URLSearchParams({ limit: "1", cursor: page.json().nextCursor });
+    expect((await getTotals(`?${pagination}`)).json()).toEqual(response.json());
+
+    const filters = new URLSearchParams({
+      search: "  FrOzEn needle 50%_  ",
+      quizId: owned.quizId,
+      status: "pending",
+      from: from.toISOString(),
+      to: expiresAt,
+    });
+    expect((await getTotals(`?${filters}`)).json()).toEqual({ ready: 0, pending: 1, failed: 0 });
+    expect((await getTotals("?search=%25_", f.outsider.headers)).json()).toEqual({
+      ready: 1,
+      pending: 0,
+      failed: 0,
+    });
+    expect((await getTotals(`?quizId=${foreign.quizId}`)).json()).toEqual({
+      ready: 0,
+      pending: 0,
+      failed: 0,
+    });
+    expect((await getTotals(`?search=${"x".repeat(161)}`)).statusCode).toBe(400);
+
+    totals.mockRejectedValueOnce(new Error("Report totals unavailable"));
+    expect((await getTotals()).statusCode).toBe(500);
+    expect(
+      (await f.app.inject({ method: "GET", url: "/v1/reports", headers: f.owner.headers })).json(),
+    ).toEqual(page.json());
+  });
+
   it.each([
     { path: "/v1/reports", method: "listReportHistory" as const, status: "pending" },
     { path: "/v1/followups", method: "listFollowupHistory" as const, status: "scheduled" },

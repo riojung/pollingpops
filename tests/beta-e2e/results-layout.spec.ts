@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { FollowupSummary, ReportSummary } from "@openround/contracts";
 import { signInBeta } from "./sign-in";
 
@@ -20,6 +20,36 @@ function canceledReadKey(rawUrl: string) {
     return `${url.origin}${url.pathname}?_rsc=${url.searchParams.get("_rsc")}`;
   }
   return null;
+}
+
+function historyFilter(query: URLSearchParams) {
+  const search = (query.get("search") ?? "").toLocaleLowerCase();
+  const status = query.get("status");
+  const source = query.get("quizId");
+  const from = query.get("from");
+  const to = query.get("to");
+  return (item: ReportSummary | FollowupSummary) =>
+    (!search || item.title.toLocaleLowerCase().includes(search)) &&
+    (!status || item.status === status) &&
+    (!source || item.quizId === source) &&
+    (!from || new Date(item.createdAt) >= new Date(from)) &&
+    (!to || new Date(item.createdAt) <= new Date(to));
+}
+
+async function expectMatchingReports(
+  overview: Locator,
+  ready: number,
+  pending: number,
+  failed: number,
+) {
+  const count = overview.getByText("Matching reports", { exact: true }).locator("..").locator("dd");
+  await expect(count).toHaveText(String(ready + pending + failed));
+  const distribution = overview.getByRole("group", { name: "Matching reports", exact: true });
+  await expect(distribution.getByRole("listitem")).toHaveText([
+    new RegExp(`^Ready\\s*${ready}$`),
+    new RegExp(`^Processing\\s*${pending}$`),
+    new RegExp(`^Needs attention\\s*${failed}$`),
+  ]);
 }
 
 async function mockHistory(page: Page) {
@@ -119,6 +149,7 @@ async function mockHistory(page: Page) {
     },
   ];
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
+  const totalsReads: URLSearchParams[] = [];
   let presentationReads = 0;
   await page.route(`${api}/v1/quizzes?*`, (route) =>
     route.fulfill({
@@ -137,19 +168,7 @@ async function mockHistory(page: Page) {
     await page.route(`${api}${path}?*`, (route) => {
       const query = new URL(route.request().url()).searchParams;
       reads.push({ path, query });
-      const search = (query.get("search") ?? "").toLocaleLowerCase();
-      const status = query.get("status");
-      const source = query.get("quizId");
-      const from = query.get("from");
-      const to = query.get("to");
-      const filtered = items.filter(
-        (item) =>
-          (!search || item.title.toLocaleLowerCase().includes(search)) &&
-          (!status || item.status === status) &&
-          (!source || item.quizId === source) &&
-          (!from || new Date(item.createdAt) >= new Date(from)) &&
-          (!to || new Date(item.createdAt) <= new Date(to)),
-      );
+      const filtered = items.filter(historyFilter(query));
       const start = Number(query.get("cursor") ?? 0);
       const limit = Number(query.get("limit") ?? 25);
       return route.fulfill({
@@ -160,6 +179,16 @@ async function mockHistory(page: Page) {
       });
     });
   }
+  await page.route(
+    (url) => url.origin === api && url.pathname === "/v1/reports/totals",
+    (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      totalsReads.push(query);
+      const totals = { ready: 0, pending: 0, failed: 0 };
+      for (const report of reports.filter(historyFilter(query))) totals[report.status]++;
+      return route.fulfill({ json: totals });
+    },
+  );
   await page.route(`${api}/v1/presentation-sessions?includeReportStatus=true`, (route) => {
     presentationReads += 1;
     return route.fulfill({ json: { sessions: presentations } });
@@ -174,6 +203,7 @@ async function mockHistory(page: Page) {
     presentations,
     surveys,
     reads,
+    totalsReads,
     presentationReadCount: () => presentationReads,
   };
 }
@@ -206,6 +236,13 @@ for (const mobile of [false, true]) {
     // land here directly, without loading and discarding a dashboard that starts prefetches.
     const fixture = await mockHistory(page);
     await signInBeta(page, undefined, { returnTo: "/results" });
+    const account = await page.request.get(`${api}/v1/auth/me`);
+    await expect(account).toBeOK();
+    const {
+      creator: { workspaceId: expectedWorkspaceId },
+    } = (await account.json()) as {
+      creator: { workspaceId: string };
+    };
     await expect(page.getByRole("heading", { name: "Results", level: 1 })).toBeVisible();
     const views = page.getByRole("navigation", { name: "Evidence views" });
     await expect(views.getByRole("link", { name: "Rounds", exact: true })).toHaveAttribute(
@@ -227,6 +264,13 @@ for (const mobile of [false, true]) {
     const collection = page.getByRole("region", { name: "Results", exact: true });
     await expect(collection.getByRole("article")).toHaveCount(25);
     const overview = page.getByRole("region", { name: "Results analytics", exact: true });
+    await expectMatchingReports(overview, 26, 1, 1);
+    await expect(overview).toContainText(
+      "Report totals include every page matching your filters. The activity chart, participant joins, recovery, and follow-ups use loaded reports.",
+    );
+    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
     const activity = overview.getByRole("region", { name: "Activity over time", exact: true });
     await expect(activity).toContainText("Grouped by report creation date.");
     const periods = activity.getByRole("listitem");
@@ -284,6 +328,15 @@ for (const mobile of [false, true]) {
     if (!mobile) await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
     await page.getByRole("button", { name: "Load More", exact: true }).click();
     await expect(collection.getByRole("article")).toHaveCount(28);
+    await expectMatchingReports(overview, 26, 1, 1);
+    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
+    expect(Object.fromEntries(fixture.reads.at(-1)!.query)).toEqual({
+      limit: "25",
+      expectedWorkspaceId,
+      cursor: "25",
+    });
     await expect(overview).toContainText("78 recovered of 104 eligible");
     await expect(joins).toContainText("312");
     await expect(reportLinks.getByRole("link")).toHaveCount(3);
@@ -310,6 +363,11 @@ for (const mobile of [false, true]) {
     ]);
     await resultStatus.selectOption("pending");
     await expect(collection.getByRole("article")).toHaveCount(1);
+    await expectMatchingReports(overview, 0, 1, 0);
+    expect(Object.fromEntries(fixture.totalsReads.at(-1)!)).toEqual({
+      status: "pending",
+      expectedWorkspaceId,
+    });
     await expect(grouping).toHaveValue("quarter");
     await expect(overview).toContainText("No paired response recovery evidence");
     await expect(overview.getByRole("meter")).toHaveCount(0);
@@ -328,6 +386,8 @@ for (const mobile of [false, true]) {
     const search = page.getByRole("searchbox", { name: "Search Round results", exact: true });
     await search.fill("No matching Round evidence");
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
+    await expectMatchingReports(overview, 0, 0, 0);
+    await expect(overview.getByText(/use loaded reports/)).toHaveCount(0);
     await expect(grouping).toHaveCount(0);
     await search.fill("Round evidence 26");
     await expect(collection.getByRole("article")).toHaveCount(1);
@@ -352,6 +412,21 @@ for (const mobile of [false, true]) {
     }));
     await expect.poll(() => fixture.reads.at(-1)?.query.get("from")).toBe(dateBoundaries.from);
     await expect.poll(() => fixture.reads.at(-1)?.query.get("to")).toBe(dateBoundaries.to);
+    await resultStatus.selectOption("ready");
+    const filteredQuery = {
+      expectedWorkspaceId,
+      search: "Round evidence 26",
+      quizId: fixture.quizId,
+      status: "ready",
+      ...dateBoundaries,
+    };
+    await expect
+      .poll(() => Object.fromEntries(fixture.totalsReads.at(-1) ?? []))
+      .toEqual(filteredQuery);
+    await expect
+      .poll(() => Object.fromEntries(fixture.reads.at(-1)?.query ?? []))
+      .toEqual({ limit: "25", ...filteredQuery });
+    await expectMatchingReports(overview, 1, 0, 0);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     await expect(collection).toHaveAttribute("data-view", "list");
     await page.reload();
@@ -623,6 +698,9 @@ for (const mobile of [false, true]) {
       "href",
       "/results?view=surveys",
     );
+    for (const { query } of fixture.reads.filter(({ path }) => path === "/v1/reports")) {
+      expect(query.get("expectedWorkspaceId")).toBe(expectedWorkspaceId);
+    }
     expect(
       pageErrors.filter(({ message, at }) => {
         const match = message.match(/^\/([^\s]+) due to access control checks\.$/);

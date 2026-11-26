@@ -4,7 +4,7 @@ import { MemoryRepository } from "../src/index.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
 
 describe("Results history search in memory", () => {
-  it("searches frozen Round and practice titles before pagination with literal tenant-scoped filters", async () => {
+  it("searches frozen Round and practice titles and counts matching reports across pages", async () => {
     const repository = new MemoryRepository();
     async function creator() {
       const tokenHash = randomUUID();

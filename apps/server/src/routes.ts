@@ -74,6 +74,7 @@ import {
   PublishQuizRequestSchema,
   RestoreRoundDraftHistorySchema,
   ReportContextSchema,
+  ReportHistoryTotalsSchema,
   ReportSummaryPageSchema,
   RoundFilterOptionsResponseSchema,
   RoundStaffAvailabilitySchema,
@@ -246,24 +247,28 @@ const HistoryCursorSchema = z
       return z.NEVER;
     }
   });
-const HistoryQueryBase = {
+const HistoryPaginationQuery = {
   cursor: HistoryCursorSchema.optional(),
   limit: z.coerce.number().int().min(1).max(50).default(25),
+};
+const HistoryDateRangeQuery = {
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 };
+const HistoryQueryBase = { ...HistoryPaginationQuery, ...HistoryDateRangeQuery };
 const SessionHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
   search: SessionHistorySearchSchema.optional(),
   status: z.enum(["active", "finished", "expired"]).optional(),
   quizId: z.string().uuid().optional(),
 });
-const ReportHistoryQuerySchema = z.object({
-  ...HistoryQueryBase,
+const ReportHistoryFiltersSchema = z.object({
+  ...HistoryDateRangeQuery,
   search: SessionHistorySearchSchema.optional(),
   status: z.enum(["pending", "ready", "failed"]).optional(),
   quizId: z.string().uuid().optional(),
 });
+const ReportHistoryQuerySchema = ReportHistoryFiltersSchema.extend(HistoryPaginationQuery);
 const FollowupHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
   search: SessionHistorySearchSchema.optional(),
@@ -271,6 +276,16 @@ const FollowupHistoryQuerySchema = z.object({
   status: z.enum(["scheduled", "open", "closed", "expired"]).optional(),
   quizId: z.string().uuid().optional(),
 });
+
+function reportHistoryFilters(query: z.infer<typeof ReportHistoryFiltersSchema>) {
+  return {
+    ...(query.search ? { search: query.search } : {}),
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.quizId ? { quizId: query.quizId } : {}),
+    ...(query.from ? { from: new Date(query.from) } : {}),
+    ...(query.to ? { to: new Date(query.to) } : {}),
+  };
+}
 
 function historyCursor(item: { createdAt: Date; cursorCreatedAt?: string; id: string }) {
   return Buffer.from(
@@ -3104,12 +3119,14 @@ export async function registerRoutes(
   });
 
   app.get("/v1/reports", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const query = ReportHistoryQuerySchema.parse(request.query);
     const page = await repository.listReportHistory(creator.workspaceId, {
       limit: query.limit,
-      ...(query.search ? { search: query.search } : {}),
+      ...reportHistoryFilters(query),
       ...(query.cursor
         ? {
             cursor: {
@@ -3119,10 +3136,6 @@ export async function registerRoutes(
             },
           }
         : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.quizId ? { quizId: query.quizId } : {}),
-      ...(query.from ? { from: new Date(query.from) } : {}),
-      ...(query.to ? { to: new Date(query.to) } : {}),
       now: new Date(),
     });
     const last = page.items.at(-1);
@@ -3135,6 +3148,17 @@ export async function registerRoutes(
       })),
       nextCursor: page.hasMore && last ? historyCursor(last) : null,
     });
+  });
+
+  app.get("/v1/reports/totals", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    const query = ReportHistoryFiltersSchema.parse(request.query);
+    return ReportHistoryTotalsSchema.parse(
+      await repository.getReportHistoryTotals(creator.workspaceId, reportHistoryFilters(query)),
+    );
   });
 
   app.get("/v1/reports/:id", async (request, reply) => {

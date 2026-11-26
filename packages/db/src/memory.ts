@@ -2,6 +2,7 @@ import {
   DEFAULT_SESSION_POLICY,
   SessionPolicySchema,
   type FolderArtifactType,
+  type ReportHistoryTotals,
   type SessionPolicy,
 } from "@openround/contracts";
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
@@ -99,6 +100,8 @@ import type {
   QuizDraftUpdate,
   QuizVersionRecord,
   ReportJob,
+  ReportHistoryFilters,
+  ReportHistoryListOptions,
   ReportHistoryRecord,
   Repository,
   SessionStaffCredentialRecord,
@@ -4678,28 +4681,48 @@ export class MemoryRepository implements Repository {
     };
   }
 
-  async listReportHistory(
-    workspaceId: string,
-    options: {
-      cursor?: HistoryCursor;
-      limit: number;
-      search?: string;
-      status?: Report["status"];
-      quizId?: string;
-      from?: Date;
-      to?: Date;
-      now: Date;
-    },
-  ) {
-    const search = options.search?.trim().toLowerCase();
-    const records = [...this.reports.values()]
-      .flatMap((report): ReportHistoryRecord[] => {
-        const session = this.sessions.get(report.sessionId);
-        if (!session || session.workspaceId !== workspaceId) return [];
-        const version = this.versions.get(session.quizVersionId);
-        if (!version) return [];
-        const quiz = this.quizzes.get(version.quizId);
-        if (!quiz) return [];
+  private *matchingReportHistory(workspaceId: string, filters: ReportHistoryFilters) {
+    const search = filters.search?.trim().toLowerCase();
+    for (const report of this.reports.values()) {
+      if (filters.status && report.status !== filters.status) continue;
+      const session = this.sessions.get(report.sessionId);
+      if (!session || session.workspaceId !== workspaceId) continue;
+      const version = this.versions.get(session.quizVersionId);
+      if (!version || !this.quizzes.has(version.quizId)) continue;
+      if (filters.quizId && version.quizId !== filters.quizId) continue;
+      if (search && !session.state.quiz.title.toLowerCase().includes(search)) continue;
+      const createdAt = new Date(this.reportCreatedAt.get(report.id) ?? session.updatedAt);
+      const afterFrom = !filters.from || createdAt.getTime() >= filters.from.getTime();
+      const beforeTo = !filters.to || createdAt.getTime() <= filters.to.getTime();
+      if (afterFrom && beforeTo) yield { report, session, quizId: version.quizId, createdAt };
+    }
+  }
+
+  async getReportHistoryTotals(workspaceId: string, filters: ReportHistoryFilters) {
+    const totals: ReportHistoryTotals = { ready: 0, pending: 0, failed: 0 };
+    for (const { report } of this.matchingReportHistory(workspaceId, filters)) {
+      totals[report.status] += 1;
+    }
+    return totals;
+  }
+
+  async listReportHistory(workspaceId: string, options: ReportHistoryListOptions) {
+    const records = [...this.matchingReportHistory(workspaceId, options)]
+      .filter(
+        ({ createdAt, report }) =>
+          !options.cursor ||
+          createdAt.getTime() < options.cursor.createdAt.getTime() ||
+          (createdAt.getTime() === options.cursor.createdAt.getTime() &&
+            report.id < options.cursor.id),
+      )
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          right.report.id.localeCompare(left.report.id),
+      );
+    const items = records
+      .slice(0, options.limit)
+      .map(({ report, session, quizId, createdAt }): ReportHistoryRecord => {
         const recovery = "recovery" in report ? report.recovery : [];
         const recovered = recovery.reduce((sum, item) => sum + item.recovered, 0);
         const eligible = recovery.reduce((sum, item) => sum + item.initiallyIncorrectWithBoth, 0);
@@ -4715,55 +4738,37 @@ export class MemoryRepository implements Repository {
               : followup.opensAt > options.now
                 ? "scheduled"
                 : "open";
-        return [
-          {
-            id: report.id,
-            sessionId: report.sessionId,
-            trustMode: report.trustMode ?? session.trustMode ?? "learning",
-            quizId: version.quizId,
-            title: session.state.quiz.title,
-            status: report.status,
-            participantCount: report.metrics.participantCount,
-            initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
-            recovery: {
-              recovered,
-              eligible,
-              percent:
-                eligible > 0
-                  ? Math.min(100, Math.round((recovered / eligible) * 10_000) / 100)
-                  : null,
-            },
-            unresolvedConceptCount:
-              "unresolvedConcepts" in report
-                ? report.unresolvedConcepts.filter((concept) => concept.unresolved > 0).length
-                : 0,
-            interventionCount: "interventions" in report ? report.interventions.length : 0,
-            followupId: followup?.id ?? null,
-            followupStatus,
-            generatedAt: report.generatedAt ? new Date(report.generatedAt) : null,
-            createdAt: new Date(this.reportCreatedAt.get(report.id) ?? session.updatedAt),
-            expiresAt: new Date(report.expiresAt),
+        return {
+          id: report.id,
+          sessionId: report.sessionId,
+          trustMode: report.trustMode ?? session.trustMode ?? "learning",
+          quizId,
+          title: session.state.quiz.title,
+          status: report.status,
+          participantCount: report.metrics.participantCount,
+          initialAccuracyPercent: reportHistoryInitialAccuracyPercent(report),
+          recovery: {
+            recovered,
+            eligible,
+            percent:
+              eligible > 0
+                ? Math.min(100, Math.round((recovered / eligible) * 10_000) / 100)
+                : null,
           },
-        ];
-      })
-      .filter((item) => !search || item.title.toLowerCase().includes(search))
-      .filter((item) => !options.status || item.status === options.status)
-      .filter((item) => !options.quizId || item.quizId === options.quizId)
-      .filter((item) => !options.from || item.createdAt.getTime() >= options.from.getTime())
-      .filter((item) => !options.to || item.createdAt.getTime() <= options.to.getTime())
-      .filter(
-        (item) =>
-          !options.cursor ||
-          item.createdAt.getTime() < options.cursor.createdAt.getTime() ||
-          (item.createdAt.getTime() === options.cursor.createdAt.getTime() &&
-            item.id < options.cursor.id),
-      )
-      .sort(
-        (left, right) =>
-          right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
-      );
+          unresolvedConceptCount:
+            "unresolvedConcepts" in report
+              ? report.unresolvedConcepts.filter((concept) => concept.unresolved > 0).length
+              : 0,
+          interventionCount: "interventions" in report ? report.interventions.length : 0,
+          followupId: followup?.id ?? null,
+          followupStatus,
+          generatedAt: report.generatedAt ? new Date(report.generatedAt) : null,
+          createdAt,
+          expiresAt: new Date(report.expiresAt),
+        };
+      });
     return {
-      items: structuredClone(records.slice(0, options.limit)),
+      items: structuredClone(items),
       hasMore: records.length > options.limit,
     };
   }

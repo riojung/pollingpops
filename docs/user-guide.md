@@ -1895,17 +1895,18 @@ state. Exports, summary sharing, follow-up creation, retention and deletion keep
 permissions and confirmation steps.
 
 The **Results** page includes a **Results analytics** dashboard for Rounds, Presentations,
-Surveys, and practice. In the Round view, **Matching reports** and the Ready, Processing, and
-Needs attention counts cover every page matching the workspace, status, Round, date, and search
-filters. Totals can load while the report list is still loading or unavailable. If the totals read
-fails, **Retry report totals** reloads the counts while the loaded reports stay available.
-**Load More** expands the loaded-report chart, evidence, and shortcuts. Other views also use
-loaded records for their totals.
+Surveys, and practice. In the Round view, **Matching reports**, its status counts, and
+**Activity over time** cover every page matching the workspace, status, Round, date, and search
+filters. Group the chart by UTC month or quarter of report creation. It shows the six most recent
+periods with matching reports. Set the date filters to see earlier periods. Totals and activity
+can load while the report list is loading or unavailable. **Retry report analytics** retries both
+while the loaded reports stay available. **Load More** expands the loaded-report evidence and
+shortcuts.
 
-Group the activity chart by month or quarter. It uses the creation date of each Round report,
-Presentation session, or practice run, and the scheduled collection deadline for Surveys.
-Shortcuts open ready Round Analytics, available Presentation reports, retained Survey results,
-or practice details.
+Other views use loaded records for their totals and charts. Their activity dates reflect when
+each Presentation session or practice run was created, or the scheduled collection deadline for
+each Survey. Shortcuts open ready Round Analytics, available Presentation reports, retained
+Survey results, or practice details.
 
 Round recovery combines recovered and eligible opportunities from ready reports. Practice shows
 completed attempts out of all recorded attempts. Round and Presentation join counts add participant

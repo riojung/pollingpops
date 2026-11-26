@@ -74,6 +74,7 @@ import {
   PublishQuizRequestSchema,
   RestoreRoundDraftHistorySchema,
   ReportContextSchema,
+  ReportHistoryAnalyticsSchema,
   ReportHistoryTotalsSchema,
   ReportSummaryPageSchema,
   RoundFilterOptionsResponseSchema,
@@ -269,6 +270,9 @@ const ReportHistoryFiltersSchema = z.object({
   quizId: z.string().uuid().optional(),
 });
 const ReportHistoryQuerySchema = ReportHistoryFiltersSchema.extend(HistoryPaginationQuery);
+const ReportHistoryTotalsQuerySchema = ReportHistoryFiltersSchema.extend({
+  includeActivity: z.enum(["true", "false"]).optional(),
+});
 const FollowupHistoryQuerySchema = z.object({
   ...HistoryQueryBase,
   search: SessionHistorySearchSchema.optional(),
@@ -3155,9 +3159,15 @@ export async function registerRoutes(
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
     requireExpectedWorkspace(request.query, creator.workspaceId);
-    const query = ReportHistoryFiltersSchema.parse(request.query);
+    const query = ReportHistoryTotalsQuerySchema.parse(request.query);
+    const filters = reportHistoryFilters(query);
+    if (query.includeActivity === "true") {
+      return ReportHistoryAnalyticsSchema.parse(
+        await repository.getReportHistoryAnalytics(creator.workspaceId, filters),
+      );
+    }
     return ReportHistoryTotalsSchema.parse(
-      await repository.getReportHistoryTotals(creator.workspaceId, reportHistoryFilters(query)),
+      await repository.getReportHistoryTotals(creator.workspaceId, filters),
     );
   });
 

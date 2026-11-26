@@ -8,6 +8,8 @@ import { signInBeta } from "./sign-in";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const web = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
 
+test.use({ timezoneId: "America/Edmonton" });
+
 const toolbarClear = (page: Page) =>
   page
     .getByRole("region", { name: "History filters", exact: true })
@@ -36,6 +38,23 @@ function historyFilter(query: URLSearchParams) {
     (!to || new Date(item.createdAt) <= new Date(to));
 }
 
+function activityPeriods(reports: readonly ReportSummary[], grouping: "month" | "quarter") {
+  const counts = new Map<string, number>();
+  for (const report of reports) {
+    const date = new Date(report.createdAt);
+    const month = date.getUTCMonth();
+    const startMonth = grouping === "month" ? month : Math.floor(month / 3) * 3;
+    const start = new Date(Date.UTC(date.getUTCFullYear(), startMonth, 1))
+      .toISOString()
+      .slice(0, 10);
+    counts.set(start, (counts.get(start) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .slice(-6)
+    .map(([start, count]) => ({ start, count }));
+}
+
 async function expectMatchingReports(
   overview: Locator,
   ready: number,
@@ -57,7 +76,7 @@ async function mockHistory(page: Page) {
   const otherQuizId = randomUUID();
   const versionId = randomUUID();
   const createdAt = "2026-10-01T12:00:00.000Z";
-  const recentReportDate = "2026-11-01T12:00:00.000Z";
+  const recentReportDate = "2026-11-01T00:15:00.000Z";
   const expiresAt = "2099-10-01T12:00:00.000Z";
   const reports: ReportSummary[] = Array.from({ length: 28 }, (_, index) => ({
     id: randomUUID(),
@@ -79,7 +98,14 @@ async function mockHistory(page: Page) {
     followupId: index === 0 ? randomUUID() : null,
     followupStatus: index === 0 ? "open" : null,
     generatedAt: index === 0 ? recentReportDate : index < 26 ? createdAt : null,
-    createdAt: index === 0 ? recentReportDate : createdAt,
+    createdAt:
+      index === 0
+        ? recentReportDate
+        : index < 25
+          ? createdAt
+          : index < 27
+            ? "2026-09-30T12:00:00.000Z"
+            : "2026-08-31T12:00:00.000Z",
     expiresAt,
   }));
   const followups: FollowupSummary[] = Array.from({ length: 26 }, (_, index) => {
@@ -184,9 +210,21 @@ async function mockHistory(page: Page) {
     (route) => {
       const query = new URL(route.request().url()).searchParams;
       totalsReads.push(query);
+      const filtered = reports.filter(historyFilter(query));
       const totals = { ready: 0, pending: 0, failed: 0 };
-      for (const report of reports.filter(historyFilter(query))) totals[report.status]++;
-      return route.fulfill({ json: totals });
+      for (const report of filtered) totals[report.status]++;
+      return route.fulfill({
+        json:
+          query.get("includeActivity") === "true"
+            ? {
+                ...totals,
+                activity: {
+                  month: activityPeriods(filtered, "month"),
+                  quarter: activityPeriods(filtered, "quarter"),
+                },
+              }
+            : totals,
+      });
     },
   );
   await page.route(`${api}/v1/presentation-sessions?includeReportStatus=true`, (route) => {
@@ -198,6 +236,7 @@ async function mockHistory(page: Page) {
   );
   return {
     quizId,
+    otherQuizId,
     reports,
     followups,
     presentations,
@@ -266,28 +305,27 @@ for (const mobile of [false, true]) {
     const overview = page.getByRole("region", { name: "Results analytics", exact: true });
     await expectMatchingReports(overview, 26, 1, 1);
     await expect(overview).toContainText(
-      "Report totals include every page matching your filters. The activity chart, participant joins, recovery, and follow-ups use loaded reports.",
+      "Report totals and activity include every page matching your filters.",
     );
-    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([
-      { expectedWorkspaceId },
-    ]);
+    await expect(overview).toContainText(
+      "Participant joins, recovery, and follow-ups use loaded reports.",
+    );
+    const analyticsQuery = { expectedWorkspaceId, includeActivity: "true" };
+    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([analyticsQuery]);
     const activity = overview.getByRole("region", { name: "Activity over time", exact: true });
-    await expect(activity).toContainText("Grouped by report creation date.");
+    await expect(activity).toContainText("Grouped by report creation date in UTC.");
     const periods = activity.getByRole("listitem");
     const grouping = activity.getByRole("combobox", { name: "Group by", exact: true });
+    await expect(grouping.getByRole("option")).toHaveText(["Month", "Quarter"]);
     await expect(grouping).toHaveValue("month");
-    await expect(periods).toHaveCount(2);
-    await expect(
-      periods.filter({ hasText: /Oct.*2026/ }).getByText("24", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      periods.filter({ hasText: /Nov.*2026/ }).getByText("1", { exact: true }),
-    ).toBeVisible();
+    const monthCounts = [/Aug.*2026\s*1$/, /Sep.*2026\s*2$/, /Oct.*2026\s*24$/, /Nov.*2026\s*1$/];
+    const quarterCounts = [/Jul.*Sep.*2026\s*3$/, /Oct.*Dec.*2026\s*25$/];
+    await expect(periods).toHaveText(monthCounts);
     const loadedReads = fixture.reads.length;
     await grouping.selectOption({ label: "Quarter" });
-    await expect(periods).toHaveCount(1);
-    await expect(periods.getByText("25", { exact: true })).toBeVisible();
+    await expect(periods).toHaveText(quarterCounts);
     expect(fixture.reads).toHaveLength(loadedReads);
+    expect(fixture.totalsReads).toHaveLength(1);
     const reportLinks = overview.getByRole("region", { name: "Reports to open", exact: true });
     await expect(reportLinks.getByRole("link")).toHaveCount(3);
     await expect(
@@ -303,7 +341,11 @@ for (const mobile of [false, true]) {
     await expect(
       overview.getByRole("meter", { name: "Paired response recovery", exact: true }),
     ).toHaveAttribute("aria-valuenow", "75");
-    await expect(overview).toContainText("More results are available.");
+    const moreEvidence = overview.getByText(
+      "Load more to include more reports in the evidence and shortcuts.",
+      { exact: true },
+    );
+    await expect(moreEvidence).toBeVisible();
     await expect(
       page.getByText("25 results shown · More available", { exact: true }),
     ).toBeVisible();
@@ -329,9 +371,6 @@ for (const mobile of [false, true]) {
     await page.getByRole("button", { name: "Load More", exact: true }).click();
     await expect(collection.getByRole("article")).toHaveCount(28);
     await expectMatchingReports(overview, 26, 1, 1);
-    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([
-      { expectedWorkspaceId },
-    ]);
     expect(Object.fromEntries(fixture.reads.at(-1)!.query)).toEqual({
       limit: "25",
       expectedWorkspaceId,
@@ -340,8 +379,14 @@ for (const mobile of [false, true]) {
     await expect(overview).toContainText("78 recovered of 104 eligible");
     await expect(joins).toContainText("312");
     await expect(reportLinks.getByRole("link")).toHaveCount(3);
-    await expect(periods.getByText("28", { exact: true })).toBeVisible();
-    await expect(overview).not.toContainText("More results are available.");
+    await expect(periods).toHaveText(quarterCounts);
+    await grouping.selectOption("month");
+    await expect(periods).toHaveText(monthCounts);
+    await grouping.selectOption("quarter");
+    await expect(periods).toHaveText(quarterCounts);
+    expect(fixture.reads).toHaveLength(loadedReads + 1);
+    expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([analyticsQuery]);
+    await expect(moreEvidence).toHaveCount(0);
     await expect(page.getByText("28 results shown", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Load More", exact: true })).toHaveCount(0);
     const ready = collection.getByRole("article").filter({
@@ -365,8 +410,8 @@ for (const mobile of [false, true]) {
     await expect(collection.getByRole("article")).toHaveCount(1);
     await expectMatchingReports(overview, 0, 1, 0);
     expect(Object.fromEntries(fixture.totalsReads.at(-1)!)).toEqual({
+      ...analyticsQuery,
       status: "pending",
-      expectedWorkspaceId,
     });
     await expect(grouping).toHaveValue("quarter");
     await expect(overview).toContainText("No paired response recovery evidence");
@@ -374,7 +419,7 @@ for (const mobile of [false, true]) {
     await expect(joins).toContainText("—");
     await expect(reportLinks.getByRole("link")).toHaveCount(0);
     await expect(reportLinks).toContainText("No ready reports in the results shown.");
-    await expect(periods.getByText("1", { exact: true })).toBeVisible();
+    await expect(periods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
     await expect(
       collection.getByRole("heading", { name: "Synthetic processing evidence" }),
     ).toBeVisible();
@@ -388,6 +433,9 @@ for (const mobile of [false, true]) {
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
     await expectMatchingReports(overview, 0, 0, 0);
     await expect(overview.getByText(/use loaded reports/)).toHaveCount(0);
+    const emptyActivity = activity.getByText("No reports match these filters.", { exact: true });
+    await expect(emptyActivity).toBeVisible();
+    await expect(periods).toHaveCount(0);
     await expect(grouping).toHaveCount(0);
     await search.fill("Round evidence 26");
     await expect(collection.getByRole("article")).toHaveCount(1);
@@ -401,8 +449,15 @@ for (const mobile of [false, true]) {
     await expect(
       reportLinks.getByRole("link", { name: fixture.reports[25]!.title, exact: true }),
     ).toHaveAttribute("href", `/report/${fixture.reports[25]!.id}?view=analytics`);
-    await page.getByRole("combobox", { name: "Round", exact: true }).selectOption(fixture.quizId);
-    await page.getByLabel("From", { exact: true }).fill("2026-09-01");
+    const source = page.getByRole("combobox", { name: "Round", exact: true });
+    await source.selectOption(fixture.otherQuizId);
+    await expect(emptyActivity).toBeVisible();
+    await source.selectOption(fixture.quizId);
+    await expect(periods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
+    const from = page.getByLabel("From", { exact: true });
+    await from.fill("2026-10-01");
+    await expect(emptyActivity).toBeVisible();
+    await from.fill("2026-09-01");
     await page.getByLabel("To", { exact: true }).fill("2026-10-31");
     await expect(collection.getByRole("article")).toHaveCount(1);
     await expect.poll(() => fixture.reads.at(-1)?.query.get("quizId")).toBe(fixture.quizId);
@@ -422,11 +477,12 @@ for (const mobile of [false, true]) {
     };
     await expect
       .poll(() => Object.fromEntries(fixture.totalsReads.at(-1) ?? []))
-      .toEqual(filteredQuery);
+      .toEqual({ ...filteredQuery, includeActivity: "true" });
     await expect
       .poll(() => Object.fromEntries(fixture.reads.at(-1)?.query ?? []))
       .toEqual({ limit: "25", ...filteredQuery });
     await expectMatchingReports(overview, 1, 0, 0);
+    await expect(periods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     await expect(collection).toHaveAttribute("data-view", "list");
     await page.reload();

@@ -225,7 +225,7 @@ function ResultsPanel({
   children,
 }: {
   view: "results" | "practice" | "presentations" | "surveys";
-  busy: boolean;
+  busy?: boolean;
   panelRef: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
@@ -473,7 +473,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
   }
 
   return (
-    <ResultsPanel view="results" busy={loading || loadingMore} panelRef={panel}>
+    <ResultsPanel view="results" panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
         count={reports.length}
@@ -544,6 +544,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         className={resultStyles.collection}
         data-view={listControls.layout}
         aria-label={t("pages.common.results")}
+        aria-busy={loading || loadingMore}
       >
         {reports.map((report) => (
           <article

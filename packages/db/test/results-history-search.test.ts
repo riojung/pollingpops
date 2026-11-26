@@ -4,7 +4,7 @@ import { MemoryRepository } from "../src/index.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
 
 describe("Results history search in memory", () => {
-  it("searches frozen Round and practice titles and counts matching reports across pages", async () => {
+  it("searches frozen Round and practice titles and aggregates matching reports across pages", async () => {
     const repository = new MemoryRepository();
     async function creator() {
       const tokenHash = randomUUID();
@@ -22,6 +22,13 @@ describe("Results history search in memory", () => {
       expect(actor).not.toBeNull();
       return actor!;
     }
-    await expectResultsHistorySearchConformance(repository, await creator(), await creator());
+    await expectResultsHistorySearchConformance(
+      repository,
+      await creator(),
+      await creator(),
+      (_workspaceId, reportIds, dates) => {
+        reportIds.forEach((id, index) => repository.reportCreatedAt.set(id, dates[index]!));
+      },
+    );
   });
 });

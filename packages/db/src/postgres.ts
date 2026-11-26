@@ -34,6 +34,7 @@ import {
   SessionPolicySchema,
   MAX_SESSION_DECISION_EVENTS,
   QUESTION_HEALTH_POST_USE_MAX_REPORTS,
+  REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT,
   RecoveryPackCardReferenceSchema,
   RecoveryPackPracticeSourceSchema,
   RecoveryPackPracticeSequenceSchema,
@@ -50,6 +51,7 @@ import {
   type FolderArtifactType,
   type QuizDraft,
   type Report,
+  type ReportHistoryAnalytics,
   type ReportHistoryTotals,
   type SupportedLocale,
   type SessionPolicy,
@@ -6789,6 +6791,62 @@ export class PostgresRepository implements Repository {
       pending: Number(row.pending),
       failed: Number(row.failed),
     };
+  }
+
+  async getReportHistoryAnalytics(
+    workspaceId: string,
+    filters: ReportHistoryFilters,
+  ): Promise<ReportHistoryAnalytics> {
+    const result = await this.workspaceQuery(
+      workspaceId,
+      `WITH matching_reports AS (
+         SELECT reports.status, reports.created_at AT TIME ZONE 'UTC' AS created_at_utc
+         ${REPORT_HISTORY_SOURCE}
+         ${REPORT_HISTORY_WHERE}
+       ), periods AS (
+         SELECT status, date_trunc('month', created_at_utc) AS month_start,
+                date_trunc('quarter', created_at_utc) AS quarter_start
+         FROM matching_reports
+       ), grouped AS (
+         SELECT CASE
+                  WHEN GROUPING(month_start) = 0 THEN 'month'
+                  WHEN GROUPING(quarter_start) = 0 THEN 'quarter'
+                  ELSE 'total'
+                END AS period,
+                coalesce(month_start, quarter_start) AS start,
+                count(*) AS count,
+                count(*) FILTER (WHERE status = 'ready') AS ready,
+                count(*) FILTER (WHERE status = 'pending') AS pending,
+                count(*) FILTER (WHERE status = 'failed') AS failed
+         FROM periods
+         GROUP BY GROUPING SETS ((), (month_start), (quarter_start))
+       ), ranked AS (
+         SELECT *, row_number() OVER (PARTITION BY period ORDER BY start DESC) AS bucket_number
+         FROM grouped
+       )
+       SELECT period, to_char(start, 'YYYY-MM-DD') AS start, count, ready, pending, failed
+       FROM ranked
+       WHERE bucket_number <= $7
+       ORDER BY ranked.start ASC`,
+      [...reportHistoryFilterParams(workspaceId, filters), REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT],
+    );
+    const analytics: ReportHistoryAnalytics = {
+      ready: 0,
+      pending: 0,
+      failed: 0,
+      activity: { month: [], quarter: [] },
+    };
+    for (const row of result.rows) {
+      if (row.period === "total") {
+        analytics.ready = Number(row.ready);
+        analytics.pending = Number(row.pending);
+        analytics.failed = Number(row.failed);
+      } else {
+        const period = row.period as keyof ReportHistoryAnalytics["activity"];
+        analytics.activity[period].push({ start: String(row.start), count: Number(row.count) });
+      }
+    }
+    return analytics;
   }
 
   async listReportHistory(workspaceId: string, options: ReportHistoryListOptions) {

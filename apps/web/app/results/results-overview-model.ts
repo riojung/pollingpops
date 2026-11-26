@@ -1,4 +1,4 @@
-import type { PresentationReportStatus } from "@openround/contracts";
+import type { PresentationReportStatus, ReportHistoryAnalytics } from "@openround/contracts";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 
@@ -18,10 +18,30 @@ export interface PresentationResultSummary {
 
 export type ResultsActivityGrouping = "month" | "quarter";
 
+export interface ResultsActivityPeriod {
+  start: Date;
+  end: Date;
+  count: number;
+}
+
+/** The report analytics endpoint groups creation dates by UTC calendar periods. */
+export function roundReportActivity(
+  activity: ReportHistoryAnalytics["activity"],
+  grouping: ResultsActivityGrouping,
+): ResultsActivityPeriod[] {
+  const monthsPerPeriod = grouping === "month" ? 1 : 3;
+  return activity[grouping].map((bucket) => {
+    const start = new Date(`${bucket.start}T00:00:00.000Z`);
+    const end = new Date(start);
+    end.setUTCMonth(start.getUTCMonth() + monthsPerPeriod, 0);
+    return { start, end, count: bucket.count };
+  });
+}
+
 /** Returns the most recent represented periods using inclusive local calendar days. */
 export function resultsActivity(dates: readonly string[], grouping: ResultsActivityGrouping) {
   const monthsPerPeriod = grouping === "month" ? 1 : 3;
-  const buckets = new Map<number, { start: Date; end: Date; count: number }>();
+  const buckets = new Map<number, ResultsActivityPeriod>();
   for (const value of dates) {
     const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
     const date = new Date(dateOnly ? `${value}T00:00:00` : value);

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
+  ReportHistoryAnalyticsSchema,
   ReportHistoryTotalsSchema,
   SessionCountsResponseSchema,
   type QuizDraft,
@@ -318,15 +319,20 @@ describe("Sessions Library history APIs", () => {
 
 describe("Results history search APIs", () => {
   it.each([
-    { path: "/v1/reports", method: "listReportHistory" },
-    { path: "/v1/reports/totals", method: "getReportHistoryTotals" },
-  ] as const)("checks the expected workspace before reading $path", async ({ path, method }) => {
+    { path: "/v1/reports", query: "", method: "listReportHistory" },
+    { path: "/v1/reports/totals", query: "", method: "getReportHistoryTotals" },
+    {
+      path: "/v1/reports/totals",
+      query: "&includeActivity=true",
+      method: "getReportHistoryAnalytics",
+    },
+  ] as const)("checks the expected workspace before $method", async ({ path, query, method }) => {
     const f = await fixture();
     const read = vi.spyOn(f.repository, method);
     const get = (expectedWorkspaceId: string) =>
       f.app.inject({
         method: "GET",
-        url: `${path}?expectedWorkspaceId=${expectedWorkspaceId}`,
+        url: `${path}?expectedWorkspaceId=${expectedWorkspaceId}${query}`,
         headers: f.owner.headers,
       });
 
@@ -343,19 +349,20 @@ describe("Results history search APIs", () => {
     expect(read).toHaveBeenCalledExactlyOnceWith(f.owner.creator.workspaceId, expect.any(Object));
   });
 
-  it("returns private report totals across all pages with the report history filters", async () => {
+  it("returns private report totals and optional activity across all pages with the report history filters", async () => {
     const f = await fixture();
     const owned = await f.seedRounds(f.owner.creator, 28);
     const foreign = await f.seedRounds(f.outsider.creator, 1);
     const from = new Date();
     const expiresAt = new Date(from.getTime() + 86_400_000).toISOString();
-    const seedReport = (
+    const seedReport = async (
       workspaceId: string,
       sessionId: string,
       status: "ready" | "pending" | "failed",
-    ) =>
-      f.repository.saveReport(workspaceId, {
-        id: randomUUID(),
+    ) => {
+      const id = randomUUID();
+      await f.repository.saveReport(workspaceId, {
+        id,
         sessionId,
         status,
         generatedAt: status === "ready" ? from.toISOString() : null,
@@ -364,11 +371,16 @@ describe("Results history search APIs", () => {
         questions: [],
         participants: [],
       });
+      return id;
+    };
+    const reportIds = [];
     for (const [index, { id }] of owned.rounds.entries()) {
-      await seedReport(
-        f.owner.creator.workspaceId,
-        id,
-        index === 0 ? "pending" : index === 1 ? "failed" : "ready",
+      reportIds.push(
+        await seedReport(
+          f.owner.creator.workspaceId,
+          id,
+          index === 0 ? "pending" : index === 1 ? "failed" : "ready",
+        ),
       );
     }
     await seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready");
@@ -422,6 +434,58 @@ describe("Results history search APIs", () => {
     expect(
       (await f.app.inject({ method: "GET", url: "/v1/reports", headers: f.owner.headers })).json(),
     ).toEqual(page.json());
+
+    const older = new Date("2025-03-31T23:59:59.999Z");
+    const newer = new Date("2025-04-01T00:00:00.000Z");
+    reportIds.forEach((id, index) =>
+      f.repository.reportCreatedAt.set(id, index === 0 ? older : newer),
+    );
+    const analytics = vi.spyOn(f.repository, "getReportHistoryAnalytics");
+    expect(
+      (await f.app.inject({ method: "GET", url: `${path}?includeActivity=true` })).statusCode,
+    ).toBe(401);
+    expect((await getTotals("?includeActivity=false")).json()).toEqual(response.json());
+    expect((await getTotals("?includeActivity=invalid")).statusCode).toBe(400);
+    expect(analytics).not.toHaveBeenCalled();
+    totals.mockClear();
+    history.mockClear();
+
+    const activity = await getTotals(`?${pagination}&includeActivity=true`);
+    expect(activity.statusCode).toBe(200);
+    expect(activity.headers["cache-control"]).toBe("private, no-store");
+    expect(ReportHistoryAnalyticsSchema.parse(activity.json())).toEqual({
+      ...response.json(),
+      activity: {
+        month: [
+          { start: "2025-03-01", count: 1 },
+          { start: "2025-04-01", count: 27 },
+        ],
+        quarter: [
+          { start: "2025-01-01", count: 1 },
+          { start: "2025-04-01", count: 27 },
+        ],
+      },
+    });
+    expect(totals).not.toHaveBeenCalled();
+    expect(history).not.toHaveBeenCalled();
+
+    filters.set("from", older.toISOString());
+    filters.set("to", older.toISOString());
+    expect((await getTotals(`?includeActivity=true&${filters}`)).json()).toEqual({
+      ready: 0,
+      pending: 1,
+      failed: 0,
+      activity: {
+        month: [{ start: "2025-03-01", count: 1 }],
+        quarter: [{ start: "2025-01-01", count: 1 }],
+      },
+    });
+    expect((await getTotals(`?includeActivity=true&quizId=${foreign.quizId}`)).json()).toEqual({
+      ready: 0,
+      pending: 0,
+      failed: 0,
+      activity: { month: [], quarter: [] },
+    });
   });
 
   it.each([

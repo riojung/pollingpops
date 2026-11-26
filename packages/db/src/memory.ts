@@ -2,13 +2,17 @@ import {
   DEFAULT_SESSION_POLICY,
   SessionPolicySchema,
   type FolderArtifactType,
+  type ReportHistoryAnalytics,
   type ReportHistoryTotals,
   type SessionPolicy,
 } from "@openround/contracts";
 import { createFolderState, updateFolderState, deleteFolderState, folderOrder } from "./folders.js";
 import { upgradeGameState, type EngineAnswer } from "@openround/game-engine";
 import { roundAnswerExportAllowed, roundStateForExport } from "./response-export.js";
-import { reportHistoryInitialAccuracyPercent } from "./report-history.js";
+import {
+  countReportHistoryActivity,
+  reportHistoryInitialAccuracyPercent,
+} from "./report-history.js";
 import { assertAudienceAdmissionInMemory } from "./platform-memory.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
 import { PlatformError } from "./platform-types.js";
@@ -4704,6 +4708,24 @@ export class MemoryRepository implements Repository {
       totals[report.status] += 1;
     }
     return totals;
+  }
+
+  async getReportHistoryAnalytics(workspaceId: string, filters: ReportHistoryFilters) {
+    const analytics: ReportHistoryAnalytics = {
+      ready: 0,
+      pending: 0,
+      failed: 0,
+      activity: { month: [], quarter: [] },
+    };
+    for (const { report, createdAt } of this.matchingReportHistory(workspaceId, filters)) {
+      analytics[report.status] += 1;
+      const month = createdAt.toISOString().slice(0, 7);
+      const quarterMonth = Math.floor(createdAt.getUTCMonth() / 3) * 3 + 1;
+      const quarter = `${month.slice(0, 4)}-${String(quarterMonth).padStart(2, "0")}`;
+      countReportHistoryActivity(analytics.activity.month, `${month}-01`);
+      countReportHistoryActivity(analytics.activity.quarter, `${quarter}-01`);
+    }
+    return analytics;
   }
 
   async listReportHistory(workspaceId: string, options: ReportHistoryListOptions) {

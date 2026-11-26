@@ -145,6 +145,11 @@ Review the title before creating. Workshop settings contain the participant iden
 visibility, vote budget and lifetime choices. Existing workshop links continue to work; a facilitator can
 choose **Add canvas view** while the workshop is still a draft or collecting ideas.
 
+On the workshop host page, **Board analytics** shows the vote totals for a closed round. Choose a
+**Voting round** to revisit results retained from earlier rounds. Each share uses all votes cast
+in the selected round. One ballot can include more than one idea. A round with zero votes shows
+zero counts and has no percentages. A current round releases totals only after it closes.
+
 Choose a blank board or preview one of seven original starters for brainstorming, retrospectives,
 project planning, decisions and learning reflection. Starter content is in English and remains
 editable. Review the title, workshop prompt and settings before creating. Guided starters create

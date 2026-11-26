@@ -31,7 +31,8 @@ import {
 import { GuestInvitationDialog } from "./guest-invitation-dialog";
 import { canvasSharingMessages } from "../../lib/i18n/canvas-sharing-messages";
 import { guidedWorkshopCopy } from "../../lib/i18n/guided-workshop-messages";
-import { WorkshopLifecycleControls, WorkshopRoundHistory } from "./workshop-lifecycle";
+import { WorkshopLifecycleControls } from "./workshop-lifecycle";
+import { BoardAnalytics } from "./board-analytics";
 
 function BoardDeletionDialog({
   busy,
@@ -498,11 +499,8 @@ export function BoardHost({ id }: { id: string }) {
                 {t("boards.visible")}
               </label>
             ) : null}
-            {!board.countsVisible ? (
-              <p className={styles.muted}>{t("boards.countsHidden")}</p>
-            ) : null}
           </section>
-          <WorkshopRoundHistory board={board} />
+          <BoardAnalytics key={board.id} board={board} />
           {inviting && canEdit && board.status !== "closed" ? (
             <GuestInvitationDialog
               sourceBoardId={board.id}

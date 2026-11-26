@@ -821,9 +821,12 @@ respondent shares, and average ratings from complete histograms. The dashboard u
 aggregate endpoint, including run and question disclosure thresholds. Open, empty, and withheld
 states stay distinct. Conditional Survey reporting remains subject to its independent privacy approval.
 
+The workshop host's **Board analytics** dashboard charts released vote counts and shares for
+the selected closed round. It retains access to available past rounds after reopening a workshop.
+Open, unavailable, and zero-vote results are distinct. Percentages use votes cast in that round.
+
 | Increment           | Acceptance                                                                                                                                                                                                |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Board analytics     | Chart finalized Board vote results in the existing host or report surface. Use closed rounds and verify the empty and withheld states.                                                                    |
 | Workspace analytics | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons. |
 | Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                        |
 

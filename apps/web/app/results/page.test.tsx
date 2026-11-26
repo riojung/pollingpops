@@ -217,10 +217,18 @@ function survey(id = "survey-first", title = "First Survey result") {
     expiresAt: "2099-10-10T12:00:00Z",
   };
 }
+function reportAnalytics(ready = 2, pending = 0, failed = 0) {
+  const count = ready + pending + failed;
+  const periods = count > 0 ? [{ start: "2026-10-01", count }] : [];
+  return { ready, pending, failed, activity: { month: periods, quarter: periods } };
+}
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
     return { quizzes: [{ id: "round-source", title: "Source Round" }] };
-  if (matchesRequest(path, reportTotalsPath)) return { ready: 2, pending: 0, failed: 0 };
+  if (matchesRequest(path, reportTotalsPath)) {
+    const search = new URLSearchParams(path.split("?")[1]).get("search");
+    return reportAnalytics(search === "missing" ? 0 : 2);
+  }
   if (path.startsWith("/v1/reports?"))
     return path.includes("cursor=")
       ? { items: [report("report-later", "Later Round result")], nextCursor: null }
@@ -261,30 +269,45 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
-  it("keeps all-page Round counts stable while loading more rows expands the evidence", async () => {
+  it("uses exact Round activity across pages and switches grouping without another request", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       matchesRequest(path, reportTotalsPath)
-        ? { ready: 28, pending: 3, failed: 1 }
+        ? {
+            ...reportAnalytics(28, 3, 1),
+            activity: {
+              month: [
+                { start: "2026-10-01", count: 25 },
+                { start: "2026-11-01", count: 7 },
+              ],
+              quarter: [{ start: "2026-10-01", count: 32 }],
+            },
+          }
         : response(path),
     );
     const harness = resultsHarness();
     const before = await harness.settle();
-    expect(before).toContain("Report totals include every page matching your filters.");
     expect(before).toContain(
-      "The activity chart, participant joins, recovery, and follow-ups use loaded reports.",
+      "Report totals and activity include every page matching your filters.",
     );
+    expect(before).toContain("Grouped by report creation date in UTC.");
+    expect(before).toContain("Participant joins, recovery, and follow-ups use loaded reports.");
     expect(before).toContain("<dt>Matching reports</dt><dd>32</dd>");
     expect(before).toContain("Ready<strong>28</strong>");
     expect(before).toContain("Processing<strong>3</strong>");
     expect(before).toContain("Needs attention<strong>1</strong>");
     expect(before).toContain("<dt>Participant joins</dt><dd>5<");
     expect(before).toContain("1 results shown · More available");
+    expect(activityCounts()).toEqual(["25", "7"]);
 
     clickButton("Load More");
     const after = await harness.settle();
     expect(after).toContain("<dt>Matching reports</dt><dd>32</dd>");
     expect(after).toContain("<dt>Participant joins</dt><dd>10<");
     expect(after).toContain("Later Round result");
+    expect(activityCounts()).toEqual(["25", "7"]);
+    changeField("Group by", "quarter");
+    await harness.settle();
+    expect(activityCounts()).toEqual(["32"]);
     expect(historyCalls(reportTotalsPath)).toHaveLength(1);
     const pagination = new URLSearchParams(historyCalls("/v1/reports").at(-1)![0].split("?")[1]);
     expect(pagination.get("expectedWorkspaceId")).toBe("workspace-a");
@@ -298,16 +321,13 @@ describe("Results workspace", () => {
       if (matchesRequest(path, reportTotalsPath)) {
         const params = new URLSearchParams(path.split("?")[1]);
         if (!params.has("search")) return previousTotals.promise;
-        return {
-          ready: params.get("expectedWorkspaceId") === "workspace-a" ? 29 : 7,
-          pending: 0,
-          failed: 0,
-        };
+        return reportAnalytics(params.get("expectedWorkspaceId") === "workspace-a" ? 29 : 7);
       }
       return response(path);
     });
     const harness = resultsHarness();
-    expect(await harness.settle()).toContain("Loading totals for all matching reports…");
+    expect(await harness.settle()).toContain("Loading report totals and activity…");
+    expect(activityCounts()).toEqual([]);
     const first = historyCalls(reportTotalsPath)[0]!;
     changeField("Result Status", "ready");
     changeField("Round", "round-source");
@@ -321,7 +341,10 @@ describe("Results workspace", () => {
     const listParams = new URLSearchParams(listUrl.split("?")[1]);
     expect(listParams.get("limit")).toBe("25");
     listParams.delete("limit");
-    expect(new URLSearchParams(totalsUrl.split("?")[1]).toString()).toBe(listParams.toString());
+    const totalsParams = new URLSearchParams(totalsUrl.split("?")[1]);
+    expect(totalsParams.get("includeActivity")).toBe("true");
+    totalsParams.delete("includeActivity");
+    expect(totalsParams.toString()).toBe(listParams.toString());
     expect(listParams.get("search")).toBe("First");
     expect(listParams.get("expectedWorkspaceId")).toBe("workspace-a");
     expect(listParams.get("status")).toBe("ready");
@@ -331,10 +354,11 @@ describe("Results workspace", () => {
 
     fixtures.workspaceId = "workspace-b";
     expect(harness.render()).not.toContain("<dt>Matching reports</dt><dd>29</dd>");
-    previousTotals.resolve({ ready: 88, pending: 0, failed: 0 });
+    previousTotals.resolve(reportAnalytics(88));
     const after = await harness.settle();
     expect(after).toContain("<dt>Matching reports</dt><dd>7</dd>");
     expect(after).not.toContain("<dt>Matching reports</dt><dd>88</dd>");
+    expect(activityCounts()).toEqual(["7"]);
     for (const endpoint of ["/v1/reports", reportTotalsPath]) {
       const params = new URLSearchParams(historyCalls(endpoint).at(-1)![0].split("?")[1]);
       expect(params.get("expectedWorkspaceId")).toBe("workspace-b");
@@ -354,22 +378,24 @@ describe("Results workspace", () => {
     });
     const harness = resultsHarness();
     const before = await harness.settle();
-    expect(before).toContain("Full report totals could not load.");
+    expect(before).toContain("Report totals and activity could not load.");
     expect(before).toContain("<dt>Results shown</dt><dd>1</dd>");
     expect(before).toContain('href="/report/report-first"');
     expect(before).not.toContain("Matching reports");
+    expect(activityCounts()).toEqual([]);
 
     const heading = elements(fixtures.tree).find(
       (node) =>
         node.type === "h2" && elementText(node.props.children as ReactNode) === "Results analytics",
     )!;
     const focus = attachFocus(heading);
-    clickButton("Retry report totals");
+    clickButton("Retry report analytics");
     expect(focus).toHaveBeenCalledOnce();
-    expect(await harness.settle()).toContain("Loading totals for all matching reports…");
+    expect(await harness.settle()).toContain("Loading report totals and activity…");
     expect(historyCalls("/v1/reports")).toHaveLength(1);
-    pendingRetry.resolve({ ready: 27, pending: 0, failed: 0 });
+    pendingRetry.resolve(reportAnalytics(27));
     expect(await harness.settle()).toContain("<dt>Matching reports</dt><dd>27</dd>");
+    expect(activityCounts()).toEqual(["27"]);
     expect(totalsReads).toBe(2);
     harness.dispose();
   });
@@ -481,7 +507,7 @@ describe("Results workspace", () => {
       });
       const harness = resultsHarness();
       const loadingMarkup = await harness.settle();
-      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
       expect(resultsPanel().props["aria-labelledby"]).toBe(`results-${view}-link`);
       expect(
         elements(fixtures.tree).filter((node) => node.props.id === "results-panel"),
@@ -493,8 +519,15 @@ describe("Results workspace", () => {
       ).toBe("page");
       expect(loadingMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
       if (view === "results") {
+        expect(resultsPanel().props["aria-busy"]).toBeUndefined();
+        expect(
+          elements(resultsBusyScope(view)).some(
+            (node) => node.props["aria-label"] === "Results analytics",
+          ),
+        ).toBe(false);
         expect(loadingMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
         expect(loadingMarkup).not.toContain("<dt>Participant joins</dt>");
+        expect(activityCounts()).toEqual(["2"]);
       }
       const placeholders = elements(fixtures.tree).find(
         (node) => node.props["aria-hidden"] === "true" && node.props["data-view"] === "list",
@@ -511,15 +544,16 @@ describe("Results workspace", () => {
       if (view === "results") {
         expect(failedMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
         expect(failedMarkup).not.toContain("<dt>Participant joins</dt>");
+        expect(activityCounts()).toEqual(["2"]);
       }
       expect(failedMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(failedMarkup).not.toContain(`<h2 lang="">${title}</h2>`);
       const focus = attachFocus(resultsPanel());
       clickButton("Try again");
       expect(focus).toHaveBeenCalledOnce();
       expect(harness.render()).not.toContain("Connection interrupted");
-      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
       const pendingMarkup = await harness.settle();
       expect(pendingMarkup).not.toContain("Try again");
       expect(pendingMarkup).not.toMatch(/0 (?:results|practice items) shown/);
@@ -533,7 +567,7 @@ describe("Results workspace", () => {
       const markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).not.toContain("Connection interrupted");
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(
         elements(fixtures.tree).some((node) =>
           node.props.className?.toString().includes("loadingCard"),
@@ -566,7 +600,7 @@ describe("Results workspace", () => {
     async ({ view, path, empty, destination }) => {
       fixtures.query = `view=${view}`;
       fixtures.apiFetch.mockImplementation(async (url: string) => {
-        if (matchesRequest(url, reportTotalsPath)) return { ready: 0, pending: 0, failed: 0 };
+        if (matchesRequest(url, reportTotalsPath)) return reportAnalytics(0);
         if (!matchesRequest(url, path)) return response(url);
         if (view === "presentations") return { sessions: [] };
         if (view === "surveys") return { rooms: [], nextCursor: null };
@@ -575,8 +609,9 @@ describe("Results workspace", () => {
       const harness = resultsHarness();
       const markup = await harness.settle();
       expect(headings()).toEqual([empty]);
+      if (view === "results") expect(markup).toContain("No reports match these filters.");
       expect(markup).toContain(view === "practice" ? "0 practice items shown" : "0 results shown");
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(markup).not.toContain("Clear filters");
       if (destination) expect(markup).toContain(`<a class="button" href="${destination}">`);
       harness.dispose();
@@ -652,7 +687,7 @@ describe("Results workspace", () => {
         changeSearch("missing");
         if (view === "results" || view === "practice") {
           harness.render();
-          expect(resultsPanel().props["aria-busy"]).toBe(true);
+          expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
           expect(field("Group by")).toBeUndefined();
         }
         const markup = await harness.settle();
@@ -737,12 +772,12 @@ describe("Results workspace", () => {
       expect(markup).toContain("Previously loaded results remain below.");
       const count = view === "practice" ? "1 practice items shown" : "1 results shown";
       expect(markup).toContain(`${count} · More available`);
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       const focus = attachFocus(resultsPanel());
       clickButton("Try again");
       expect(focus).toHaveBeenCalledOnce();
       markup = await harness.settle();
-      expect(resultsPanel().props["aria-busy"]).toBe(true);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`${count} · More available`);
       expect(markup).not.toContain("Next page unavailable");
@@ -762,7 +797,7 @@ describe("Results workspace", () => {
       markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`<h2 lang="">${later}</h2>`);
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       const calls = historyCalls(path);
       expect(calls.at(-1)![0]).toBe(calls.at(-2)![0]);
       harness.dispose();
@@ -792,7 +827,7 @@ describe("Results workspace", () => {
       const markup = await harness.settle();
       expect(markup).toContain("Later page unavailable");
       expect(markup).toContain(`${count} · More available`);
-      expect(resultsPanel().props["aria-busy"]).toBe(false);
+      expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       harness.dispose();
     },
   );
@@ -829,7 +864,7 @@ describe("Results workspace", () => {
     pendingRetry.reject(new Error("Obsolete retry failed"));
     const settled = await harness.settle();
     expect(settled).not.toContain("Obsolete retry failed");
-    expect(resultsPanel().props["aria-busy"]).toBe(false);
+    expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
     expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
     harness.dispose();
   });
@@ -1600,6 +1635,21 @@ function historyFilters() {
 }
 function resultsPanel() {
   return elements(fixtures.tree).find((node) => node.props.id === "results-panel")!;
+}
+function resultsBusyScope(view: string) {
+  const panel = resultsPanel();
+  if (view !== "results") return panel;
+  return elements(panel).find(
+    (node) => node.type === "section" && node.props["aria-label"] === "Results",
+  )!;
+}
+function activityCounts() {
+  const chart = elements(fixtures.tree).find(
+    (node) => node.props["aria-label"] === "Activity over time",
+  );
+  return elements(chart)
+    .filter((node) => node.type === "strong")
+    .map((node) => elementText(node.props.children as ReactNode));
 }
 function attachFocus(node: ReactElement<Record<string, unknown>>) {
   const focus = vi.fn();

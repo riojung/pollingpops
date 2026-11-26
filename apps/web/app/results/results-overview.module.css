@@ -116,6 +116,9 @@
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: var(--workspace-card-gap, 0.625rem);
 }
+.activityGrid > :only-child {
+  grid-column: 1 / -1;
+}
 .activityGrid h3 {
   margin: 0;
   color: var(--ui-text-strong);

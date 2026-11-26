@@ -5,6 +5,7 @@ import {
   presentationOverview,
   resultsActivity,
   roundOverview,
+  roundReportActivity,
   surveyOverview,
 } from "./results-overview-model";
 
@@ -119,4 +120,22 @@ describe("activity periods for shown Results", () => {
       { start: new Date(2024, 1, 1), end: new Date(2024, 1, 29), count: 1 },
     ]);
   });
+});
+
+it("keeps the server's Round counts and uses UTC month and quarter boundaries", () => {
+  const activity = {
+    month: [{ start: "2028-02-01", count: 9 }],
+    quarter: [
+      { start: "2027-10-01", count: 18 },
+      { start: "2028-01-01", count: 13 },
+    ],
+  };
+  expect(roundReportActivity(activity, "month")).toEqual([
+    { start: new Date("2028-02-01T00:00:00Z"), end: new Date("2028-02-29T00:00:00Z"), count: 9 },
+  ]);
+  expect(roundReportActivity(activity, "quarter")).toEqual([
+    { start: new Date("2027-10-01T00:00:00Z"), end: new Date("2027-12-31T00:00:00Z"), count: 18 },
+    { start: new Date("2028-01-01T00:00:00Z"), end: new Date("2028-03-31T00:00:00Z"), count: 13 },
+  ]);
+  expect(roundReportActivity({ month: [], quarter: [] }, "quarter")).toEqual([]);
 });

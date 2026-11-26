@@ -1,4 +1,4 @@
-import type { ReportHistoryTotals } from "@openround/contracts";
+import type { ReportHistoryAnalytics } from "@openround/contracts";
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useLocale } from "../../components/locale-provider";
@@ -15,9 +15,11 @@ import {
   presentationOverview,
   resultsActivity,
   roundOverview,
+  roundReportActivity,
   surveyOverview,
   type PresentationResultSummary,
   type ResultsActivityGrouping,
+  type ResultsActivityPeriod,
 } from "./results-overview-model";
 import styles from "./results-overview.module.css";
 
@@ -86,8 +88,8 @@ type Props = ActivityGroupingControls & { hasMore?: boolean } & (
     | {
         kind: "rounds";
         items: readonly ReportSummary[];
-        totals: ReportHistoryTotals | "loading" | "unavailable";
-        onTotalsRetry: () => void;
+        analytics: ReportHistoryAnalytics | "loading" | "unavailable";
+        onAnalyticsRetry: () => void;
       }
     | { kind: "practice"; items: readonly FollowupSummary[] }
     | { kind: "presentations"; items: readonly PresentationResultSummary[] }
@@ -101,55 +103,67 @@ interface ResultLink {
 }
 
 function ResultsActivity({
-  dates,
+  periods,
   dateBasis,
+  timeZone,
+  empty,
   grouping,
   onGroupingChange,
-}: ActivityGroupingControls & { dates: readonly string[]; dateBasis: string }) {
+}: ActivityGroupingControls & {
+  periods: readonly ResultsActivityPeriod[];
+  dateBasis: string;
+  timeZone?: "UTC";
+  empty?: string;
+}) {
   const { locale, t } = useLocale();
-  const periods = resultsActivity(dates, grouping);
-  if (periods.length === 0) return null;
+  if (periods.length === 0 && !empty) return null;
 
-  const max = Math.max(...periods.map((period) => period.count));
-  const formatter = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" });
+  const max = Math.max(1, ...periods.map((period) => period.count));
+  const formatter = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric", timeZone });
   return (
     <section className={styles.widget} aria-label={t("resultsOverview.activity")}>
       <div className={styles.activityHeader}>
         <div>
           <h3>{t("resultsOverview.activity")}</h3>
           <p>
-            {dateBasis} {t("resultsOverview.recentPeriods")}
+            {dateBasis} {periods.length ? t("resultsOverview.recentPeriods") : null}
           </p>
         </div>
-        <label className={styles.grouping}>
-          {t("resultsOverview.groupBy")}
-          <select
-            className="select"
-            value={grouping}
-            onChange={(event) =>
-              onGroupingChange(event.target.value === "quarter" ? "quarter" : "month")
-            }
-          >
-            <option value="month">{t("resultsOverview.month")}</option>
-            <option value="quarter">{t("resultsOverview.quarter")}</option>
-          </select>
-        </label>
+        {periods.length ? (
+          <label className={styles.grouping}>
+            {t("resultsOverview.groupBy")}
+            <select
+              className="select"
+              value={grouping}
+              onChange={(event) =>
+                onGroupingChange(event.target.value === "quarter" ? "quarter" : "month")
+              }
+            >
+              <option value="month">{t("resultsOverview.month")}</option>
+              <option value="quarter">{t("resultsOverview.quarter")}</option>
+            </select>
+          </label>
+        ) : null}
       </div>
-      <ul className={styles.periods} role="list">
-        {periods.map((period) => (
-          <li key={period.start.getTime()}>
-            <span>
-              {grouping === "month"
-                ? formatter.format(period.start)
-                : formatter.formatRange(period.start, period.end)}
-            </span>
-            <span className={styles.activityTrack} aria-hidden="true">
-              <span style={{ width: `${(period.count / max) * 100}%` }} />
-            </span>
-            <strong>{formatNumber(locale, period.count)}</strong>
-          </li>
-        ))}
-      </ul>
+      {periods.length ? (
+        <ul className={styles.periods} role="list">
+          {periods.map((period) => (
+            <li key={period.start.getTime()}>
+              <span>
+                {grouping === "month"
+                  ? formatter.format(period.start)
+                  : formatter.formatRange(period.start, period.end)}
+              </span>
+              <span className={styles.activityTrack} aria-hidden="true">
+                <span style={{ width: `${(period.count / max) * 100}%` }} />
+              </span>
+              <strong>{formatNumber(locale, period.count)}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.noLinks}>{empty}</p>
+      )}
     </section>
   );
 }
@@ -185,23 +199,22 @@ export function ResultsOverview(props: Props) {
   const number = (value: number) => formatNumber(locale, value);
   let primary: ReactNode;
   let secondary: ReactNode;
-  let dates: string[];
+  let dates: string[] = [];
   let links: ResultLink[];
   let dateBasis = t("resultsOverview.sessionDateBasis");
   let linksLabel = t("resultsOverview.reportsToOpen");
   let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
   let shownCount = props.items.length;
-  const totals = props.kind === "rounds" ? props.totals : undefined;
-  const hasFullTotals = typeof totals === "object";
+  const analytics = props.kind === "rounds" ? props.analytics : undefined;
+  const hasFullAnalytics = typeof analytics === "object";
   const hasLoadedEvidence = props.kind !== "rounds" || props.items.length > 0;
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
-    const statusCounts = hasFullTotals ? totals : summary;
+    const statusCounts = hasFullAnalytics ? analytics : summary;
     const ready = props.items.filter((item) => item.status === "ready");
     dateBasis = t("resultsOverview.roundDateBasis");
-    dates = props.items.map((item) => item.createdAt);
     links = ready.map((item) => ({
       title: item.title,
       date: item.createdAt,
@@ -220,9 +233,9 @@ export function ResultsOverview(props: Props) {
         status: "failed",
       },
     ];
-    if (hasFullTotals) {
+    if (hasFullAnalytics) {
       shownLabel = t("resultsOverview.matchingReports");
-      shownCount = totals.ready + totals.pending + totals.failed;
+      shownCount = analytics.ready + analytics.pending + analytics.failed;
     }
     primary = (
       <>
@@ -346,6 +359,10 @@ export function ResultsOverview(props: Props) {
     );
   }
 
+  const periods = hasFullAnalytics
+    ? roundReportActivity(analytics.activity, props.grouping)
+    : resultsActivity(dates, props.grouping);
+
   return (
     <section
       className={styles.overview}
@@ -365,31 +382,31 @@ export function ResultsOverview(props: Props) {
           {t("resultsOverview.title")}
         </h2>
         <p role={props.kind === "rounds" ? "status" : undefined}>
-          {hasFullTotals
+          {hasFullAnalytics
             ? t("resultsOverview.allReportsScope")
             : hasLoadedEvidence
               ? t("resultsOverview.scope", { count: number(props.items.length) })
               : null}
-          {hasFullTotals && hasLoadedEvidence
+          {hasFullAnalytics && hasLoadedEvidence
             ? ` ${t("resultsOverview.loadedReportsEvidence")}`
             : null}
-          {totals === "loading" ? ` ${t("resultsOverview.reportTotalsLoading")}` : null}
-          {totals === "unavailable" ? ` ${t("resultsOverview.reportTotalsUnavailable")}` : null}
+          {analytics === "loading" ? ` ${t("resultsOverview.reportTotalsLoading")}` : null}
+          {analytics === "unavailable" ? ` ${t("resultsOverview.reportTotalsUnavailable")}` : null}
         </p>
-        {props.kind === "rounds" && totals === "unavailable" ? (
+        {props.kind === "rounds" && analytics === "unavailable" ? (
           <button
             className="button-quiet"
             type="button"
             onClick={() => {
               headingRef.current?.focus();
-              props.onTotalsRetry();
+              props.onAnalyticsRetry();
             }}
           >
             {t("resultsOverview.retryReportTotals")}
           </button>
         ) : null}
       </div>
-      {hasFullTotals || hasLoadedEvidence ? (
+      {hasFullAnalytics || hasLoadedEvidence ? (
         <div className={styles.widgets}>
           <div className={`${styles.widget} ${styles.countWidget}`}>
             <dl>
@@ -401,7 +418,7 @@ export function ResultsOverview(props: Props) {
                 className={styles.distribution}
                 role="group"
                 aria-label={t(
-                  hasFullTotals ? "resultsOverview.matchingReports" : "resultsOverview.status",
+                  hasFullAnalytics ? "resultsOverview.matchingReports" : "resultsOverview.status",
                 )}
               >
                 <div className={styles.statusTrack} aria-hidden="true">
@@ -438,18 +455,26 @@ export function ResultsOverview(props: Props) {
           ) : null}
         </div>
       ) : null}
-      {hasLoadedEvidence ? (
+      {hasFullAnalytics || hasLoadedEvidence ? (
         <div className={styles.activityGrid}>
           <ResultsActivity
-            dates={dates}
+            periods={periods}
             dateBasis={dateBasis}
+            timeZone={hasFullAnalytics ? "UTC" : undefined}
+            empty={hasFullAnalytics ? t("resultsOverview.noMatchingReportActivity") : undefined}
             grouping={props.grouping}
             onGroupingChange={props.onGroupingChange}
           />
-          <ResultLinks label={linksLabel} links={links} />
+          {hasLoadedEvidence ? <ResultLinks label={linksLabel} links={links} /> : null}
         </div>
       ) : null}
-      {props.hasMore ? <p className={styles.more}>{t("resultsOverview.more")}</p> : null}
+      {props.hasMore ? (
+        <p className={styles.more}>
+          {t(
+            props.kind === "rounds" ? "resultsOverview.moreRoundEvidence" : "resultsOverview.more",
+          )}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -34,13 +34,16 @@ const resultsWorkspaceKeys = [
   "resultsOverview.matchingReports",
   "resultsOverview.allReportsScope",
   "resultsOverview.loadedReportsEvidence",
+  "resultsOverview.moreRoundEvidence",
+  "resultsOverview.roundDateBasis",
+  "resultsOverview.noMatchingReportActivity",
   "resultsOverview.reportTotalsLoading",
   "resultsOverview.reportTotalsUnavailable",
   "resultsOverview.retryReportTotals",
 ] as const;
 
 describe("Results workspace messages", () => {
-  it("explicitly translates toolbar controls and Round report totals in every locale", async () => {
+  it("explicitly translates toolbar controls and Round report analytics in every locale", async () => {
     for (const locale of supportedLocales.filter((candidate) => candidate !== "en-CA")) {
       const messages = await loadWorkspacePageMessages(locale);
       for (const key of resultsWorkspaceKeys) {

@@ -807,12 +807,12 @@ report authority and detail paths. Its question chart compares response counts i
 or by volume, with filters for assessments and opinion questions.
 
 The **Results analytics** dashboard adds a monthly or quarterly history chart and shortcuts to
-eligible reports. The Round view's **Matching reports** total and status counts cover the full
-filtered report history in the active workspace using the same source, status, search, and report
-creation date filters as the list. The list and totals load and retry independently, with each
-request bound to the workspace shown in Results. The activity chart, participant joins, recovery, and
-follow-ups use the loaded reports. Practice, Presentation, and Survey totals still use loaded
-records.
+eligible reports. The Round view's **Matching reports** total, status counts, and activity chart
+cover the full filtered report history using the same workspace, source, status, search, and report
+creation date filters as the list. The chart uses the six most recent represented UTC months or
+quarters, with earlier periods accessible through date filters. The list and analytics load and
+retry independently. Participant joins, recovery, follow-ups, and shortcuts use the loaded reports.
+Practice, Presentation, and Survey totals and charts still use loaded records.
 
 The Presentation report's **Session insights** dashboard provides Overview, Delivery, Response
 coverage, Opinion results, and Q&A views. It uses the frozen session version, recorded reveal
@@ -829,10 +829,10 @@ The workshop host's **Board analytics** dashboard charts released vote counts an
 the selected closed round. It retains access to available past rounds after reopening a workshop.
 Open, unavailable, and zero-vote results are distinct. Percentages use votes cast in that round.
 
-| Increment           | Acceptance                                                                                                                                                                                                                                                                                                                   |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace analytics | Round report totals and statuses are implemented across pages. Define the authorized scope and date range for pagination-independent activity charts and the remaining activity views. Keep participant joins distinct from unique respondents and seek independent WX-10 disclosure approval for cross-session comparisons. |
-| Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                                                                                                                           |
+| Increment           | Acceptance                                                                                                                                                                                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Workspace analytics | Round report totals, statuses, and activity are implemented across pages. Define the authorized scope and date range for full-history analytics in Practice, Presentation, and Survey Results. Keep participant joins distinct from unique respondents and seek independent WX-10 disclosure approval for cross-session comparisons. |
+| Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                                                                                                                                   |
 
 ### WX-11 Consistent surfaces and commercial explanations
 

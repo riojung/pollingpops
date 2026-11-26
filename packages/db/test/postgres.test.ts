@@ -1974,12 +1974,38 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
   });
 
-  it("searches retained Round and practice results and counts matching reports under restricted PostgreSQL permissions", async () => {
-    await expectResultsHistorySearchConformance(
-      repository,
-      await creator("results-history-owner"),
-      await creator("results-history-outsider"),
-    );
+  it("searches retained Round and practice results and aggregates matching reports under restricted PostgreSQL permissions", async () => {
+    const nonUtcUrl = new URL(runtimeUrl!);
+    nonUtcUrl.searchParams.set("options", "-c timezone=America/Edmonton");
+    const nonUtcRepository = new PostgresRepository(nonUtcUrl.toString());
+    try {
+      await expectResultsHistorySearchConformance(
+        nonUtcRepository,
+        await creator("results-history-owner"),
+        await creator("results-history-outsider"),
+        async (workspaceId, reportIds, dates) => {
+          const client = await runtimePool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT set_config('app.workspace_id', $1, true)", [workspaceId]);
+            await client.query(
+              `UPDATE reports SET created_at = fixture.created_at
+               FROM unnest($1::uuid[], $2::timestamptz[]) AS fixture(id, created_at)
+               WHERE reports.id = fixture.id`,
+              [reportIds, dates],
+            );
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+        },
+      );
+    } finally {
+      await nonUtcRepository.close();
+    }
   });
 
   it("distinguishes missing assessed evidence from measured zero in retained PostgreSQL report history", async () => {

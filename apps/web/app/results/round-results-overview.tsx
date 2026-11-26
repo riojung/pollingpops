@@ -1,4 +1,4 @@
-import { ReportHistoryTotalsSchema, type ReportHistoryTotals } from "@openround/contracts";
+import { ReportHistoryAnalyticsSchema, type ReportHistoryAnalytics } from "@openround/contracts";
 import { useEffect, useState } from "react";
 import type { ReportSummary } from "../../components/workspace/workspace-types";
 import { apiFetch } from "../../lib/api";
@@ -15,17 +15,21 @@ export function RoundResultsOverview({
   grouping: ResultsActivityGrouping;
   onGroupingChange: (grouping: ResultsActivityGrouping) => void;
 }) {
-  const [totals, setTotals] = useState<ReportHistoryTotals | "loading" | "unavailable">("loading");
+  const [analytics, setAnalytics] = useState<ReportHistoryAnalytics | "loading" | "unavailable">(
+    "loading",
+  );
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    void apiFetch<unknown>(`/v1/reports/totals?${query}`, { signal: controller.signal })
+    void apiFetch<unknown>(`/v1/reports/totals?${query}&includeActivity=true`, {
+      signal: controller.signal,
+    })
       .then((response) => {
-        if (!controller.signal.aborted) setTotals(ReportHistoryTotalsSchema.parse(response));
+        if (!controller.signal.aborted) setAnalytics(ReportHistoryAnalyticsSchema.parse(response));
       })
       .catch(() => {
-        if (!controller.signal.aborted) setTotals("unavailable");
+        if (!controller.signal.aborted) setAnalytics("unavailable");
       });
     return () => controller.abort();
   }, [attempt, query]);
@@ -34,9 +38,9 @@ export function RoundResultsOverview({
     <ResultsOverview
       {...overview}
       kind="rounds"
-      totals={totals}
-      onTotalsRetry={() => {
-        setTotals("loading");
+      analytics={analytics}
+      onAnalyticsRetry={() => {
+        setAnalytics("loading");
         setAttempt((current) => current + 1);
       }}
     />

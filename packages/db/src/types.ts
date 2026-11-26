@@ -22,6 +22,7 @@ import type {
   RecoveryPackPracticeSource,
   RecoveryPackPracticeSequence,
   Report,
+  ReportHistoryAnalytics,
   ReportHistoryTotals,
   ResponsePayload,
   SessionDecisionEvent,
@@ -1655,6 +1656,10 @@ export interface Repository {
     workspaceId: string,
     filters: ReportHistoryFilters,
   ): Promise<ReportHistoryTotals>;
+  getReportHistoryAnalytics(
+    workspaceId: string,
+    filters: ReportHistoryFilters,
+  ): Promise<ReportHistoryAnalytics>;
   createFollowup(
     input: Extract<FollowupRecord, { purpose: "recovery" }>,
     access: FollowupAccessRecord[],

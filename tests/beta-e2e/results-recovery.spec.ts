@@ -77,8 +77,28 @@ async function expectNoLoadedReportMetrics(overview: Locator) {
   await expect(overview.getByText("Results shown", { exact: true })).toHaveCount(0);
   await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
   await expect(overview.getByText(/loaded (?:reports|results)/)).toHaveCount(0);
-  await expect(overview.getByRole("region", { name: "Activity over time" })).toHaveCount(0);
+  await expect(overview.getByRole("region", { name: "Reports to open", exact: true })).toHaveCount(
+    0,
+  );
   await expect(overview.getByRole("meter")).toHaveCount(0);
+}
+
+const reportActivity = (overview: Locator) =>
+  overview.getByRole("region", { name: "Activity over time", exact: true });
+
+async function expectUnknownReportActivity(overview: Locator) {
+  const activity = reportActivity(overview);
+  await expect(activity.getByRole("listitem")).toHaveCount(0);
+  await expect(activity.getByRole("combobox", { name: "Group by" })).toHaveCount(0);
+  await expect(overview.getByText("No reports match these filters.", { exact: true })).toHaveCount(
+    0,
+  );
+}
+
+async function expectOctoberReportActivity(overview: Locator) {
+  const activity = reportActivity(overview);
+  await expect(activity).toContainText("Grouped by report creation date in UTC.");
+  await expect(activity.getByRole("listitem")).toHaveText([/Oct.*2026\s*1$/]);
 }
 
 async function installHistory(page: Page) {
@@ -206,10 +226,20 @@ async function installHistory(page: Page) {
     const search = url.searchParams.get("search")?.toLocaleLowerCase() ?? "";
     const matchesSearch = (row: { title: string }) =>
       row.title.toLocaleLowerCase().includes(search);
-    if (isReportTotals)
+    if (isReportTotals) {
+      const ready = Number(matchesSearch(report));
+      const periods = ready ? [{ start: "2026-10-01", count: ready }] : [];
       return route.fulfill({
-        json: { ready: Number(matchesSearch(report)), pending: 0, failed: 0 },
+        json: {
+          ready,
+          pending: 0,
+          failed: 0,
+          ...(url.searchParams.get("includeActivity") === "true"
+            ? { activity: { month: periods, quarter: periods } }
+            : {}),
+        },
       });
+    }
     return route.fulfill({
       json: {
         [history.envelope]: history.rows.filter(matchesSearch),
@@ -234,23 +264,44 @@ async function installHistory(page: Page) {
   };
 }
 
-test("Results keeps exact totals while the first report page loads or fails", async ({ page }) => {
-  await signInBeta(page, undefined, { returnTo: "/results" });
+test("Results keeps full-history analytics while the first report page loads or fails", async ({
+  page,
+}) => {
+  await signInBeta(page, undefined, { returnTo: "/library" });
   await specialistLocale(page, "en-CA");
   const expectedWorkspaceId = await signedInWorkspaceId(page);
   const fixture = await installHistory(page);
   try {
     fixture.allow(reportsPath);
     fixture.allow(reportTotalsPath);
-    fixture.release(reportTotalsPath);
     await page.goto("/results?q=workshop");
     const panel = page.locator("#results-panel");
+    const collection = panel.getByRole("region", { name: "Results", exact: true });
     const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
+    const analyticsStatus = overview.getByRole("status");
+    const busyStatus = analyticsStatus.locator('xpath=ancestor-or-self::*[@aria-busy="true"]');
+    await expect(collection).toHaveAttribute("aria-busy", "true");
+    await expect(panel).not.toHaveAttribute("aria-busy");
+    await expect(analyticsStatus).toHaveText("Loading report totals and activity…");
+    await expect(busyStatus).toHaveCount(0);
+
+    fixture.fail(reportTotalsPath);
+    await expect(analyticsStatus).toHaveText("Report totals and activity could not load.");
+    await expect(busyStatus).toHaveCount(0);
+    await expect(collection).toHaveAttribute("aria-busy", "true");
+
+    fixture.allow(reportTotalsPath);
+    await overview.getByRole("button", { name: "Retry report analytics", exact: true }).click();
+    await expect(analyticsStatus).toHaveText(
+      "Report totals and activity include every page matching your filters.",
+    );
+    await expect(busyStatus).toHaveCount(0);
+    await expect(collection).toHaveAttribute("aria-busy", "true");
     const matchingReports = overview.getByText("Matching reports", { exact: true });
     const matchingCount = matchingReports.locator("..").locator("dd");
     await expect(matchingCount).toHaveText("1");
-    await expect(panel).toHaveAttribute("aria-busy", "true");
-    await expect(panel.getByRole("article")).toHaveCount(0);
+    await expectOctoberReportActivity(overview);
+    await expect(collection.getByRole("article")).toHaveCount(0);
     await expectNoLoadedReportMetrics(overview);
 
     const queriesFor = (path: string) =>
@@ -259,20 +310,25 @@ test("Results keeps exact totals while the first report page loads or fails", as
         .map((read) => Object.fromEntries(new URLSearchParams(read.query)));
     const scopedFilters = { expectedWorkspaceId, search: "workshop" };
     await expect.poll(() => queriesFor(reportsPath)).toEqual([{ limit: "25", ...scopedFilters }]);
-    expect(queriesFor(reportTotalsPath)).toEqual([scopedFilters]);
+    expect(queriesFor(reportTotalsPath)).toEqual([
+      { ...scopedFilters, includeActivity: "true" },
+      { ...scopedFilters, includeActivity: "true" },
+    ]);
     fixture.fail(reportsPath);
-    await expect(panel).toHaveAttribute("aria-busy", "false");
+    await expect(collection).toHaveAttribute("aria-busy", "false");
     const retry = panel.getByRole("button", { name: "Try again", exact: true });
     await expect(retry).toBeVisible();
     await expect(matchingCount).toHaveText("1");
+    await expectOctoberReportActivity(overview);
     await expect(panel.getByText(/^0 results shown$/)).toHaveCount(0);
     await expectNoLoadedReportMetrics(overview);
 
     const readsBeforeRetry = fixture.reads.length;
     fixture.allow(reportsPath);
     await retry.click();
-    await expect(panel.getByRole("article")).toHaveCount(1);
+    await expect(collection.getByRole("article")).toHaveCount(1);
     await expect(matchingCount).toHaveText("1");
+    await expectOctoberReportActivity(overview);
     await expect(overview.getByText("Participant joins", { exact: true })).toBeVisible();
     expect(fixture.reads.slice(readsBeforeRetry).map(({ path }) => path)).toEqual([reportsPath]);
     expect(queriesFor(reportsPath)).toEqual([
@@ -301,6 +357,10 @@ for (const phone of [false, true]) {
           `/results?${new URLSearchParams({ ...(view.key === "results" ? {} : { view: view.key }), q: "workshop" })}`,
         );
         const panel = page.locator("#results-panel");
+        const busyRegion =
+          view.key === "results"
+            ? panel.getByRole("region", { name: "Results", exact: true })
+            : panel;
         const retry = panel.getByRole("button", { name: "Try again", exact: true });
         await expect(retry).toBeVisible();
         await expect(page.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
@@ -308,10 +368,11 @@ for (const phone of [false, true]) {
         if (view.key === "results") {
           const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
           await expect(overview.getByRole("status")).toHaveText(
-            "Full report totals could not load.",
+            "Report totals and activity could not load.",
           );
           await expect(overview.getByText("Matching reports", { exact: true })).toHaveCount(0);
           await expectNoLoadedReportMetrics(overview);
+          await expectUnknownReportActivity(overview);
         }
         await quality(page);
         if (view.key === "results")
@@ -327,9 +388,16 @@ for (const phone of [false, true]) {
         fixture.allow(view.path);
         await page.keyboard.press("Enter");
         await expect(panel).toBeFocused();
-        await expect(panel).toHaveAttribute("aria-busy", "true");
+        await expect(busyRegion).toHaveAttribute("aria-busy", "true");
         await expect(page.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
         if (view.key === "results") {
+          const analyticsStatus = panel
+            .getByRole("region", { name: "Results analytics", exact: true })
+            .getByRole("status");
+          await expect(analyticsStatus).toHaveText("Report totals and activity could not load.");
+          await expect(
+            analyticsStatus.locator('xpath=ancestor-or-self::*[@aria-busy="true"]'),
+          ).toHaveCount(0);
           await quality(page);
           await panel.screenshot({
             path: info.outputPath("retry-loading-light.png"),
@@ -337,7 +405,7 @@ for (const phone of [false, true]) {
           });
         }
         fixture.release(view.path);
-        await expect(panel).toHaveAttribute("aria-busy", "false");
+        await expect(busyRegion).toHaveAttribute("aria-busy", "false");
         await expect(panel.getByRole("article")).toHaveCount(1);
         expect(fixture.reads.filter((read) => read.path === view.path).at(-1)!.query).toBe(
           lastFailure.query,
@@ -348,39 +416,43 @@ for (const phone of [false, true]) {
           expect(fixture.reads.slice(readsBeforeListRetry)).toEqual([lastFailure]);
           const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
           const heading = overview.getByRole("heading", { name: "Results analytics", exact: true });
-          const totalsStatus = overview.getByRole("status");
-          const totalsRetry = overview.getByRole("button", {
-            name: "Retry report totals",
+          const analyticsStatus = overview.getByRole("status");
+          const analyticsRetry = overview.getByRole("button", {
+            name: "Retry report analytics",
             exact: true,
           });
-          await expect(totalsStatus).toContainText("Full report totals could not load.");
+          await expect(analyticsStatus).toContainText("Report totals and activity could not load.");
           await expect(overview.getByText(/loaded (?:reports|results)/)).toBeVisible();
           await expect(overview.getByText("Results shown", { exact: true })).toBeVisible();
           await expect(overview.getByText("Matching reports", { exact: true })).toHaveCount(0);
           await expect(panel.getByRole("article")).toHaveCount(1);
+          await expectUnknownReportActivity(overview);
           const readsBeforeRetry = fixture.reads.length;
-          await tabTo(page, totalsRetry);
-          await expectVisibleKeyboardFocus(totalsRetry);
+          await tabTo(page, analyticsRetry);
+          await expectVisibleKeyboardFocus(analyticsRetry);
           fixture.allow(reportTotalsPath);
           await page.keyboard.press("Enter");
           await expect(heading).toBeFocused();
-          await expect(totalsStatus).toContainText("Loading totals for all matching reports…");
+          await expect(analyticsStatus).toContainText("Loading report totals and activity…");
           await expect(panel.getByRole("article")).toHaveCount(1);
+          await expectUnknownReportActivity(overview);
           fixture.release(reportTotalsPath);
           const matchingReports = overview.getByText("Matching reports", { exact: true });
           await expect(matchingReports.locator("..").locator("dd")).toHaveText("1");
-          await expect(totalsRetry).toHaveCount(0);
+          await expectOctoberReportActivity(overview);
+          await expect(analyticsRetry).toHaveCount(0);
           const [totalsRead, ...extraReads] = fixture.reads.slice(readsBeforeRetry);
           expect(extraReads).toEqual([]);
           expect(totalsRead?.path).toBe(reportTotalsPath);
           expect(Object.fromEntries(new URLSearchParams(totalsRead?.query))).toEqual({
             expectedWorkspaceId,
             search: "workshop",
+            includeActivity: "true",
           });
           await expect(heading).toBeFocused();
           await page.keyboard.press(tabKey(page));
           await expect(
-            overview.getByRole("combobox", { name: "Group by", exact: true }),
+            reportActivity(overview).getByRole("combobox", { name: "Group by", exact: true }),
           ).toBeFocused();
         }
 
@@ -397,6 +469,14 @@ for (const phone of [false, true]) {
           exact: true,
         });
         await expect(heading).toBeVisible();
+        if (view.key === "results") {
+          const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
+          const activity = reportActivity(overview);
+          await expect(
+            activity.getByText("No reports match these filters.", { exact: true }),
+          ).toBeVisible();
+          await expect(activity.getByRole("listitem")).toHaveCount(0);
+        }
         await quality(page);
         const emptyClear = heading
           .locator("..")

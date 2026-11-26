@@ -4,11 +4,12 @@ import { createGameState } from "@openround/game-engine";
 import type { QuizDraft } from "@openround/contracts";
 import type { CreatorContext, Repository } from "../../src/index.js";
 
-/** Search and report totals use retained history across pages. */
+/** Search and report analytics use retained history across pages. */
 export async function expectResultsHistorySearchConformance(
   repository: Repository,
   owner: CreatorContext,
   outsider: CreatorContext,
+  setReportDates: (workspaceId: string, reportIds: string[], dates: Date[]) => void | Promise<void>,
 ) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 86_400_000);
@@ -216,4 +217,95 @@ export async function expectResultsHistorySearchConformance(
     (await followups({ search: "needle", status: "scheduled" })).items.map(({ id }) => id),
   ).toEqual([owned.followups[0]]);
   expect((await followups({ search: "needle", status: "closed" })).items).toEqual([]);
+
+  const dates = [
+    "2023-12-31T23:59:59.999Z",
+    "2024-01-01T00:00:00.000Z",
+    "2024-03-31T23:59:59.999Z",
+    "2024-04-01T00:00:00.000Z",
+    "2024-07-01T00:00:00.000Z",
+    "2024-10-01T00:00:00.000Z",
+    "2025-01-31T23:59:59.999Z",
+    "2025-02-01T00:00:00.000Z",
+  ];
+  const latest = new Date("2025-04-01T00:00:00.000Z");
+  await setReportDates(
+    owner.workspaceId,
+    owned.reports,
+    owned.reports.map((_, index) => (dates[index] ? new Date(dates[index]) : latest)),
+  );
+  await setReportDates(outsider.workspaceId, foreign.reports, [latest, latest]);
+
+  const analytics = (filters: Parameters<Repository["getReportHistoryAnalytics"]>[1] = {}) =>
+    repository.getReportHistoryAnalytics(owner.workspaceId, filters);
+  expect((await reports()).items.some(({ id }) => id === owned.reports[0])).toBe(false);
+  expect(await analytics()).toEqual({
+    ready: 26,
+    pending: 1,
+    failed: 1,
+    activity: {
+      month: [
+        { start: "2024-04-01", count: 1 },
+        { start: "2024-07-01", count: 1 },
+        { start: "2024-10-01", count: 1 },
+        { start: "2025-01-01", count: 1 },
+        { start: "2025-02-01", count: 1 },
+        { start: "2025-04-01", count: 20 },
+      ],
+      quarter: [
+        { start: "2024-01-01", count: 2 },
+        { start: "2024-04-01", count: 1 },
+        { start: "2024-07-01", count: 1 },
+        { start: "2024-10-01", count: 1 },
+        { start: "2025-01-01", count: 2 },
+        { start: "2025-04-01", count: 20 },
+      ],
+    },
+  });
+  const firstDate = new Date(dates[0]!);
+  expect(
+    await analytics({
+      quizId: owned.quizId,
+      search: "  FrOzEn needle 50%_  ",
+      status: "pending",
+      from: firstDate,
+      to: firstDate,
+    }),
+  ).toEqual({
+    ready: 0,
+    pending: 1,
+    failed: 0,
+    activity: {
+      month: [{ start: "2023-12-01", count: 1 }],
+      quarter: [{ start: "2023-10-01", count: 1 }],
+    },
+  });
+  expect(await analytics({ from: new Date(dates[2]!), to: new Date(dates[3]!) })).toEqual({
+    ready: 1,
+    pending: 0,
+    failed: 1,
+    activity: {
+      month: [
+        { start: "2024-03-01", count: 1 },
+        { start: "2024-04-01", count: 1 },
+      ],
+      quarter: [
+        { start: "2024-01-01", count: 1 },
+        { start: "2024-04-01", count: 1 },
+      ],
+    },
+  });
+  for (const filters of [
+    { quizId: foreign.quizId },
+    { search: "Renamed library source" },
+    { search: "%_", from: new Date(firstDate.getTime() + 1) },
+    { to: new Date(firstDate.getTime() - 1) },
+  ]) {
+    expect(await analytics(filters)).toEqual({
+      ready: 0,
+      pending: 0,
+      failed: 0,
+      activity: { month: [], quarter: [] },
+    });
+  }
 }

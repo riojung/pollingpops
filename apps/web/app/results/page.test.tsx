@@ -146,6 +146,7 @@ vi.mock("../../components/workspace/workspace-shell", () => ({
 import ResultsPage from "./page";
 
 const reportTotalsPath = "/v1/reports/totals";
+const practiceAnalyticsPath = "/v1/followups/analytics";
 
 function matchesRequest(path: string, endpoint: string) {
   return path === endpoint || path.startsWith(`${endpoint}?`);
@@ -222,12 +223,28 @@ function reportAnalytics(ready = 2, pending = 0, failed = 0) {
   const periods = count > 0 ? [{ start: "2026-10-01", count }] : [];
   return { ready, pending, failed, activity: { month: periods, quarter: periods } };
 }
+function practiceAnalytics(open = 2) {
+  const periods = open > 0 ? [{ start: "2026-10-01", count: open }] : [];
+  return {
+    open,
+    scheduled: 0,
+    closed: 0,
+    expired: 0,
+    attemptCount: open * 3,
+    completedAttemptCount: open * 2,
+    activity: { month: periods, quarter: periods },
+  };
+}
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
     return { quizzes: [{ id: "round-source", title: "Source Round" }] };
   if (matchesRequest(path, reportTotalsPath)) {
     const search = new URLSearchParams(path.split("?")[1]).get("search");
     return reportAnalytics(search === "missing" ? 0 : 2);
+  }
+  if (matchesRequest(path, practiceAnalyticsPath)) {
+    const search = new URLSearchParams(path.split("?")[1]).get("search");
+    return practiceAnalytics(search === "missing" ? 0 : 2);
   }
   if (path.startsWith("/v1/reports?"))
     return path.includes("cursor=")
@@ -243,6 +260,7 @@ function response(path: string) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.spyOn(Date, "now").mockReturnValue(new Date("2026-10-14T12:00:00Z").getTime());
   fixtures.workspaceId = "workspace-a";
   fixtures.locale = "en-CA";
@@ -264,11 +282,135 @@ beforeEach(() => {
 });
 afterEach(() => {
   fixtures.hooks = null;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("Results workspace", () => {
+  it("coalesces Practice search typing into one scoped list read and one analytics read", async () => {
+    fixtures.query = "view=practice&q=First";
+    const harness = resultsHarness();
+    const endpoints = ["/v1/followups", practiceAnalyticsPath];
+    const searchReads = (endpoint: string) =>
+      historyCalls(endpoint).map(([url]) => new URLSearchParams(url.split("?")[1]).get("search"));
+    await harness.settle();
+    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
+
+    for (const value of ["R", "Re", "  Review  "]) {
+      changeSearch(value);
+      await harness.settle();
+      expect(new URLSearchParams(fixtures.query).get("q")).toBe(value);
+      vi.advanceTimersByTime(100);
+    }
+    vi.advanceTimersByTime(149);
+    await harness.settle();
+    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
+
+    vi.advanceTimersByTime(1);
+    await harness.settle();
+    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First", "Review"]);
+
+    changeSearch("Pending edit");
+    await harness.settle();
+    clickButton("Clear filters");
+    await harness.settle();
+    for (const endpoint of endpoints)
+      expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
+    vi.advanceTimersByTime(250);
+    await harness.settle();
+    for (const endpoint of endpoints)
+      expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
+    harness.dispose();
+  });
+
+  it("shows full-history Practice counts and attempt-weighted completion while the list loads", async () => {
+    fixtures.query = "view=practice";
+    const firstPage = deferred<unknown>();
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, "/v1/followups") && !path.includes("cursor="))
+        return firstPage.promise;
+      if (matchesRequest(path, practiceAnalyticsPath)) {
+        return {
+          open: 20,
+          scheduled: 3,
+          closed: 6,
+          expired: 1,
+          attemptCount: 80,
+          completedAttemptCount: 21,
+          activity: {
+            month: [
+              { start: "2026-10-01", count: 28 },
+              { start: "2026-11-01", count: 2 },
+            ],
+            quarter: [{ start: "2026-10-01", count: 30 }],
+          },
+        };
+      }
+      return response(path);
+    });
+    const harness = resultsHarness();
+    const loading = await harness.settle();
+    expect(resultsPanel().props["aria-busy"]).toBeUndefined();
+    expect(resultsBusyScope("practice").props["aria-busy"]).toBe(true);
+    expect(loading).toContain(
+      "Practice totals and activity include every page matching your filters.",
+    );
+    expect(loading).toContain("Grouped by practice creation date in UTC.");
+    expect(loading).toContain("<dt>Matching practice items</dt><dd>30</dd>");
+    expect(loading).toContain("Scheduled<strong>3</strong>");
+    expect(loading).toContain("21 completed of 80 attempts");
+    expect(loading).toContain('aria-valuenow="26.25"');
+    expect(loading).not.toContain("First practice");
+    expect(activityCounts()).toEqual(["28", "2"]);
+
+    firstPage.resolve(response("/v1/followups?limit=25"));
+    await harness.settle();
+    clickButton("Load More Practice");
+    const after = await harness.settle();
+    expect(after).toContain("Later practice");
+    expect(after).toContain("21 completed of 80 attempts");
+    expect(activityCounts()).toEqual(["28", "2"]);
+    changeField("Group by", "quarter");
+    await harness.settle();
+    expect(activityCounts()).toEqual(["30"]);
+    expect(historyCalls(practiceAnalyticsPath)).toHaveLength(1);
+    harness.dispose();
+  });
+
+  it("discards a retried Practice aggregate after the workspace switches", async () => {
+    fixtures.query = "view=practice";
+    const obsolete = deferred<unknown>();
+    let reads = 0;
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, practiceAnalyticsPath)) {
+        const params = new URLSearchParams(path.split("?")[1]);
+        if (params.get("expectedWorkspaceId") === "workspace-b") return practiceAnalytics(7);
+        if (++reads === 1) throw new Error("Practice analytics unavailable");
+        return obsolete.promise;
+      }
+      return response(path);
+    });
+    const harness = resultsHarness();
+    const failed = await harness.settle();
+    expect(failed).toContain("Practice totals and activity could not load.");
+    expect(failed).toContain("<dt>Results shown</dt><dd>1</dd>");
+    expect(failed).toContain("2 completed of 3 attempts");
+    expect(activityCounts()).toEqual([]);
+    clickButton("Retry practice analytics");
+    expect(await harness.settle()).toContain("Loading practice totals and activity…");
+    expect(historyCalls("/v1/followups")).toHaveLength(1);
+    const pending = historyCalls(practiceAnalyticsPath).at(-1)!;
+
+    fixtures.workspaceId = "workspace-b";
+    expect(await harness.settle()).toContain("<dt>Matching practice items</dt><dd>7</dd>");
+    expect(pending[1].signal?.aborted).toBe(true);
+    obsolete.resolve(practiceAnalytics(88));
+    expect(await harness.settle()).not.toContain("<dt>Matching practice items</dt><dd>88</dd>");
+    expect(activityCounts()).toEqual(["7"]);
+    harness.dispose();
+  });
+
   it("uses exact Round activity across pages and switches grouping without another request", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       matchesRequest(path, reportTotalsPath)
@@ -601,6 +743,7 @@ describe("Results workspace", () => {
       fixtures.query = `view=${view}`;
       fixtures.apiFetch.mockImplementation(async (url: string) => {
         if (matchesRequest(url, reportTotalsPath)) return reportAnalytics(0);
+        if (matchesRequest(url, practiceAnalyticsPath)) return practiceAnalytics(0);
         if (!matchesRequest(url, path)) return response(url);
         if (view === "presentations") return { sessions: [] };
         if (view === "surveys") return { rooms: [], nextCursor: null };
@@ -610,6 +753,7 @@ describe("Results workspace", () => {
       const markup = await harness.settle();
       expect(headings()).toEqual([empty]);
       if (view === "results") expect(markup).toContain("No reports match these filters.");
+      if (view === "practice") expect(markup).toContain("No practice items match these filters.");
       expect(markup).toContain(view === "practice" ? "0 practice items shown" : "0 results shown");
       expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(markup).not.toContain("Clear filters");
@@ -685,6 +829,7 @@ describe("Results workspace", () => {
         changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
         changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
         changeSearch("missing");
+        if (view === "practice") elapsePracticeSearchDelay(harness);
         if (view === "results" || view === "practice") {
           harness.render();
           expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
@@ -893,6 +1038,7 @@ describe("Results workspace", () => {
       await harness.settle();
       changeSearch("frozen evidence");
       clickButton("List view");
+      elapsePracticeSearchDelay(harness);
       await harness.settle();
       const reads = historyCalls("/v1/followups").length;
       for (const locale of ["ko-KR", "de-DE", "en-CA"] as const) {
@@ -1327,11 +1473,12 @@ describe("Results workspace", () => {
       changeField("From", "2026-10-01");
       changeField("To", "2026-10-31");
       changeSearch("  NeEdLe %_  ");
+      if (view === "practice") elapsePracticeSearchDelay(harness);
       await harness.settle();
       const filters = Object.fromEntries(
         new URLSearchParams(historyCalls(path).at(-1)![0].split("?")[1]),
       );
-      const scope = view === "results" ? { expectedWorkspaceId: "workspace-a" } : {};
+      const scope = { expectedWorkspaceId: "workspace-a" };
       expect(filters).toEqual({
         limit: "25",
         ...scope,
@@ -1341,6 +1488,14 @@ describe("Results workspace", () => {
         from: new Date("2026-10-01T00:00:00").toISOString(),
         to: new Date("2026-10-31T23:59:59.999").toISOString(),
       });
+      if (view === "practice") {
+        const aggregateFilters = new URLSearchParams(
+          historyCalls(practiceAnalyticsPath).at(-1)![0].split("?")[1],
+        );
+        const unpaginatedFilters = new URLSearchParams(filters);
+        unpaginatedFilters.delete("limit");
+        expect(aggregateFilters.toString()).toBe(unpaginatedFilters.toString());
+      }
       clickButton(more);
       const markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${later}</h2>`);
@@ -1387,8 +1542,10 @@ describe("Results workspace", () => {
           await harness.settle();
           if (stage === "more") clickButton(more);
           const request = historyCalls(path).at(-1)!;
-          if (change === "query") changeSearch("new query");
-          else fixtures.workspaceId = "workspace-b";
+          if (change === "query") {
+            changeSearch("new query");
+            if (view === "practice") elapsePracticeSearchDelay(harness);
+          } else fixtures.workspaceId = "workspace-b";
           expect(harness.render()).not.toContain('<h2 lang="">First');
           let markup = await harness.settle();
           expect(request[1]?.signal?.aborted).toBe(true);
@@ -1580,6 +1737,11 @@ function resultsHarness() {
   };
   return { render, flushEffects, settle, dispose };
 }
+function elapsePracticeSearchDelay(harness: ReturnType<typeof resultsHarness>) {
+  harness.render();
+  harness.flushEffects();
+  vi.advanceTimersByTime(250);
+}
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
@@ -1638,9 +1800,10 @@ function resultsPanel() {
 }
 function resultsBusyScope(view: string) {
   const panel = resultsPanel();
-  if (view !== "results") return panel;
+  if (view !== "results" && view !== "practice") return panel;
+  const collectionLabel = view === "results" ? "Results" : "Practice assignments and follow-ups";
   return elements(panel).find(
-    (node) => node.type === "section" && node.props["aria-label"] === "Results",
+    (node) => node.type === "section" && node.props["aria-label"] === collectionLabel,
   )!;
 }
 function activityCounts() {

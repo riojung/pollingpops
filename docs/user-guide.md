@@ -1903,14 +1903,21 @@ can load while the report list is loading or unavailable. **Retry report analyti
 while the loaded reports stay available. **Load More** expands the loaded-report evidence and
 shortcuts.
 
-Other views use loaded records for their totals and charts. Their activity dates reflect when
-each Presentation session or practice run was created, or the scheduled collection deadline for
-each Survey. Shortcuts open ready Round Analytics, available Presentation reports, retained
-Survey results, or practice details.
+In the **Practice** view, **Matching practice items**, its status counts, recorded attempts, and
+**Activity over time** cover every page matching the workspace and filters. The chart counts
+practice items by UTC month or quarter of creation and shows the six most recent matching periods.
+**Retry practice analytics** retries the dashboard separately from the list. **Load More** adds
+rows. The practice shortcuts show up to three recent items from the list.
 
-Round recovery combines recovered and eligible opportunities from ready reports. Practice shows
-completed attempts out of all recorded attempts. Round and Presentation join counts add participant
-records across the included sessions. Survey widgets show runs and the Surveys they represent.
+Presentation and Survey views use loaded records for their totals and charts. Their activity dates
+reflect when each Presentation session was created or the scheduled collection deadline for each
+Survey. Shortcuts open ready Round Analytics, available Presentation reports, retained Survey
+results, or practice details.
+
+Round recovery combines recovered and eligible opportunities from ready reports. Practice completion
+uses completed attempts out of all recorded attempts in the matching runs. Round and Presentation
+join counts add participant records across the included sessions. Survey widgets show runs and the
+Surveys they represent.
 Open an individual Survey report for response counts and question results. No-evidence states remain
 separate from a measured zero.
 

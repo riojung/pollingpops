@@ -375,6 +375,31 @@ export async function expectRecoveryPackPracticeConformance(
       })
     ).items.some(({ id }) => id === first!.id),
   ).toBe(false);
+  const practiceFilters = {
+    now: f.input.opensAt,
+    search: f.input.title,
+    purpose: "assignment",
+  } as const;
+  expect(await repository.getFollowupHistoryAnalytics(workspaceId, practiceFilters)).toMatchObject({
+    open: 1,
+    scheduled: 0,
+    closed: 0,
+    expired: 0,
+  });
+  expect(
+    await repository.getFollowupHistoryAnalytics(workspaceId, {
+      ...practiceFilters,
+      quizId: randomUUID(),
+    }),
+  ).toEqual({
+    open: 0,
+    scheduled: 0,
+    closed: 0,
+    expired: 0,
+    attemptCount: 0,
+    completedAttemptCount: 0,
+    activity: { month: [], quarter: [] },
+  });
   await repository.closeFollowup(workspaceId, first!.id, new Date());
   const audits = (await repository.listAuditEvents(workspaceId, null, 100)).filter(
     ({ action, targetId }) =>

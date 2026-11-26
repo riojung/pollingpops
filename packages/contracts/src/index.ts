@@ -3568,24 +3568,35 @@ export const ReportHistoryTotalsSchema = z.object({
 });
 export type ReportHistoryTotals = z.infer<typeof ReportHistoryTotalsSchema>;
 export const REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT = 6;
-const ReportHistoryActivityBucketSchema = z.object({
+const HistoryActivityBucketSchema = z.object({
   start: z.iso.date().endsWith("-01"),
   count: z.number().int().positive(),
 });
 /** The most recent represented UTC calendar buckets in chronological order. */
+const HistoryActivitySchema = z.object({
+  month: z.array(HistoryActivityBucketSchema).max(REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT),
+  quarter: z
+    .array(
+      HistoryActivityBucketSchema.extend({
+        start: z.iso.date().regex(/-(01|04|07|10)-01$/),
+      }),
+    )
+    .max(REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT),
+});
 export const ReportHistoryAnalyticsSchema = ReportHistoryTotalsSchema.extend({
-  activity: z.object({
-    month: z.array(ReportHistoryActivityBucketSchema).max(REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT),
-    quarter: z
-      .array(
-        ReportHistoryActivityBucketSchema.extend({
-          start: z.iso.date().regex(/-(01|04|07|10)-01$/),
-        }),
-      )
-      .max(REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT),
-  }),
+  activity: HistoryActivitySchema,
 });
 export type ReportHistoryAnalytics = z.infer<typeof ReportHistoryAnalyticsSchema>;
+export const FollowupHistoryAnalyticsSchema = z.object({
+  open: z.number().int().nonnegative(),
+  scheduled: z.number().int().nonnegative(),
+  closed: z.number().int().nonnegative(),
+  expired: z.number().int().nonnegative(),
+  attemptCount: z.number().int().nonnegative(),
+  completedAttemptCount: z.number().int().nonnegative(),
+  activity: HistoryActivitySchema,
+});
+export type FollowupHistoryAnalytics = z.infer<typeof FollowupHistoryAnalyticsSchema>;
 export const FollowupSummaryPageSchema = z.object({
   items: z.array(FollowupSummarySchema),
   nextCursor: z.string().nullable(),

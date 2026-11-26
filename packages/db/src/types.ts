@@ -7,6 +7,7 @@ import type {
   AuthoringSourceType,
   ChatReaction,
   ConfidenceValue,
+  FollowupHistoryAnalytics,
   FollowupPurpose,
   FollowupTimeMode,
   FolderArtifactType,
@@ -833,9 +834,7 @@ export interface HistoryPage<T> {
   hasMore: boolean;
 }
 
-export interface FollowupHistoryListOptions {
-  cursor?: HistoryCursor;
-  limit: number;
+export interface FollowupHistoryFilters {
   search?: string;
   purpose?: FollowupPurpose;
   status?: FollowupHistoryRecord["status"];
@@ -843,6 +842,11 @@ export interface FollowupHistoryListOptions {
   from?: Date;
   to?: Date;
   now: Date;
+}
+
+export interface FollowupHistoryListOptions extends FollowupHistoryFilters {
+  cursor?: HistoryCursor;
+  limit: number;
 }
 
 export interface ProductEventRecord extends ProductEvent {
@@ -1695,6 +1699,10 @@ export interface Repository {
     workspaceId: string,
     options: FollowupHistoryListOptions,
   ): Promise<HistoryPage<FollowupHistoryRecord>>;
+  getFollowupHistoryAnalytics(
+    workspaceId: string,
+    filters: FollowupHistoryFilters,
+  ): Promise<FollowupHistoryAnalytics>;
   getFollowupByGenericToken(
     followupId: string,
     tokenHash: string,

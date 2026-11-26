@@ -14,10 +14,12 @@ import {
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const reportsPath = "/v1/reports";
 const reportTotalsPath = "/v1/reports/totals";
+const practicePath = "/v1/followups";
+const practiceAnalyticsPath = "/v1/followups/analytics";
 const longTitle = "Synthetic workshop · 함께 검토 · " + "LongUnbrokenTitle".repeat(5);
 const views = [
   { key: "results", path: reportsPath, search: "Search Round results" },
-  { key: "practice", path: "/v1/followups", search: "Search practice" },
+  { key: "practice", path: practicePath, search: "Search practice" },
   {
     key: "presentations",
     path: "/v1/presentation-sessions",
@@ -25,6 +27,34 @@ const views = [
   },
   { key: "surveys", path: "/v1/survey-rooms", search: "Search Survey results" },
 ] as const;
+const historyAnalytics = {
+  results: {
+    kind: "report",
+    path: reportTotalsPath,
+    collectionLabel: "Results",
+    countLabel: "Matching reports",
+    shortcutLabel: "Reports to open",
+    emptyMessage: "No reports match these filters.",
+    errorMessage: "Report totals and activity could not load.",
+    loadingMessage: "Loading report totals and activity…",
+    scopeMessage: "Report totals and activity include every page matching your filters.",
+    retryLabel: "Retry report analytics",
+    query: { includeActivity: "true" },
+  },
+  practice: {
+    kind: "practice",
+    path: practiceAnalyticsPath,
+    collectionLabel: "Practice assignments and follow-ups",
+    countLabel: "Matching practice items",
+    shortcutLabel: "Practice to review",
+    emptyMessage: "No practice items match these filters.",
+    errorMessage: "Practice totals and activity could not load.",
+    loadingMessage: "Loading practice totals and activity…",
+    scopeMessage: "Practice totals and activity include every page matching your filters.",
+    retryLabel: "Retry practice analytics",
+    query: {},
+  },
+} as const;
 const modes = [
   { name: "light", colorScheme: "light", forcedColors: "none" },
   { name: "dark", colorScheme: "dark", forcedColors: "none" },
@@ -73,31 +103,30 @@ async function signedInWorkspaceId(page: Page) {
   return creator.workspaceId;
 }
 
-async function expectNoLoadedReportMetrics(overview: Locator) {
+type AnalyticsView = (typeof historyAnalytics)[keyof typeof historyAnalytics];
+
+async function expectNoLoadedEvidence(overview: Locator, analytics: AnalyticsView) {
   await expect(overview.getByText("Results shown", { exact: true })).toHaveCount(0);
   await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
   await expect(overview.getByText(/loaded (?:reports|results)/)).toHaveCount(0);
-  await expect(overview.getByRole("region", { name: "Reports to open", exact: true })).toHaveCount(
-    0,
-  );
-  await expect(overview.getByRole("meter")).toHaveCount(0);
+  await expect(
+    overview.getByRole("region", { name: analytics.shortcutLabel, exact: true }),
+  ).toHaveCount(0);
 }
 
-const reportActivity = (overview: Locator) =>
+const historyActivity = (overview: Locator) =>
   overview.getByRole("region", { name: "Activity over time", exact: true });
 
-async function expectUnknownReportActivity(overview: Locator) {
-  const activity = reportActivity(overview);
+async function expectUnknownActivity(overview: Locator, analytics: AnalyticsView) {
+  const activity = historyActivity(overview);
   await expect(activity.getByRole("listitem")).toHaveCount(0);
   await expect(activity.getByRole("combobox", { name: "Group by" })).toHaveCount(0);
-  await expect(overview.getByText("No reports match these filters.", { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(overview.getByText(analytics.emptyMessage, { exact: true })).toHaveCount(0);
 }
 
-async function expectOctoberReportActivity(overview: Locator) {
-  const activity = reportActivity(overview);
-  await expect(activity).toContainText("Grouped by report creation date in UTC.");
+async function expectOctoberActivity(overview: Locator, analytics: AnalyticsView) {
+  const activity = historyActivity(overview);
+  await expect(activity).toContainText(`Grouped by ${analytics.kind} creation date in UTC.`);
   await expect(activity.getByRole("listitem")).toHaveText([/Oct.*2026\s*1$/]);
 }
 
@@ -145,7 +174,7 @@ async function installHistory(page: Page) {
   });
   const histories: Record<string, { envelope: string; rows: Array<{ title: string }> }> = {
     [reportsPath]: { envelope: "items", rows: [report] },
-    "/v1/followups": { envelope: "items", rows: [practice] },
+    [practicePath]: { envelope: "items", rows: [practice] },
     "/v1/presentation-sessions": {
       envelope: "sessions",
       rows: [
@@ -182,7 +211,7 @@ async function installHistory(page: Page) {
   const reads: Array<{ path: string; query: string }> = [];
   const mutations: string[] = [];
   const gates = new Map<string, { promise: Promise<void>; release: () => void; held: boolean }>();
-  for (const path of [...Object.keys(histories), reportTotalsPath]) {
+  for (const path of [...Object.keys(histories), reportTotalsPath, practiceAnalyticsPath]) {
     let release!: () => void;
     const promise = new Promise<void>((done) => {
       release = done;
@@ -205,7 +234,8 @@ async function installHistory(page: Page) {
       });
     const history = histories[url.pathname];
     const isReportTotals = url.pathname === reportTotalsPath;
-    if (!history && !isReportTotals) return route.continue();
+    const isPracticeAnalytics = url.pathname === practiceAnalyticsPath;
+    if (!history && !isReportTotals && !isPracticeAnalytics) return route.continue();
     reads.push({ path: url.pathname, query: url.search });
     const gate = gates.get(url.pathname)!;
     if (allowed.has(url.pathname) && !gate.held) {
@@ -240,6 +270,21 @@ async function installHistory(page: Page) {
         },
       });
     }
+    if (isPracticeAnalytics) {
+      const matches = matchesSearch(practice);
+      const periods = matches ? [{ start: "2026-10-01", count: 1 }] : [];
+      return route.fulfill({
+        json: {
+          open: Number(matches),
+          scheduled: 0,
+          closed: 0,
+          expired: 0,
+          attemptCount: matches ? practice.attemptCount : 0,
+          completedAttemptCount: matches ? practice.completedAttemptCount : 0,
+          activity: { month: periods, quarter: periods },
+        },
+      });
+    }
     return route.fulfill({
       json: {
         [history.envelope]: history.rows.filter(matchesSearch),
@@ -264,81 +309,102 @@ async function installHistory(page: Page) {
   };
 }
 
-test("Results keeps full-history analytics while the first report page loads or fails", async ({
-  page,
-}) => {
-  await signInBeta(page, undefined, { returnTo: "/library" });
-  await specialistLocale(page, "en-CA");
-  const expectedWorkspaceId = await signedInWorkspaceId(page);
-  const fixture = await installHistory(page);
-  try {
-    fixture.allow(reportsPath);
-    fixture.allow(reportTotalsPath);
-    await page.goto("/results?q=workshop");
-    const panel = page.locator("#results-panel");
-    const collection = panel.getByRole("region", { name: "Results", exact: true });
-    const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
-    const analyticsStatus = overview.getByRole("status");
-    const busyStatus = analyticsStatus.locator('xpath=ancestor-or-self::*[@aria-busy="true"]');
-    await expect(collection).toHaveAttribute("aria-busy", "true");
-    await expect(panel).not.toHaveAttribute("aria-busy");
-    await expect(analyticsStatus).toHaveText("Loading report totals and activity…");
-    await expect(busyStatus).toHaveCount(0);
+for (const [view, listPath] of [
+  ["results", reportsPath],
+  ["practice", practicePath],
+] as const) {
+  const analytics = historyAnalytics[view];
+  test(`Results keeps full-history analytics while the first ${analytics.kind} page loads or fails`, async ({
+    page,
+  }) => {
+    await signInBeta(page, undefined, { returnTo: "/library" });
+    await specialistLocale(page, "en-CA");
+    const expectedWorkspaceId = await signedInWorkspaceId(page);
+    const fixture = await installHistory(page);
+    try {
+      fixture.allow(listPath);
+      fixture.allow(analytics.path);
+      await page.goto(
+        view === "practice" ? "/results?view=practice&q=workshop" : "/results?q=workshop",
+      );
+      const panel = page.locator("#results-panel");
+      const collection = panel.getByRole("region", {
+        name: analytics.collectionLabel,
+        exact: true,
+      });
+      const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
+      const analyticsStatus = overview.getByRole("status");
+      const busyStatus = analyticsStatus.locator('xpath=ancestor-or-self::*[@aria-busy="true"]');
+      await expect(collection).toHaveAttribute("aria-busy", "true");
+      await expect(panel).not.toHaveAttribute("aria-busy");
+      await expect(analyticsStatus).toHaveText(analytics.loadingMessage);
+      await expect(busyStatus).toHaveCount(0);
 
-    fixture.fail(reportTotalsPath);
-    await expect(analyticsStatus).toHaveText("Report totals and activity could not load.");
-    await expect(busyStatus).toHaveCount(0);
-    await expect(collection).toHaveAttribute("aria-busy", "true");
+      fixture.fail(analytics.path);
+      await expect(analyticsStatus).toHaveText(analytics.errorMessage);
+      await expect(busyStatus).toHaveCount(0);
+      await expect(collection).toHaveAttribute("aria-busy", "true");
+      await expectUnknownActivity(overview, analytics);
+      await expect(overview.getByRole("meter")).toHaveCount(0);
 
-    fixture.allow(reportTotalsPath);
-    await overview.getByRole("button", { name: "Retry report analytics", exact: true }).click();
-    await expect(analyticsStatus).toHaveText(
-      "Report totals and activity include every page matching your filters.",
-    );
-    await expect(busyStatus).toHaveCount(0);
-    await expect(collection).toHaveAttribute("aria-busy", "true");
-    const matchingReports = overview.getByText("Matching reports", { exact: true });
-    const matchingCount = matchingReports.locator("..").locator("dd");
-    await expect(matchingCount).toHaveText("1");
-    await expectOctoberReportActivity(overview);
-    await expect(collection.getByRole("article")).toHaveCount(0);
-    await expectNoLoadedReportMetrics(overview);
+      fixture.allow(analytics.path);
+      await overview.getByRole("button", { name: analytics.retryLabel, exact: true }).click();
+      await expect(analyticsStatus).toHaveText(analytics.scopeMessage);
+      await expect(busyStatus).toHaveCount(0);
+      await expect(collection).toHaveAttribute("aria-busy", "true");
+      const matchingCount = overview
+        .getByText(analytics.countLabel, { exact: true })
+        .locator("..")
+        .locator("dd");
+      const expectFullHistory = async () => {
+        await expect(matchingCount).toHaveText("1");
+        await expectOctoberActivity(overview, analytics);
+        if (view === "practice") {
+          await expect(
+            overview.getByRole("meter", { name: "Completed attempts", exact: true }),
+          ).toHaveAttribute("aria-valuetext", "9 completed of 12 attempts");
+        }
+      };
+      await expectFullHistory();
+      await expect(collection.getByRole("article")).toHaveCount(0);
+      await expectNoLoadedEvidence(overview, analytics);
+      if (view === "results") await expect(overview.getByRole("meter")).toHaveCount(0);
 
-    const queriesFor = (path: string) =>
-      fixture.reads
-        .filter((read) => read.path === path)
-        .map((read) => Object.fromEntries(new URLSearchParams(read.query)));
-    const scopedFilters = { expectedWorkspaceId, search: "workshop" };
-    await expect.poll(() => queriesFor(reportsPath)).toEqual([{ limit: "25", ...scopedFilters }]);
-    expect(queriesFor(reportTotalsPath)).toEqual([
-      { ...scopedFilters, includeActivity: "true" },
-      { ...scopedFilters, includeActivity: "true" },
-    ]);
-    fixture.fail(reportsPath);
-    await expect(collection).toHaveAttribute("aria-busy", "false");
-    const retry = panel.getByRole("button", { name: "Try again", exact: true });
-    await expect(retry).toBeVisible();
-    await expect(matchingCount).toHaveText("1");
-    await expectOctoberReportActivity(overview);
-    await expect(panel.getByText(/^0 results shown$/)).toHaveCount(0);
-    await expectNoLoadedReportMetrics(overview);
+      const queriesFor = (path: string) =>
+        fixture.reads
+          .filter((read) => read.path === path)
+          .map((read) => Object.fromEntries(new URLSearchParams(read.query)));
+      const scopedFilters = { expectedWorkspaceId, search: "workshop" };
+      const listQuery = { limit: "25", ...scopedFilters };
+      const analyticsQuery = { ...scopedFilters, ...analytics.query };
+      await expect.poll(() => queriesFor(listPath)).toEqual([listQuery]);
+      expect(queriesFor(analytics.path)).toEqual([analyticsQuery, analyticsQuery]);
+      fixture.fail(listPath);
+      await expect(collection).toHaveAttribute("aria-busy", "false");
+      const retry = panel.getByRole("button", { name: "Try again", exact: true });
+      await expect(retry).toBeVisible();
+      await expectFullHistory();
+      await expect(panel.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
+      await expectNoLoadedEvidence(overview, analytics);
+      if (view === "results") await expect(overview.getByRole("meter")).toHaveCount(0);
 
-    const readsBeforeRetry = fixture.reads.length;
-    fixture.allow(reportsPath);
-    await retry.click();
-    await expect(collection.getByRole("article")).toHaveCount(1);
-    await expect(matchingCount).toHaveText("1");
-    await expectOctoberReportActivity(overview);
-    await expect(overview.getByText("Participant joins", { exact: true })).toBeVisible();
-    expect(fixture.reads.slice(readsBeforeRetry).map(({ path }) => path)).toEqual([reportsPath]);
-    expect(queriesFor(reportsPath)).toEqual([
-      { limit: "25", ...scopedFilters },
-      { limit: "25", ...scopedFilters },
-    ]);
-  } finally {
-    fixture.releaseAll();
-  }
-});
+      const readsBeforeRetry = fixture.reads.length;
+      fixture.allow(listPath);
+      await retry.click();
+      await expect(collection.getByRole("article")).toHaveCount(1);
+      await expectFullHistory();
+      await expect(
+        overview.getByRole("region", { name: analytics.shortcutLabel, exact: true }),
+      ).toBeVisible();
+      if (view === "results")
+        await expect(overview.getByText("Participant joins", { exact: true })).toBeVisible();
+      expect(fixture.reads.slice(readsBeforeRetry).map(({ path }) => path)).toEqual([listPath]);
+      expect(queriesFor(listPath)).toEqual([listQuery, listQuery]);
+    } finally {
+      fixture.releaseAll();
+    }
+  });
+}
 
 for (const phone of [false, true]) {
   test(`Results keeps failed evidence unknown and restores keyboard continuity${phone ? " @mobile" : ""}`, async ({
@@ -357,22 +423,26 @@ for (const phone of [false, true]) {
           `/results?${new URLSearchParams({ ...(view.key === "results" ? {} : { view: view.key }), q: "workshop" })}`,
         );
         const panel = page.locator("#results-panel");
-        const busyRegion =
-          view.key === "results"
-            ? panel.getByRole("region", { name: "Results", exact: true })
-            : panel;
+        const analytics =
+          view.key === "results" || view.key === "practice" ? historyAnalytics[view.key] : null;
+        const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
+        const analyticsStatus = overview.getByRole("status");
+        const busyRegion = analytics
+          ? panel.getByRole("region", {
+              name: analytics.collectionLabel,
+              exact: true,
+            })
+          : panel;
         const retry = panel.getByRole("button", { name: "Try again", exact: true });
         await expect(retry).toBeVisible();
         await expect(page.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
         await expect(panel.getByRole("article")).toHaveCount(0);
-        if (view.key === "results") {
-          const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
-          await expect(overview.getByRole("status")).toHaveText(
-            "Report totals and activity could not load.",
-          );
-          await expect(overview.getByText("Matching reports", { exact: true })).toHaveCount(0);
-          await expectNoLoadedReportMetrics(overview);
-          await expectUnknownReportActivity(overview);
+        if (analytics) {
+          await expect(analyticsStatus).toHaveText(analytics.errorMessage);
+          await expect(overview.getByText(analytics.countLabel, { exact: true })).toHaveCount(0);
+          await expectNoLoadedEvidence(overview, analytics);
+          await expect(overview.getByRole("meter")).toHaveCount(0);
+          await expectUnknownActivity(overview, analytics);
         }
         await quality(page);
         if (view.key === "results")
@@ -390,19 +460,17 @@ for (const phone of [false, true]) {
         await expect(panel).toBeFocused();
         await expect(busyRegion).toHaveAttribute("aria-busy", "true");
         await expect(page.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
-        if (view.key === "results") {
-          const analyticsStatus = panel
-            .getByRole("region", { name: "Results analytics", exact: true })
-            .getByRole("status");
-          await expect(analyticsStatus).toHaveText("Report totals and activity could not load.");
+        if (analytics) {
+          await expect(analyticsStatus).toHaveText(analytics.errorMessage);
           await expect(
             analyticsStatus.locator('xpath=ancestor-or-self::*[@aria-busy="true"]'),
           ).toHaveCount(0);
           await quality(page);
-          await panel.screenshot({
-            path: info.outputPath("retry-loading-light.png"),
-            scale: "css",
-          });
+          if (view.key === "results")
+            await panel.screenshot({
+              path: info.outputPath("retry-loading-light.png"),
+              scale: "css",
+            });
         }
         fixture.release(view.path);
         await expect(busyRegion).toHaveAttribute("aria-busy", "false");
@@ -412,47 +480,63 @@ for (const phone of [false, true]) {
         );
         await expect(panel.locator("section[data-view]")).toHaveAttribute("data-view", "list");
 
-        if (view.key === "results") {
+        if (analytics) {
           expect(fixture.reads.slice(readsBeforeListRetry)).toEqual([lastFailure]);
-          const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
           const heading = overview.getByRole("heading", { name: "Results analytics", exact: true });
-          const analyticsStatus = overview.getByRole("status");
           const analyticsRetry = overview.getByRole("button", {
-            name: "Retry report analytics",
+            name: analytics.retryLabel,
             exact: true,
           });
-          await expect(analyticsStatus).toContainText("Report totals and activity could not load.");
-          await expect(overview.getByText(/loaded (?:reports|results)/)).toBeVisible();
+          await expect(analyticsStatus).toContainText(analytics.errorMessage);
+          await expect(analyticsStatus).toContainText(
+            "Summary of 1 loaded results with your current filters.",
+          );
           await expect(overview.getByText("Results shown", { exact: true })).toBeVisible();
-          await expect(overview.getByText("Matching reports", { exact: true })).toHaveCount(0);
+          await expect(overview.getByText(analytics.countLabel, { exact: true })).toHaveCount(0);
           await expect(panel.getByRole("article")).toHaveCount(1);
-          await expectUnknownReportActivity(overview);
+          await expectUnknownActivity(overview, analytics);
+          if (view.key === "practice") {
+            const fallbackStatus = overview.getByRole("group", {
+              name: "Status of results shown",
+              exact: true,
+            });
+            await expect(fallbackStatus.getByRole("listitem")).toHaveText([
+              /^Open\s*1$/,
+              /^Scheduled\s*0$/,
+              /^Closed\s*0$/,
+              /^Expired\s*0$/,
+            ]);
+            await expect(
+              overview.getByRole("meter", { name: "Completed attempts", exact: true }),
+            ).toHaveAttribute("aria-valuetext", "9 completed of 12 attempts");
+          }
           const readsBeforeRetry = fixture.reads.length;
           await tabTo(page, analyticsRetry);
           await expectVisibleKeyboardFocus(analyticsRetry);
-          fixture.allow(reportTotalsPath);
+          fixture.allow(analytics.path);
           await page.keyboard.press("Enter");
           await expect(heading).toBeFocused();
-          await expect(analyticsStatus).toContainText("Loading report totals and activity…");
+          await expect(analyticsStatus).toContainText(analytics.loadingMessage);
           await expect(panel.getByRole("article")).toHaveCount(1);
-          await expectUnknownReportActivity(overview);
-          fixture.release(reportTotalsPath);
-          const matchingReports = overview.getByText("Matching reports", { exact: true });
-          await expect(matchingReports.locator("..").locator("dd")).toHaveText("1");
-          await expectOctoberReportActivity(overview);
+          await expect(busyRegion).toHaveAttribute("aria-busy", "false");
+          await expectUnknownActivity(overview, analytics);
+          fixture.release(analytics.path);
+          const matchingItems = overview.getByText(analytics.countLabel, { exact: true });
+          await expect(matchingItems.locator("..").locator("dd")).toHaveText("1");
+          await expectOctoberActivity(overview, analytics);
           await expect(analyticsRetry).toHaveCount(0);
           const [totalsRead, ...extraReads] = fixture.reads.slice(readsBeforeRetry);
           expect(extraReads).toEqual([]);
-          expect(totalsRead?.path).toBe(reportTotalsPath);
+          expect(totalsRead?.path).toBe(analytics.path);
           expect(Object.fromEntries(new URLSearchParams(totalsRead?.query))).toEqual({
             expectedWorkspaceId,
             search: "workshop",
-            includeActivity: "true",
+            ...analytics.query,
           });
           await expect(heading).toBeFocused();
           await page.keyboard.press(tabKey(page));
           await expect(
-            reportActivity(overview).getByRole("combobox", { name: "Group by", exact: true }),
+            historyActivity(overview).getByRole("combobox", { name: "Group by", exact: true }),
           ).toBeFocused();
         }
 
@@ -469,12 +553,9 @@ for (const phone of [false, true]) {
           exact: true,
         });
         await expect(heading).toBeVisible();
-        if (view.key === "results") {
-          const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
-          const activity = reportActivity(overview);
-          await expect(
-            activity.getByText("No reports match these filters.", { exact: true }),
-          ).toBeVisible();
+        if (analytics) {
+          const activity = historyActivity(overview);
+          await expect(activity.getByText(analytics.emptyMessage, { exact: true })).toBeVisible();
           await expect(activity.getByRole("listitem")).toHaveCount(0);
         }
         await quality(page);
@@ -490,8 +571,21 @@ for (const phone of [false, true]) {
         await expect(panel.locator("section[data-view]")).toHaveAttribute("data-view", "list");
         expect(new URL(page.url()).searchParams.get("view") ?? "results").toBe(view.key);
 
+        const readsBeforeSearch = fixture.reads.length;
         await search.fill("workshop");
         await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("workshop");
+        if (view.key === "practice") {
+          await expect
+            .poll(() =>
+              fixture.reads
+                .slice(readsBeforeSearch)
+                .some(
+                  ({ path, query }) =>
+                    path === view.path && new URLSearchParams(query).get("search") === "workshop",
+                ),
+            )
+            .toBe(true);
+        }
         await expect(panel.getByRole("article")).toHaveCount(1);
         const toolbarClear = panel.getByRole("button", { name: "Clear filters", exact: true });
         await tabTo(page, toolbarClear);

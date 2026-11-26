@@ -15,10 +15,14 @@ import type {
   PresentationNavigationState,
   PresentationNavigationEvent,
   PresentationRecoveryPackIntervention,
+  PresentationResultSummary,
+  PresentationResultsAnalytics,
+  PresentationResultsSources,
   PresentationSessionPhase,
   PresentationSessionResponse,
 } from "@openround/contracts";
 import type { PlatformRoomCoverageInput } from "./platform-types.js";
+import type { HistoryCursor } from "./types.js";
 
 export interface PresentationSessionRecord {
   id: string;
@@ -305,12 +309,43 @@ export type PresentationSessionCommandInput = PresentationSessionTransitionInput
   };
 };
 
+export interface PresentationResultsFilters {
+  presentationId?: string;
+  status?: PresentationSessionRecord["status"];
+  search?: string;
+  from?: Date;
+  to?: Date;
+}
+
+export interface PresentationResultsListOptions extends PresentationResultsFilters {
+  cursor?: HistoryCursor;
+  limit: number;
+}
+
+export type PresentationResultRecord = Omit<
+  PresentationResultSummary,
+  "createdAt" | "finishedAt"
+> & {
+  createdAt: Date;
+  finishedAt: Date | null;
+  cursorCreatedAt?: string;
+};
+
 export interface PresentationSessionRepository extends PresentationTextRepository {
   listSessions(
     workspaceId: string,
     now?: Date,
     includeExpired?: boolean,
   ): Promise<PresentationSessionRecord[]>;
+  listResultsHistory(
+    workspaceId: string,
+    options: PresentationResultsListOptions,
+  ): Promise<{ items: PresentationResultRecord[]; hasMore: boolean }>;
+  getResultsAnalytics(
+    workspaceId: string,
+    filters: PresentationResultsFilters,
+  ): Promise<PresentationResultsAnalytics>;
+  listResultsSources(workspaceId: string): Promise<PresentationResultsSources["sources"]>;
   /** Deletes the entire retained room only when it is finished or its live access has expired. */
   deleteSession(
     workspaceId: string,

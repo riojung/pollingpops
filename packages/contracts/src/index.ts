@@ -7359,6 +7359,45 @@ export const PresentationRestV1SessionListWithReportStatusResponseSchema = z
   })
   .strict();
 
+export const PresentationResultSummarySchema = z
+  .object(PresentationRestV1SessionListItemSchema.shape)
+  .pick({
+    id: true,
+    presentationId: true,
+    title: true,
+    status: true,
+    phase: true,
+    participantCount: true,
+    responseCount: true,
+    blockCount: true,
+    createdAt: true,
+    finishedAt: true,
+  })
+  .extend({
+    finishedAt: PresentationRestV1SessionListItemSchema.shape.finishedAt.optional(),
+    reportStatus: PresentationReportStatusSchema.nullable(),
+  });
+export type PresentationResultSummary = z.infer<typeof PresentationResultSummarySchema>;
+
+export const PresentationResultsPageSchema = z.object({
+  items: z.array(PresentationResultSummarySchema),
+  nextCursor: z.string().nullable(),
+});
+export type PresentationResultsPage = z.infer<typeof PresentationResultsPageSchema>;
+
+export const PresentationResultsAnalyticsSchema = z.object({
+  active: z.number().int().nonnegative(),
+  finished: z.number().int().nonnegative(),
+  participantJoins: z.number().int().nonnegative(),
+  activity: HistoryActivitySchema,
+});
+export type PresentationResultsAnalytics = z.infer<typeof PresentationResultsAnalyticsSchema>;
+
+export const PresentationResultsSourcesSchema = z.object({
+  sources: z.array(PresentationResultSummarySchema.pick({ id: true, title: true })),
+});
+export type PresentationResultsSources = z.infer<typeof PresentationResultsSourcesSchema>;
+
 export const PresentationReportTimelineEventTypeSchema = z.enum([
   "presentation.started",
   "content.presented",

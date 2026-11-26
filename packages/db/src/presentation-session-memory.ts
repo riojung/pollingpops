@@ -9,7 +9,10 @@ import {
 } from "./presentation-insights-types.js";
 import { transitionPresentationInteractionState } from "./presentation-interactions.js";
 import { transitionPresentationNavigationState } from "./presentation-navigation.js";
-import { requiresPresentationTextOpinions } from "@openround/contracts";
+import {
+  requiresPresentationTextOpinions,
+  type PresentationResultsAnalytics,
+} from "@openround/contracts";
 import {
   assertTextReadSession,
   textModerationPage,
@@ -40,6 +43,7 @@ import type {
   MemoryRepositoryLifecycleExtension,
 } from "./memory.js";
 import type { Repository } from "./types.js";
+import { countHistoryActivity } from "./report-history.js";
 import {
   clone,
   assertCommandRequestHash,
@@ -64,6 +68,9 @@ import {
   type PresentationResponseAcceptance,
   type PresentationResponseAcknowledgementState,
   type PresentationResponseContext,
+  type PresentationResultRecord,
+  type PresentationResultsFilters,
+  type PresentationResultsListOptions,
   type PresentationActiveCredentialRevocation,
   type PresentationSessionCommandInput,
   type PresentationSessionCommandReceiptRecord,
@@ -83,6 +90,13 @@ import {
   type PresentationSessionTransitionInput,
   type PresentationTransitionAcceptance,
 } from "./presentation-session-types.js";
+
+function newestPresentationResultFirst(
+  left: Pick<PresentationSessionRecord, "createdAt" | "id">,
+  right: Pick<PresentationSessionRecord, "createdAt" | "id">,
+) {
+  return right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id);
+}
 
 export class MemoryPresentationSessionRepository
   implements PresentationSessionRepository, MemoryRepositoryLifecycleExtension
@@ -305,6 +319,103 @@ export class MemoryPresentationSessionRepository
       )
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .map(clone);
+  }
+
+  private matchingResultsSessions(workspaceId: string, filters: PresentationResultsFilters) {
+    const search = filters.search?.trim().toLowerCase();
+    const presentationId = filters.presentationId?.toLowerCase();
+    return [...this.sessions.values()].filter(
+      (session) =>
+        session.workspaceId === workspaceId &&
+        (!filters.status || session.status === filters.status) &&
+        (!presentationId || session.presentationId.toLowerCase() === presentationId) &&
+        (!filters.from || session.createdAt >= filters.from) &&
+        (!filters.to || session.createdAt <= filters.to) &&
+        (!search || session.title.toLowerCase().includes(search)),
+    );
+  }
+
+  async listResultsHistory(workspaceId: string, options: PresentationResultsListOptions) {
+    const { cursor, limit } = options;
+    const page = this.matchingResultsSessions(workspaceId, options)
+      .filter((session) => !cursor || newestPresentationResultFirst(session, cursor) > 0)
+      .sort(newestPresentationResultFirst)
+      .slice(0, limit + 1);
+    const selected = new Map(
+      page.slice(0, limit).map((session) => {
+        const block = session.content.blocks[session.currentBlockIndex];
+        const item: PresentationResultRecord = {
+          id: session.id,
+          presentationId: session.presentationId,
+          title: session.title,
+          status: session.status,
+          phase: session.phase,
+          participantCount: 0,
+          responseCount: 0,
+          blockCount: session.content.blocks.length,
+          createdAt: new Date(session.createdAt),
+          finishedAt: session.finishedAt && new Date(session.finishedAt),
+          reportStatus: null,
+        };
+        return [
+          session.id,
+          { session, item, questionBlockId: block?.kind === "question" ? block.id : null },
+        ];
+      }),
+    );
+    for (const participant of this.participants.values()) {
+      const result = selected.get(participant.sessionId);
+      if (result && participant.workspaceId === workspaceId) result.item.participantCount += 1;
+    }
+    for (const response of this.responses.values()) {
+      const result = selected.get(response.sessionId);
+      if (
+        result &&
+        response.workspaceId === workspaceId &&
+        result.questionBlockId === presentationResponseBlockId(result.session, response.blockId)
+      )
+        result.item.responseCount += 1;
+    }
+    for (const report of this.reports.values()) {
+      const result = selected.get(report.sessionId);
+      if (result?.item.status === "finished" && report.workspaceId === workspaceId)
+        result.item.reportStatus = report.status;
+    }
+    return {
+      items: Array.from(selected.values(), ({ item }) => item),
+      hasMore: page.length > limit,
+    };
+  }
+
+  async getResultsAnalytics(workspaceId: string, filters: PresentationResultsFilters) {
+    const matchingIds = new Set<string>();
+    const analytics: PresentationResultsAnalytics = {
+      active: 0,
+      finished: 0,
+      participantJoins: 0,
+      activity: { month: [], quarter: [] },
+    };
+    for (const session of this.matchingResultsSessions(workspaceId, filters)) {
+      matchingIds.add(session.id);
+      analytics[session.status] += 1;
+      countHistoryActivity(analytics.activity, session.createdAt);
+    }
+    for (const participant of this.participants.values()) {
+      if (participant.workspaceId === workspaceId && matchingIds.has(participant.sessionId))
+        analytics.participantJoins += 1;
+    }
+    return analytics;
+  }
+
+  async listResultsSources(workspaceId: string) {
+    const sources = new Map<string, { id: string; title: string }>();
+    for (const session of this.matchingResultsSessions(workspaceId, {}).sort(
+      newestPresentationResultFirst,
+    )) {
+      const id = session.presentationId;
+      if (!sources.has(id)) sources.set(id, { id, title: session.title });
+    }
+    return [...sources.values()].sort((left, right) => left.id.localeCompare(right.id));
   }
 
   async deleteSession(

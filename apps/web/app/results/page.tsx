@@ -40,7 +40,11 @@ import signals from "../../components/workspace/workspace-signals.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
-import { PracticeResultsOverview, RoundResultsOverview } from "./history-results-overview";
+import {
+  PracticeResultsOverview,
+  PresentationResultsOverview,
+  RoundResultsOverview,
+} from "./history-results-overview";
 import {
   evidencePercent,
   type PresentationResultSummary,
@@ -105,10 +109,25 @@ function ResultsSummary({
   );
 }
 
+function useHistorySearch(input: string) {
+  const search = input.trim();
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    if (search === debouncedSearch) return;
+    if (!search) {
+      setDebouncedSearch("");
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
+  return search ? debouncedSearch : "";
+}
+
 function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
-  const { status, quizId, fromDate, toDate, search, expectedWorkspaceId } = filters;
+  const { status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId } = filters;
   const queryKey = `${workspaceId}\u0000${path}?${buildHistoryQuery(filters)}`;
   const activeQueryKey = useRef(queryKey);
   activeQueryKey.current = queryKey;
@@ -135,10 +154,10 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   const fetchPage = useCallback(
     (cursor?: string, signal?: AbortSignal) =>
       apiFetch<CursorPage<T>>(
-        `${path}?${buildHistoryQuery({ status, quizId, fromDate, toDate, search, expectedWorkspaceId }, cursor)}`,
+        `${path}?${buildHistoryQuery({ status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId }, cursor)}`,
         { signal },
       ),
-    [path, status, quizId, fromDate, toDate, search, expectedWorkspaceId],
+    [path, status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId],
   );
 
   useEffect(() => {
@@ -642,31 +661,20 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
   const { locale, t } = useLocale();
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId;
-  const search = listControls.search.trim();
+  const search = useHistorySearch(listControls.search);
   const panel = useRef<HTMLElement>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [status, setStatus] = useState<FollowupStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  useEffect(() => {
-    if (search === debouncedSearch) return;
-    if (!search) {
-      setDebouncedSearch("");
-      return;
-    }
-    const timer = setTimeout(() => setDebouncedSearch(search), 250);
-    return () => clearTimeout(timer);
-  }, [search, debouncedSearch]);
-
   const filters = {
     status,
     quizId,
     fromDate,
     toDate,
-    search: search ? debouncedSearch : "",
+    search,
     expectedWorkspaceId: workspaceId,
   };
   const analyticsQuery = buildHistoryFilterQuery(filters);
@@ -881,80 +889,80 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
 function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
+  const collection = useRef<HTMLElement>(null);
+  const moreFocus = useRef<{ query: string; count: number; button: HTMLButtonElement } | null>(
+    null,
+  );
   const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
-  const activeWorkspace = useRef(workspaceId);
-  activeWorkspace.current = workspaceId;
-  const [snapshot, setSnapshot] = useState<{
-    workspaceId: string;
-    sessions: PresentationResultSummary[];
-    error: string;
-    loaded: boolean;
-  }>({ workspaceId: "", sessions: [], error: "", loaded: false });
-  const [fetching, setFetching] = useState(true);
-  const [reload, setReload] = useState(0);
-  const sessions = snapshot.workspaceId === workspaceId ? snapshot.sessions : [];
-  const loading = fetching || snapshot.workspaceId !== workspaceId;
-  const error = snapshot.workspaceId === workspaceId ? snapshot.error : "";
+  const search = useHistorySearch(listControls.search);
   const [status, setStatus] = useState("all");
   const [sourceId, setSourceId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [sources, setSources] = useState<RoundFilterOption[]>([]);
+  const [sourcesUnavailable, setSourcesUnavailable] = useState(false);
+  const [sourcesAttempt, setSourcesAttempt] = useState(0);
+  const filters = {
+    status,
+    presentationId: sourceId,
+    fromDate,
+    toDate,
+    search,
+    expectedWorkspaceId: workspaceId,
+  };
+  const analyticsQuery = buildHistoryFilterQuery(filters);
+  const {
+    items: sessions,
+    loaded,
+    nextCursor,
+    loading,
+    loadingMore,
+    error,
+    retry,
+    more,
+  } = useHistoryPage<PresentationResultSummary>("/v1/presentation-sessions/results", filters);
+
+  useEffect(() => {
+    const queued = moreFocus.current;
+    if (!queued) return;
+    if (queued.query !== analyticsQuery) {
+      moreFocus.current = null;
+      return;
+    }
+    if (loadingMore) return;
+    moreFocus.current = null;
+    const triggerRemoved = !queued.button.isConnected;
+    if (
+      document.activeElement === queued.button ||
+      (triggerRemoved && document.activeElement === document.body)
+    ) {
+      const firstAdded = collection.current?.querySelectorAll<HTMLElement>("article")[queued.count];
+      if (firstAdded) firstAdded.focus();
+      else if (triggerRemoved) panel.current?.focus();
+    }
+  }, [analyticsQuery, loadingMore, nextCursor, sessions.length]);
 
   useEffect(() => {
     if (!workspaceId) return;
     const controller = new AbortController();
-    const isCurrent = () => !controller.signal.aborted && activeWorkspace.current === workspaceId;
-    setFetching(true);
-    setSnapshot((current) =>
-      current.workspaceId === workspaceId ? { ...current, error: "" } : current,
-    );
-    void apiFetch<{ sessions: PresentationResultSummary[] }>(
-      "/v1/presentation-sessions?includeReportStatus=true",
+    void apiFetch<{ sources: RoundFilterOption[] }>(
+      `/v1/presentation-sessions/results/sources?expectedWorkspaceId=${encodeURIComponent(workspaceId)}`,
       { signal: controller.signal },
     )
-      .then((response) => {
-        if (isCurrent())
-          setSnapshot({ workspaceId, sessions: response.sessions, error: "", loaded: true });
+      .then(({ sources }) => {
+        if (!controller.signal.aborted) setSources(sources);
       })
-      .catch((caught) => {
-        if (isCurrent())
-          setSnapshot((current) => ({
-            workspaceId,
-            sessions: current.workspaceId === workspaceId ? current.sessions : [],
-            error: humanError(caught),
-            loaded: current.workspaceId === workspaceId && current.loaded,
-          }));
-      })
-      .finally(() => {
-        if (isCurrent()) setFetching(false);
+      .catch(() => {
+        if (!controller.signal.aborted) setSourcesUnavailable(true);
       });
     return () => controller.abort();
-  }, [workspaceId, reload]);
+  }, [workspaceId, sourcesAttempt]);
 
-  const search = listControls.search.trim().toLocaleLowerCase();
-  const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
-  const to = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
-  const visible = sessions.filter((session) => {
-    const createdAt = new Date(session.createdAt).getTime();
-    return (
-      (!search || session.title.toLocaleLowerCase().includes(search)) &&
-      (status === "all" || session.status === status) &&
-      (sourceId === "all" || session.presentationId === sourceId) &&
-      createdAt >= from &&
-      createdAt <= to
-    );
-  });
-  const sources = Array.from(
-    new Map(
-      sessions.map((session) => [
-        session.presentationId,
-        { id: session.presentationId, title: session.title },
-      ]),
-    ).values(),
+  const filtered = Boolean(
+    listControls.search || status !== "all" || sourceId !== "all" || fromDate || toDate,
   );
-  const filtered = Boolean(search || status !== "all" || sourceId !== "all" || fromDate || toDate);
 
   function clearFilters() {
     setStatus("all");
@@ -964,21 +972,14 @@ function PresentationResultList(listControls: ListControls) {
     listControls.onSearchClear();
   }
 
-  function retryHistory() {
-    if (loading || !error) return;
-    setFetching(true);
-    setSnapshot((current) => ({ ...current, error: "" }));
-    setReload((value) => value + 1);
-  }
-
   return (
-    <ResultsPanel view="presentations" busy={loading} panelRef={panel}>
+    <ResultsPanel view="presentations" panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
-        count={visible.length}
-        countAvailable={snapshot.workspaceId === workspaceId && snapshot.loaded}
+        count={sessions.length}
+        countAvailable={loaded}
         loading={loading}
-        hasMore={false}
+        hasMore={Boolean(nextCursor)}
         status={status}
         statusLabel={t("pages.common.statusLabel")}
         statusOptions={[
@@ -998,10 +999,28 @@ function PresentationResultList(listControls: ListControls) {
         onToDateChange={setToDate}
         onClear={clearFilters}
       />
-      {!loading && !error && visible.length > 0 ? (
-        <ResultsOverview
-          kind="presentations"
-          items={visible}
+      {sourcesUnavailable ? (
+        <div className={resultStyles.loadError}>
+          <p role="alert">{t("resultsOverview.presentationSourcesUnavailable")}</p>
+          <button
+            className="button-quiet"
+            type="button"
+            onClick={() => {
+              panel.current?.focus();
+              setSourcesUnavailable(false);
+              setSourcesAttempt((current) => current + 1);
+            }}
+          >
+            {t("resultsOverview.retryPresentationSources")}
+          </button>
+        </div>
+      ) : null}
+      {workspaceId ? (
+        <PresentationResultsOverview
+          key={analyticsQuery}
+          query={analyticsQuery}
+          items={sessions}
+          hasMore={Boolean(nextCursor)}
           grouping={grouping}
           onGroupingChange={setGrouping}
         />
@@ -1010,18 +1029,18 @@ function PresentationResultList(listControls: ListControls) {
         <ResultsLoading
           label={t("pages.results.loadingPresentations")}
           layout={listControls.layout}
-          hasRows={visible.length > 0}
+          hasRows={sessions.length > 0}
         />
       ) : null}
-      {error && !loading ? (
+      {error && !loading && !loadingMore ? (
         <ResultsLoadError
           error={error}
-          onRetry={retryHistory}
+          onRetry={retry}
           panelRef={panel}
           retained={sessions.length > 0}
         />
       ) : null}
-      {!loading && !error && !visible.length ? (
+      {!loading && !error && !sessions.length ? (
         <div className={styles.emptyState}>
           <h2>
             {t(filtered ? "pages.results.noMatches" : "pages.results.emptyPresentationsTitle")}
@@ -1044,13 +1063,17 @@ function PresentationResultList(listControls: ListControls) {
         className={resultStyles.collection}
         data-view={listControls.layout}
         aria-label={t("pages.results.presentationResults")}
+        aria-busy={loading || loadingMore}
+        ref={collection}
       >
-        {visible.map((session) => (
+        {sessions.map((session) => (
           <article
             className={`${styles.listCard} ${resultStyles.card} ${signals.surface}`}
+            aria-label={session.title}
             data-kind="presentation"
             data-state-tone={workspaceStateTone(session.status)}
             key={session.id}
+            tabIndex={-1}
           >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
@@ -1112,6 +1135,25 @@ function PresentationResultList(listControls: ListControls) {
           </article>
         ))}
       </section>
+      {nextCursor ? (
+        <div className={styles.loadMore}>
+          <button
+            className="button-quiet"
+            aria-disabled={loadingMore}
+            type="button"
+            onClick={(event) => {
+              if (loadingMore) return;
+              const button = event.currentTarget;
+              if (button?.matches(":focus")) {
+                moreFocus.current = { query: analyticsQuery, count: sessions.length, button };
+              }
+              void more();
+            }}
+          >
+            {loadingMore ? t("pages.common.loading") : t("pages.results.loadMore")}
+          </button>
+        </div>
+      ) : null}
     </ResultsPanel>
   );
 }

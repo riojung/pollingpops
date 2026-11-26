@@ -1,4 +1,8 @@
-import type { FollowupHistoryAnalytics, ReportHistoryAnalytics } from "@openround/contracts";
+import type {
+  FollowupHistoryAnalytics,
+  PresentationResultsAnalytics,
+  ReportHistoryAnalytics,
+} from "@openround/contracts";
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { useLocale } from "../../components/locale-provider";
@@ -98,7 +102,12 @@ type Props = ActivityGroupingControls & { hasMore?: boolean } & (
         analytics: FollowupHistoryAnalytics | "loading" | "unavailable";
         onAnalyticsRetry: () => void;
       }
-    | { kind: "presentations"; items: readonly PresentationResultSummary[] }
+    | {
+        kind: "presentations";
+        items: readonly PresentationResultSummary[];
+        analytics: PresentationResultsAnalytics | "loading" | "unavailable";
+        onAnalyticsRetry: () => void;
+      }
     | { kind: "surveys"; items: readonly SurveySessionSummary[] }
   );
 
@@ -199,6 +208,30 @@ function ResultLinks({ links, label }: { links: readonly ResultLink[]; label: st
   );
 }
 
+const historyAnalyticsCopy = {
+  rounds: {
+    scope: "resultsOverview.allReportsScope",
+    loading: "resultsOverview.reportTotalsLoading",
+    unavailable: "resultsOverview.reportTotalsUnavailable",
+    retry: "resultsOverview.retryReportTotals",
+    empty: "resultsOverview.noMatchingReportActivity",
+  },
+  practice: {
+    scope: "resultsOverview.allPracticeScope",
+    loading: "resultsOverview.practiceAnalyticsLoading",
+    unavailable: "resultsOverview.practiceAnalyticsUnavailable",
+    retry: "resultsOverview.retryPracticeAnalytics",
+    empty: "resultsOverview.noMatchingPracticeActivity",
+  },
+  presentations: {
+    scope: "resultsOverview.allPresentationScope",
+    loading: "resultsOverview.presentationAnalyticsLoading",
+    unavailable: "resultsOverview.presentationAnalyticsUnavailable",
+    retry: "resultsOverview.retryPresentationAnalytics",
+    empty: "resultsOverview.noMatchingPresentationActivity",
+  },
+} as const;
+
 export function ResultsOverview(props: Props) {
   const { locale, t } = useLocale();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -212,8 +245,8 @@ export function ResultsOverview(props: Props) {
   let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
   let shownCount = props.items.length;
-  const isPractice = props.kind === "practice";
-  const usesHistoryAnalytics = props.kind === "rounds" || isPractice;
+  const usesHistoryAnalytics = props.kind !== "surveys";
+  const historyCopy = usesHistoryAnalytics ? historyAnalyticsCopy[props.kind] : undefined;
   const analytics = usesHistoryAnalytics ? props.analytics : undefined;
   const hasFullAnalytics = typeof analytics === "object";
   const hasLoadedEvidence = !usesHistoryAnalytics || props.items.length > 0;
@@ -313,8 +346,19 @@ export function ResultsOverview(props: Props) {
       </>
     );
   } else if (props.kind === "presentations") {
-    const summary = presentationOverview(props.items);
-    dates = props.items.map((item) => item.createdAt);
+    const summary =
+      typeof props.analytics === "object"
+        ? {
+            count: props.analytics.active + props.analytics.finished,
+            active: props.analytics.active,
+            finished: props.analytics.finished,
+            joins: props.analytics.participantJoins,
+          }
+        : presentationOverview(props.items);
+    if (hasFullAnalytics) {
+      shownLabel = t("resultsOverview.matchingPresentationSessions");
+      shownCount = summary.count;
+    }
     links = props.items
       .filter(
         (item) =>
@@ -342,7 +386,9 @@ export function ResultsOverview(props: Props) {
         <dt>{t("resultsOverview.participantJoins")}</dt>
         <dd>
           {number(summary.joins)}
-          <p>{t("resultsOverview.joinScope")}</p>
+          <p>
+            {t(hasFullAnalytics ? "resultsOverview.fullJoinScope" : "resultsOverview.joinScope")}
+          </p>
         </dd>
       </>
     );
@@ -396,19 +442,16 @@ export function ResultsOverview(props: Props) {
           {t("resultsOverview.title")}
         </h2>
         <p role={usesHistoryAnalytics ? "status" : undefined}>
-          {hasFullAnalytics
-            ? t(isPractice ? "resultsOverview.allPracticeScope" : "resultsOverview.allReportsScope")
+          {hasFullAnalytics && historyCopy
+            ? t(historyCopy.scope)
             : hasLoadedEvidence
               ? t("resultsOverview.scope", { count: number(props.items.length) })
               : null}
           {props.kind === "rounds" && hasFullAnalytics && hasLoadedEvidence
             ? ` ${t("resultsOverview.loadedReportsEvidence")}`
             : null}
-          {analytics === "loading"
-            ? ` ${t(isPractice ? "resultsOverview.practiceAnalyticsLoading" : "resultsOverview.reportTotalsLoading")}`
-            : null}
-          {analytics === "unavailable"
-            ? ` ${t(isPractice ? "resultsOverview.practiceAnalyticsUnavailable" : "resultsOverview.reportTotalsUnavailable")}`
+          {historyCopy && (analytics === "loading" || analytics === "unavailable")
+            ? ` ${t(historyCopy[analytics])}`
             : null}
         </p>
         {usesHistoryAnalytics && analytics === "unavailable" ? (
@@ -420,11 +463,7 @@ export function ResultsOverview(props: Props) {
               props.onAnalyticsRetry();
             }}
           >
-            {t(
-              isPractice
-                ? "resultsOverview.retryPracticeAnalytics"
-                : "resultsOverview.retryReportTotals",
-            )}
+            {t(historyAnalyticsCopy[props.kind].retry)}
           </button>
         ) : null}
       </div>
@@ -467,7 +506,7 @@ export function ResultsOverview(props: Props) {
               </div>
             ) : null}
           </div>
-          {hasLoadedEvidence || (isPractice && hasFullAnalytics) ? (
+          {hasLoadedEvidence || (props.kind !== "rounds" && hasFullAnalytics) ? (
             <>
               <div className={styles.widget}>{primary}</div>
               <dl className={styles.widget}>{secondary}</dl>
@@ -481,27 +520,19 @@ export function ResultsOverview(props: Props) {
             periods={periods}
             dateBasis={dateBasis}
             timeZone={hasFullAnalytics ? "UTC" : undefined}
-            empty={
-              hasFullAnalytics
-                ? t(
-                    isPractice
-                      ? "resultsOverview.noMatchingPracticeActivity"
-                      : "resultsOverview.noMatchingReportActivity",
-                  )
-                : undefined
-            }
+            empty={hasFullAnalytics && historyCopy ? t(historyCopy.empty) : undefined}
             grouping={props.grouping}
             onGroupingChange={props.onGroupingChange}
           />
           {hasLoadedEvidence ? <ResultLinks label={linksLabel} links={links} /> : null}
         </div>
       ) : null}
-      {props.hasMore ? (
+      {props.hasMore && props.kind !== "presentations" ? (
         <p className={styles.more}>
           {t(
             props.kind === "rounds"
               ? "resultsOverview.moreRoundEvidence"
-              : isPractice
+              : props.kind === "practice"
                 ? "resultsOverview.morePracticeItems"
                 : "resultsOverview.more",
           )}

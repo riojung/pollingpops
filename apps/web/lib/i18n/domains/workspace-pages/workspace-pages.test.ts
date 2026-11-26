@@ -48,6 +48,16 @@ const resultsWorkspaceKeys = [
   "resultsOverview.noMatchingPracticeActivity",
   "resultsOverview.morePracticeItems",
   "resultsOverview.practiceDateBasis",
+  "resultsOverview.allPresentationScope",
+  "resultsOverview.matchingPresentationSessions",
+  "resultsOverview.presentationAnalyticsLoading",
+  "resultsOverview.presentationAnalyticsUnavailable",
+  "resultsOverview.retryPresentationAnalytics",
+  "resultsOverview.noMatchingPresentationActivity",
+  "resultsOverview.fullJoinScope",
+  "resultsOverview.presentationSourcesUnavailable",
+  "resultsOverview.retryPresentationSources",
+  "resultsOverview.sessionDateBasis",
 ] as const;
 
 describe("Results workspace messages", () => {
@@ -68,8 +78,9 @@ describe("Results workspace messages", () => {
   });
 
   it("loads analytics and interpolates Results controls through the scoped route catalog", async () => {
-    const domains = localeDomainsForPath("/results?view=practice");
+    const domains = localeDomainsForPath("/results?view=presentations");
     expect(domains).toEqual(["workspace-pages"]);
+    expect(localeDomainsForPath("/results?view=practice")).toEqual(domains);
 
     for (const locale of supportedLocales) {
       const messages = await loadMessages(locale, domains);
@@ -78,6 +89,7 @@ describe("Results workspace messages", () => {
         expect(messages[key], `${locale}:${key}`).toBe(workspaceMessages[key]);
       }
       expect(messages["resultsOverview.practiceDateBasis"], locale).toContain("UTC");
+      expect(messages["resultsOverview.sessionDateBasis"], locale).toContain("UTC");
 
       const results = translate(messages, "pages.results.resultCount", { count: 12 });
       const practice = translate(messages, "pages.results.practiceCount", { count: 7 });

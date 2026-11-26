@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { FollowupSummarySchema, ReportSummarySchema } from "../../packages/contracts/src/index.ts";
+import {
+  FollowupSummarySchema,
+  PresentationResultSummarySchema,
+  ReportSummarySchema,
+} from "../../packages/contracts/src/index.ts";
 import { signInBeta } from "./sign-in";
 import { specialistLocale } from "./option-b-specialist-support";
 import {
@@ -16,13 +20,16 @@ const reportsPath = "/v1/reports";
 const reportTotalsPath = "/v1/reports/totals";
 const practicePath = "/v1/followups";
 const practiceAnalyticsPath = "/v1/followups/analytics";
+const presentationResultsPath = "/v1/presentation-sessions/results";
+const presentationAnalyticsPath = `${presentationResultsPath}/analytics`;
+const presentationSourcesPath = `${presentationResultsPath}/sources`;
 const longTitle = "Synthetic workshop · 함께 검토 · " + "LongUnbrokenTitle".repeat(5);
 const views = [
   { key: "results", path: reportsPath, search: "Search Round results" },
   { key: "practice", path: practicePath, search: "Search practice" },
   {
     key: "presentations",
-    path: "/v1/presentation-sessions",
+    path: presentationResultsPath,
     search: "Search Presentation results",
   },
   { key: "surveys", path: "/v1/survey-rooms", search: "Search Survey results" },
@@ -52,6 +59,19 @@ const historyAnalytics = {
     loadingMessage: "Loading practice totals and activity…",
     scopeMessage: "Practice totals and activity include every page matching your filters.",
     retryLabel: "Retry practice analytics",
+    query: {},
+  },
+  presentations: {
+    kind: "session",
+    path: presentationAnalyticsPath,
+    collectionLabel: "Presentation Results",
+    countLabel: "Matching sessions",
+    shortcutLabel: "Reports to open",
+    emptyMessage: "No Presentation sessions match these filters.",
+    errorMessage: "Presentation totals and activity could not load.",
+    loadingMessage: "Loading Presentation totals and activity…",
+    scopeMessage: "Presentation totals and activity include every page matching your filters.",
+    retryLabel: "Retry Presentation analytics",
     query: {},
   },
 } as const;
@@ -105,9 +125,15 @@ async function signedInWorkspaceId(page: Page) {
 
 type AnalyticsView = (typeof historyAnalytics)[keyof typeof historyAnalytics];
 
-async function expectNoLoadedEvidence(overview: Locator, analytics: AnalyticsView) {
+async function expectNoLoadedEvidence(
+  overview: Locator,
+  analytics: AnalyticsView,
+  fullHistory = false,
+) {
   await expect(overview.getByText("Results shown", { exact: true })).toHaveCount(0);
-  await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
+  if (!fullHistory || analytics.kind !== "session") {
+    await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
+  }
   await expect(overview.getByText(/loaded (?:reports|results)/)).toHaveCount(0);
   await expect(
     overview.getByRole("region", { name: analytics.shortcutLabel, exact: true }),
@@ -172,26 +198,23 @@ async function installHistory(page: Page) {
     expiresAt,
     createdAt,
   });
+  const presentation = PresentationResultSummarySchema.parse({
+    id: randomUUID(),
+    presentationId: randomUUID(),
+    title: longTitle,
+    status: "finished",
+    reportStatus: "ready",
+    phase: "finished",
+    blockCount: 4,
+    participantCount: 12,
+    responseCount: 24,
+    createdAt,
+    finishedAt: createdAt,
+  });
   const histories: Record<string, { envelope: string; rows: Array<{ title: string }> }> = {
     [reportsPath]: { envelope: "items", rows: [report] },
     [practicePath]: { envelope: "items", rows: [practice] },
-    "/v1/presentation-sessions": {
-      envelope: "sessions",
-      rows: [
-        {
-          id: randomUUID(),
-          presentationId: randomUUID(),
-          title: longTitle,
-          status: "finished",
-          phase: "finished",
-          blockCount: 4,
-          participantCount: 12,
-          responseCount: 24,
-          createdAt,
-          finishedAt: createdAt,
-        } as { title: string },
-      ],
-    },
+    [presentationResultsPath]: { envelope: "items", rows: [presentation] },
     "/v1/survey-rooms": {
       envelope: "rooms",
       rows: [
@@ -211,7 +234,13 @@ async function installHistory(page: Page) {
   const reads: Array<{ path: string; query: string }> = [];
   const mutations: string[] = [];
   const gates = new Map<string, { promise: Promise<void>; release: () => void; held: boolean }>();
-  for (const path of [...Object.keys(histories), reportTotalsPath, practiceAnalyticsPath]) {
+  for (const path of [
+    ...Object.keys(histories),
+    reportTotalsPath,
+    practiceAnalyticsPath,
+    presentationAnalyticsPath,
+    presentationSourcesPath,
+  ]) {
     let release!: () => void;
     const promise = new Promise<void>((done) => {
       release = done;
@@ -235,7 +264,9 @@ async function installHistory(page: Page) {
     const history = histories[url.pathname];
     const isReportTotals = url.pathname === reportTotalsPath;
     const isPracticeAnalytics = url.pathname === practiceAnalyticsPath;
-    if (!history && !isReportTotals && !isPracticeAnalytics) return route.continue();
+    const isPresentationAnalytics = url.pathname === presentationAnalyticsPath;
+    const isPresentationSources = url.pathname === presentationSourcesPath;
+    if (!gates.has(url.pathname)) return route.continue();
     reads.push({ path: url.pathname, query: url.search });
     const gate = gates.get(url.pathname)!;
     if (allowed.has(url.pathname) && !gate.held) {
@@ -285,10 +316,29 @@ async function installHistory(page: Page) {
         },
       });
     }
+    if (isPresentationAnalytics) {
+      const matches = matchesSearch(presentation);
+      const periods = matches ? [{ start: "2026-10-01", count: 1 }] : [];
+      return route.fulfill({
+        json: {
+          active: 0,
+          finished: Number(matches),
+          participantJoins: matches ? presentation.participantCount : 0,
+          activity: { month: periods, quarter: periods },
+        },
+      });
+    }
+    if (isPresentationSources) {
+      return route.fulfill({
+        json: {
+          sources: [{ id: presentation.presentationId, title: "Synthetic source Presentation" }],
+        },
+      });
+    }
     return route.fulfill({
       json: {
         [history.envelope]: history.rows.filter(matchesSearch),
-        ...(history.envelope === "sessions" ? {} : { nextCursor: null }),
+        nextCursor: null,
       },
     });
   });
@@ -312,6 +362,7 @@ async function installHistory(page: Page) {
 for (const [view, listPath] of [
   ["results", reportsPath],
   ["practice", practicePath],
+  ["presentations", presentationResultsPath],
 ] as const) {
   const analytics = historyAnalytics[view];
   test(`Results keeps full-history analytics while the first ${analytics.kind} page loads or fails`, async ({
@@ -324,8 +375,15 @@ for (const [view, listPath] of [
     try {
       fixture.allow(listPath);
       fixture.allow(analytics.path);
+      if (view === "presentations") {
+        fixture.allow(presentationSourcesPath);
+        fixture.release(presentationSourcesPath);
+      }
       await page.goto(
-        view === "practice" ? "/results?view=practice&q=workshop" : "/results?q=workshop",
+        `/results?${new URLSearchParams({
+          ...(view === "results" ? {} : { view }),
+          q: "workshop",
+        })}`,
       );
       const panel = page.locator("#results-panel");
       const collection = panel.getByRole("region", {
@@ -364,10 +422,15 @@ for (const [view, listPath] of [
             overview.getByRole("meter", { name: "Completed attempts", exact: true }),
           ).toHaveAttribute("aria-valuetext", "9 completed of 12 attempts");
         }
+        if (view === "presentations") {
+          await expect(
+            overview.getByText("Participant joins", { exact: true }).locator("..").locator("dd"),
+          ).toHaveText(/^12\s*Join records across matching sessions\.$/);
+        }
       };
       await expectFullHistory();
       await expect(collection.getByRole("article")).toHaveCount(0);
-      await expectNoLoadedEvidence(overview, analytics);
+      await expectNoLoadedEvidence(overview, analytics, true);
       if (view === "results") await expect(overview.getByRole("meter")).toHaveCount(0);
 
       const queriesFor = (path: string) =>
@@ -385,7 +448,7 @@ for (const [view, listPath] of [
       await expect(retry).toBeVisible();
       await expectFullHistory();
       await expect(panel.getByText(/^0 (?:results|practice items) shown$/)).toHaveCount(0);
-      await expectNoLoadedEvidence(overview, analytics);
+      await expectNoLoadedEvidence(overview, analytics, true);
       if (view === "results") await expect(overview.getByRole("meter")).toHaveCount(0);
 
       const readsBeforeRetry = fixture.reads.length;
@@ -423,8 +486,7 @@ for (const phone of [false, true]) {
           `/results?${new URLSearchParams({ ...(view.key === "results" ? {} : { view: view.key }), q: "workshop" })}`,
         );
         const panel = page.locator("#results-panel");
-        const analytics =
-          view.key === "results" || view.key === "practice" ? historyAnalytics[view.key] : null;
+        const analytics = view.key === "surveys" ? null : historyAnalytics[view.key];
         const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
         const analyticsStatus = overview.getByRole("status");
         const busyRegion = analytics
@@ -540,6 +602,37 @@ for (const phone of [false, true]) {
           ).toBeFocused();
         }
 
+        if (view.key === "presentations") {
+          const sourcesRetry = panel.getByRole("button", {
+            name: "Retry Presentation options",
+            exact: true,
+          });
+          const source = panel.getByRole("combobox", { name: "Presentation", exact: true });
+          await expect(
+            panel.getByText("Presentation filter options could not load.", { exact: true }),
+          ).toBeVisible();
+          await expect(source.getByRole("option")).toHaveCount(1);
+          const readsBeforeRetry = fixture.reads.length;
+          await tabTo(page, sourcesRetry, true);
+          await expectVisibleKeyboardFocus(sourcesRetry);
+          fixture.allow(presentationSourcesPath);
+          fixture.release(presentationSourcesPath);
+          await page.keyboard.press("Enter");
+          await expect(panel).toBeFocused();
+          await expect(sourcesRetry).toHaveCount(0);
+          await expect(source.getByRole("option")).toHaveText([
+            "All Presentations",
+            "Synthetic source Presentation",
+          ]);
+          await expect(busyRegion).toHaveAttribute("aria-busy", "false");
+          expect(fixture.reads.slice(readsBeforeRetry)).toEqual([
+            {
+              path: presentationSourcesPath,
+              query: `?expectedWorkspaceId=${expectedWorkspaceId}`,
+            },
+          ]);
+        }
+
         const search = page.getByRole("searchbox", { name: view.search, exact: true });
         await search.fill("no-matching-synthetic-evidence");
         await expect
@@ -574,7 +667,7 @@ for (const phone of [false, true]) {
         const readsBeforeSearch = fixture.reads.length;
         await search.fill("workshop");
         await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("workshop");
-        if (view.key === "practice") {
+        if (view.key === "practice" || view.key === "presentations") {
           await expect
             .poll(() =>
               fixture.reads

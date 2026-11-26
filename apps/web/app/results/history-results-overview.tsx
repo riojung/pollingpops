@@ -1,4 +1,9 @@
-import { FollowupHistoryAnalyticsSchema, ReportHistoryAnalyticsSchema } from "@openround/contracts";
+import {
+  FollowupHistoryAnalyticsSchema,
+  PresentationResultsAnalyticsSchema,
+  ReportHistoryAnalyticsSchema,
+  type PresentationResultSummary,
+} from "@openround/contracts";
 import { useEffect, useState } from "react";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
 import { apiFetch } from "../../lib/api";
@@ -55,4 +60,15 @@ export function PracticeResultsOverview({
     FollowupHistoryAnalyticsSchema.parse,
   );
   return <ResultsOverview {...overview} {...analytics} kind="practice" />;
+}
+
+export function PresentationResultsOverview({
+  query,
+  ...overview
+}: HistoryOverviewProps<PresentationResultSummary>) {
+  const analytics = useHistoryAnalytics(
+    `/v1/presentation-sessions/results/analytics?${query}`,
+    PresentationResultsAnalyticsSchema.parse,
+  );
+  return <ResultsOverview {...overview} {...analytics} kind="presentations" />;
 }

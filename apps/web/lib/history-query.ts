@@ -1,6 +1,7 @@
 export interface HistoryQueryFilters {
   status: string;
-  quizId: string;
+  quizId?: string;
+  presentationId?: string;
   fromDate: string;
   toDate: string;
   search?: string;
@@ -11,7 +12,10 @@ function applyHistoryFilters(params: URLSearchParams, filters: HistoryQueryFilte
   if (filters.expectedWorkspaceId) params.set("expectedWorkspaceId", filters.expectedWorkspaceId);
   if (filters.search?.trim()) params.set("search", filters.search.trim());
   if (filters.status !== "all") params.set("status", filters.status);
-  if (filters.quizId !== "all") params.set("quizId", filters.quizId);
+  if (filters.quizId && filters.quizId !== "all") params.set("quizId", filters.quizId);
+  if (filters.presentationId && filters.presentationId !== "all") {
+    params.set("presentationId", filters.presentationId);
+  }
   if (filters.fromDate) {
     params.set("from", new Date(`${filters.fromDate}T00:00:00`).toISOString());
   }

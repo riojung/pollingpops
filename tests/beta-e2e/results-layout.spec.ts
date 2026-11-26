@@ -5,12 +5,15 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import type {
   FollowupHistoryAnalytics,
   FollowupSummary,
+  PresentationResultSummary,
+  PresentationResultsAnalytics,
   ReportSummary,
 } from "@openround/contracts";
 import { signInBeta } from "./sign-in";
 
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const web = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
+const presentationResultsPath = "/v1/presentation-sessions/results";
 
 test.use({ timezoneId: "America/Edmonton" });
 
@@ -31,13 +34,13 @@ function canceledReadKey(rawUrl: string) {
 function historyFilter(query: URLSearchParams) {
   const search = (query.get("search") ?? "").toLocaleLowerCase();
   const status = query.get("status");
-  const source = query.get("quizId");
+  const source = query.get("quizId") ?? query.get("presentationId");
   const from = query.get("from");
   const to = query.get("to");
-  return (item: ReportSummary | FollowupSummary) =>
+  return (item: ReportSummary | FollowupSummary | PresentationResultSummary) =>
     (!search || item.title.toLocaleLowerCase().includes(search)) &&
     (!status || item.status === status) &&
-    (!source || item.quizId === source) &&
+    (!source || ("quizId" in item ? item.quizId : item.presentationId) === source) &&
     (!from || new Date(item.createdAt) >= new Date(from)) &&
     (!to || new Date(item.createdAt) <= new Date(to));
 }
@@ -202,19 +205,46 @@ async function mockHistory(page: Page) {
           };
     },
   );
-  const presentations = ["finished", "active"].map((status) => ({
-    id: randomUUID(),
-    presentationId: randomUUID(),
-    title: `Synthetic ${status} Presentation`,
-    status,
-    reportStatus: status === "finished" ? "ready" : null,
-    phase: status === "finished" ? "finished" : "revealed",
-    participantCount: 12,
-    responseCount: 24,
-    blockCount: 4,
-    createdAt,
-    finishedAt: status === "finished" ? createdAt : null,
-  }));
+  const presentationSources = [
+    "Synthetic finished Presentation source",
+    "Synthetic active Presentation source",
+    "Synthetic workshop source",
+    "Synthetic archive source",
+  ].map((title) => ({ id: randomUUID(), title }));
+  const olderPresentationDates = [
+    "2026-09-30T12:00:00.000Z",
+    "2026-07-01T00:15:00.000Z",
+    "2026-04-01T00:15:00.000Z",
+    "2026-01-01T00:15:00.000Z",
+    "2025-10-01T00:15:00.000Z",
+    "2025-07-01T00:15:00.000Z",
+    "2025-04-01T00:15:00.000Z",
+  ];
+  const presentations: PresentationResultSummary[] = Array.from(
+    { length: 25 + olderPresentationDates.length },
+    (_, index) => {
+      const date =
+        index === 0 ? recentReportDate : (olderPresentationDates[index - 25] ?? createdAt);
+      const status = index === 1 ? "active" : "finished";
+      const title =
+        ["Synthetic finished Presentation", "Synthetic active Presentation"][index] ??
+        `Synthetic workshop session ${index}`;
+      const sourceIndex = index < 2 ? index : index < 25 ? 2 : 3;
+      return {
+        id: randomUUID(),
+        presentationId: presentationSources[sourceIndex]!.id,
+        title,
+        status,
+        reportStatus: index === 0 ? "ready" : index === 25 ? "pending" : null,
+        phase: status === "finished" ? "finished" : "question_reveal",
+        participantCount: index < 25 ? 12 : index - 12,
+        responseCount: 24,
+        blockCount: 4,
+        createdAt: date,
+        finishedAt: status === "finished" ? date : null,
+      };
+    },
+  );
   const surveys = [
     {
       id: randomUUID(),
@@ -238,7 +268,8 @@ async function mockHistory(page: Page) {
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
   const totalsReads: URLSearchParams[] = [];
   const practiceAnalyticsReads: URLSearchParams[] = [];
-  let presentationReads = 0;
+  const presentationAnalyticsReads: URLSearchParams[] = [];
+  const presentationSourceReads: URLSearchParams[] = [];
   await page.route(`${api}/v1/quizzes?*`, (route) =>
     route.fulfill({
       json: {
@@ -252,6 +283,7 @@ async function mockHistory(page: Page) {
   for (const [path, items] of [
     ["/v1/reports", reports],
     ["/v1/followups", followups],
+    [presentationResultsPath, presentations],
   ] as const) {
     await page.route(`${api}${path}?*`, (route) => {
       const query = new URL(route.request().url()).searchParams;
@@ -315,10 +347,35 @@ async function mockHistory(page: Page) {
       return route.fulfill({ json: analytics });
     },
   );
-  await page.route(`${api}/v1/presentation-sessions?includeReportStatus=true`, (route) => {
-    presentationReads += 1;
-    return route.fulfill({ json: { sessions: presentations } });
-  });
+  await page.route(
+    (url) => url.origin === api && url.pathname === `${presentationResultsPath}/analytics`,
+    (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      presentationAnalyticsReads.push(query);
+      const filtered = presentations.filter(historyFilter(query));
+      const analytics: PresentationResultsAnalytics = {
+        active: 0,
+        finished: 0,
+        participantJoins: 0,
+        activity: {
+          month: activityPeriods(filtered, "month"),
+          quarter: activityPeriods(filtered, "quarter"),
+        },
+      };
+      for (const item of filtered) {
+        analytics[item.status]++;
+        analytics.participantJoins += item.participantCount;
+      }
+      return route.fulfill({ json: analytics });
+    },
+  );
+  await page.route(
+    (url) => url.origin === api && url.pathname === `${presentationResultsPath}/sources`,
+    (route) => {
+      presentationSourceReads.push(new URL(route.request().url()).searchParams);
+      return route.fulfill({ json: { sources: presentationSources } });
+    },
+  );
   await page.route(`${api}/v1/survey-rooms?*`, (route) =>
     route.fulfill({ json: { rooms: surveys, nextCursor: null } }),
   );
@@ -332,7 +389,9 @@ async function mockHistory(page: Page) {
     reads,
     totalsReads,
     practiceAnalyticsReads,
-    presentationReadCount: () => presentationReads,
+    presentationAnalyticsReads,
+    presentationSources,
+    presentationSourceReads,
   };
 }
 
@@ -760,8 +819,54 @@ for (const mobile of [false, true]) {
     await views.getByRole("link", { name: "Presentations", exact: true }).click();
     await expect(page).toHaveURL(/\/results\?view=presentations$/);
     const presentations = page.getByRole("region", { name: "Presentation Results", exact: true });
-    await expect(presentations.getByRole("article")).toHaveCount(2);
-    await expect(joins).toContainText("24");
+    const presentationReads = () =>
+      fixture.reads
+        .filter(({ path }) => path === presentationResultsPath)
+        .map(({ query }) => Object.fromEntries(query));
+    const presentationAnalyticsReads = () =>
+      fixture.presentationAnalyticsReads.map((query) => Object.fromEntries(query));
+    const presentationSources = page.getByRole("combobox", { name: "Presentation", exact: true });
+    const matchingSessions = overview
+      .getByText("Matching sessions", { exact: true })
+      .locator("..")
+      .locator("dd");
+    const presentationDistribution = overview.getByRole("group", {
+      name: "Matching sessions",
+      exact: true,
+    });
+    const presentationPeriods = activity.getByRole("listitem");
+    const presentationMonthCounts = [
+      /Jan.*2026\s*1$/,
+      /Apr.*2026\s*1$/,
+      /Jul.*2026\s*1$/,
+      /Sep.*2026\s*1$/,
+      /Oct.*2026\s*24$/,
+      /Nov.*2026\s*1$/,
+    ];
+    const expectFullPresentationHistory = async () => {
+      await expect(matchingSessions).toHaveText("32");
+      await expect(presentationDistribution.getByRole("listitem")).toHaveText([
+        /^Finished\s*31$/,
+        /^Active\s*1$/,
+      ]);
+      await expect(joins).toContainText("412");
+      await expect(joins).toContainText("Join records across matching sessions.");
+    };
+    await expect(presentations.getByRole("article")).toHaveCount(25);
+    await expect(overview).toContainText(
+      "Presentation totals and activity include every page matching your filters.",
+    );
+    await expect(activity).toContainText("Grouped by session creation date in UTC.");
+    await expectFullPresentationHistory();
+    await expect(presentationPeriods).toHaveText(presentationMonthCounts);
+    await expect(presentationSources.locator("option")).toContainText(
+      fixture.presentationSources.map(({ title }) => title),
+    );
+    expect(presentationReads()).toEqual([{ limit: "25", expectedWorkspaceId }]);
+    expect(presentationAnalyticsReads()).toEqual([{ expectedWorkspaceId }]);
+    expect(fixture.presentationSourceReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
     await expect(reportLinks.getByRole("link")).toHaveCount(1);
     await expect(
       reportLinks.getByRole("link", { name: fixture.presentations[0]!.title, exact: true }),
@@ -787,20 +892,87 @@ for (const mobile of [false, true]) {
     await expect(
       activePresentation.getByRole("link", { name: "View Presentation", exact: true }),
     ).toHaveAttribute("href", `/presentation/${fixture.presentations[1]!.presentationId}`);
-    const presentationReads = fixture.presentationReadCount();
-    await page
-      .getByRole("searchbox", { name: "Search Presentation results", exact: true })
-      .fill("finished");
+    await expect(
+      activePresentation.getByText("Current question responses", { exact: true }).locator(".."),
+    ).toContainText("24");
+
+    const presentationSearch = page.getByRole("searchbox", {
+      name: "Search Presentation results",
+      exact: true,
+    });
+    const presentationStatus = page.getByRole("combobox", { name: "Status", exact: true });
+    const presentationFilters = page.getByRole("region", { name: "History filters", exact: true });
+    await presentationSources.selectOption(fixture.presentationSources[3]!.id);
+    await expect(presentations.getByRole("article")).toHaveCount(7);
+    await expect(matchingSessions).toHaveText("7");
+    await expect(
+      presentations.getByRole("heading", { name: "Synthetic workshop session 25", exact: true }),
+    ).toBeVisible();
+    await presentationStatus.selectOption("finished");
+    await presentationFilters.getByLabel("From", { exact: true }).fill("2026-09-30");
+    await presentationFilters.getByLabel("To", { exact: true }).fill("2026-09-30");
+    await presentationSearch.fill(" workshop ");
+    const scopedPresentationFilters = {
+      expectedWorkspaceId,
+      search: "workshop",
+      status: "finished",
+      presentationId: fixture.presentationSources[3]!.id,
+      from: "2026-09-30T06:00:00.000Z",
+      to: "2026-10-01T05:59:59.999Z",
+    };
+    await expect
+      .poll(() => presentationReads().at(-1))
+      .toEqual({ limit: "25", ...scopedPresentationFilters });
+    await expect.poll(() => presentationAnalyticsReads().at(-1)).toEqual(scopedPresentationFilters);
     await expect(presentations.getByRole("article")).toHaveCount(1);
-    await expect(joins).toContainText("12");
-    await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
+    await expect(matchingSessions).toHaveText("1");
+    await expect(joins).toContainText("13");
+    await expect(presentationPeriods).toHaveText([/Sep.*2026\s*1$/]);
+    await expect(
+      reportLinks.getByRole("link", { name: fixture.presentations[25]!.title, exact: true }),
+    ).toHaveAttribute("href", `/presentation-session/${fixture.presentations[25]!.id}/report`);
+    await presentationStatus.selectOption("active");
     await expect(page.getByText("No results match these filters.", { exact: true })).toBeVisible();
+    await expect(
+      activity.getByText("No Presentation sessions match these filters.", { exact: true }),
+    ).toBeVisible();
+    await expect(matchingSessions).toHaveText("0");
     await toolbarClear(page).click();
-    await expect(presentations.getByRole("article")).toHaveCount(2);
-    expect(fixture.presentationReadCount()).toBe(presentationReads);
-    await page
-      .getByRole("combobox", { name: "Presentation", exact: true })
-      .selectOption(fixture.presentations[0]!.presentationId);
+    await expect(presentations.getByRole("article")).toHaveCount(25);
+    await expectFullPresentationHistory();
+
+    const readsBeforeMore = fixture.reads.length;
+    const analyticsBeforeMore = fixture.presentationAnalyticsReads.length;
+    await expect(
+      page.getByText("25 results shown · More available", { exact: true }),
+    ).toBeVisible();
+    const loadMorePresentations = page.getByRole("button", { name: "Load More", exact: true });
+    await loadMorePresentations.focus();
+    await page.keyboard.press("Enter");
+    await expect(presentations.getByRole("article")).toHaveCount(32);
+    await expect(loadMorePresentations).toHaveCount(0);
+    await expect(
+      presentations.getByRole("article", { name: fixture.presentations[25]!.title, exact: true }),
+    ).toBeFocused();
+    await expect(page.getByText("32 results shown", { exact: true })).toBeVisible();
+    await expectFullPresentationHistory();
+    await expect(presentationPeriods).toHaveText(presentationMonthCounts);
+    await grouping.selectOption("quarter");
+    await expect(presentationPeriods).toHaveText([
+      /Jul.*Sep.*2025\s*1$/,
+      /Oct.*Dec.*2025\s*1$/,
+      /Jan.*Mar.*2026\s*1$/,
+      /Apr.*Jun.*2026\s*1$/,
+      /Jul.*Sep.*2026\s*2$/,
+      /Oct.*Dec.*2026\s*25$/,
+    ]);
+    expect(fixture.reads.slice(readsBeforeMore).map(({ path }) => path)).toEqual([
+      presentationResultsPath,
+    ]);
+    expect(presentationReads().at(-1)).toEqual({ limit: "25", expectedWorkspaceId, cursor: "25" });
+    expect(fixture.presentationAnalyticsReads).toHaveLength(analyticsBeforeMore);
+    expect(fixture.presentationSourceReads).toHaveLength(1);
+    await presentationSources.selectOption(fixture.presentations[0]!.presentationId);
     await expect(presentation).toBeVisible();
     await expect(presentations.getByRole("article")).toHaveCount(1);
     await page.getByRole("button", { name: "Grid view", exact: true }).click();

@@ -1909,10 +1909,16 @@ practice items by UTC month or quarter of creation and shows the six most recent
 **Retry practice analytics** retries the dashboard separately from the list. **Load More** adds
 rows. The practice shortcuts show up to three recent items from the list.
 
-Presentation and Survey views use loaded records for their totals and charts. Their activity dates
-reflect when each Presentation session was created or the scheduled collection deadline for each
-Survey. Shortcuts open ready Round Analytics, available Presentation reports, retained Survey
-results, or practice details.
+In the **Presentations** view, **Matching sessions**, status counts, participant joins, and the
+activity chart include every page matching the workspace and filters. A join is a participant
+record in a session. The same person can contribute joins in multiple sessions. The chart shows
+the six latest UTC months or quarters with matching session creation dates. The Presentation
+filter offers sources from retained sessions across pages. **Load More** loads older matching
+rows. **Retry Presentation analytics** retries totals and activity separately from the list.
+
+Survey totals and charts use loaded runs, grouped by the scheduled collection deadline.
+Shortcuts open ready Round Analytics, available Presentation reports, retained Survey results,
+or practice details.
 
 Round recovery combines recovered and eligible opportunities from ready reports. Practice completion
 uses completed attempts out of all recorded attempts in the matching runs. Round and Presentation

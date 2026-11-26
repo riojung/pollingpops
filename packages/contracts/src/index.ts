@@ -3561,6 +3561,12 @@ export const ReportSummaryPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type ReportSummaryPage = z.infer<typeof ReportSummaryPageSchema>;
+export const ReportHistoryTotalsSchema = z.object({
+  ready: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+export type ReportHistoryTotals = z.infer<typeof ReportHistoryTotalsSchema>;
 export const FollowupSummaryPageSchema = z.object({
   items: z.array(FollowupSummarySchema),
   nextCursor: z.string().nullable(),

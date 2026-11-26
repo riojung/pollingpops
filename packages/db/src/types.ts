@@ -22,6 +22,7 @@ import type {
   RecoveryPackPracticeSource,
   RecoveryPackPracticeSequence,
   Report,
+  ReportHistoryTotals,
   ResponsePayload,
   SessionDecisionEvent,
   SessionCounts,
@@ -773,6 +774,20 @@ export interface ReportHistoryRecord {
   /** Exact database timestamp used to create the next opaque keyset cursor. */
   cursorCreatedAt?: string;
   expiresAt: Date;
+}
+
+export interface ReportHistoryFilters {
+  search?: string;
+  status?: Report["status"];
+  quizId?: string;
+  from?: Date;
+  to?: Date;
+}
+
+export interface ReportHistoryListOptions extends ReportHistoryFilters {
+  cursor?: HistoryCursor;
+  limit: number;
+  now: Date;
 }
 
 interface FollowupHistoryRecordBase {
@@ -1634,17 +1649,12 @@ export interface Repository {
   ): Promise<QuestionHealthObservationReportPage>;
   listReportHistory(
     workspaceId: string,
-    options: {
-      cursor?: HistoryCursor;
-      limit: number;
-      search?: string;
-      status?: Report["status"];
-      quizId?: string;
-      from?: Date;
-      to?: Date;
-      now: Date;
-    },
+    options: ReportHistoryListOptions,
   ): Promise<HistoryPage<ReportHistoryRecord>>;
+  getReportHistoryTotals(
+    workspaceId: string,
+    filters: ReportHistoryFilters,
+  ): Promise<ReportHistoryTotals>;
   createFollowup(
     input: Extract<FollowupRecord, { purpose: "recovery" }>,
     access: FollowupAccessRecord[],

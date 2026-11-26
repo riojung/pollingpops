@@ -1974,7 +1974,7 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
   });
 
-  it("searches retained Round and practice results before pagination under restricted PostgreSQL permissions", async () => {
+  it("searches retained Round and practice results and counts matching reports under restricted PostgreSQL permissions", async () => {
     await expectResultsHistorySearchConformance(
       repository,
       await creator("results-history-owner"),

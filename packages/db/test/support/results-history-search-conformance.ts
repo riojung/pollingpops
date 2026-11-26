@@ -4,7 +4,7 @@ import { createGameState } from "@openround/game-engine";
 import type { QuizDraft } from "@openround/contracts";
 import type { CreatorContext, Repository } from "../../src/index.js";
 
-/** Search must operate on retained history before the cursor and page limit. */
+/** Search and report totals use retained history across pages. */
 export async function expectResultsHistorySearchConformance(
   repository: Repository,
   owner: CreatorContext,
@@ -85,11 +85,12 @@ export async function expectResultsHistorySearchConformance(
         updatedAt: createdAt,
       });
       const reportId = `${reportIdPrefix}${index.toString(16).padStart(12, "0")}`;
+      const status = index === 0 ? "pending" : index === 2 ? "failed" : "ready";
       await repository.saveReport(actor.workspaceId, {
         id: reportId,
         sessionId,
-        status: index === 0 ? "pending" : "ready",
-        generatedAt: index === 0 ? null : now.toISOString(),
+        status,
+        generatedAt: status === "ready" ? now.toISOString() : null,
         expiresAt: expiresAt.toISOString(),
         metrics: { participantCount: 0, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
         questions: [],
@@ -140,6 +141,8 @@ export async function expectResultsHistorySearchConformance(
 
   const reports = (options: Partial<Parameters<Repository["listReportHistory"]>[1]> = {}) =>
     repository.listReportHistory(owner.workspaceId, { limit: 25, now, ...options });
+  const totals = (filters: Parameters<Repository["getReportHistoryTotals"]>[1] = {}) =>
+    repository.getReportHistoryTotals(owner.workspaceId, filters);
   const followups = (options: Partial<Parameters<Repository["listFollowupHistory"]>[1]> = {}) =>
     repository.listFollowupHistory(owner.workspaceId, { limit: 25, now, ...options });
   for (const history of [reports, followups]) {
@@ -178,6 +181,31 @@ export async function expectResultsHistorySearchConformance(
   expect((await reports({ search: "needle", status: "ready" })).items.map(({ id }) => id)).toEqual([
     owned.reports[1],
   ]);
+  expect(await totals()).toEqual({ ready: 26, pending: 1, failed: 1 });
+  expect(await totals({ search: "  NeEdLe  ", quizId: owned.quizId })).toEqual({
+    ready: 1,
+    pending: 1,
+    failed: 0,
+  });
+  expect(await totals({ search: "%_", status: "pending", from: now, to: expiresAt })).toEqual({
+    ready: 0,
+    pending: 1,
+    failed: 0,
+  });
+  expect(await totals({ status: "failed" })).toEqual({ ready: 0, pending: 0, failed: 1 });
+  expect(await repository.getReportHistoryTotals(outsider.workspaceId, {})).toEqual({
+    ready: 1,
+    pending: 1,
+    failed: 0,
+  });
+  for (const filters of [
+    { quizId: foreign.quizId },
+    { search: "Renamed library source" },
+    { from: expiresAt },
+    { to: new Date(0) },
+  ]) {
+    expect(await totals(filters)).toEqual({ ready: 0, pending: 0, failed: 0 });
+  }
   expect(
     (await followups({ search: "needle", purpose: "recovery" })).items.map(({ id }) => id),
   ).toEqual([owned.followups[0]]);

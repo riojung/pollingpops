@@ -13,7 +13,11 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
-import { buildHistoryQuery, type HistoryQueryFilters } from "../../lib/history-query";
+import {
+  buildHistoryFilterQuery,
+  buildHistoryQuery,
+  type HistoryQueryFilters,
+} from "../../lib/history-query";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 import { formatDateTime, formatNumber, pluralCategory } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
@@ -36,6 +40,7 @@ import signals from "../../components/workspace/workspace-signals.module.css";
 import resultStyles from "./results.module.css";
 import { PackPracticeAttribution } from "../../components/practice/pack-practice-attribution";
 import { EvidenceMeter, ResultKindIcon, ResultsOverview } from "./results-overview";
+import { RoundResultsOverview } from "./round-results-overview";
 import {
   evidencePercent,
   type PresentationResultSummary,
@@ -103,7 +108,7 @@ function ResultsSummary({
 function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
-  const { status, quizId, fromDate, toDate, search } = filters;
+  const { status, quizId, fromDate, toDate, search, expectedWorkspaceId } = filters;
   const queryKey = `${workspaceId}\u0000${path}?${buildHistoryQuery(filters)}`;
   const activeQueryKey = useRef(queryKey);
   activeQueryKey.current = queryKey;
@@ -130,10 +135,10 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
   const fetchPage = useCallback(
     (cursor?: string, signal?: AbortSignal) =>
       apiFetch<CursorPage<T>>(
-        `${path}?${buildHistoryQuery({ status, quizId, fromDate, toDate, search }, cursor)}`,
+        `${path}?${buildHistoryQuery({ status, quizId, fromDate, toDate, search, expectedWorkspaceId }, cursor)}`,
         { signal },
       ),
-    [path, status, quizId, fromDate, toDate, search],
+    [path, status, quizId, fromDate, toDate, search, expectedWorkspaceId],
   );
 
   useEffect(() => {
@@ -428,12 +433,23 @@ function followupLifecycleLabel(report: ReportSummary, t: ReturnType<typeof useL
 
 function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
   const { locale, t } = useLocale();
+  const { creator } = useWorkspace();
+  const workspaceId = creator?.workspaceId;
   const panel = useRef<HTMLElement>(null);
   const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [status, setStatus] = useState<ReportStatusFilter>("all");
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const filters = {
+    status,
+    quizId,
+    fromDate,
+    toDate,
+    search: listControls.search,
+    expectedWorkspaceId: workspaceId,
+  };
+  const totalsQuery = buildHistoryFilterQuery(filters);
   const {
     items: reports,
     loaded,
@@ -443,13 +459,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
     error,
     retry,
     more,
-  } = useHistoryPage<ReportSummary>("/v1/reports", {
-    status,
-    quizId,
-    fromDate,
-    toDate,
-    search: listControls.search,
-  });
+  } = useHistoryPage<ReportSummary>("/v1/reports", filters);
   const hasFilters = Boolean(
     status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
   );
@@ -488,9 +498,10 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         ]}
         toDate={toDate}
       />
-      {!loading && reports.length > 0 ? (
-        <ResultsOverview
-          kind="rounds"
+      {workspaceId ? (
+        <RoundResultsOverview
+          key={totalsQuery}
+          query={totalsQuery}
           items={reports}
           hasMore={Boolean(nextCursor)}
           grouping={grouping}

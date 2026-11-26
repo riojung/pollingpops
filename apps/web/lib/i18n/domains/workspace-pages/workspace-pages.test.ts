@@ -23,7 +23,7 @@ const sessionWorkflowKeys = [
   "pages.sessions.deleteSurveyConfirm",
 ] as const;
 
-const resultToolbarKeys = [
+const resultsWorkspaceKeys = [
   "pages.results.searchRounds",
   "pages.results.searchPresentations",
   "pages.results.searchPractice",
@@ -31,13 +31,19 @@ const resultToolbarKeys = [
   "pages.results.practiceCount",
   "pages.results.moreAvailable",
   "pages.results.layoutLabel",
+  "resultsOverview.matchingReports",
+  "resultsOverview.allReportsScope",
+  "resultsOverview.loadedReportsEvidence",
+  "resultsOverview.reportTotalsLoading",
+  "resultsOverview.reportTotalsUnavailable",
+  "resultsOverview.retryReportTotals",
 ] as const;
 
 describe("Results workspace messages", () => {
-  it("explicitly translates toolbar controls and preserves placeholders in every locale", async () => {
+  it("explicitly translates toolbar controls and Round report totals in every locale", async () => {
     for (const locale of supportedLocales.filter((candidate) => candidate !== "en-CA")) {
       const messages = await loadWorkspacePageMessages(locale);
-      for (const key of resultToolbarKeys) {
+      for (const key of resultsWorkspaceKeys) {
         const message = messages[key];
         const englishMessage = workspacePageEnglishMessages[key];
 
@@ -57,7 +63,7 @@ describe("Results workspace messages", () => {
     for (const locale of supportedLocales) {
       const messages = await loadMessages(locale, domains);
       const workspaceMessages = await loadWorkspacePageMessages(locale);
-      for (const key of resultToolbarKeys) {
+      for (const key of resultsWorkspaceKeys) {
         expect(messages[key], `${locale}:${key}`).toBe(workspaceMessages[key]);
       }
 

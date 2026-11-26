@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type {
   PresentationSessionInsights,
   PresentationSessionInsightsEnvelope,
@@ -21,6 +21,15 @@ import {
 } from "../../lib/presentation-session-insights-export";
 import { presentationInsightsCopy } from "../../lib/i18n/presentation-insights-copy";
 import styles from "./insights.module.css";
+
+const insightsTabs = [
+  { id: "overview", label: "Overview" },
+  { id: "delivery", label: "Delivery" },
+  { id: "coverage", label: "Response coverage" },
+  { id: "opinion", label: "Opinion results" },
+  { id: "qna", label: "Q&A" },
+] as const;
+type InsightsTab = (typeof insightsTabs)[number]["id"];
 
 function Facts({ rows, compact = false }: { rows: Array<[string, string]>; compact?: boolean }) {
   return (
@@ -47,93 +56,242 @@ function TableTitle({ table }: { table: PresentationInsightsTable }) {
     table.title
   );
 }
+
+function InsightsTable({ table }: { table: PresentationInsightsTable }) {
+  const headingId = useId();
+  const scale = table.visualization?.description;
+  return (
+    <section className={styles.tableSection} data-category={table.category}>
+      <h3 id={headingId}>
+        <TableTitle table={table} />
+      </h3>
+      {scale ? (
+        <p className={styles.scale} id={`${headingId}-scale`}>
+          {scale}
+        </p>
+      ) : null}
+      <div className={styles.table} tabIndex={0} role="region" aria-labelledby={headingId}>
+        <table aria-describedby={scale ? `${headingId}-scale` : undefined}>
+          <caption className="sr-only">
+            <TableTitle table={table} />
+          </caption>
+          <thead>
+            <tr>
+              {table.columns.map((column) => (
+                <th scope="col" key={column}>
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row, index) => (
+              <tr key={index}>
+                {row.map((cell, column) => {
+                  const language = table.authoredCells?.[index]?.[column] ? "" : undefined;
+                  if (column === 0) {
+                    return (
+                      <th scope="row" key={column} lang={language}>
+                        {cell}
+                      </th>
+                    );
+                  }
+                  const fraction =
+                    column === table.visualization?.column
+                      ? table.visualization.fractions[index]
+                      : null;
+                  return (
+                    <td key={column} lang={language}>
+                      {cell}
+                      {fraction != null ? (
+                        <span className={styles.metricTrack} aria-hidden="true">
+                          <span style={{ width: `${fraction * 100}%` }} />
+                        </span>
+                      ) : null}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {table.note ? <p className={styles.note}>{table.note}</p> : null}
+    </section>
+  );
+}
+
 export function PresentationInsightsDetails({
   insights,
   locale = "en-CA",
+  activeTab,
+  onSelectTab,
 }: {
   insights: PresentationSessionInsights;
   locale?: SupportedLocale;
+  activeTab: InsightsTab;
+  onSelectTab: (tab: InsightsTab) => void;
 }) {
+  const tabsId = useId();
   const copy = presentationInsightsCopy(locale);
-  const view = presentationInsightsView(insights, locale, copy);
+  const view = useMemo(() => {
+    const copy = presentationInsightsCopy(locale);
+    return presentationInsightsView(insights, locale, (key, values) =>
+      copy(
+        key === "Frozen session content; session additions are marked below."
+          ? "Frozen session content. See Delivery for items added during this session."
+          : key,
+        values,
+      ),
+    );
+  }, [insights, locale]);
+  const totals = insights.delivery.totals;
+  const deliveryParts = [
+    { status: "presented", count: totals.presentedBlocks },
+    { status: "skipped", count: totals.skippedBlocks },
+    { status: "unknown", count: totals.unknownBlocks },
+  ];
+
+  function moveTabFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = (index + 1) % insightsTabs.length;
+        break;
+      case "ArrowLeft":
+        next = (index + insightsTabs.length - 1) % insightsTabs.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = insightsTabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    const id = insightsTabs[next]!.id;
+    onSelectTab(id);
+    event.currentTarget.ownerDocument.getElementById(`${tabsId}-tab-${id}`)?.focus();
+  }
+
+  function selectedContent() {
+    if (activeTab === "overview") {
+      return (
+        <>
+          <div className={styles.overviewFacts}>
+            <Facts rows={view.facts.slice(8, 11)} />
+          </div>
+          <details className={styles.metadata}>
+            <summary>
+              {copy("Published version")} · {view.facts[0]?.[1]}
+            </summary>
+            <div className={styles.metadataGroups}>
+              <Facts rows={[...view.facts.slice(0, 3), ...view.facts.slice(6, 8)]} compact />
+              <Facts rows={view.facts.slice(3, 6)} compact />
+            </div>
+          </details>
+          <details className={styles.notes}>
+            <summary>{copy("Reading these insights")}</summary>
+            <ul>
+              {view.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </details>
+        </>
+      );
+    }
+    if (activeTab === "qna") {
+      const asOf = insights.qna.status === "available" ? insights.qna.asOf : null;
+      return (
+        <section className={styles.qna}>
+          <h3>{copy("Q&A outcomes")}</h3>
+          {asOf ? (
+            <>
+              <Facts rows={view.qna.slice(0, -1)} />
+              <p className={styles.snapshot}>
+                {copy("Q&A data as of")} ·{" "}
+                <time dateTime={asOf}>{new Date(asOf).toLocaleString(locale)}</time>
+              </p>
+            </>
+          ) : null}
+          <p className={styles.note}>{view.qnaNote}</p>
+        </section>
+      );
+    }
+
+    const tables = view.tables.filter((table) => table.category === activeTab);
+    return (
+      <>
+        {activeTab === "delivery" ? (
+          <section className={styles.delivery}>
+            <h3>{copy("Delivery coverage")}</h3>
+            <Facts rows={view.facts.slice(10)} />
+            {totals.totalBlocks > 0 ? (
+              <div className={styles.deliveryTrack} aria-hidden="true">
+                {deliveryParts
+                  .filter((part) => part.count > 0)
+                  .map((part) => (
+                    <span
+                      key={part.status}
+                      data-status={part.status}
+                      style={{ flex: part.count }}
+                    />
+                  ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+        {tables.map((table) => (
+          <InsightsTable table={table} key={table.title} />
+        ))}
+        {activeTab !== "delivery" && tables.length === 0 ? (
+          <p className={styles.empty}>
+            {copy(
+              activeTab === "opinion"
+                ? "No opinion or Quick Check results are available for this session."
+                : "No response coverage was recorded for this session.",
+            )}
+          </p>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <div className={styles.details} lang={locale}>
-      <section>
-        <h3>{copy("Delivery coverage")}</h3>
-        <Facts rows={view.facts.slice(8)} />
-      </section>
-      <details className={styles.metadata}>
-        <summary>
-          {copy("Published version")} · {view.facts[0]?.[1]}
-        </summary>
-        <div className={styles.metadataGroups}>
-          <Facts rows={[...view.facts.slice(0, 3), ...view.facts.slice(6, 8)]} compact />
-          <Facts rows={view.facts.slice(3, 6)} compact />
+      <div className={styles.tabs} role="tablist" aria-label={copy("Session insights")}>
+        {insightsTabs.map((tab, index) => (
+          <button
+            key={tab.id}
+            id={`${tabsId}-tab-${tab.id}`}
+            role="tab"
+            type="button"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`${tabsId}-panel-${tab.id}`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => onSelectTab(tab.id)}
+            onKeyDown={(event) => moveTabFocus(event, index)}
+          >
+            {copy(tab.label)}
+          </button>
+        ))}
+      </div>
+      {insightsTabs.map((tab) => (
+        <div
+          key={tab.id}
+          id={`${tabsId}-panel-${tab.id}`}
+          className={styles.tabPanel}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-tab-${tab.id}`}
+          hidden={activeTab !== tab.id}
+          tabIndex={activeTab === tab.id ? 0 : -1}
+        >
+          {activeTab === tab.id ? selectedContent() : null}
         </div>
-      </details>
-      {view.tables.map((table, index) => (
-        <details className={styles.tableSection} key={table.title} open={index === 0}>
-          <summary>
-            <h3>
-              <TableTitle table={table} />
-            </h3>
-          </summary>
-          <div className={styles.table} tabIndex={0} role="region" aria-label={table.title}>
-            <table>
-              <caption className="sr-only">
-                <TableTitle table={table} />
-              </caption>
-              <thead>
-                <tr>
-                  {table.columns.map((column) => (
-                    <th scope="col" key={column}>
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {table.rows.map((row, index) => (
-                  <tr key={index}>
-                    {row.map((cell, column) =>
-                      column === 0 ? (
-                        <th
-                          scope="row"
-                          key={column}
-                          lang={table.authoredCells?.[index]?.[column] ? "" : undefined}
-                        >
-                          {cell}
-                        </th>
-                      ) : (
-                        <td
-                          key={column}
-                          lang={table.authoredCells?.[index]?.[column] ? "" : undefined}
-                        >
-                          {cell}
-                        </td>
-                      ),
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {table.note ? <p className={styles.note}>{table.note}</p> : null}
-        </details>
       ))}
-      <section className={styles.qna}>
-        <h3>{copy("Q&A outcomes")}</h3>
-        <Facts rows={view.qna} />
-        <p className={styles.note}>{view.qnaNote}</p>
-      </section>
-      <details className={styles.notes}>
-        <summary>{copy("Reading these insights")}</summary>
-        <ul>
-          {view.notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      </details>
     </div>
   );
 }
@@ -153,6 +311,7 @@ export function PresentationSessionInsightsPanel({
   const [loadFailed, setLoadFailed] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [activeTab, setActiveTab] = useState<InsightsTab>("overview");
   const [downloadError, setDownloadError] = useState("");
   const [downloadStarted, setDownloadStarted] = useState(false);
   const releaseDownload = useRef<(() => void) | null>(null);
@@ -256,10 +415,23 @@ export function PresentationSessionInsightsPanel({
       ) : null}
       {current ? (
         <>
-          <p className={styles.downloadNotice}>
-            {copy("Downloaded copies cannot be revoked. Keep them within the intended audience.")}
-          </p>
-          <PresentationInsightsDetails insights={current} locale={locale} />
+          <div className={styles.panelContext}>
+            <p className={styles.snapshot}>
+              {copy("Insights calculated")} ·{" "}
+              <time dateTime={current.freshness.calculatedAt}>
+                {new Date(current.freshness.calculatedAt).toLocaleString(locale)}
+              </time>
+            </p>
+            <p>
+              {copy("Downloaded copies cannot be revoked. Keep them within the intended audience.")}
+            </p>
+          </div>
+          <PresentationInsightsDetails
+            insights={current}
+            locale={locale}
+            activeTab={activeTab}
+            onSelectTab={setActiveTab}
+          />
         </>
       ) : null}
       {downloadError ? (

@@ -9,12 +9,19 @@ import type {
 } from "./i18n/presentation-insights-copy";
 
 export interface PresentationInsightsTable {
+  category: "delivery" | "coverage" | "opinion";
   title: string;
   /** UI language boundaries; downloadable copies use the canonical title and rows. */
   titleParts?: Array<{ text: string; authored: boolean }>;
   columns: string[];
   rows: string[][];
   authoredCells?: boolean[][];
+  /** Zero-based column index and one fraction per row. Null means a bar is unavailable. */
+  visualization?: {
+    column: number;
+    fractions: readonly (number | null)[];
+    description?: string;
+  };
   note?: string;
 }
 export interface PresentationInsightsView {
@@ -115,6 +122,7 @@ export function presentationInsightsView(
   ];
   const tables: PresentationInsightsTable[] = [
     {
+      category: "delivery",
       title: copy("Section delivery"),
       columns: [
         copy("Section"),
@@ -138,6 +146,7 @@ export function presentationInsightsView(
       ),
     },
     {
+      category: "delivery",
       title: copy("Block delivery"),
       columns: [copy("Block"), copy("Type"), copy("Section"), copy("Delivery"), copy("Source")],
       rows: value.delivery.blocks.map((block) => [
@@ -231,6 +240,7 @@ export function presentationInsightsView(
       return row;
     });
     tables.push({
+      category: "coverage",
       title: copy("Response coverage · {purpose}", { purpose: copy(purposes[purpose]) }),
       columns: [
         copy("Activity"),
@@ -243,6 +253,12 @@ export function presentationInsightsView(
       ],
       rows,
       authoredCells: questions.map((question) => [hasAuthoredBlockTitle(question.blockId)]),
+      visualization: {
+        column: 5,
+        fractions: questions.map(({ responseRatePercent }) =>
+          responseRatePercent === null ? null : responseRatePercent / 100,
+        ),
+      },
       note:
         purpose === "text"
           ? copy(
@@ -278,6 +294,7 @@ export function presentationInsightsView(
           ]);
         if (question.distributionStatus !== "available") {
           tables.push({
+            category: "opinion",
             title,
             titleParts,
             columns: [copy("Distribution availability")],
@@ -301,37 +318,50 @@ export function presentationInsightsView(
           });
           continue;
         }
+        const weighted = question.measure === "weighted_points";
+        const maximum = weighted
+          ? Math.max(...question.results.map((result) => result.value))
+          : question.acceptedRespondents!;
         tables.push({
+          category: "opinion",
           title,
           titleParts,
           columns: [
             copy("Option"),
-            question.measure === "weighted_points"
-              ? copy("Weighted rank points")
-              : copy("Respondents selecting option"),
+            weighted ? copy("Weighted rank points") : copy("Respondents selecting option"),
           ],
           rows: question.results.map((result) => [result.label, number(result.value)]),
           authoredCells: question.results.map(() => [true]),
-          note:
-            question.measure === "weighted_points"
+          visualization: {
+            column: 1,
+            fractions: question.results.map(({ value }) => {
+              if (value > maximum) return null;
+              return maximum === 0 ? 0 : value / maximum;
+            }),
+            description: weighted
+              ? copy("Bars are scaled to the highest weighted score ({maximum}).", {
+                  maximum: number(maximum),
+                })
+              : copy("Bars show the share of accepted respondents who selected each option."),
+          },
+          note: weighted
+            ? copy(
+                "Distribution available. Ranking points are separate from response coverage and assessment accuracy.",
+              )
+            : (question.maxSelections ?? 1) > 1
               ? copy(
-                  "Distribution available. Ranking points are separate from response coverage and assessment accuracy.",
+                  "Distribution available. Participants may choose several options. Option counts do not represent distinct people across options.",
                 )
-              : (question.maxSelections ?? 1) > 1
-                ? copy(
-                    "Distribution available. Participants may choose several options. Option counts do not represent distinct people across options.",
-                  )
-                : purpose === "quick_check"
-                  ? copy(
-                      "Distribution available. Option counts use accepted Quick Check responses.",
-                    )
-                  : copy("Distribution available. Option counts use accepted opinion responses."),
+              : purpose === "quick_check"
+                ? copy("Distribution available. Option counts use accepted Quick Check responses.")
+                : copy("Distribution available. Option counts use accepted opinion responses."),
         });
       }
     }
   }
   if (value.recovery.length)
     tables.push({
+      category: "coverage",
       title: copy("Recovery evidence"),
       columns: [
         copy("Initial activity"),

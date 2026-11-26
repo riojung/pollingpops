@@ -1897,25 +1897,31 @@ Open an individual Survey report for response counts and question results. No-ev
 separate from a measured zero.
 
 Finished Presentation reports include **Session insights** for the session's frozen published
-version. Section and block delivery show what the facilitator presented, skipped, or did not
-record. Revisiting a block counts once. These measures describe delivery, not learner completion
-or understanding; elapsed time is wall-clock time.
+version. **Overview** shows participant entries, accepted responses, blocks presented, and when
+the insights were calculated. Use **Published version** for the session, report, and retention
+dates. **Delivery** breaks down what the facilitator presented, skipped, or did not record by
+section and block. Revisiting a block counts once. These measures describe delivery, not learner
+completion or understanding. Elapsed time is wall-clock time.
 
-Response coverage compares accepted responses with participant identities joined by the original
+**Response coverage** compares accepted responses with participant identities joined by the original
 answer reveal. Someone who joined later is excluded from that activity's denominator. Joined
 identities are not verified people, devices or attendance, and response records across activities
 are not unique respondents. Older sessions without a reveal roster show **Not recorded**, rather
 than substituting the final participant count. Positive activity samples below five are hidden.
-Opinion distributions stay separate from assessed evidence, which remains in the detailed report.
-Recovery uses initially incorrect participants who also submitted the linked recheck.
+This view also includes paired recovery for initially incorrect participants who submitted the
+linked recheck. **Opinion results** shows qualifying opinion and Quick Check distributions.
+Option bars show the share of accepted respondents who picked each option. Weighted ranking
+bars are scaled to the highest score recorded for the activity. Assessment accuracy remains in
+the detailed report.
 
-Q&A counts reflect currently published or answered questions, with their own snapshot time;
+**Q&A** counts reflect currently published or answered questions, with their own snapshot time;
 pending, dismissed and removed questions are excluded. They may change after the session finishes,
 while the delivery and response evidence stays frozen. Question bodies, participant names and
 presenter notes are excluded from insights. Private review-link views are not tracked.
 
-Use **Export coverage CSV** or **Download readable summary** in Session insights for private
-aggregate copies. The HTML summary works offline without scripts or remote assets. These files
+Use **Refresh insights** to request an updated snapshot. **Export coverage CSV** and **Download
+readable summary** include the whole insights snapshot from any view. The HTML summary works
+offline without scripts or remote assets. These files
 are deliberate copies and cannot be revoked after download. The existing detailed-report CSV,
 versioned JSON and **Share summary** controls keep their existing behavior.
 

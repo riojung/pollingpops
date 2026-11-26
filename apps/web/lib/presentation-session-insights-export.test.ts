@@ -16,9 +16,13 @@ describe("truthful Presentation insights projection", () => {
     value.delivery.blocks[0]!.title = "Content";
     value.delivery.blocks[2]!.title = "Presented {block} $&";
     value.delivery.sections[0]!.title = "Presented";
-    value.participation.questions.find(
+    const opinion = value.participation.questions.find(
       (question) => question.purpose === "opinion",
-    )!.results[0]!.label = "Not recorded";
+    )!;
+    opinion.results[0]!.label = "Not recorded";
+    opinion.joinedByRevealCount = 11;
+    opinion.notRespondedByRevealCount = 6;
+    opinion.responseRatePercent = 45.5;
     const before = structuredClone(value);
     const csv = presentationInsightsCsv(value, "de-DE");
     const html = presentationInsightsHtml(value, "de-DE");
@@ -31,11 +35,15 @@ describe("truthful Presentation insights projection", () => {
       "UI Frozen session content; session additions are marked below.",
     ]);
     const sections = view.tables.find((table) => table.title === "UI Section delivery")!;
+    expect(sections.category).toBe("delivery");
+    expect(sections.visualization).toBeUndefined();
     expect(sections.rows[0]![0]).toBe("Presented");
     expect(sections.authoredCells![0]![0]).toBe(true);
     expect(sections.rows[2]![0]).toBe("UI Unsectioned");
     expect(sections.authoredCells![2]![0]).toBe(false);
     const blocks = view.tables.find((table) => table.title === "UI Block delivery")!;
+    expect(blocks.category).toBe("delivery");
+    expect(blocks.visualization).toBeUndefined();
     expect(blocks.rows[0]).toEqual([
       "1. Content",
       "UI Content",
@@ -44,9 +52,25 @@ describe("truthful Presentation insights projection", () => {
       "UI Published content",
     ]);
     expect(blocks.authoredCells![0]).toEqual([true, false, true]);
+    const coverage = view.tables.find(
+      (table) => table.title === "UI Response coverage · UI Opinion activities",
+    )!;
+    expect(coverage.category).toBe("coverage");
+    expect(coverage.visualization).toEqual({ column: 5, fractions: [0.455] });
+    expect(coverage.columns[coverage.visualization!.column]).toBe("UI Response rate");
+    expect(coverage.rows[0]![coverage.visualization!.column]).toBe("45,5%");
     const distribution = view.tables.find((table) =>
       table.title.startsWith("UI Opinion distribution"),
     )!;
+    expect(distribution.category).toBe("opinion");
+    expect(distribution.visualization).toEqual({
+      column: 1,
+      fractions: [0.6, 0.4],
+      description: "UI Bars show the share of accepted respondents who selected each option.",
+    });
+    expect(distribution.columns[distribution.visualization!.column]).toBe(
+      "UI Respondents selecting option",
+    );
     expect(distribution.title).toBe("UI Opinion distribution · 3. Presented {block} $&");
     expect(distribution.titleParts?.filter((part) => part.authored)).toEqual([
       { text: "3. Presented {block} $&", authored: true },
@@ -56,11 +80,15 @@ describe("truthful Presentation insights projection", () => {
     const skipped = view.tables.find((table) =>
       table.title.startsWith("UI Quick Check distribution"),
     )!;
+    expect(skipped.category).toBe("opinion");
+    expect(skipped.visualization).toBeUndefined();
     expect(skipped.rows[0]).toEqual(["UI Not applicable"]);
     expect(skipped.authoredCells?.[0]?.[0]).not.toBe(true);
     expect(value).toEqual(before);
     expect(presentationInsightsCsv(value, "de-DE")).toBe(csv);
     expect(presentationInsightsHtml(value, "de-DE")).toBe(html);
+    expect(csv).not.toContain("Bars show the share");
+    expect(html).not.toContain("Bars show the share");
   });
 
   it("localizes generated block fallbacks while marking no authored language on missing titles", () => {
@@ -85,6 +113,7 @@ describe("truthful Presentation insights projection", () => {
     const assessment = view.tables.find(
       (table) => table.title === "Response coverage · Assessed activities",
     )!;
+    expect(assessment.visualization).toEqual({ column: 5, fractions: [1, 0.5, null, null] });
     expect(assessment.rows[0]!.slice(2, 7)).toEqual(["10", "10", "0", "100%", "Recorded"]);
     expect(
       assessment.rows.find((row) => row[0]!.includes("Recorded zero roster"))!.slice(2, 7),
@@ -107,6 +136,7 @@ describe("truthful Presentation insights projection", () => {
   it("separates suppressed text, opinion option counts, skipped Quick Checks and paired recovery", () => {
     const view = presentationInsightsView(presentationInsightsFixture());
     const text = view.tables.find((table) => table.title.includes("Moderated text activities"))!;
+    expect(text.visualization).toEqual({ column: 5, fractions: [null] });
     expect(text.rows[0]!.slice(1, 6)).toEqual([
       "Hidden · fewer than 5 responses",
       "Hidden",
@@ -115,6 +145,7 @@ describe("truthful Presentation insights projection", () => {
       "Hidden",
     ]);
     const skipped = view.tables.find((table) => table.title.includes("Session-only Quick Checks"))!;
+    expect(skipped.visualization).toEqual({ column: 5, fractions: [null] });
     expect(skipped.rows[0]!.slice(1, 4)).toEqual([
       "Skipped · not presented",
       "Not collected",
@@ -127,6 +158,8 @@ describe("truthful Presentation insights projection", () => {
     ]);
     expect(opinion.note).toContain("several options");
     const recovery = view.tables.find((table) => table.title === "Recovery evidence")!;
+    expect(recovery.category).toBe("coverage");
+    expect(recovery.visualization).toBeUndefined();
     expect(recovery.rows[0]!.slice(3)).toEqual(["5", "3", "60%"]);
     expect(recovery.note).toContain("incorrect initial answer and an accepted recheck");
   });
@@ -172,10 +205,13 @@ describe("truthful Presentation insights projection", () => {
     const coverage = view.tables.find(
       (table) => table.title === "Response coverage · Opinion activities",
     )!;
+    expect(coverage.visualization).toEqual({ column: 5, fractions: [0.5] });
     expect(coverage.rows[0]!.slice(2, 7)).toEqual(["5", "10", "5", "50%", "Recorded"]);
     const distribution = view.tables.find((table) =>
       table.title.startsWith("Opinion distribution"),
     )!;
+    expect(distribution.category).toBe("opinion");
+    expect(distribution.visualization).toBeUndefined();
     expect(distribution.rows).toEqual([["Unavailable"]]);
     expect(distribution.note).toBe("Opinion distribution is unavailable for this activity.");
     for (const copy of [presentationInsightsCsv(value), presentationInsightsHtml(value)]) {
@@ -202,9 +238,15 @@ describe("truthful Presentation insights projection", () => {
       results: [],
     });
     const view = presentationInsightsView(value);
+    const coverage = view.tables.find(
+      (table) => table.title === "Response coverage · Opinion activities",
+    )!;
+    expect(coverage.visualization).toEqual({ column: 5, fractions: [null] });
     const distribution = view.tables.find((table) =>
       table.title.startsWith("Opinion distribution"),
     )!;
+    expect(distribution.category).toBe("opinion");
+    expect(distribution.visualization).toBeUndefined();
     expect(distribution.rows).toEqual([["Hidden · fewer than five responses"]]);
     expect(distribution.note).toContain("below five");
     const skipped = view.tables.find((table) =>
@@ -249,6 +291,12 @@ describe("truthful Presentation insights projection", () => {
     const distribution = presentationInsightsView(value).tables.find((table) =>
       table.title.startsWith("Quick Check distribution"),
     )!;
+    expect(distribution.category).toBe("opinion");
+    expect(distribution.visualization).toEqual({
+      column: 1,
+      fractions: [0.6, 0.4],
+      description: "Bars show the share of accepted respondents who selected each option.",
+    });
     expect(distribution.rows).toEqual([
       ["Yes", "3"],
       ["No", "2"],
@@ -259,24 +307,92 @@ describe("truthful Presentation insights projection", () => {
       expect(copy).not.toMatch(/accuracy_percent|Correct among assessed responses/);
     }
   });
-  it("retains the complete bounded rating histogram", () => {
+  it("scales each multiple-selection option by accepted respondents", () => {
     const value = presentationInsightsFixture();
     const opinion = value.participation.questions.find(
-      (question) => question.blockId === insightsId(12),
+      (question) => question.purpose === "opinion",
     )!;
-    opinion.results = Array.from({ length: 100 }, (_, index) => ({
-      label: `Rating ${index + 1}`,
-      value: index === 99 ? 5 : 0,
-    }));
-    opinion.maxSelections = 1;
+    opinion.results = [
+      { label: "Discuss", value: 4 },
+      { label: "Continue", value: 3 },
+    ];
     const distribution = presentationInsightsView(value).tables.find((table) =>
       table.title.startsWith("Opinion distribution"),
     )!;
-    expect(distribution.rows).toHaveLength(100);
-    expect(distribution.rows.at(-1)).toEqual(["Rating 100", "5"]);
-    expect(presentationInsightsCsv(value)).toContain('"Rating 100","5"');
-    expect(presentationInsightsHtml(value)).toContain('<th scope="row">Rating 100</th><td>5</td>');
+    expect(distribution.visualization?.fractions).toEqual([0.8, 0.6]);
+    expect(distribution.note).toContain("several options");
   });
+  it("omits a bar when an option count exceeds the number of accepted respondents", () => {
+    const value = presentationInsightsFixture();
+    const opinion = value.participation.questions.find(
+      (question) => question.purpose === "opinion",
+    )!;
+    opinion.results[0]!.value = 6;
+    const distribution = presentationInsightsView(value).tables.find((table) =>
+      table.title.startsWith("Opinion distribution"),
+    )!;
+    expect(distribution.rows[0]).toEqual(["Discuss", "6"]);
+    expect(distribution.visualization?.fractions).toEqual([null, 0.4]);
+  });
+  it("scales weighted rank points to the highest score and localizes the scale description", () => {
+    const value = presentationInsightsFixture();
+    const opinion = value.participation.questions.find(
+      (question) => question.purpose === "opinion",
+    )!;
+    opinion.measure = "weighted_points";
+    opinion.results = [
+      { label: "Discuss", value: 3000 },
+      { label: "Continue", value: 12000 },
+      { label: "Pause", value: 0 },
+    ];
+    const copy: NonNullable<Parameters<typeof presentationInsightsView>[2]> = (key, values = {}) =>
+      `UI ${key}`.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+    const distribution = presentationInsightsView(value, "de-DE", copy).tables.find((table) =>
+      table.title.startsWith("UI Opinion distribution"),
+    )!;
+    expect(distribution.columns[1]).toBe("UI Weighted rank points");
+    expect(distribution.visualization).toEqual({
+      column: 1,
+      fractions: [0.25, 1, 0],
+      description: "UI Bars are scaled to the highest weighted score (12.000).",
+    });
+    const note =
+      "Distribution available. Ranking points are separate from response coverage and assessment accuracy.";
+    expect(distribution.note).toBe(`UI ${note}`);
+    for (const download of [presentationInsightsCsv(value), presentationInsightsHtml(value)]) {
+      expect(download).toContain("Weighted rank points");
+      expect(download).toContain(note);
+      expect(download).not.toContain("Bars are scaled");
+    }
+  });
+  it.each([0, 5])(
+    "retains the complete bounded rating histogram with a maximum of %i",
+    (maximum) => {
+      const value = presentationInsightsFixture();
+      const opinion = value.participation.questions.find(
+        (question) => question.blockId === insightsId(12),
+      )!;
+      opinion.results = Array.from({ length: 100 }, (_, index) => ({
+        label: `Rating ${index + 1}`,
+        value: index === 99 ? maximum : 0,
+      }));
+      opinion.maxSelections = 1;
+      const distribution = presentationInsightsView(value).tables.find((table) =>
+        table.title.startsWith("Opinion distribution"),
+      )!;
+      expect(distribution.rows).toHaveLength(100);
+      expect(distribution.rows.at(-1)).toEqual(["Rating 100", String(maximum)]);
+      expect(distribution.visualization).toEqual({
+        column: 1,
+        fractions: [...Array<number>(99).fill(0), maximum / 5],
+        description: "Bars show the share of accepted respondents who selected each option.",
+      });
+      expect(presentationInsightsCsv(value)).toContain(`"Rating 100","${maximum}"`);
+      expect(presentationInsightsHtml(value)).toContain(
+        `<th scope="row">Rating 100</th><td>${maximum}</td>`,
+      );
+    },
+  );
   it("retains known-zero coverage while suppressing an opinion histogram below the sample threshold", () => {
     const value = presentationInsightsFixture();
     const opinion = value.participation.questions.find(
@@ -284,9 +400,9 @@ describe("truthful Presentation insights projection", () => {
     )!;
     Object.assign(opinion, {
       acceptedRespondents: 0,
-      joinedByRevealCount: 0,
-      notRespondedByRevealCount: 0,
-      responseRatePercent: null,
+      joinedByRevealCount: 10,
+      notRespondedByRevealCount: 10,
+      responseRatePercent: 0,
       distributionStatus: "suppressed",
       results: [],
     });
@@ -294,16 +410,13 @@ describe("truthful Presentation insights projection", () => {
     const coverage = view.tables.find(
       (table) => table.title === "Response coverage · Opinion activities",
     )!;
-    expect(coverage.rows[0]!.slice(2, 6)).toEqual([
-      "0",
-      "0",
-      "0",
-      "Not applicable · zero joined by reveal",
-    ]);
+    expect(coverage.rows[0]!.slice(2, 6)).toEqual(["0", "10", "10", "0%"]);
+    expect(coverage.visualization).toEqual({ column: 5, fractions: [0] });
     const distribution = view.tables.find((table) =>
       table.title.startsWith("Opinion distribution"),
     )!;
     expect(distribution.rows).toEqual([["Hidden · fewer than five responses"]]);
+    expect(distribution.visualization).toBeUndefined();
     expect(presentationInsightsCsv(value)).not.toContain('"Discuss"');
     expect(presentationInsightsHtml(value)).not.toContain("Respondents selecting option");
   });

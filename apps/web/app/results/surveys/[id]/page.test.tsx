@@ -112,6 +112,7 @@ vi.mock("../../../../components/session-summary/summary-dialog", () => ({
   ),
 }));
 
+import { ApiClientError } from "../../../../lib/api";
 import SurveyResultsPage from "./page";
 
 const room = {
@@ -224,6 +225,7 @@ describe("Survey results detail", () => {
     expect(markup).toMatch(/<main\b[^>]*\blang="fr-FR">/);
     expect(markup).toContain("Actualiser les résultats");
     expect(markup).toContain("Résultats agrégés");
+    expect(markup).toContain("Analyse du sondage");
     expect(markup).toMatch(
       /<div\b[^>]*\blang="fr-FR"><a\b[^>]*href="\/results\?view=surveys"[^>]*>Retour aux résultats de sondage<\/a><\/div>/,
     );
@@ -239,8 +241,13 @@ describe("Survey results detail", () => {
     expect(markup).toContain("Closing early does not change this deadline.");
     expect(markup).toContain('id="survey-counts-question-a">Response counts</caption>');
     expect(markup).toContain('scope="col">Response</th>');
+    expect(markup).toContain('scope="col">Share of question respondents</th>');
     expect(markup).toContain('scope="row" lang="">Planning');
     expect(markup).toContain("</th><td>6</td>");
+    expect(markup).toContain('aria-labelledby="survey-analytics-heading"');
+    expect(markup).toContain("Questions with results</dt><dd>1 of 1</dd>");
+    expect(markup).toContain('href="#survey-question-question-a"');
+    expect(markup).toContain("8 of 8 finalized submissions");
     // Multi-select bars use each question's respondent count, not the sum of selections.
     expect(markup).toContain("width:75%");
     expect(markup).toContain("width:62.5%");
@@ -274,7 +281,9 @@ describe("Survey results detail", () => {
       path.endsWith("/results") ? { results } : { room },
     );
     const markup = await reportHarness().settle();
-    expect(markup).toContain(`id="survey-question-question-a" lang="">${prompt}</h3>`);
+    expect(markup).toContain(
+      `id="survey-question-question-a" lang="" tabindex="-1">${prompt}</h3>`,
+    );
     expect(markup).toContain(`scope="row" lang="">${label}`);
     expect(markup).toContain("width:100%");
     expect(markup).toContain('role="region"');
@@ -282,11 +291,13 @@ describe("Survey results detail", () => {
     expect(markup).toContain('id="survey-counts-question-a">Response counts</caption>');
   });
 
-  it("gives duplicate-prompt table regions distinct indexed accessible names", async () => {
+  it("distinguishes duplicate prompts in links and tables with their original question numbers", async () => {
     const results = aggregate();
+    const question = results.questions[0]!;
     results.questions = [
-      ...results.questions,
-      ...results.questions.map((question) => ({ ...question, id: "question-b" })),
+      question,
+      { ...question, id: "withheld", prompt: "Withheld question", suppressed: true },
+      { ...question, id: "question-c" },
     ];
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path.endsWith("/results") ? { results } : { room },
@@ -297,8 +308,15 @@ describe("Survey results detail", () => {
     );
     expect(regionNames).toEqual([
       "Question 1 results: Which topics should we discuss?",
-      "Question 2 results: Which topics should we discuss?",
+      "Question 3 results: Which topics should we discuss?",
     ]);
+    expect(markup).toContain(
+      'href="#survey-question-question-a">Question 1 · <span lang="">Which topics should we discuss?</span></a>',
+    );
+    expect(markup).toContain(
+      'href="#survey-question-question-c">Question 3 · <span lang="">Which topics should we discuss?</span></a>',
+    );
+    expect(markup).not.toContain('href="#survey-question-withheld"');
     expect(markup.match(/<h3[^>]*>Which topics should we discuss\?<\/h3>/g)).toHaveLength(2);
     expect(markup.match(/Response counts<\/caption>/g)).toHaveLength(2);
   });
@@ -326,6 +344,7 @@ describe("Survey results detail", () => {
     expect(markup).toContain("Distributions stay hidden while this Survey is open.");
     expect(markup).toContain("Each question needs at least five responses.");
     expect(markup).not.toContain("Planning");
+    expect(markup).not.toContain("Survey analytics");
     expect(markup).not.toContain("Response counts");
     expect(markup).not.toContain("Share summary");
   });
@@ -346,6 +365,7 @@ describe("Survey results detail", () => {
       "Distributions are hidden because fewer than five respondents submitted.",
     );
     expect(markup).not.toContain("Planning");
+    expect(markup).not.toContain("Survey analytics");
     expect(markup).toContain("Share summary");
     results = {
       ...aggregate(),
@@ -358,6 +378,44 @@ describe("Survey results detail", () => {
     );
     expect(markup).not.toContain("Planning");
     expect(markup).not.toContain("Response counts");
+    expect(markup).toContain("Questions with results</dt><dd>0 of 1</dd>");
+    expect(markup).toContain("No question distributions are available for this report.");
+    expect(markup).not.toContain('href="#survey-question-question-a"');
+  });
+
+  it("shows an empty finalized run without analytics or question evidence", async () => {
+    const results = {
+      ...aggregate(),
+      submittedCount: 0,
+      resultsStatus: "insufficient_sample",
+      suppressed: true,
+    };
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      path.endsWith("/results") ? { results } : { room },
+    );
+    const markup = await reportHarness().settle();
+    expect(markup).toContain("No finalized submissions.");
+    expect(markup).not.toContain("Survey analytics");
+    expect(markup).not.toContain("Which topics should we discuss?");
+  });
+
+  it("keeps conditional Survey results withheld and explains their unavailability", async () => {
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (path.endsWith("/results")) {
+        throw new ApiClientError(
+          "Private service detail",
+          "SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE",
+          409,
+        );
+      }
+      return { room };
+    });
+    const markup = await reportHarness().settle();
+    expect(markup).toContain("Results for this conditional Survey are unavailable.");
+    expect(markup).not.toContain("Survey analytics");
+    expect(markup).not.toContain("Aggregate results");
+    expect(markup).not.toContain("Share summary");
+    expect(markup).not.toContain("Private service detail");
   });
 
   it.each(["id", "workspace"] as const)(

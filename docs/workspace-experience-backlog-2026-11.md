@@ -816,11 +816,16 @@ rosters, separate Q&A snapshot time, and existing small-sample suppression. Cove
 available opinion distributions have inline bars alongside exact values. Private aggregate CSV
 and HTML downloads still cover the entire snapshot.
 
-| Increment                  | Acceptance                                                                                                                                                                                                       |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Survey and Board analytics | Chart finalized aggregates in their existing report or host surfaces. Preserve Survey disclosure thresholds and show Board vote results from closed rounds only. Review each format's empty and withheld states. |
-| Workspace analytics        | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons.        |
-| Q&A analysis               | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                               |
+The finalized Survey report's **Survey analytics** dashboard summarizes released question coverage,
+respondent shares, and average ratings from complete histograms. The dashboard uses the existing
+aggregate endpoint, including run and question disclosure thresholds. Open, empty, and withheld
+states stay distinct. Conditional Survey reporting remains subject to its independent privacy approval.
+
+| Increment           | Acceptance                                                                                                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Board analytics     | Chart finalized Board vote results in the existing host or report surface. Use closed rounds and verify the empty and withheld states.                                                                    |
+| Workspace analytics | Define the authorized session scope and date range for each measure. Keep participant joins distinct from unique respondents and use independent WX-10 disclosure approval for cross-session comparisons. |
+| Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                        |
 
 ### WX-11 Consistent surfaces and commercial explanations
 

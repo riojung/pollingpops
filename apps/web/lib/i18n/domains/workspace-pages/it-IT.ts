@@ -467,6 +467,22 @@ const messages = {
   "pages.results.surveyRetention":
     "I risultati e le risposte scadono il {date}. La chiusura anticipata non modifica questa scadenza.",
   "pages.results.surveyAggregate": "Risultati aggregati",
+  "pages.results.surveyAnalytics": "Analisi del sondaggio",
+  "pages.results.surveyFinalizedSubmissions": "Invii completati",
+  "pages.results.surveyQuestionsWithResults": "Domande con risultati",
+  "pages.results.surveyAvailableQuestionCount": "{available} su {total}",
+  "pages.results.surveyQuestionCoverage": "Tasso di risposta per domanda",
+  "pages.results.surveyCoverageNote":
+    "Quota degli invii completati che contengono una risposta a ciascuna domanda.",
+  "pages.results.surveyCoverageDetail": "{answered} su {submitted} invii completati",
+  "pages.results.surveyNoDistributions":
+    "Per questo report non sono disponibili distribuzioni delle risposte.",
+  "pages.results.surveyNoSubmissions": "Nessun invio completato.",
+  "pages.results.surveyQuestionNumber": "Domanda {number}",
+  "pages.results.surveyShareOfResponses": "Quota tra chi ha risposto a questa domanda",
+  "pages.results.surveyAverageRating": "Valutazione media",
+  "pages.results.surveyConditionalUnavailable":
+    "I risultati di questo sondaggio condizionale non sono disponibili.",
   "pages.results.surveyRefresh": "Aggiorna risultati",
   "pages.results.surveySubmissions":
     "{count} invii completati. Vengono conteggiate solo le risposte completate.",

@@ -465,6 +465,22 @@ const messages = {
   "pages.results.surveyRetention":
     "Os resultados e as respostas expiram a {date}. Encerrar mais cedo não altera este prazo.",
   "pages.results.surveyAggregate": "Resultados agregados",
+  "pages.results.surveyAnalytics": "Análise do inquérito",
+  "pages.results.surveyFinalizedSubmissions": "Submissões concluídas",
+  "pages.results.surveyQuestionsWithResults": "Perguntas com resultados",
+  "pages.results.surveyAvailableQuestionCount": "{available} de {total}",
+  "pages.results.surveyQuestionCoverage": "Taxa de resposta por pergunta",
+  "pages.results.surveyCoverageNote":
+    "Proporção das submissões concluídas que incluem uma resposta a cada pergunta.",
+  "pages.results.surveyCoverageDetail": "{answered} de {submitted} submissões concluídas",
+  "pages.results.surveyNoDistributions":
+    "Não estão disponíveis distribuições das respostas para este relatório.",
+  "pages.results.surveyNoSubmissions": "Não há submissões concluídas.",
+  "pages.results.surveyQuestionNumber": "Pergunta {number}",
+  "pages.results.surveyShareOfResponses": "Proporção entre quem respondeu a esta pergunta",
+  "pages.results.surveyAverageRating": "Classificação média",
+  "pages.results.surveyConditionalUnavailable":
+    "Os resultados deste inquérito condicional não estão disponíveis.",
   "pages.results.surveyRefresh": "Atualizar resultados",
   "pages.results.surveySubmissions":
     "{count} submissões concluídas. Apenas são contabilizadas as respostas concluídas.",

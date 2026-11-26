@@ -1,6 +1,5 @@
 "use client";
 
-import type { surveyAggregate } from "@openround/contracts/surveys";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,10 +11,11 @@ import {
 } from "../../../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../../../components/workspace/workspace-shell";
 import styles from "../../../../components/workspace/workspace-content.module.css";
-import { apiFetch } from "../../../../lib/api";
+import { ApiClientError, apiFetch } from "../../../../lib/api";
 import { formatDateTime, formatNumber } from "../../../../lib/i18n/format";
+import { SurveyAnalytics, SurveyQuestionResults } from "./survey-analytics";
+import { surveyAnalyticsOverview, type SurveyAggregate } from "./survey-analytics-model";
 import reportStyles from "./survey-results.module.css";
-import { evidencePercent } from "../../results-overview-model";
 
 interface SurveyRoom {
   title: string;
@@ -27,8 +27,10 @@ interface SurveyRoom {
 interface SurveyReport {
   key: string;
   room: SurveyRoom;
-  results: ReturnType<typeof surveyAggregate>;
+  results: SurveyAggregate;
 }
+
+type SurveyLoadState = "loading" | "ready" | "unavailable" | "failed";
 
 function SurveyResults() {
   const { id } = useParams<{ id: string }>();
@@ -39,17 +41,27 @@ function SurveyResults() {
   const activeRequestKey = useRef(requestKey);
   activeRequestKey.current = requestKey;
   const [report, setReport] = useState<SurveyReport | null>(null);
-  const [loadState, setLoadState] = useState({ key: "", loading: true, failed: false });
+  const [loadState, setLoadState] = useState<{ key: string; status: SurveyLoadState }>({
+    key: "",
+    status: "loading",
+  });
   const [revision, setRevision] = useState(0);
   // Route and workspace changes hide previous evidence before their effects run.
   const current = report?.key === requestKey && workspaceId ? report : null;
-  const loading = loadState.key !== requestKey || loadState.loading;
-  const failed = loadState.key === requestKey && loadState.failed;
+  const status = loadState.key === requestKey ? loadState.status : "loading";
+  const loading = status === "loading";
+  const overview = current ? surveyAnalyticsOverview(current.results) : null;
+  const answerCounts = new Map(
+    overview?.questions.map(({ id, answeredCount }) => [id, answeredCount]),
+  );
+  const empty =
+    current?.results.resultsStatus === "insufficient_sample" &&
+    current.results.submittedCount === 0;
 
   useEffect(() => {
     const controller = new AbortController();
     setReport(null);
-    setLoadState({ key: requestKey, loading: true, failed: false });
+    setLoadState({ key: requestKey, status: "loading" });
     if (!workspaceId || !id) return () => controller.abort();
     const path = `/v1/survey-rooms/${encodeURIComponent(id)}`;
     void Promise.all([
@@ -65,11 +77,17 @@ function SurveyResults() {
       .then(([roomResponse, resultsResponse]) => {
         if (controller.signal.aborted || activeRequestKey.current !== requestKey) return;
         setReport({ key: requestKey, room: roomResponse.room, results: resultsResponse.results });
-        setLoadState({ key: requestKey, loading: false, failed: false });
+        setLoadState({ key: requestKey, status: "ready" });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (controller.signal.aborted || activeRequestKey.current !== requestKey) return;
-        setLoadState({ key: requestKey, loading: false, failed: true });
+        const conditionalUnavailable =
+          error instanceof ApiClientError &&
+          error.code === "SURVEY_BRANCHING_RESULTS_NOT_AVAILABLE";
+        setLoadState({
+          key: requestKey,
+          status: conditionalUnavailable ? "unavailable" : "failed",
+        });
       });
     return () => controller.abort();
   }, [id, requestKey, revision, workspaceId]);
@@ -103,9 +121,14 @@ function SurveyResults() {
           <SessionSummaryButton key={requestKey} source={{ kind: "survey", id }} />
         ) : null}
       </div>
-      {failed ? (
+      {status === "failed" ? (
         <p className="error" role="alert">
           {t("pages.results.surveyLoadError")}
+        </p>
+      ) : null}
+      {status === "unavailable" ? (
+        <p className="notice" role="status">
+          {t("pages.results.surveyConditionalUnavailable")}
         </p>
       ) : null}
       {loading ? <p role="status">{t("pages.common.loading")}</p> : null}
@@ -131,79 +154,33 @@ function SurveyResults() {
             </p>
             <p>{t("pages.results.surveyPrivacy")}</p>
           </section>
+          {overview ? (
+            <SurveyAnalytics overview={overview} submittedCount={current.results.submittedCount} />
+          ) : null}
           <section className={`${styles.panel} ${reportStyles.panel}`}>
             <h2>{t("pages.results.surveyAggregate")}</h2>
             <p>
-              {t("pages.results.surveySubmissions", {
-                count: formatNumber(locale, current.results.submittedCount),
-              })}
+              {empty
+                ? t("pages.results.surveyNoSubmissions")
+                : t("pages.results.surveySubmissions", {
+                    count: formatNumber(locale, current.results.submittedCount),
+                  })}
             </p>
             {current.results.resultsStatus === "collecting" ? (
               <p className="notice">{t("pages.results.surveyCollectingNotice")}</p>
-            ) : current.results.suppressed ? (
+            ) : empty ? null : !overview ? (
               <p className="notice">{t("pages.results.surveySuppressed")}</p>
             ) : (
-              current.results.questions.map((question, index) => (
-                <section className={reportStyles.question} key={question.id}>
-                  <h3 id={`survey-question-${question.id}`} lang="">
-                    {question.prompt}
-                  </h3>
-                  {question.suppressed ? (
-                    <p className="notice">{t("pages.results.surveyQuestionSuppressed")}</p>
-                  ) : (
-                    <>
-                      <p>
-                        {t("pages.results.surveyResponses", {
-                          count: formatNumber(locale, question.answeredCount ?? 0),
-                        })}
-                      </p>
-                      {(question.maxSelections ?? 1) > 1 ? (
-                        <p>{t("pages.results.surveyMultipleSelections")}</p>
-                      ) : null}
-                      <div
-                        className={reportStyles.tableContainer}
-                        role="region"
-                        aria-label={t("summary.questionRegion", {
-                          number: formatNumber(locale, index + 1),
-                          prompt: question.prompt,
-                        })}
-                        tabIndex={0}
-                      >
-                        <table className={reportStyles.distribution}>
-                          <caption id={`survey-counts-${question.id}`}>
-                            {t("pages.results.surveyResponseCounts")}
-                          </caption>
-                          <thead>
-                            <tr>
-                              <th scope="col">{t("pages.results.surveyResponse")}</th>
-                              <th scope="col">{t("pages.results.surveyCount")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {question.distribution.map((row) => (
-                              <tr key={row.label}>
-                                <th scope="row" lang="">
-                                  {row.label}
-                                  {question.answeredCount !== null && question.answeredCount > 0 ? (
-                                    <span className={reportStyles.responseBar} aria-hidden="true">
-                                      <span
-                                        style={{
-                                          width: `${evidencePercent(row.count, question.answeredCount)}%`,
-                                        }}
-                                      />
-                                    </span>
-                                  ) : null}
-                                </th>
-                                <td>{formatNumber(locale, row.count)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  )}
-                </section>
-              ))
+              <div className={reportStyles.questions}>
+                {current.results.questions.map((question, index) => (
+                  <SurveyQuestionResults
+                    key={question.id}
+                    question={question}
+                    position={index + 1}
+                    answeredCount={answerCounts.get(question.id)}
+                  />
+                ))}
+              </div>
             )}
           </section>
         </>

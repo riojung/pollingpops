@@ -470,6 +470,22 @@ const messages = {
   "pages.results.surveyRetention":
     "Ergebnisse und Antworten verfallen am {date}. Ein vorzeitiges Schließen ändert diese Frist nicht.",
   "pages.results.surveyAggregate": "Zusammengefasste Ergebnisse",
+  "pages.results.surveyAnalytics": "Umfrageanalyse",
+  "pages.results.surveyFinalizedSubmissions": "Abgeschlossene Einreichungen",
+  "pages.results.surveyQuestionsWithResults": "Fragen mit Ergebnissen",
+  "pages.results.surveyAvailableQuestionCount": "{available} von {total}",
+  "pages.results.surveyQuestionCoverage": "Antwortquote je Frage",
+  "pages.results.surveyCoverageNote":
+    "Anteil der abgeschlossenen Einreichungen, in denen die jeweilige Frage beantwortet wurde.",
+  "pages.results.surveyCoverageDetail": "{answered} von {submitted} abgeschlossenen Einreichungen",
+  "pages.results.surveyNoDistributions":
+    "Für diesen Bericht sind keine Antwortverteilungen verfügbar.",
+  "pages.results.surveyNoSubmissions": "Keine abgeschlossenen Einreichungen.",
+  "pages.results.surveyQuestionNumber": "Frage {number}",
+  "pages.results.surveyShareOfResponses": "Anteil unter den Personen mit Antwort auf diese Frage",
+  "pages.results.surveyAverageRating": "Durchschnittliche Bewertung",
+  "pages.results.surveyConditionalUnavailable":
+    "Die Ergebnisse für diese bedingte Umfrage sind nicht verfügbar.",
   "pages.results.surveyRefresh": "Ergebnisse aktualisieren",
   "pages.results.surveySubmissions":
     "{count} abgeschlossene Einreichungen. Es werden nur abgeschlossene Antworten gezählt.",

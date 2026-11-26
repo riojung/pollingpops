@@ -464,6 +464,20 @@ export const workspacePageEnglishMessages = {
   "pages.results.surveyRetention":
     "Results and responses expire {date}. Closing early does not change this deadline.",
   "pages.results.surveyAggregate": "Aggregate results",
+  "pages.results.surveyAnalytics": "Survey analytics",
+  "pages.results.surveyFinalizedSubmissions": "Finalized submissions",
+  "pages.results.surveyQuestionsWithResults": "Questions with results",
+  "pages.results.surveyAvailableQuestionCount": "{available} of {total}",
+  "pages.results.surveyQuestionCoverage": "Question coverage",
+  "pages.results.surveyCoverageNote": "Share of finalized submissions that answered each question.",
+  "pages.results.surveyCoverageDetail": "{answered} of {submitted} finalized submissions",
+  "pages.results.surveyNoDistributions": "No question distributions are available for this report.",
+  "pages.results.surveyNoSubmissions": "No finalized submissions.",
+  "pages.results.surveyQuestionNumber": "Question {number}",
+  "pages.results.surveyShareOfResponses": "Share of question respondents",
+  "pages.results.surveyAverageRating": "Average rating",
+  "pages.results.surveyConditionalUnavailable":
+    "Results for this conditional Survey are unavailable.",
   "pages.results.surveyRefresh": "Refresh results",
   "pages.results.surveySubmissions":
     "{count} finalized submissions. Only finalized responses are counted.",

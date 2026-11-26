@@ -468,6 +468,22 @@ const messages = {
   "pages.results.surveyRetention":
     "Les résultats et les réponses expirent le {date}. Une fermeture anticipée ne modifie pas cette date limite.",
   "pages.results.surveyAggregate": "Résultats agrégés",
+  "pages.results.surveyAnalytics": "Analyse du sondage",
+  "pages.results.surveyFinalizedSubmissions": "Envois finalisés",
+  "pages.results.surveyQuestionsWithResults": "Questions avec des résultats",
+  "pages.results.surveyAvailableQuestionCount": "{available} sur {total}",
+  "pages.results.surveyQuestionCoverage": "Taux de réponse par question",
+  "pages.results.surveyCoverageNote":
+    "Part des envois finalisés qui contiennent une réponse à chaque question.",
+  "pages.results.surveyCoverageDetail": "{answered} envois finalisés sur {submitted}",
+  "pages.results.surveyNoDistributions":
+    "Aucune répartition des réponses par question n’est disponible pour ce rapport.",
+  "pages.results.surveyNoSubmissions": "Aucun envoi finalisé.",
+  "pages.results.surveyQuestionNumber": "Question {number}",
+  "pages.results.surveyShareOfResponses": "Part parmi les répondants à cette question",
+  "pages.results.surveyAverageRating": "Note moyenne",
+  "pages.results.surveyConditionalUnavailable":
+    "Les résultats de ce sondage conditionnel ne sont pas disponibles.",
   "pages.results.surveyRefresh": "Actualiser les résultats",
   "pages.results.surveySubmissions":
     "{count} envois finalisés. Seules les réponses finalisées sont comptabilisées.",

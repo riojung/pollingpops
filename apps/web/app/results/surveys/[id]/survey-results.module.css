@@ -4,6 +4,143 @@
   overflow-wrap: anywhere;
 }
 
+.analytics {
+  border-inline-start: 4px solid var(--ui-accent-ink);
+  background: linear-gradient(115deg, var(--ui-accent-soft), var(--ui-surface-raised) 52%);
+  padding: clamp(16px, 2.4vw, 28px);
+}
+
+.analytics > h2 {
+  margin: 0 0 16px;
+  font-size: clamp(1.3rem, 2.3vw, 1.7rem);
+  letter-spacing: -0.03em;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.metrics > div,
+.coverage li,
+.question {
+  padding: clamp(12px, 2vw, 16px);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface-raised);
+}
+
+.metrics dt,
+.ratingSummary dt {
+  color: var(--ui-text-subtle);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.metrics dd {
+  margin: 4px 0 0;
+  color: var(--ui-text-strong);
+  font-size: clamp(1.4rem, 2.8vw, 1.85rem);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.coverageHeading {
+  margin: 0;
+  color: var(--ui-text-strong);
+  font-size: 1rem;
+}
+
+.coverageNote {
+  margin: 5px 0 0;
+  color: var(--ui-text-subtle);
+  font-size: 0.8125rem;
+}
+
+.coverage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coverage li {
+  min-width: 0;
+}
+
+.coverage li > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.coverage a {
+  min-width: 0;
+  color: var(--ui-accent-ink);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.coverage strong {
+  flex: none;
+  color: var(--ui-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ui-text-subtle);
+  font-size: 0.75rem;
+}
+
+.questions {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.question h3 {
+  margin: 0;
+  scroll-margin-block-start: 9rem;
+}
+
+.question > p {
+  margin: 8px 0;
+}
+
+.ratingSummary {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.25rem 0;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-soft);
+}
+
+.ratingSummary > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+}
+
+.ratingSummary dd {
+  margin: 0;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 .tableContainer {
   width: 100%;
   max-width: 100%;
@@ -23,8 +160,11 @@
 }
 
 .distribution caption {
-  padding-block: 0.75rem;
-  text-align: left;
+  padding-block: 0.5rem 0.75rem;
+  color: var(--ui-text-strong);
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-align: start;
 }
 
 .distribution th,
@@ -33,20 +173,38 @@
   padding: 0.65rem 0.5rem;
   overflow-wrap: anywhere;
   white-space: normal;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 
-.distribution th:last-child,
-.distribution td:last-child {
-  width: 5rem;
-  text-align: right;
+.distribution thead th {
+  background: var(--ui-surface-soft);
+  color: var(--ui-text-subtle);
+  font-size: 0.8125rem;
+}
+
+.distribution thead th:nth-child(2) {
+  width: 18%;
+}
+
+.distribution thead th:last-child {
+  width: 31%;
+}
+
+.distribution th:nth-child(n + 2),
+.distribution td {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.distribution tbody tr:last-child > * {
+  border-bottom: 0;
 }
 
 .responseBar {
   display: block;
-  height: 9px;
-  margin-top: 9px;
+  height: 6px;
+  margin-top: 6px;
   overflow: hidden;
   border-radius: 12px;
   background: var(--ui-surface-soft);
@@ -57,4 +215,32 @@
   height: 100%;
   border-radius: inherit;
   background: var(--ui-accent-ink);
+}
+
+@media (max-width: 400px) {
+  .metrics > div,
+  .question {
+    padding: 10px;
+  }
+
+  .distribution th,
+  .distribution td {
+    padding-inline: 4px;
+  }
+
+  .distribution thead th:last-child {
+    width: 36%;
+  }
+}
+
+@media (forced-colors: active) {
+  .responseBar {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+
+  .responseBar > span {
+    background: Highlight;
+  }
 }

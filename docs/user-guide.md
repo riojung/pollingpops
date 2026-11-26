@@ -1644,12 +1644,18 @@ explicit closure or their collection deadline; open and expired runs stay out of
 Search by the recorded Survey title or run code, select a source Survey, filter by collection
 deadline, and choose **Grid** or **List**. Results keeps its own workspace layout preference.
 
-**View Results** opens the aggregate report directly at `/results/surveys/{runId}`, without passing
-through Sessions. It shows finalized submissions and question-level distributions, with no scores
-or respondent identities. Distributions remain hidden below five responses per question. The report
-provides refresh and, where enabled, **Share summary** and summary downloads. **Back to Survey results**
-returns to the Surveys tab; owners/editors can choose **Manage Survey run** for sharing and closure.
-Existing results remain readable when new Survey creation is paused.
+**View Results** opens `/results/surveys/{runId}`. **Survey analytics** shows finalized submissions
+and how many questions have results. **Question coverage** shows what share of finalized submissions
+answered each released question. Select a question to jump to its breakdown. Each option's share
+uses the respondents who answered that question, so multi-select shares can add up to more than
+100%. Rating questions with a complete histogram also show an average.
+
+Question distributions require at least five finalized respondents for the run and five answers
+to the question. Open runs and small samples show a status instead of charts. Conditional Survey
+results remain withheld pending privacy approval. The report provides refresh and, where enabled,
+**Share summary** and summary downloads. **Back to Survey results** returns to the Surveys tab.
+Owners and editors can choose **Manage Survey run** for sharing and closure. Existing results
+remain readable when new Survey creation is paused.
 
 ### Delete archived content and session history
 

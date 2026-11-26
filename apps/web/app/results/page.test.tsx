@@ -194,7 +194,9 @@ function practice(id = "practice-first", title = "First practice") {
     createdAt: "2026-10-01T12:00:00Z",
   };
 }
-const presentationResultsPath = "/v1/presentation-sessions?includeReportStatus=true";
+const presentationResultsPath = "/v1/presentation-sessions/results";
+const presentationAnalyticsPath = `${presentationResultsPath}/analytics`;
+const presentationSourcesPath = `${presentationResultsPath}/sources`;
 const presentation = {
   id: "presentation-first",
   presentationId: "presentation-source",
@@ -235,6 +237,11 @@ function practiceAnalytics(open = 2) {
     activity: { month: periods, quarter: periods },
   };
 }
+function presentationAnalytics(active: number, finished: number, participantJoins: number) {
+  const count = active + finished;
+  const periods = count > 0 ? [{ start: "2026-10-01", count }] : [];
+  return { active, finished, participantJoins, activity: { month: periods, quarter: periods } };
+}
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
     return { quizzes: [{ id: "round-source", title: "Source Round" }] };
@@ -254,7 +261,31 @@ function response(path: string) {
     return path.includes("cursor=")
       ? { items: [practice("practice-later", "Later practice")], nextCursor: null }
       : { items: [practice()], nextCursor: "practice-next" };
-  if (path === presentationResultsPath) return { sessions: [presentation] };
+  if (matchesRequest(path, presentationAnalyticsPath)) {
+    const search = new URLSearchParams(path.split("?")[1]).get("search");
+    return search === "missing" ? presentationAnalytics(0, 0, 0) : presentationAnalytics(1, 1, 12);
+  }
+  if (matchesRequest(path, presentationSourcesPath)) {
+    return {
+      sources: [
+        { id: "presentation-source", title: "Source Presentation" },
+        { id: "older-source", title: "Older Presentation source" },
+      ],
+    };
+  }
+  if (matchesRequest(path, presentationResultsPath)) {
+    const query = new URLSearchParams(path.split("?")[1]);
+    const older = {
+      ...presentation,
+      id: "presentation-later",
+      title: "Later Presentation result",
+      presentationId: "older-source",
+    };
+    if (query.get("search") === "missing") return { items: [], nextCursor: null };
+    if (query.has("cursor") || query.get("presentationId") === "older-source")
+      return { items: [older], nextCursor: null };
+    return { items: [presentation], nextCursor: "presentation-next" };
+  }
   if (path.startsWith("/v1/survey-rooms?")) return { rooms: [survey()], nextCursor: null };
   throw new Error(`Unexpected request: ${path}`);
 }
@@ -288,41 +319,46 @@ afterEach(() => {
 });
 
 describe("Results workspace", () => {
-  it("coalesces Practice search typing into one scoped list read and one analytics read", async () => {
-    fixtures.query = "view=practice&q=First";
-    const harness = resultsHarness();
-    const endpoints = ["/v1/followups", practiceAnalyticsPath];
-    const searchReads = (endpoint: string) =>
-      historyCalls(endpoint).map(([url]) => new URLSearchParams(url.split("?")[1]).get("search"));
-    await harness.settle();
-    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
-
-    for (const value of ["R", "Re", "  Review  "]) {
-      changeSearch(value);
+  it.each([
+    { view: "practice", endpoints: ["/v1/followups", practiceAnalyticsPath] },
+    { view: "presentations", endpoints: [presentationResultsPath, presentationAnalyticsPath] },
+  ])(
+    "coalesces $view search typing into one scoped list read and one analytics read",
+    async ({ view, endpoints }) => {
+      fixtures.query = `view=${view}&q=First`;
+      const harness = resultsHarness();
+      const searchReads = (endpoint: string) =>
+        historyCalls(endpoint).map(([url]) => new URLSearchParams(url.split("?")[1]).get("search"));
       await harness.settle();
-      expect(new URLSearchParams(fixtures.query).get("q")).toBe(value);
-      vi.advanceTimersByTime(100);
-    }
-    vi.advanceTimersByTime(149);
-    await harness.settle();
-    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
+      for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
 
-    vi.advanceTimersByTime(1);
-    await harness.settle();
-    for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First", "Review"]);
+      for (const value of ["R", "Re", "  Review  "]) {
+        changeSearch(value);
+        await harness.settle();
+        expect(new URLSearchParams(fixtures.query).get("q")).toBe(value);
+        vi.advanceTimersByTime(100);
+      }
+      vi.advanceTimersByTime(149);
+      await harness.settle();
+      for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First"]);
 
-    changeSearch("Pending edit");
-    await harness.settle();
-    clickButton("Clear filters");
-    await harness.settle();
-    for (const endpoint of endpoints)
-      expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
-    vi.advanceTimersByTime(250);
-    await harness.settle();
-    for (const endpoint of endpoints)
-      expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
-    harness.dispose();
-  });
+      vi.advanceTimersByTime(1);
+      await harness.settle();
+      for (const endpoint of endpoints) expect(searchReads(endpoint)).toEqual(["First", "Review"]);
+
+      changeSearch("Pending edit");
+      await harness.settle();
+      clickButton("Clear filters");
+      await harness.settle();
+      for (const endpoint of endpoints)
+        expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
+      vi.advanceTimersByTime(250);
+      await harness.settle();
+      for (const endpoint of endpoints)
+        expect(searchReads(endpoint)).toEqual(["First", "Review", null]);
+      harness.dispose();
+    },
+  );
 
   it("shows full-history Practice counts and attempt-weighted completion while the list loads", async () => {
     fixtures.query = "view=practice";
@@ -744,8 +780,8 @@ describe("Results workspace", () => {
       fixtures.apiFetch.mockImplementation(async (url: string) => {
         if (matchesRequest(url, reportTotalsPath)) return reportAnalytics(0);
         if (matchesRequest(url, practiceAnalyticsPath)) return practiceAnalytics(0);
+        if (matchesRequest(url, presentationAnalyticsPath)) return presentationAnalytics(0, 0, 0);
         if (!matchesRequest(url, path)) return response(url);
-        if (view === "presentations") return { sessions: [] };
         if (view === "surveys") return { rooms: [], nextCursor: null };
         return { items: [], nextCursor: null };
       });
@@ -754,6 +790,8 @@ describe("Results workspace", () => {
       expect(headings()).toEqual([empty]);
       if (view === "results") expect(markup).toContain("No reports match these filters.");
       if (view === "practice") expect(markup).toContain("No practice items match these filters.");
+      if (view === "presentations")
+        expect(markup).toContain("No Presentation sessions match these filters.");
       expect(markup).toContain(view === "practice" ? "0 practice items shown" : "0 results shown");
       expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(markup).not.toContain("Clear filters");
@@ -829,8 +867,8 @@ describe("Results workspace", () => {
         changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
         changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
         changeSearch("missing");
-        if (view === "practice") elapsePracticeSearchDelay(harness);
-        if (view === "results" || view === "practice") {
+        if (view === "practice" || view === "presentations") elapseHistorySearchDelay(harness);
+        if (view !== "surveys") {
           harness.render();
           expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
           expect(field("Group by")).toBeUndefined();
@@ -870,7 +908,7 @@ describe("Results workspace", () => {
           filterFields.every((node) => node.props.value === (node.type === "select" ? "all" : "")),
         ).toBe(true);
       }
-      if (view === "presentations" || view === "surveys")
+      if (view === "surveys")
         expect(
           fixtures.apiFetch.mock.calls.filter(([url]) => matchesRequest(url, path)),
         ).toHaveLength(1);
@@ -892,6 +930,13 @@ describe("Results workspace", () => {
       title: "First practice",
       later: "Later practice",
       more: "Load More Practice",
+    },
+    {
+      view: "presentations",
+      path: presentationResultsPath,
+      title: "First Presentation result",
+      later: "Later Presentation result",
+      more: "Load More",
     },
   ])(
     "retains $view rows and retries the failed cursor",
@@ -936,7 +981,7 @@ describe("Results workspace", () => {
         elements(fixtures.tree).find(
           (node) =>
             node.type === "button" && elementText(node.props.children as ReactNode) === "Loading",
-        )?.props.disabled,
+        )?.props[view === "presentations" ? "aria-disabled" : "disabled"],
       ).toBe(true);
       pendingRetry.resolve(response(historyCalls(path).at(-1)![0]));
       markup = await harness.settle();
@@ -945,6 +990,11 @@ describe("Results workspace", () => {
       expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       const calls = historyCalls(path);
       expect(calls.at(-1)![0]).toBe(calls.at(-2)![0]);
+      if (view === "presentations") {
+        expect(markup).toContain("<dt>Matching sessions</dt><dd>2</dd>");
+        expect(historyCalls(presentationAnalyticsPath)).toHaveLength(1);
+        expect(historyCalls(presentationSourcesPath)).toHaveLength(1);
+      }
       harness.dispose();
     },
   );
@@ -1038,7 +1088,7 @@ describe("Results workspace", () => {
       await harness.settle();
       changeSearch("frozen evidence");
       clickButton("List view");
-      elapsePracticeSearchDelay(harness);
+      elapseHistorySearchDelay(harness);
       await harness.settle();
       const reads = historyCalls("/v1/followups").length;
       for (const locale of ["ko-KR", "de-DE", "en-CA"] as const) {
@@ -1075,29 +1125,6 @@ describe("Results workspace", () => {
     },
   );
 
-  it("discards stale Presentation history when the workspace changes", async () => {
-    fixtures.query = "view=presentations";
-    const pending = deferred<unknown>();
-    let reads = 0;
-    fixtures.apiFetch.mockImplementation((url: string) => {
-      if (url === presentationResultsPath) {
-        reads++;
-        return reads === 1
-          ? pending.promise
-          : Promise.resolve({ sessions: [{ ...presentation, title: "Current workspace" }] });
-      }
-      return Promise.resolve(response(url));
-    });
-    const harness = resultsHarness();
-    await harness.settle();
-    fixtures.workspaceId = "workspace-b";
-    await harness.settle();
-    pending.resolve({ sessions: [{ ...presentation, title: "Previous workspace" }] });
-    const markup = await harness.settle();
-    expect(markup).toContain("Current workspace");
-    expect(markup).not.toContain("Previous workspace");
-    harness.dispose();
-  });
   it("opens the modern Round library from the empty results state", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path.startsWith("/v1/reports?") ? { items: [], nextCursor: null } : response(path),
@@ -1172,9 +1199,11 @@ describe("Results workspace", () => {
     const markup = await resultsHarness().settle();
     expect(markup).toContain('placeholder="Search Round results"');
     expect(markup).not.toContain('href="/results?view=presentations"');
-    expect(fixtures.apiFetch.mock.calls.some(([path]) => path === presentationResultsPath)).toBe(
-      false,
-    );
+    expect(
+      fixtures.apiFetch.mock.calls.some(([path]) =>
+        String(path).startsWith("/v1/presentation-sessions"),
+      ),
+    ).toBe(false);
     expect(
       new URLSearchParams(historyCalls("/v1/reports")[0]![0].split("?")[1]).get("search"),
     ).toBe("needle");
@@ -1450,6 +1479,11 @@ describe("Results workspace", () => {
       view: "results",
       path: "/v1/reports",
       statusLabel: "Result Status",
+      sourceLabel: "Round",
+      sourceKey: "quizId",
+      sourceId: "round-source",
+      cursor: "report-next",
+      analyticsPath: null,
       status: "ready",
       more: "Load More",
       later: "Later Round result",
@@ -1458,22 +1492,52 @@ describe("Results workspace", () => {
       view: "practice",
       path: "/v1/followups",
       statusLabel: "Practice Status",
+      sourceLabel: "Round",
+      sourceKey: "quizId",
+      sourceId: "round-source",
+      cursor: "practice-next",
+      analyticsPath: practiceAnalyticsPath,
       status: "open",
       more: "Load More Practice",
       later: "Later practice",
     },
+    {
+      view: "presentations",
+      path: presentationResultsPath,
+      statusLabel: "Status",
+      sourceLabel: "Presentation",
+      sourceKey: "presentationId",
+      sourceId: "presentation-source",
+      cursor: "presentation-next",
+      analyticsPath: presentationAnalyticsPath,
+      status: "finished",
+      more: "Load More",
+      later: "Later Presentation result",
+    },
   ])(
     "sends $view search and filters on every page and clears all filters together",
-    async ({ view, path, statusLabel, status, more, later }) => {
+    async ({
+      view,
+      path,
+      statusLabel,
+      sourceLabel,
+      sourceKey,
+      sourceId,
+      cursor,
+      analyticsPath,
+      status,
+      more,
+      later,
+    }) => {
       fixtures.query = `view=${view}`;
       const harness = resultsHarness();
       await harness.settle();
       changeField(statusLabel, status);
-      changeField("Round", "round-source");
+      changeField(sourceLabel, sourceId);
       changeField("From", "2026-10-01");
       changeField("To", "2026-10-31");
       changeSearch("  NeEdLe %_  ");
-      if (view === "practice") elapsePracticeSearchDelay(harness);
+      if (analyticsPath) elapseHistorySearchDelay(harness);
       await harness.settle();
       const filters = Object.fromEntries(
         new URLSearchParams(historyCalls(path).at(-1)![0].split("?")[1]),
@@ -1484,24 +1548,26 @@ describe("Results workspace", () => {
         ...scope,
         search: "NeEdLe %_",
         status,
-        quizId: "round-source",
+        [sourceKey]: sourceId,
         from: new Date("2026-10-01T00:00:00").toISOString(),
         to: new Date("2026-10-31T23:59:59.999").toISOString(),
       });
-      if (view === "practice") {
+      if (analyticsPath) {
         const aggregateFilters = new URLSearchParams(
-          historyCalls(practiceAnalyticsPath).at(-1)![0].split("?")[1],
+          historyCalls(analyticsPath).at(-1)![0].split("?")[1],
         );
         const unpaginatedFilters = new URLSearchParams(filters);
         unpaginatedFilters.delete("limit");
-        expect(aggregateFilters.toString()).toBe(unpaginatedFilters.toString());
+        expect(Object.fromEntries(aggregateFilters)).toEqual(
+          Object.fromEntries(unpaginatedFilters),
+        );
       }
       clickButton(more);
       const markup = await harness.settle();
       expect(markup).toContain(`<h2 lang="">${later}</h2>`);
       expect(
         Object.fromEntries(new URLSearchParams(historyCalls(path).at(-1)![0].split("?")[1])),
-      ).toEqual({ ...filters, cursor: view === "practice" ? "practice-next" : "report-next" });
+      ).toEqual({ ...filters, cursor });
       expect(markup).toContain(view === "practice" ? "2 practice items shown" : "2 results shown");
       clickButton("Clear filters");
       await harness.settle();
@@ -1516,6 +1582,12 @@ describe("Results workspace", () => {
   it.each([
     { view: "results", path: "/v1/reports", factory: report, more: "Load More" },
     { view: "practice", path: "/v1/followups", factory: practice, more: "Load More Practice" },
+    {
+      view: "presentations",
+      path: presentationResultsPath,
+      factory: (id: string, title: string) => ({ ...presentation, id, title }),
+      more: "Load More",
+    },
   ])(
     "discards stale $view first pages and load-more responses after query or workspace changes",
     async ({ view, path, factory, more }) => {
@@ -1544,7 +1616,7 @@ describe("Results workspace", () => {
           const request = historyCalls(path).at(-1)!;
           if (change === "query") {
             changeSearch("new query");
-            if (view === "practice") elapsePracticeSearchDelay(harness);
+            if (view !== "results") elapseHistorySearchDelay(harness);
           } else fixtures.workspaceId = "workspace-b";
           expect(harness.render()).not.toContain('<h2 lang="">First');
           let markup = await harness.settle();
@@ -1559,81 +1631,52 @@ describe("Results workspace", () => {
     },
   );
 
-  it("filters Presentation snapshots locally by title, status, source, and inclusive dates", async () => {
-    fixtures.query = "view=presentations";
-    fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path === presentationResultsPath
-        ? {
-            sessions: [
-              presentation,
-              {
-                ...presentation,
-                id: "presentation-active",
-                title: "Active Presentation",
-                status: "active",
-              },
-              {
-                ...presentation,
-                id: "presentation-other",
-                presentationId: "other-source",
-                title: "Other Presentation",
-              },
-              {
-                ...presentation,
-                id: "presentation-old",
-                title: "Old Presentation",
-                createdAt: "2026-09-01T12:00:00Z",
-              },
-            ],
-          }
-        : response(path),
-    );
+  it("retries workspace-wide Presentation source options independently of the list and totals", async () => {
+    fixtures.query = "view=presentations&q=Presentation";
+    const previousWorkspace = deferred<unknown>();
+    let sourceReads = 0;
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, presentationSourcesPath)) {
+        sourceReads++;
+        if (sourceReads === 1) throw new Error("Presentation options unavailable");
+        if (sourceReads === 2) return previousWorkspace.promise;
+      }
+      return response(path);
+    });
     const harness = resultsHarness();
+    const unavailable = await harness.settle();
+    expect(unavailable).toContain("Presentation filter options could not load.");
+    expect(unavailable).toContain("First Presentation result");
+    expect(unavailable).toContain("<dt>Matching sessions</dt><dd>2</dd>");
+    clickButton("Retry Presentation options");
     await harness.settle();
-    changeSearch("  PRESENTATION  ");
-    changeField("Status", "finished");
-    changeField("Presentation", "presentation-source");
-    changeField("From", "2026-10-10");
-    changeField("To", "2026-10-10");
-    let markup = await harness.settle();
-    expect(headings()).toEqual(["First Presentation result"]);
-    expect(markup).toContain("1 results shown");
-    expect(
-      fixtures.apiFetch.mock.calls.filter(([path]) => path === presentationResultsPath),
-    ).toHaveLength(1);
-    changeSearch("absent");
-    markup = await harness.settle();
-    expect(markup).toContain("No results match these filters.");
-    expect(headings()).toEqual(["No results match these filters."]);
-    clickButton("Clear filters");
-    await harness.settle();
-    expect(headings()).toHaveLength(4);
-    expect(
-      fixtures.apiFetch.mock.calls.filter(([path]) => path === presentationResultsPath),
-    ).toHaveLength(1);
-  });
+    const pending = historyCalls(presentationSourcesPath).at(-1)!;
+    expect(historyCalls(presentationResultsPath)).toHaveLength(1);
+    expect(historyCalls(presentationAnalyticsPath)).toHaveLength(1);
 
-  it("aborts a stale Presentation snapshot on workspace remount", async () => {
-    fixtures.query = "view=presentations";
-    const stale = deferred<unknown>();
-    let reads = 0;
-    fixtures.apiFetch.mockImplementation((path: string) =>
-      path === presentationResultsPath && ++reads === 1
-        ? stale.promise
-        : Promise.resolve(response(path)),
-    );
-    const harness = resultsHarness();
-    await harness.settle();
-    const request = fixtures.apiFetch.mock.calls.find(
-      ([path]) => path === presentationResultsPath,
-    )!;
     fixtures.workspaceId = "workspace-b";
-    expect(harness.render()).not.toContain("First Presentation result");
     await harness.settle();
-    expect(request[1].signal.aborted).toBe(true);
-    stale.resolve({ sessions: [{ ...presentation, title: "Stale Presentation" }] });
-    expect(await harness.settle()).not.toContain("Stale Presentation");
+    expect(pending[1].signal?.aborted).toBe(true);
+    previousWorkspace.resolve({ sources: [{ id: "old-source", title: "Obsolete source" }] });
+    const current = await harness.settle();
+    expect(current).not.toContain("Obsolete source");
     expect(headings()).toEqual(["First Presentation result"]);
+    expect(elements(field("Presentation")).map((node) => node.props.value)).toContain(
+      "older-source",
+    );
+    changeField("Presentation", "older-source");
+    await harness.settle();
+    expect(headings()).toEqual(["Later Presentation result"]);
+    expect(
+      historyCalls(presentationSourcesPath).map(([path]) =>
+        Object.fromEntries(new URLSearchParams(path.split("?")[1])),
+      ),
+    ).toEqual([
+      { expectedWorkspaceId: "workspace-a" },
+      { expectedWorkspaceId: "workspace-a" },
+      { expectedWorkspaceId: "workspace-b" },
+    ]);
+    harness.dispose();
   });
 
   it("persists Results layout separately per workspace and survives browser storage failures", async () => {
@@ -1737,7 +1780,7 @@ function resultsHarness() {
   };
   return { render, flushEffects, settle, dispose };
 }
-function elapsePracticeSearchDelay(harness: ReturnType<typeof resultsHarness>) {
+function elapseHistorySearchDelay(harness: ReturnType<typeof resultsHarness>) {
   harness.render();
   harness.flushEffects();
   vi.advanceTimersByTime(250);
@@ -1800,8 +1843,13 @@ function resultsPanel() {
 }
 function resultsBusyScope(view: string) {
   const panel = resultsPanel();
-  if (view !== "results" && view !== "practice") return panel;
-  const collectionLabel = view === "results" ? "Results" : "Practice assignments and follow-ups";
+  if (view === "surveys") return panel;
+  const collectionLabel =
+    view === "results"
+      ? "Results"
+      : view === "practice"
+        ? "Practice assignments and follow-ups"
+        : "Presentation Results";
   return elements(panel).find(
     (node) => node.type === "section" && node.props["aria-label"] === collectionLabel,
   )!;

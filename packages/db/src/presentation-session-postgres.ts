@@ -10,8 +10,10 @@ import {
 import { transitionPresentationInteractionState } from "./presentation-interactions.js";
 import { transitionPresentationNavigationState } from "./presentation-navigation.js";
 import {
+  REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT,
   requiresPresentationTextOpinions,
   isPresentationTextResultQuestion,
+  type PresentationResultsAnalytics,
 } from "@openround/contracts";
 import {
   assertTextReadSession,
@@ -77,6 +79,9 @@ import {
   type PresentationResponseAcceptance,
   type PresentationResponseAcknowledgementState,
   type PresentationResponseContext,
+  type PresentationResultRecord,
+  type PresentationResultsFilters,
+  type PresentationResultsListOptions,
   type PresentationActiveCredentialRevocation,
   type PresentationSessionCommandInput,
   type PresentationSessionCreateInput,
@@ -93,6 +98,27 @@ import {
   type PresentationSessionTransitionInput,
   type PresentationTransitionAcceptance,
 } from "./presentation-session-types.js";
+
+const PRESENTATION_RESULTS_WHERE = `WHERE session.workspace_id = $1
+  AND ($2::uuid IS NULL OR session.presentation_id = $2)
+  AND ($3::text IS NULL OR session.status = $3)
+  AND ($4::timestamptz IS NULL OR session.created_at >= $4)
+  AND ($5::timestamptz IS NULL OR session.created_at <= $5)
+  AND ($6::text IS NULL OR strpos(
+    lower(session.title COLLATE "und-x-icu"),
+    lower($6::text COLLATE "und-x-icu")
+  ) > 0)`;
+
+function presentationResultsFilterParams(workspaceId: string, filters: PresentationResultsFilters) {
+  return [
+    workspaceId,
+    filters.presentationId ?? null,
+    filters.status ?? null,
+    filters.from ?? null,
+    filters.to ?? null,
+    filters.search?.trim() || null,
+  ];
+}
 
 export class PostgresPresentationSessionRepository implements PresentationSessionRepository {
   constructor(
@@ -336,6 +362,161 @@ export class PostgresPresentationSessionRepository implements PresentationSessio
         [workspaceId, now, includeExpired],
       );
       return result.rows.map(mapSession);
+    });
+  }
+
+  async listResultsHistory(workspaceId: string, options: PresentationResultsListOptions) {
+    return this.transaction(workspaceId, async (client) => {
+      const { rows } = await client.query<{
+        id: string;
+        presentation_id: string;
+        title: string;
+        status: PresentationResultRecord["status"];
+        phase: PresentationResultRecord["phase"];
+        participant_count: string;
+        response_count: string;
+        block_count: number;
+        created_at: Date;
+        cursor_created_at: string;
+        finished_at: Date | null;
+        report_status: PresentationResultRecord["reportStatus"];
+      }>(
+        `WITH page AS MATERIALIZED (
+           SELECT session.workspace_id, session.id, session.presentation_id, session.title,
+                  session.status, session.phase, session.created_at, session.finished_at,
+                  session.current_block_index, session.content_snapshot
+           FROM presentation_live_sessions session
+           ${PRESENTATION_RESULTS_WHERE}
+             AND ($7::timestamptz IS NULL OR (session.created_at, session.id) < ($7, $8::uuid))
+           ORDER BY session.created_at DESC, session.id DESC
+           LIMIT $9
+         )
+         SELECT session.id, session.presentation_id, session.title, session.status, session.phase,
+                session.created_at, session.finished_at, report.status AS report_status,
+                to_char(session.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                  AS cursor_created_at,
+                jsonb_array_length(session.content_snapshot -> 'blocks') AS block_count,
+                (SELECT count(*)
+                 FROM presentation_live_participants participant
+                 WHERE participant.workspace_id = session.workspace_id
+                   AND participant.session_id = session.id) AS participant_count,
+                (SELECT count(*)
+                 FROM presentation_live_responses current_response
+                 WHERE current_response.workspace_id = session.workspace_id
+                   AND current_response.session_id = session.id
+                   AND session.current_block_index >= 0
+                   AND session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'kind' = 'question'
+                   AND current_response.block_id = (session.content_snapshot -> 'blocks' -> session.current_block_index ->> 'id')::uuid
+                   AND ${PRESENTATION_CURRENT_RESPONSE_BLOCK_MATCH_SQL}) AS response_count
+         FROM page session
+         LEFT JOIN presentation_session_reports report
+           ON session.status = 'finished'
+          AND report.workspace_id = session.workspace_id AND report.session_id = session.id
+         ORDER BY session.created_at DESC, session.id DESC`,
+        [
+          ...presentationResultsFilterParams(workspaceId, options),
+          options.cursor?.cursorCreatedAt ?? options.cursor?.createdAt ?? null,
+          options.cursor?.id ?? null,
+          options.limit + 1,
+        ],
+      );
+      const items: PresentationResultRecord[] = rows.slice(0, options.limit).map((row) => ({
+        id: row.id,
+        presentationId: row.presentation_id,
+        title: row.title,
+        status: row.status,
+        phase: row.phase,
+        participantCount: Number(row.participant_count),
+        responseCount: Number(row.response_count),
+        blockCount: row.block_count,
+        createdAt: row.created_at,
+        cursorCreatedAt: row.cursor_created_at,
+        finishedAt: row.finished_at,
+        reportStatus: row.report_status,
+      }));
+      return { items, hasMore: rows.length > options.limit };
+    });
+  }
+
+  async getResultsAnalytics(workspaceId: string, filters: PresentationResultsFilters) {
+    return this.transaction(workspaceId, async (client) => {
+      const { rows } = await client.query<{
+        period: "total" | "month" | "quarter";
+        start: string | null;
+        count: string;
+        active: string;
+        finished: string;
+        participant_joins: string | null;
+      }>(
+        `WITH matching_sessions AS (
+           SELECT session.id, session.workspace_id, session.status,
+                  session.created_at AT TIME ZONE 'UTC' AS created_at_utc
+           FROM presentation_live_sessions session
+           ${PRESENTATION_RESULTS_WHERE}
+         ), periods AS (
+           SELECT status, date_trunc('month', created_at_utc) AS month_start,
+                  date_trunc('quarter', created_at_utc) AS quarter_start
+           FROM matching_sessions
+         ), grouped AS (
+           SELECT CASE
+                    WHEN GROUPING(month_start) = 0 THEN 'month'
+                    WHEN GROUPING(quarter_start) = 0 THEN 'quarter'
+                    ELSE 'total'
+                  END AS period,
+                  coalesce(month_start, quarter_start) AS start,
+                  count(*) AS count,
+                  count(*) FILTER (WHERE status = 'active') AS active,
+                  count(*) FILTER (WHERE status = 'finished') AS finished
+           FROM periods
+           GROUP BY GROUPING SETS ((), (month_start), (quarter_start))
+         ), ranked AS (
+           SELECT *, row_number() OVER (PARTITION BY period ORDER BY start DESC) AS bucket_number
+           FROM grouped
+         )
+         SELECT period, to_char(start, 'YYYY-MM-DD') AS start, count, active, finished,
+                CASE WHEN period = 'total' THEN (
+                  SELECT count(*)
+                  FROM matching_sessions session
+                  JOIN presentation_live_participants participant
+                    ON participant.workspace_id = session.workspace_id AND participant.session_id = session.id
+                ) END AS participant_joins
+         FROM ranked
+         WHERE bucket_number <= $7
+         ORDER BY ranked.start ASC`,
+        [
+          ...presentationResultsFilterParams(workspaceId, filters),
+          REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT,
+        ],
+      );
+      const analytics: PresentationResultsAnalytics = {
+        active: 0,
+        finished: 0,
+        participantJoins: 0,
+        activity: { month: [], quarter: [] },
+      };
+      for (const row of rows) {
+        if (row.period === "total") {
+          analytics.active = Number(row.active);
+          analytics.finished = Number(row.finished);
+          analytics.participantJoins = Number(row.participant_joins);
+        } else if (row.start) {
+          analytics.activity[row.period].push({ start: row.start, count: Number(row.count) });
+        }
+      }
+      return analytics;
+    });
+  }
+
+  async listResultsSources(workspaceId: string) {
+    return this.transaction(workspaceId, async (client) => {
+      const { rows } = await client.query<{ id: string; title: string }>(
+        `SELECT DISTINCT ON (session.presentation_id) session.presentation_id AS id, session.title
+         FROM presentation_live_sessions session
+         WHERE session.workspace_id = $1
+         ORDER BY session.presentation_id, session.created_at DESC, session.id DESC`,
+        [workspaceId],
+      );
+      return rows;
     });
   }
 

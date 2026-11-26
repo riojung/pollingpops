@@ -26,14 +26,14 @@ describe("Results overview widgets", () => {
     expect(absent).toContain("No evidence recorded");
     expect(absent).not.toContain("0%");
   });
-  it("shows Presentation participant joins and links to finished reports", () => {
+  it("uses full-history Presentation counts and links to loaded finished reports", () => {
     const items = (["finished", "active"] as const).map((status) => ({
       id: status,
       presentationId: "presentation",
       title: "Presentation",
       status,
       reportStatus: status === "finished" ? ("ready" as const) : null,
-      phase: status === "finished" ? "finished" : "lobby",
+      phase: status === "finished" ? ("finished" as const) : ("lobby" as const),
       participantCount: status === "finished" ? 5 : 7,
       responseCount: 50,
       blockCount: 1,
@@ -43,6 +43,16 @@ describe("Results overview widgets", () => {
       <ResultsOverview
         kind="presentations"
         items={items}
+        analytics={{
+          active: 8,
+          finished: 17,
+          participantJoins: 120,
+          activity: {
+            month: [{ start: "2026-10-01", count: 25 }],
+            quarter: [{ start: "2026-10-01", count: 25 }],
+          },
+        }}
+        onAnalyticsRetry={() => undefined}
         grouping="month"
         onGroupingChange={() => undefined}
       />,
@@ -51,24 +61,27 @@ describe("Results overview widgets", () => {
     expect(markup).toContain('data-status="active" data-tone="active"');
     expect(markup).toContain('aria-hidden="true" data-status="finished"');
     expect(markup).toContain('aria-hidden="true" data-status="active"');
-    expect(markup).toContain("Finished<strong>1</strong>");
-    expect(markup).toContain("Active<strong>1</strong>");
-    expect(markup).toContain('aria-valuenow="50"');
-    expect(markup).toContain('aria-valuetext="1 / 2"');
-    expect(markup).toMatch(/<dt>Participant joins<\/dt><dd[^>]*>12</);
+    expect(markup).toContain("Finished<strong>17</strong>");
+    expect(markup).toContain("Active<strong>8</strong>");
+    expect(markup).toContain('aria-valuenow="68"');
+    expect(markup).toContain('aria-valuetext="17 / 25"');
+    expect(markup).toMatch(/<dt>Matching sessions<\/dt><dd[^>]*>25</);
+    expect(markup).toMatch(/<dt>Participant joins<\/dt><dd[^>]*>120</);
+    expect(markup).toContain("Join records across matching sessions.");
+    expect(markup).toContain("Grouped by session creation date in UTC.");
     expect(markup).toContain('href="/presentation-session/finished/report"');
     expect(markup).not.toContain('href="/presentation-session/active/report"');
     expect(markup).not.toContain('data-tone="danger"');
   });
   it("keeps ready and readable pending Presentation reports in the shortcuts despite newer failures", () => {
-    const statuses = ["ready", "pending", "failed", "failed", "failed", null, undefined] as const;
+    const statuses = ["ready", "pending", "failed", "failed", "failed", null] as const;
     const items = statuses.map((reportStatus, index) => ({
       id: `session-${index + 1}`,
       presentationId: "presentation",
       title: `Presentation ${index + 1}`,
       status: "finished" as const,
       reportStatus,
-      phase: "finished",
+      phase: "finished" as const,
       participantCount: 5,
       responseCount: 50,
       blockCount: 1,
@@ -78,10 +91,15 @@ describe("Results overview widgets", () => {
       <ResultsOverview
         kind="presentations"
         items={items}
+        analytics="unavailable"
+        onAnalyticsRetry={() => undefined}
         grouping="month"
         onGroupingChange={() => undefined}
       />,
     );
+    expect(markup).toContain("Presentation totals and activity could not load.");
+    expect(markup).toContain("Retry Presentation analytics");
+    expect(markup).not.toContain("<dt>Matching sessions</dt>");
     expect(markup.match(/href="\/presentation-session\/session-\d\/report"/g)).toEqual([
       'href="/presentation-session/session-2/report"',
       'href="/presentation-session/session-1/report"',

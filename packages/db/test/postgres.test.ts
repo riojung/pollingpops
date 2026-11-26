@@ -22,6 +22,7 @@ import {
 } from "./support/session-summary-conformance.js";
 import { expectSessionHistoryConformance } from "./support/session-history-conformance.js";
 import { expectResultsHistorySearchConformance } from "./support/results-history-search-conformance.js";
+import { expectPresentationResultsHistoryConformance } from "./support/presentation-results-history-conformance.js";
 import { expectReportHistoryEvidenceConformance } from "./support/report-history-evidence-conformance.js";
 import { expectLivePollPersistenceConformance } from "./support/live-poll-conformance.js";
 import { expectTextOpinionPersistenceConformance } from "./support/text-opinion-conformance.js";
@@ -2013,6 +2014,41 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       repository,
       await creator("report-history-evidence-owner"),
     );
+  });
+
+  it("paginates and aggregates Presentation results through the restricted runtime role", async () => {
+    const nonUtcUrl = new URL(runtimeUrl!);
+    nonUtcUrl.searchParams.set("options", "-c timezone=America/Edmonton");
+    const nonUtcRepository = new PostgresRepository(nonUtcUrl.toString());
+    try {
+      await expectPresentationResultsHistoryConformance(
+        nonUtcRepository,
+        async (workspaceId, newerId, olderId) => {
+          const client = await runtimePool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT set_config('app.workspace_id', $1, true)", [workspaceId]);
+            await client.query(
+              `UPDATE presentation_live_sessions
+               SET created_at = CASE WHEN id = $2
+                    THEN '2025-04-01T00:01:00.123457Z'::timestamptz
+                    ELSE '2025-04-01T00:01:00.123456Z'::timestamptz
+                  END
+               WHERE workspace_id = $1 AND id IN ($2, $3)`,
+              [workspaceId, newerId, olderId],
+            );
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+        },
+      );
+    } finally {
+      await nonUtcRepository.close();
+    }
   });
 
   it("paginates feedback by creation time and ID without losing records when cursor anchors are deleted", async () => {

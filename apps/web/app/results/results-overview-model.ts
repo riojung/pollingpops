@@ -1,24 +1,12 @@
 import type {
   FollowupHistoryAnalytics,
-  PresentationReportStatus,
+  PresentationResultSummary,
   ReportHistoryAnalytics,
 } from "@openround/contracts";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
 import type { SurveySessionSummary } from "../../lib/session-controls";
 
-export interface PresentationResultSummary {
-  id: string;
-  presentationId: string;
-  title: string;
-  status: "active" | "finished";
-  reportStatus?: PresentationReportStatus | null;
-  phase: string;
-  participantCount: number;
-  responseCount: number;
-  blockCount: number;
-  createdAt: string;
-  finishedAt?: string | null;
-}
+export type { PresentationResultSummary } from "@openround/contracts";
 
 export type ResultsActivityGrouping = "month" | "quarter";
 

@@ -8,6 +8,9 @@ import {
   JoinPresentationSessionSchema,
   PresentationCommandSchema,
   PresentationHostSnapshotSchema,
+  PresentationResultsAnalyticsSchema,
+  PresentationResultsPageSchema,
+  PresentationResultsSourcesSchema,
   PresentationRestV1CreateSessionResponseSchema,
   PresentationRestV1HostSnapshotResponseSchema,
   PresentationRestV1HostSnapshotSchema,
@@ -19,19 +22,24 @@ import {
   PresentationRestV1SessionListResponseSchema,
   PresentationRestV1SessionListWithReportStatusResponseSchema,
   PresentationRestResponseSubmitSchema,
+  PresentationSessionStatusSchema,
   PresentationTextModerationRequestSchema,
   PresentationTextModerationQuerySchema,
   PresentationTextResultsQuerySchema,
+  SessionHistorySearchSchema,
 } from "@openround/contracts";
 import type {
   CreatorContext,
   PresentationRepository,
+  PresentationResultsFilters,
   PresentationSessionRepository,
   Repository,
 } from "@openround/db";
 import type { AuthService } from "./auth.js";
 import { createRecoveryPackRepository } from "@openround/db";
 import type { AppConfig } from "./config.js";
+import { requireExpectedWorkspace } from "./customer-account.js";
+import { historyCursor, HistoryDateRangeQuery, HistoryPaginationQuery } from "./history-query.js";
 import type { MetricsService } from "./metrics.js";
 import { registerPresentationCompanionRoutes } from "./presentation-companion-routes.js";
 import { registerPresentationStageRoutes } from "./presentation-stage-routes.js";
@@ -56,6 +64,17 @@ const ControlPassParamsSchema = z.object({
 const PresentationSessionListQuerySchema = z.object({
   includeReportStatus: z.literal("true").optional(),
 });
+const PresentationResultsFiltersSchema = z.object({
+  ...HistoryDateRangeQuery,
+  presentationId: z.string().uuid().optional(),
+  status: PresentationSessionStatusSchema.optional(),
+  search: SessionHistorySearchSchema.refine(
+    (value) => !value.includes("\u0000"),
+    "Search cannot contain a null character",
+  ).optional(),
+});
+const PresentationResultsQuerySchema =
+  PresentationResultsFiltersSchema.extend(HistoryPaginationQuery);
 const PresentationReportQuerySchema = z
   .object({
     includeSessionContext: z.literal("true").optional(),
@@ -66,6 +85,22 @@ const PresentationReportQuerySchema = z
     includeInteractions: z.literal("true").optional(),
   })
   .strict();
+
+function presentationResultsFilters({
+  from,
+  to,
+  presentationId,
+  status,
+  search,
+}: z.infer<typeof PresentationResultsFiltersSchema>): PresentationResultsFilters {
+  return {
+    presentationId,
+    status,
+    search,
+    from: from ? new Date(from) : undefined,
+    to: to ? new Date(to) : undefined,
+  };
+}
 
 function apiError(
   reply: FastifyReply,
@@ -330,6 +365,58 @@ export async function registerPresentationSessionRoutes(
         ...session,
         reportStatus: statuses.get(session.id) ?? null,
       })),
+    });
+  });
+
+  app.get("/v1/presentation-sessions/results", async (request, reply) => {
+    noStore(reply);
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    const query = PresentationResultsQuerySchema.parse(request.query);
+    const page = await dependencies.presentationSessions.listResultsHistory(creator.workspaceId, {
+      ...presentationResultsFilters(query),
+      limit: query.limit,
+      cursor: query.cursor
+        ? {
+            createdAt: new Date(query.cursor.createdAt),
+            cursorCreatedAt: query.cursor.createdAt,
+            id: query.cursor.id,
+          }
+        : undefined,
+    });
+    const last = page.items.at(-1);
+    return PresentationResultsPageSchema.parse({
+      items: page.items.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
+        finishedAt: item.finishedAt?.toISOString() ?? null,
+      })),
+      nextCursor: page.hasMore && last ? historyCursor(last) : null,
+    });
+  });
+
+  app.get("/v1/presentation-sessions/results/analytics", async (request, reply) => {
+    noStore(reply);
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    const query = PresentationResultsFiltersSchema.parse(request.query);
+    return PresentationResultsAnalyticsSchema.parse(
+      await dependencies.presentationSessions.getResultsAnalytics(
+        creator.workspaceId,
+        presentationResultsFilters(query),
+      ),
+    );
+  });
+
+  app.get("/v1/presentation-sessions/results/sources", async (request, reply) => {
+    noStore(reply);
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    return PresentationResultsSourcesSchema.parse({
+      sources: await dependencies.presentationSessions.listResultsSources(creator.workspaceId),
     });
   });
 

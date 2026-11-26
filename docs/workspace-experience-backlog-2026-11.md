@@ -817,8 +817,12 @@ The Practice view's matching items, status counts, recorded attempts, and activi
 the full filtered history. They include assignments and recovery follow-ups. Completion divides
 completed attempts by all recorded attempts from matching items. The UTC chart counts practice
 items by creation date, with up to six represented months or quarters. The workspace-bound list
-and analytics load and retry independently. Practice shortcuts use loaded rows. Presentation and
-Survey totals and charts still use loaded records.
+and analytics load and retry independently. Practice shortcuts use loaded rows.
+
+Presentation Results totals, including participant joins and active and finished counts, cover the
+full filtered session history. The chart uses the six latest represented UTC months or quarters by
+session creation. The list pages matching sessions, while workspace-scoped source choices cover all
+retained sessions. Report shortcuts use loaded rows. Survey totals and charts use loaded records.
 
 The Presentation report's **Session insights** dashboard provides Overview, Delivery, Response
 coverage, Opinion results, and Q&A views. It uses the frozen session version, recorded reveal
@@ -835,10 +839,10 @@ The workshop host's **Board analytics** dashboard charts released vote counts an
 the selected closed round. It retains access to available past rounds after reopening a workshop.
 Open, unavailable, and zero-vote results are distinct. Percentages use votes cast in that round.
 
-| Increment           | Acceptance                                                                                                                                                                                                                                                                                                                                         |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace analytics | Round totals and activity and Practice totals, completion, and activity are implemented across pages. Define the authorized scope and date range for full-history Presentation and Survey Results analytics. Keep participant joins distinct from unique respondents and seek independent WX-10 disclosure approval for cross-session comparisons. |
-| Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                                                                                                                                                 |
+| Increment           | Acceptance                                                                                                                                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace analytics | Round, Practice, and Presentation Results totals and activity cover all matching pages. Define the authorized scope and date range for full-history Survey Results analytics. Keep participant joins distinct from unique respondents and seek independent WX-10 disclosure approval for cross-session comparisons. |
+| Q&A analysis        | Evaluate useful topic grouping and sentiment review with facilitators. Before accessing question text, approve the data scope, retention, and audience for any automated analysis.                                                                                                                                  |
 
 ### WX-11 Consistent surfaces and commercial explanations
 

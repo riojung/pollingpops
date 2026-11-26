@@ -1,10 +1,13 @@
 import { verifyEmailAndSignIn } from "./support/email-auth.js";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PresentationReportEnvelopeSchema,
   PresentationReportWithSessionContextEnvelopeSchema,
+  PresentationResultsAnalyticsSchema,
+  PresentationResultsPageSchema,
+  PresentationResultsSourcesSchema,
   PresentationRestV1CreateSessionResponseSchema,
   PresentationRestV1HostSnapshotResponseSchema,
   PresentationRestV1JoinSessionResponseSchema,
@@ -14,7 +17,11 @@ import {
   PresentationRestV1SessionListWithReportStatusResponseSchema,
   type PresentationContent,
 } from "@openround/contracts";
-import { MemoryRepository, type PresentationSessionRecord } from "@openround/db";
+import {
+  MemoryRepository,
+  type CreatorContext,
+  type PresentationSessionRecord,
+} from "@openround/db";
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
@@ -41,22 +48,18 @@ async function waitForLaterWallClockMillisecond(earlierTimestamp: string) {
   throw new Error(`Wall clock did not advance beyond ${earlierTimestamp}`);
 }
 
-async function signIn(target: FastifyInstance) {
+async function signIn(target: FastifyInstance, email = "presentation-host@example.com") {
   const magic = await target.inject({
     method: "POST",
     url: "/v1/auth/magic-link",
     payload: {
-      email: "presentation-host@example.com",
+      email,
       segment: "workplace",
       acceptPolicies: true,
     },
   });
   const token = new URL(magic.json<{ debugUrl: string }>().debugUrl).searchParams.get("token")!;
-  const verified = await verifyEmailAndSignIn(
-    target,
-    `/v1/auth/verify?token=${token}`,
-    "presentation-host@example.com",
-  );
+  const verified = await verifyEmailAndSignIn(target, `/v1/auth/verify?token=${token}`, email);
   const setCookie = verified.headers["set-cookie"]!;
   return (Array.isArray(setCookie) ? setCookie[0]! : setCookie).split(";")[0]!;
 }
@@ -77,6 +80,152 @@ afterEach(async () => {
 });
 
 describe("live Presentation sessions", () => {
+  it("serves the filtered retained Results history and totals independently of cursor pages", async () => {
+    const built = await buildApp(
+      ConfigSchema.parse({
+        NODE_ENV: "test",
+        ALLOW_IN_MEMORY: "true",
+        WEB_ORIGIN: "http://localhost:3000",
+        PUBLIC_API_URL: "http://localhost:4000",
+        FEATURE_PRESENTATIONS: "false",
+        FEATURE_PRESENTATION_REALTIME: "false",
+        LOG_LEVEL: "silent",
+      }),
+      { repository: new MemoryRepository(), cache: new MemorySessionCache() },
+    );
+    app = built.app;
+    const cookie = await signIn(app);
+    const { creator } = (await app.inject({ url: "/v1/auth/me", headers: { cookie } })).json<{
+      creator: CreatorContext;
+    }>();
+    const presentationId = randomUUID();
+    const olderPresentationId = randomUUID();
+    const content: PresentationContent = {
+      schemaVersion: 2,
+      title: "Previous edition",
+      description: "",
+      experiencePreset: { id: "focus", version: 1 },
+      blocks: [
+        {
+          id: randomUUID(),
+          kind: "content",
+          layout: "title_body",
+          textElements: [
+            { id: randomUUID(), role: "title", text: "Private", region: "top_center", order: 0 },
+          ],
+          mediaId: null,
+          mediaAlt: null,
+          speakerNotes: "PRIVATE_NOTES",
+        },
+      ],
+    };
+    for (let index = 0; index < 27; index += 1) {
+      const createdAt = new Date(Date.UTC(2024, 0, index + 1));
+      await built.presentationSessions.createSession({
+        id: randomUUID(),
+        workspaceId: creator.workspaceId,
+        presentationId: index === 0 ? olderPresentationId : presentationId,
+        presentationVersionId: randomUUID(),
+        title: index === 0 ? "Previous %_ edition" : "Current edition",
+        content,
+        code: String(1_000_000 + index),
+        status: index === 0 ? "finished" : "active",
+        phase: index === 0 ? "finished" : "lobby",
+        currentBlockIndex: index === 0 ? 0 : -1,
+        revision: 0,
+        createdBy: creator.userId,
+        createdAt,
+        updatedAt: createdAt,
+        finishedAt: index === 0 ? createdAt : null,
+        liveExpiresAt: new Date(createdAt.getTime() + 60_000),
+        retentionExpiresAt: new Date(Date.now() + 86_400_000),
+      });
+    }
+
+    const url = "/v1/presentation-sessions/results";
+    const headers = { cookie };
+    const participantRead = vi.spyOn(built.presentationSessions, "listParticipants");
+    const responseRead = vi.spyOn(built.presentationSessions, "listResponses");
+    for (const path of [url, `${url}/analytics`, `${url}/sources`]) {
+      expect((await app.inject({ url: path })).statusCode).toBe(401);
+      expect(
+        (await app.inject({ url: `${path}?expectedWorkspaceId=${randomUUID()}`, headers }))
+          .statusCode,
+      ).toBe(409);
+    }
+    for (const path of [url, `${url}/analytics`]) {
+      const malformedSearch = await app.inject({ url: `${path}?search=edition%00`, headers });
+      expect(malformedSearch.statusCode).toBe(400);
+      expect(malformedSearch.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
+    }
+    const first = await app.inject({ url, headers });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.headers["cache-control"]).toBe("private, no-store");
+    expect(first.headers.pragma).toBe("no-cache");
+    const page = PresentationResultsPageSchema.parse(first.json());
+    expect(page.items).toHaveLength(25);
+    expect(page.items.every((item) => item.presentationId === presentationId)).toBe(true);
+    expect(page.nextCursor).toEqual(expect.any(String));
+    expect(first.body).not.toMatch(/participants|cursorCreatedAt|PRIVATE_NOTES/);
+    const next = await app.inject({
+      url: `${url}?cursor=${page.nextCursor}&expectedWorkspaceId=${creator.workspaceId}`,
+      headers,
+    });
+    expect(next.statusCode, next.body).toBe(200);
+    expect(PresentationResultsPageSchema.parse(next.json())).toMatchObject({
+      items: [
+        { presentationId, status: "active", reportStatus: null },
+        { presentationId: olderPresentationId, status: "finished", reportStatus: "pending" },
+      ],
+      nextCursor: null,
+    });
+    expect((await app.inject({ url: `${url}?cursor=malformed`, headers })).statusCode).toBe(400);
+    const analytics = await app.inject({
+      url: `${url}/analytics?limit=1&cursor=ignored`,
+      headers,
+    });
+    expect(analytics.statusCode, analytics.body).toBe(200);
+    expect(analytics.headers["cache-control"]).toBe("private, no-store");
+    expect(PresentationResultsAnalyticsSchema.parse(analytics.json())).toEqual({
+      active: 26,
+      finished: 1,
+      participantJoins: 0,
+      activity: {
+        month: [{ start: "2024-01-01", count: 27 }],
+        quarter: [{ start: "2024-01-01", count: 27 }],
+      },
+    });
+    const filter = new URLSearchParams({
+      search: "%_ EDITION",
+      presentationId: olderPresentationId,
+      status: "finished",
+      from: "2024-01-01T00:00:00.000Z",
+      to: "2024-01-01T00:00:00.000Z",
+    });
+    const filtered = await app.inject({ url: `${url}?${filter}`, headers });
+    expect(PresentationResultsPageSchema.parse(filtered.json()).items).toEqual([
+      expect.objectContaining({ title: "Previous %_ edition", reportStatus: "pending" }),
+    ]);
+    const totals = await app.inject({ url: `${url}/analytics?${filter}`, headers });
+    expect(PresentationResultsAnalyticsSchema.parse(totals.json())).toMatchObject({
+      active: 0,
+      finished: 1,
+    });
+    const sources = await app.inject({ url: `${url}/sources`, headers });
+    expect(sources.headers["cache-control"]).toBe("private, no-store");
+    expect(PresentationResultsSourcesSchema.parse(sources.json()).sources).toEqual(
+      expect.arrayContaining([
+        { id: presentationId, title: "Current edition" },
+        { id: olderPresentationId, title: "Previous %_ edition" },
+      ]),
+    );
+    expect(participantRead).not.toHaveBeenCalled();
+    expect(responseRead).not.toHaveBeenCalled();
+    const outsider = await signIn(app, "presentation-outsider@example.com");
+    const outsiderPage = await app.inject({ url, headers: { cookie: outsider } });
+    expect(outsiderPage.json()).toEqual({ items: [], nextCursor: null });
+  });
+
   it("hosts mixed blocks, protects answer keys, reconnects, and produces timeline evidence", async () => {
     const cache = new RecordingSessionCache();
     const repository = new MemoryRepository({ initialWorkspaceId: BETA_WORKSPACE_ID });
@@ -732,6 +881,24 @@ describe("live Presentation sessions", () => {
     expect(
       Object.fromEntries(finishedList.map(({ id, reportStatus }) => [id, reportStatus])),
     ).toEqual({ [lobby.id]: "ready", [failedSession.id]: "failed" });
+    const results = await app.inject({
+      url: "/v1/presentation-sessions/results",
+      headers: { cookie },
+    });
+    expect(results.statusCode, results.body).toBe(200);
+    expect(PresentationResultsPageSchema.parse(results.json()).items).toEqual(
+      expect.arrayContaining(
+        finishedList.map(({ id, participantCount, responseCount, blockCount, reportStatus }) =>
+          expect.objectContaining({
+            id,
+            participantCount,
+            responseCount,
+            blockCount,
+            reportStatus,
+          }),
+        ),
+      ),
+    );
     const legacyFinishedList = await app.inject({
       url: "/v1/presentation-sessions",
       headers: { cookie },

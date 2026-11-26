@@ -46,7 +46,27 @@ const expectedKeys = [
   "roundLimit",
   "voteCount",
   "voteCountOne",
+  "analyticsTitle",
+  "analyticsRound",
+  "analyticsOpen",
+  "analyticsWithheld",
+  "analyticsEmpty",
+  "analyticsVotes",
+  "analyticsIdeasWithVotes",
+  "analyticsIdea",
+  "analyticsIdeaNumber",
+  "analyticsIdeaUnavailable",
+  "analyticsShare",
+  "analyticsShareNote",
 ] as const;
+
+const sharedEnglishKeys: Partial<
+  Record<SupportedLocale, readonly (typeof expectedKeys)[number][]>
+> = {
+  "fr-FR": ["voteCount", "voteCountOne"],
+  "es-ES": ["analyticsIdea", "analyticsIdeaNumber"],
+  "it-IT": ["analyticsIdea", "analyticsIdeaNumber"],
+};
 
 describe("guided workshop localization", () => {
   it.each(supportedLocales)(
@@ -54,15 +74,13 @@ describe("guided workshop localization", () => {
     (locale) => {
       const english = guidedWorkshopCopy("en-CA");
       const copy = guidedWorkshopCopy(locale);
-      expect(Object.keys(copy)).toHaveLength(43);
       expect(Object.keys(copy)).toEqual(expectedKeys);
       for (const key of expectedKeys) {
         expect(copy[key].trim(), key).toBeTruthy();
         expect(copy[key].match(/\{\w+\}/g) ?? [], key).toEqual(
           english[key].match(/\{\w+\}/g) ?? [],
         );
-        // French uses the same singular and plural vote labels as English.
-        if (locale !== "en-CA" && key !== "voteCount" && key !== "voteCountOne")
+        if (locale !== "en-CA" && !sharedEnglishKeys[locale]?.includes(key))
           expect(copy[key], key).not.toBe(english[key]);
       }
       expect(copy.selectObject.match(/\{\w+\}/g)).toEqual(["{object}"]);
@@ -72,6 +90,7 @@ describe("guided workshop localization", () => {
       expect(copy.ballotCountOne.match(/\{\w+\}/g)).toEqual(["{count}"]);
       expect(copy.voteCount.match(/\{\w+\}/g)).toEqual(["{count}"]);
       expect(copy.voteCountOne.match(/\{\w+\}/g)).toEqual(["{count}"]);
+      expect(copy.analyticsIdeaNumber.match(/\{\w+\}/g)).toEqual(["{number}"]);
       expect(copy.openParticipantPanel).not.toBe(copy.closeParticipantPanel);
       expect(copy.focusMode).not.toBe(copy.exitFocusMode);
       expect(copy.zoomIn).not.toBe(copy.zoomOut);

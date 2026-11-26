@@ -648,9 +648,12 @@ for (const mobile of [false, true]) {
     page.setDefaultTimeout(15_000);
     await page.emulateMedia({ colorScheme: "dark" });
     await signInBeta(page);
+    await specialistLocale(page, "en-CA");
     await page.goto("/boards");
     const title = `Synthetic board ${randomUUID().slice(0, 8)}`;
     const firstIdea = `Synthetic first priority ${"LongUnbrokenIdea".repeat(15)}`;
+    const secondIdea = "Synthetic second priority";
+    const thirdIdea = "Synthetic third priority";
     await openWorkshopCreate(page);
     await page.getByLabel("Board title", { exact: true }).fill(title);
     await page
@@ -669,6 +672,7 @@ for (const mobile of [false, true]) {
       colorScheme: "dark",
       reducedMotion: "reduce",
     });
+    const otherContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
     const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
     await publicContext.addCookies([
       { name: "openround_creator", value: "synthetic-unrelated-cookie", url: api },
@@ -717,17 +721,26 @@ for (const mobile of [false, true]) {
       await guest.getByLabel("Your idea", { exact: true }).fill("Synthetic idea to remove");
       await guest.getByRole("button", { name: "Submit idea", exact: true }).click();
       await expect(own).toContainText("Synthetic idea to remove");
+      for (const idea of [secondIdea, thirdIdea]) {
+        await guest.getByLabel("Your idea", { exact: true }).fill(idea);
+        await guest.getByRole("button", { name: "Submit idea", exact: true }).click();
+        await expect(own).toContainText(idea);
+      }
 
       await page.getByRole("button", { name: "Refresh", exact: true }).click();
       const pending = page
         .locator("section")
         .filter({ has: page.getByRole("heading", { name: "Awaiting review", exact: true }) });
       await expect(pending).toContainText("Synthetic idea to remove");
-      await pending
-        .getByRole("listitem")
-        .filter({ hasText: "Synthetic first priority" })
-        .getByRole("button", { name: "Approve", exact: true })
-        .click();
+      for (const idea of [firstIdea, secondIdea, thirdIdea]) {
+        await hostCommand(page, () =>
+          pending
+            .getByRole("listitem")
+            .filter({ hasText: idea })
+            .getByRole("button", { name: "Approve", exact: true })
+            .click(),
+        );
+      }
       await pending
         .getByRole("listitem")
         .filter({ hasText: "Synthetic idea to remove" })
@@ -759,26 +772,103 @@ for (const mobile of [false, true]) {
       await expect(approved).not.toContainText("Synthetic idea to remove");
       await expect(own).not.toContainText("Synthetic idea to remove");
       await expect(own).toContainText("Removed");
-      await page.getByRole("button", { name: "Start voting", exact: true }).click();
-      await expect(guest.getByRole("checkbox", { name: firstIdea, exact: true })).toBeVisible();
-      await guest.getByRole("checkbox", { name: firstIdea, exact: true }).check();
+      const startVoting = page.getByRole("button", { name: "Start voting", exact: true });
+      const closeBoard = page.getByRole("button", { name: "Close board", exact: true });
+      const analytics = page.getByRole("region", { name: "Board analytics", exact: true });
+      const results = analytics.getByRole("table", { name: "Voting results", exact: true });
+      const votingRound = analytics.getByRole("combobox", { name: "Voting round", exact: true });
+      const openNotice = analytics.getByText("Vote totals are available after this round closes.", {
+        exact: true,
+      });
+      const metricValue = (label: string) =>
+        analytics
+          .getByRole("term")
+          .filter({ hasText: label })
+          .locator("..")
+          .getByRole("definition");
+      const voteReceipt = "Your votes are saved. Your ballot cannot be changed.";
+      await hostCommand(page, () => startVoting.click());
+      await expect(openNotice).toBeVisible();
+      await expect(votingRound).toHaveCount(0);
+      for (const idea of [firstIdea, secondIdea, thirdIdea]) {
+        await guest.getByRole("checkbox", { name: idea, exact: true }).check();
+      }
       await visualEvidence(guest, "guest");
       await guest.getByRole("button", { name: "Submit votes", exact: true }).click();
-      await expect(
-        guest.getByText("Your votes are saved. Your ballot cannot be changed.", { exact: true }),
-      ).toBeVisible();
+      await expect(guest.getByText(voteReceipt, { exact: true })).toBeVisible();
       await expect(guest.getByText("1 votes", { exact: true })).toHaveCount(0);
       await guest.reload();
-      await expect(
-        guest.getByText("Your votes are saved. Your ballot cannot be changed.", { exact: true }),
-      ).toBeVisible();
+      await expect(guest.getByText(voteReceipt, { exact: true })).toBeVisible();
       await expect(guest.getByRole("checkbox")).toHaveCount(0);
       await narrowAccessibility(guest);
-      await page.getByRole("button", { name: "Close board", exact: true }).click();
-      await expect(guest.getByText("1 votes", { exact: true })).toBeVisible();
+
+      const other = await otherContext.newPage();
+      await other.goto(`/board/${id}`);
+      await other.getByRole("button", { name: "Join board", exact: true }).click();
+      await other.getByRole("checkbox", { name: thirdIdea, exact: true }).check();
+      await other.getByRole("button", { name: "Submit votes", exact: true }).click();
+      await expect(other.getByText(voteReceipt, { exact: true })).toBeVisible();
+      await expect(openNotice).toBeVisible();
+      await expect(results).toHaveCount(0);
+      await expect(analytics.getByRole("term")).toHaveCount(0);
+
+      await hostCommand(page, () => closeBoard.click());
+      await expect(guest.getByText("2 votes", { exact: true })).toBeVisible();
       await expect(
         guest.getByRole("heading", { name: "Synthetic priority group", exact: true }),
       ).toBeVisible();
+      await expect(guest.getByRole("region", { name: "Board analytics", exact: true })).toHaveCount(
+        0,
+      );
+      await expect(metricValue("Votes cast")).toHaveText("4");
+      await expect(metricValue("Ideas with votes")).toHaveText("3");
+      await expect(results.getByRole("columnheader")).toHaveText([
+        "Idea",
+        "Votes cast",
+        "Share of votes",
+      ]);
+      const rows = results.getByRole("row");
+      await expect(rows).toHaveCount(4);
+      const expectedResults = [
+        [thirdIdea, "2", "50%"],
+        [firstIdea, "1", "25%"],
+        [secondIdea, "1", "25%"],
+      ] as const;
+      for (const [index, [idea, votes, share]] of expectedResults.entries()) {
+        const row = rows.nth(index + 1);
+        await expect(row.getByText(idea, { exact: true })).toBeVisible();
+        await expect(row.getByText(votes, { exact: true })).toBeVisible();
+        await expect(row.getByText(share, { exact: true })).toBeVisible();
+      }
+
+      await page.getByRole("button", { name: "Reopen collection", exact: true }).click();
+      const reopen = page.getByRole("dialog", { name: "Reopen this workshop?", exact: true });
+      await hostCommand(page, () =>
+        reopen.getByRole("button", { name: "Reopen workshop", exact: true }).click(),
+      );
+      await expect(votingRound.locator("option:checked")).toHaveText("Round 2");
+      await expect(openNotice).toBeVisible();
+      await expect(results).toHaveCount(0);
+      await votingRound.selectOption({ label: "Round 1" });
+      await expect(rows.nth(1).getByText(thirdIdea, { exact: true })).toBeVisible();
+      await expect(rows.nth(1).getByText("50%", { exact: true })).toBeVisible();
+      await narrowAccessibility(page);
+      await analytics.screenshot({
+        path: test.info().outputPath("idea-board-analytics-dark-320.png"),
+      });
+
+      await votingRound.selectOption({ label: "Round 2" });
+      await hostCommand(page, () => startVoting.click());
+      await expect(openNotice).toBeVisible();
+      await hostCommand(page, () => closeBoard.click());
+      await expect(
+        analytics.getByText("No votes were cast in this round.", { exact: true }),
+      ).toBeVisible();
+      await expect(metricValue("Votes cast")).toHaveText("0");
+      await expect(metricValue("Ideas with votes")).toHaveText("0");
+      await expect(analytics.getByText(/\d%/)).toHaveCount(0);
+      await votingRound.selectOption({ label: "Round 1" });
+      await expect(rows).toHaveCount(4);
 
       for (const request of await Promise.all(requests)) {
         expect(request.cookie).toBeUndefined();
@@ -839,7 +929,7 @@ for (const mobile of [false, true]) {
       primaryFailure = caught;
     }
     try {
-      await publicContext.close();
+      await Promise.all([publicContext.close(), otherContext.close()]);
     } catch (caught) {
       if (primaryFailure === null) primaryFailure = caught;
     }

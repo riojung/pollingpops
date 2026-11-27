@@ -1309,6 +1309,76 @@ describe.skipIf(!adminUrl)("PostgreSQL media cleanup migration", () => {
   });
 });
 
+describe.skipIf(!adminUrl)("PostgreSQL Round report participant count migration", () => {
+  it("backfills the participant count and refreshes it for existing report writers", async () => {
+    const migrations = await discoverMigrations(
+      join(dirname(fileURLToPath(import.meta.url)), "../migrations"),
+    );
+    const migration = migrations.find(({ version }) => version === 120)!;
+    const pool = new Pool({ connectionString: adminUrl });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`CREATE TEMP TABLE reports (
+        id integer PRIMARY KEY,
+        status text NOT NULL,
+        metrics jsonb NOT NULL
+      ) ON COMMIT DROP`);
+      await client.query("SET LOCAL search_path = pg_temp");
+      await client.query(`INSERT INTO reports (id, status, metrics) VALUES
+        (1, 'ready', '{"metrics":{"participantCount":6}}'),
+        (2, 'ready', '{"metrics":{"participantCount":0}}'),
+        (3, 'pending', '{"metrics":{"participantCount":11}}'),
+        (4, 'failed', '{"metrics":{"participantCount":12}}'),
+        (5, 'ready', '{"metrics":{}}'),
+        (6, 'ready', '{"metrics":{"participantCount":null}}'),
+        (7, 'ready', '{"metrics":{"participantCount":"6"}}'),
+        (8, 'ready', '{"metrics":{"participantCount":true}}'),
+        (9, 'ready', '{"metrics":{"participantCount":-6}}'),
+        (10, 'ready', '{"metrics":{"participantCount":6.5}}'),
+        (11, 'ready', '{"metrics":{"participantCount":9007199254740992}}'),
+        (12, 'ready', '{"metrics":{"participantCount":1e100}}')`);
+      await client.query(migration.sql);
+      const counts = await client.query<{ participant_count: string | null }>(
+        "SELECT participant_count::text FROM reports ORDER BY id",
+      );
+      expect(counts.rows.map(({ participant_count }) => participant_count)).toEqual([
+        "6",
+        "0",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]);
+
+      await expect(
+        client.query(`INSERT INTO reports (id, status, metrics)
+          VALUES (13, 'ready', '{"metrics":{"participantCount":9007199254740991}}')
+          RETURNING participant_count::text`),
+      ).resolves.toMatchObject({ rows: [{ participant_count: "9007199254740991" }] });
+      await expect(
+        client.query(`UPDATE reports SET metrics = '{"metrics":{"participantCount":7}}'
+          WHERE id = 13 RETURNING participant_count::text`),
+      ).resolves.toMatchObject({ rows: [{ participant_count: "7" }] });
+      await expect(
+        client.query(
+          "UPDATE reports SET status = 'failed' WHERE id = 13 RETURNING participant_count::text",
+        ),
+      ).resolves.toMatchObject({ rows: [{ participant_count: null }] });
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await pool.end();
+    }
+  });
+});
+
 describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
   const clusterAdminUrl = process.env.TEST_DATABASE_ADMIN_URL;
   const clusterRuntimeUrl = process.env.TEST_DATABASE_URL;
@@ -1463,6 +1533,8 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
       { version: 116, name: "starter_copy_receipts" },
       { version: 117, name: "survey_pages_readers" },
       { version: 118, name: "survey_branching_readers" },
+      { version: 119, name: "survey_results_history" },
+      { version: 120, name: "round_report_participant_count" },
     ]);
 
     // Missing-ledger bootstrap is exercised against an isolated legacy baseline above.
@@ -11229,6 +11301,12 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
     );
     expect(reportJob).toMatchObject({ reportId: report.id, workspaceId: first.workspaceId });
     await repository.retryReportJob(reportJob!, "terminal report failure", now, true);
+    await expect(
+      repository.getReportHistoryAnalytics(first.workspaceId, {}),
+    ).resolves.toMatchObject({
+      failed: 1,
+      participantJoins: 0,
+    });
     expect(await repository.getReport(first.workspaceId, report.id)).toMatchObject({
       status: "failed",
       generatedAt: null,
@@ -11244,6 +11322,12 @@ describe.skipIf(!enabled)("PostgreSQL row-level isolation", () => {
 
     persistedSession.state = revealed.state;
     await repository.saveSession(persistedSession, locked.state.version, report);
+    await expect(
+      repository.getReportHistoryAnalytics(first.workspaceId, {}),
+    ).resolves.toMatchObject({
+      ready: 1,
+      participantJoins: 2,
+    });
     expect((await repository.getSessionById(sessionId))?.state.phase).toBe("question_reveal");
     expect(await repository.getReportBySession(first.workspaceId, sessionId)).toMatchObject({
       id: report.id,

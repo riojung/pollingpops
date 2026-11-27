@@ -3588,6 +3588,7 @@ const HistoryActivitySchema = z.object({
     .max(REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT),
 });
 export const ReportHistoryAnalyticsSchema = ReportHistoryTotalsSchema.extend({
+  participantJoins: z.number().int().nonnegative().optional(),
   activity: HistoryActivitySchema,
 });
 export type ReportHistoryAnalytics = z.infer<typeof ReportHistoryAnalyticsSchema>;

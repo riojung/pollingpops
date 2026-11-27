@@ -778,6 +778,8 @@ export interface ReportHistoryRecord {
   expiresAt: Date;
 }
 
+export type ReportHistoryAnalyticsRecord = ReportHistoryAnalytics & { participantJoins: number };
+
 export interface ReportHistoryFilters {
   search?: string;
   status?: Report["status"];
@@ -1663,7 +1665,7 @@ export interface Repository {
   getReportHistoryAnalytics(
     workspaceId: string,
     filters: ReportHistoryFilters,
-  ): Promise<ReportHistoryAnalytics>;
+  ): Promise<ReportHistoryAnalyticsRecord>;
   createFollowup(
     input: Extract<FollowupRecord, { purpose: "recovery" }>,
     access: FollowupAccessRecord[],

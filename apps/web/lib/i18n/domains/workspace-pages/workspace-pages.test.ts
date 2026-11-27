@@ -34,6 +34,8 @@ const resultsWorkspaceKeys = [
   "resultsOverview.matchingReports",
   "resultsOverview.allReportsScope",
   "resultsOverview.loadedReportsEvidence",
+  "resultsOverview.roundJoinScope",
+  "resultsOverview.roundJoinTotalUnavailable",
   "resultsOverview.moreRoundEvidence",
   "resultsOverview.roundDateBasis",
   "resultsOverview.noMatchingReportActivity",

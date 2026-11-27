@@ -228,7 +228,13 @@ function surveyPage(items: ReturnType<typeof survey>[], nextCursor: string | nul
 function reportAnalytics(ready = 2, pending = 0, failed = 0) {
   const count = ready + pending + failed;
   const periods = count > 0 ? [{ start: "2026-10-01", count }] : [];
-  return { ready, pending, failed, activity: { month: periods, quarter: periods } };
+  return {
+    ready,
+    pending,
+    failed,
+    participantJoins: ready * 5,
+    activity: { month: periods, quarter: periods },
+  };
 }
 function practiceAnalytics(open = 2) {
   const periods = open > 0 ? [{ start: "2026-10-01", count: open }] : [];
@@ -476,11 +482,12 @@ describe("Results workspace", () => {
     harness.dispose();
   });
 
-  it("uses exact Round activity across pages and switches grouping without another request", async () => {
+  it("uses full-history Round joins and activity across pages without another totals request", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       matchesRequest(path, reportTotalsPath)
         ? {
             ...reportAnalytics(28, 3, 1),
+            participantJoins: 640,
             activity: {
               month: [
                 { start: "2026-10-01", count: 25 },
@@ -497,19 +504,23 @@ describe("Results workspace", () => {
       "Report totals and activity include every page matching your filters.",
     );
     expect(before).toContain("Grouped by report creation date in UTC.");
-    expect(before).toContain("Participant joins, recovery, and follow-ups use loaded reports.");
+    expect(before).toContain("Recovery and follow-ups use loaded reports.");
     expect(before).toContain("<dt>Matching reports</dt><dd>32</dd>");
     expect(before).toContain("Ready<strong>28</strong>");
     expect(before).toContain("Processing<strong>3</strong>");
     expect(before).toContain("Needs attention<strong>1</strong>");
-    expect(before).toContain("<dt>Participant joins</dt><dd>5<");
+    expect(before).toContain(
+      "<dt>Participant joins</dt><dd>640<p>Across ready reports matching your filters.</p></dd>",
+    );
+    expect(before).toContain("1 recovered of 2 eligible");
     expect(before).toContain("1 results shown · More available");
     expect(activityCounts()).toEqual(["25", "7"]);
 
     clickButton("Load More");
     const after = await harness.settle();
     expect(after).toContain("<dt>Matching reports</dt><dd>32</dd>");
-    expect(after).toContain("<dt>Participant joins</dt><dd>10<");
+    expect(after).toContain("<dt>Participant joins</dt><dd>640<");
+    expect(after).toContain("2 recovered of 4 eligible");
     expect(after).toContain("Later Round result");
     expect(activityCounts()).toEqual(["25", "7"]);
     changeField("Group by", "quarter");
@@ -541,7 +552,9 @@ describe("Results workspace", () => {
     changeField("From", "2026-10-01");
     changeField("To", "2026-10-31");
     changeSearch("First");
-    expect(await harness.settle()).toContain("<dt>Matching reports</dt><dd>29</dd>");
+    const filtered = await harness.settle();
+    expect(filtered).toContain("<dt>Matching reports</dt><dd>29</dd>");
+    expect(filtered).toContain("<dt>Participant joins</dt><dd>145<");
     expect(first[1].signal?.aborted).toBe(true);
     const listUrl = historyCalls("/v1/reports").at(-1)![0];
     const totalsUrl = historyCalls(reportTotalsPath).at(-1)![0];
@@ -560,11 +573,14 @@ describe("Results workspace", () => {
     expect(listParams.get("to")).toBe(new Date("2026-10-31T23:59:59.999").toISOString());
 
     fixtures.workspaceId = "workspace-b";
-    expect(harness.render()).not.toContain("<dt>Matching reports</dt><dd>29</dd>");
+    const loading = harness.render();
+    expect(loading).not.toContain("<dt>Matching reports</dt><dd>29</dd>");
+    expect(loading).not.toContain("<dt>Participant joins</dt><dd>145<");
     previousTotals.resolve(reportAnalytics(88));
     const after = await harness.settle();
     expect(after).toContain("<dt>Matching reports</dt><dd>7</dd>");
     expect(after).not.toContain("<dt>Matching reports</dt><dd>88</dd>");
+    expect(after).toContain("<dt>Participant joins</dt><dd>35<");
     expect(activityCounts()).toEqual(["7"]);
     for (const endpoint of ["/v1/reports", reportTotalsPath]) {
       const params = new URLSearchParams(historyCalls(endpoint).at(-1)![0].split("?")[1]);
@@ -587,6 +603,7 @@ describe("Results workspace", () => {
     const before = await harness.settle();
     expect(before).toContain("Report totals and activity could not load.");
     expect(before).toContain("<dt>Results shown</dt><dd>1</dd>");
+    expect(before).toContain("<dt>Participant joins</dt><dd>—</dd>");
     expect(before).toContain('href="/report/report-first"');
     expect(before).not.toContain("Matching reports");
     expect(activityCounts()).toEqual([]);
@@ -601,9 +618,30 @@ describe("Results workspace", () => {
     expect(await harness.settle()).toContain("Loading report totals and activity…");
     expect(historyCalls("/v1/reports")).toHaveLength(1);
     pendingRetry.resolve(reportAnalytics(27));
-    expect(await harness.settle()).toContain("<dt>Matching reports</dt><dd>27</dd>");
+    const recovered = await harness.settle();
+    expect(recovered).toContain("<dt>Matching reports</dt><dd>27</dd>");
+    expect(recovered).toContain("<dt>Participant joins</dt><dd>135<");
     expect(activityCounts()).toEqual(["27"]);
     expect(totalsReads).toBe(2);
+    harness.dispose();
+  });
+
+  it("keeps Round analytics available when an older API omits the join total", async () => {
+    const { ready, pending, failed, activity } = reportAnalytics(2, 1);
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      matchesRequest(path, reportTotalsPath)
+        ? { ready, pending, failed, activity }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    const markup = await harness.settle();
+    expect(markup).toContain("<dt>Matching reports</dt><dd>3</dd>");
+    expect(markup).toContain("Ready<strong>2</strong>");
+    expect(markup).toContain(
+      "<dt>Participant joins</dt><dd>—<p>Participant join total unavailable.</p></dd>",
+    );
+    expect(markup).not.toContain("Retry report analytics");
+    expect(activityCounts()).toEqual(["3"]);
     harness.dispose();
   });
 
@@ -733,7 +771,8 @@ describe("Results workspace", () => {
           ),
         ).toBe(false);
         expect(loadingMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
-        expect(loadingMarkup).not.toContain("<dt>Participant joins</dt>");
+        expect(loadingMarkup).toContain("<dt>Participant joins</dt><dd>10<");
+        expect(loadingMarkup).not.toContain("Paired response recovery");
         expect(activityCounts()).toEqual(["2"]);
       }
       if (view === "surveys") {
@@ -755,7 +794,8 @@ describe("Results workspace", () => {
       expect(failedMarkup).toContain("Connection interrupted");
       if (view === "results") {
         expect(failedMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
-        expect(failedMarkup).not.toContain("<dt>Participant joins</dt>");
+        expect(failedMarkup).toContain("<dt>Participant joins</dt><dd>10<");
+        expect(failedMarkup).not.toContain("Paired response recovery");
         expect(activityCounts()).toEqual(["2"]);
       }
       if (view === "surveys") {
@@ -828,7 +868,10 @@ describe("Results workspace", () => {
       const harness = resultsHarness();
       const markup = await harness.settle();
       expect(headings()).toEqual([empty]);
-      if (view === "results") expect(markup).toContain("No reports match these filters.");
+      if (view === "results") {
+        expect(markup).toContain("No reports match these filters.");
+        expect(markup).toContain("<dt>Participant joins</dt><dd>0<");
+      }
       if (view === "practice") expect(markup).toContain("No practice items match these filters.");
       if (view === "presentations")
         expect(markup).toContain("No Presentation sessions match these filters.");

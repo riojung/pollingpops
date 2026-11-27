@@ -807,11 +807,12 @@ report authority and detail paths. Its question chart compares response counts i
 or by volume, with filters for assessments and opinion questions.
 
 The **Results analytics** dashboard adds a monthly or quarterly history chart and shortcuts to
-eligible reports. The Round view's **Matching reports** total, status counts, and activity chart
-cover the full filtered report history using the same workspace, source, status, search, and report
-creation date filters as the list. The chart uses the six most recent represented UTC months or
-quarters, with earlier periods accessible through date filters. The list and analytics load and
-retry independently. Participant joins, recovery, follow-ups, and shortcuts use the loaded reports.
+eligible reports. The Round view's **Matching reports** total, status counts, **Participant joins**,
+and activity chart cover the full filtered report history using the same workspace, source, status,
+search, and report creation date filters as the list. Participant joins add the recorded counts
+from matching ready reports. The chart uses the six most recent represented UTC months or quarters,
+with earlier periods accessible through date filters. The list and analytics load and retry
+independently. Recovery, follow-ups, and report shortcuts use the loaded reports.
 
 The Practice view's matching items, status counts, recorded attempts, and activity chart also cover
 the full filtered history. They include assignments and recovery follow-ups. Completion divides

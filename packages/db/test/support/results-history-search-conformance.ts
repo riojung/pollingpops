@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { expect } from "vitest";
 import { createGameState } from "@openround/game-engine";
-import type { QuizDraft } from "@openround/contracts";
+import { LegacyReportSchema, type QuizDraft } from "@openround/contracts";
 import type { CreatorContext, Repository } from "../../src/index.js";
 
 /** Search and analytics use retained history across pages. */
@@ -104,7 +104,12 @@ export async function expectResultsHistorySearchConformance(
         status,
         generatedAt: status === "ready" ? now.toISOString() : null,
         expiresAt: expiresAt.toISOString(),
-        metrics: { participantCount: 0, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
+        metrics: {
+          participantCount: [11, 6, 12, 7][index] ?? 1,
+          completedCount: 0,
+          answerCount: 0,
+          accuracyPercent: 0,
+        },
         questions: [],
         participants: [],
       });
@@ -265,7 +270,7 @@ export async function expectResultsHistorySearchConformance(
 
   const analytics = (filters: Parameters<Repository["getReportHistoryAnalytics"]>[1] = {}) =>
     repository.getReportHistoryAnalytics(owner.workspaceId, filters);
-  expect((await reports()).items.some(({ id }) => id === owned.reports[0])).toBe(false);
+  expect((await reports()).items.some(({ id }) => id === owned.reports[1])).toBe(false);
   const activity = {
     month: [
       { start: "2024-04-01", count: 1 },
@@ -288,6 +293,7 @@ export async function expectResultsHistorySearchConformance(
     ready: 26,
     pending: 1,
     failed: 1,
+    participantJoins: 37,
     activity,
   });
   const firstDate = new Date(dates[0]!);
@@ -303,6 +309,7 @@ export async function expectResultsHistorySearchConformance(
     ready: 0,
     pending: 1,
     failed: 0,
+    participantJoins: 0,
     activity: {
       month: [{ start: "2023-12-01", count: 1 }],
       quarter: [{ start: "2023-10-01", count: 1 }],
@@ -312,6 +319,7 @@ export async function expectResultsHistorySearchConformance(
     ready: 1,
     pending: 0,
     failed: 1,
+    participantJoins: 7,
     activity: {
       month: [
         { start: "2024-03-01", count: 1 },
@@ -333,9 +341,46 @@ export async function expectResultsHistorySearchConformance(
       ready: 0,
       pending: 0,
       failed: 0,
+      participantJoins: 0,
       activity: { month: [], quarter: [] },
     });
   }
+  const oldReadyDate = new Date(dates[1]!);
+  const oldReadyFilters = {
+    quizId: owned.quizId,
+    search: "  FrOzEn needle  ",
+    status: "ready",
+    from: oldReadyDate,
+    to: oldReadyDate,
+  } as const;
+  const oldReadyAnalytics = {
+    ready: 1,
+    pending: 0,
+    failed: 0,
+    participantJoins: 6,
+    activity: {
+      month: [{ start: "2024-01-01", count: 1 }],
+      quarter: [{ start: "2024-01-01", count: 1 }],
+    },
+  };
+  expect(await analytics(oldReadyFilters)).toEqual(oldReadyAnalytics);
+  expect(await repository.getReportHistoryAnalytics(outsider.workspaceId, {})).toMatchObject({
+    ready: 1,
+    pending: 1,
+    participantJoins: 6,
+  });
+
+  const oldReadyReport = LegacyReportSchema.parse(
+    await repository.getReport(owner.workspaceId, owned.reports[1]!),
+  );
+  for (const participantCount of [undefined, "6", -6, 6.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await repository.saveReport(owner.workspaceId, {
+      ...oldReadyReport,
+      metrics: { ...oldReadyReport.metrics, participantCount: participantCount as number },
+    });
+    expect(await analytics(oldReadyFilters)).toEqual({ ...oldReadyAnalytics, participantJoins: 0 });
+  }
+  await repository.saveReport(owner.workspaceId, oldReadyReport);
 
   const practiceAnalytics = (
     filters: Omit<Parameters<Repository["getFollowupHistoryAnalytics"]>[1], "now"> = {},

@@ -315,12 +315,17 @@ async function mockHistory(page: Page) {
       totalsReads.push(query);
       const filtered = reports.filter(historyFilter(query));
       const totals = { ready: 0, pending: 0, failed: 0 };
-      for (const report of filtered) totals[report.status]++;
+      let participantJoins = 0;
+      for (const report of filtered) {
+        totals[report.status]++;
+        if (report.status === "ready") participantJoins += report.participantCount;
+      }
       return route.fulfill({
         json:
           query.get("includeActivity") === "true"
             ? {
                 ...totals,
+                participantJoins,
                 activity: {
                   month: activityPeriods(filtered, "month"),
                   quarter: activityPeriods(filtered, "quarter"),
@@ -499,9 +504,7 @@ for (const mobile of [false, true]) {
     await expect(overview).toContainText(
       "Report totals and activity include every page matching your filters.",
     );
-    await expect(overview).toContainText(
-      "Participant joins, recovery, and follow-ups use loaded reports.",
-    );
+    await expect(overview).toContainText("Recovery and follow-ups use loaded reports.");
     const analyticsQuery = { expectedWorkspaceId, includeActivity: "true" };
     expect(fixture.totalsReads.map((query) => Object.fromEntries(query))).toEqual([analyticsQuery]);
     const activity = overview.getByRole("region", { name: "Activity over time", exact: true });
@@ -528,7 +531,7 @@ for (const mobile of [false, true]) {
       .locator("..")
       .locator("dd")
       .first();
-    await expect(joins).toContainText("300");
+    await expect(joins).toHaveText(/^312\s*Across ready reports matching your filters\.$/);
     await expect(overview).toContainText("75 recovered of 100 eligible");
     await expect(
       overview.getByRole("meter", { name: "Paired response recovery", exact: true }),
@@ -608,7 +611,7 @@ for (const mobile of [false, true]) {
     await expect(grouping).toHaveValue("quarter");
     await expect(overview).toContainText("No paired response recovery evidence");
     await expect(overview.getByRole("meter")).toHaveCount(0);
-    await expect(joins).toContainText("—");
+    await expect(joins).toHaveText(/^0\s*Across ready reports matching your filters\.$/);
     await expect(reportLinks.getByRole("link")).toHaveCount(0);
     await expect(reportLinks).toContainText("No ready reports in the results shown.");
     await expect(periods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
@@ -674,6 +677,7 @@ for (const mobile of [false, true]) {
       .poll(() => Object.fromEntries(fixture.reads.at(-1)?.query ?? []))
       .toEqual({ limit: "25", ...filteredQuery });
     await expectMatchingReports(overview, 1, 0, 0);
+    await expect(joins).toHaveText(/^12\s*Across ready reports matching your filters\.$/);
     await expect(periods).toHaveText([/Jul.*Sep.*2026\s*1$/]);
     await page.getByRole("button", { name: "List view", exact: true }).click();
     await expect(collection).toHaveAttribute("data-view", "list");

@@ -52,7 +52,6 @@ import {
   type FolderArtifactType,
   type QuizDraft,
   type Report,
-  type ReportHistoryAnalytics,
   type ReportHistoryTotals,
   type SupportedLocale,
   type SessionPolicy,
@@ -170,6 +169,7 @@ import type {
   QuizVersionRecord,
   RuntimeDatabasePrincipalSecurity,
   ReportJob,
+  ReportHistoryAnalyticsRecord,
   ReportHistoryFilters,
   ReportHistoryListOptions,
   ReportHistoryRecord,
@@ -6821,15 +6821,16 @@ export class PostgresRepository implements Repository {
   async getReportHistoryAnalytics(
     workspaceId: string,
     filters: ReportHistoryFilters,
-  ): Promise<ReportHistoryAnalytics> {
+  ): Promise<ReportHistoryAnalyticsRecord> {
     const result = await this.workspaceQuery(
       workspaceId,
       `WITH matching_reports AS (
-         SELECT reports.status, reports.created_at AT TIME ZONE 'UTC' AS created_at_utc
+         SELECT reports.status, reports.created_at AT TIME ZONE 'UTC' AS created_at_utc,
+                reports.participant_count
          ${REPORT_HISTORY_SOURCE}
          ${REPORT_HISTORY_WHERE}
        ), periods AS (
-         SELECT status, date_trunc('month', created_at_utc) AS month_start,
+         SELECT status, participant_count, date_trunc('month', created_at_utc) AS month_start,
                 date_trunc('quarter', created_at_utc) AS quarter_start
          FROM matching_reports
        ), grouped AS (
@@ -6842,23 +6843,26 @@ export class PostgresRepository implements Repository {
                 count(*) AS count,
                 count(*) FILTER (WHERE status = 'ready') AS ready,
                 count(*) FILTER (WHERE status = 'pending') AS pending,
-                count(*) FILTER (WHERE status = 'failed') AS failed
+                count(*) FILTER (WHERE status = 'failed') AS failed,
+                coalesce(sum(participant_count), 0) AS participant_joins
          FROM periods
          GROUP BY GROUPING SETS ((), (month_start), (quarter_start))
        ), ranked AS (
          SELECT *, row_number() OVER (PARTITION BY period ORDER BY start DESC) AS bucket_number
          FROM grouped
        )
-       SELECT period, to_char(start, 'YYYY-MM-DD') AS start, count, ready, pending, failed
+       SELECT period, to_char(start, 'YYYY-MM-DD') AS start, count, ready, pending, failed,
+              participant_joins
        FROM ranked
        WHERE bucket_number <= $7
        ORDER BY ranked.start ASC`,
       [...reportHistoryFilterParams(workspaceId, filters), REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT],
     );
-    const analytics: ReportHistoryAnalytics = {
+    const analytics: ReportHistoryAnalyticsRecord = {
       ready: 0,
       pending: 0,
       failed: 0,
+      participantJoins: 0,
       activity: { month: [], quarter: [] },
     };
     for (const row of result.rows) {
@@ -6866,8 +6870,9 @@ export class PostgresRepository implements Repository {
         analytics.ready = Number(row.ready);
         analytics.pending = Number(row.pending);
         analytics.failed = Number(row.failed);
+        analytics.participantJoins = Number(row.participant_joins);
       } else {
-        const period = row.period as keyof ReportHistoryAnalytics["activity"];
+        const period = row.period as keyof ReportHistoryAnalyticsRecord["activity"];
         analytics.activity[period].push({ start: String(row.start), count: Number(row.count) });
       }
     }

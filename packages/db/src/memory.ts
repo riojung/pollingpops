@@ -3,7 +3,6 @@ import {
   SessionPolicySchema,
   type FollowupHistoryAnalytics,
   type FolderArtifactType,
-  type ReportHistoryAnalytics,
   type ReportHistoryTotals,
   type SessionPolicy,
 } from "@openround/contracts";
@@ -103,6 +102,7 @@ import type {
   QuizDraftUpdate,
   QuizVersionRecord,
   ReportJob,
+  ReportHistoryAnalyticsRecord,
   ReportHistoryFilters,
   ReportHistoryListOptions,
   ReportHistoryRecord,
@@ -4710,14 +4710,23 @@ export class MemoryRepository implements Repository {
   }
 
   async getReportHistoryAnalytics(workspaceId: string, filters: ReportHistoryFilters) {
-    const analytics: ReportHistoryAnalytics = {
+    const analytics: ReportHistoryAnalyticsRecord = {
       ready: 0,
       pending: 0,
       failed: 0,
+      participantJoins: 0,
       activity: { month: [], quarter: [] },
     };
     for (const { report, createdAt } of this.matchingReportHistory(workspaceId, filters)) {
       analytics[report.status] += 1;
+      const participantCount = report.metrics?.participantCount;
+      if (
+        report.status === "ready" &&
+        Number.isSafeInteger(participantCount) &&
+        participantCount >= 0
+      ) {
+        analytics.participantJoins += participantCount;
+      }
       countHistoryActivity(analytics.activity, createdAt);
     }
     return analytics;

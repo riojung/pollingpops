@@ -1906,13 +1906,13 @@ state. Exports, summary sharing, follow-up creation, retention and deletion keep
 permissions and confirmation steps.
 
 The **Results** page includes a **Results analytics** dashboard for Rounds, Presentations,
-Surveys, and practice. In the Round view, **Matching reports**, its status counts, and
+Surveys, and practice. In the Round view, **Matching reports**, its status counts, **Participant joins**, and
 **Activity over time** cover every page matching the workspace, status, Round, date, and search
-filters. Group the chart by UTC month or quarter of report creation. It shows the six most recent
-periods with matching reports. Set the date filters to see earlier periods. Totals and activity
-can load while the report list is loading or unavailable. **Retry report analytics** retries both
-while the loaded reports stay available. **Load More** expands the loaded-report evidence and
-shortcuts.
+filters. **Participant joins** adds the participant count from matching ready reports. Group the
+chart by UTC month or quarter of report creation. It shows the six most recent periods with matching
+reports. Set the date filters to see earlier periods. Totals and activity can load while the report
+list is loading or unavailable. **Retry report analytics** retries both while the loaded reports
+stay available. **Load More** expands the recovery and follow-up evidence and report shortcuts.
 
 In the **Practice** view, **Matching practice items**, its status counts, recorded attempts, and
 **Activity over time** cover every page matching the workspace and filters. The chart counts

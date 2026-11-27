@@ -152,7 +152,7 @@ async function expectNoLoadedEvidence(
   fullHistory = false,
 ) {
   await expect(overview.getByText(/^(Results shown|Survey runs shown)$/)).toHaveCount(0);
-  if (!fullHistory || analytics.kind !== "session") {
+  if (!fullHistory || (analytics.kind !== "report" && analytics.kind !== "session")) {
     await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
   }
   await expect(overview.getByText(/loaded (?:reports|results)/)).toHaveCount(0);
@@ -314,7 +314,10 @@ async function installHistory(page: Page) {
           pending: 0,
           failed: 0,
           ...(url.searchParams.get("includeActivity") === "true"
-            ? { activity: { month: periods, quarter: periods } }
+            ? {
+                participantJoins: ready ? report.participantCount : 0,
+                activity: { month: periods, quarter: periods },
+              }
             : {}),
         },
       });
@@ -471,6 +474,15 @@ for (const [view, listPath] of [
             overview.getByText("Participant joins", { exact: true }).locator("..").locator("dd"),
           ).toHaveText(/^12\s*Join records across matching sessions\.$/);
         }
+        if (view === "results") {
+          await expect(
+            overview
+              .getByText("Participant joins", { exact: true })
+              .locator("..")
+              .locator("dd")
+              .first(),
+          ).toHaveText(/^12\s*Across ready reports matching your filters\.$/);
+        }
         if (view === "surveys") {
           await expect(overview.getByRole("meter")).toHaveCount(0);
           await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
@@ -507,8 +519,6 @@ for (const [view, listPath] of [
       await expect(
         overview.getByRole("region", { name: analytics.shortcutLabel, exact: true }),
       ).toBeVisible();
-      if (view === "results")
-        await expect(overview.getByText("Participant joins", { exact: true })).toBeVisible();
       expect(fixture.reads.slice(readsBeforeRetry).map(({ path }) => path)).toEqual([listPath]);
       expect(queriesFor(listPath)).toEqual([listQuery, listQuery]);
     } finally {

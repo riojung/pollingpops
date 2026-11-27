@@ -265,7 +265,9 @@ export function ResultsOverview(props: Props) {
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
-    const statusCounts = typeof props.analytics === "object" ? props.analytics : summary;
+    const roundAnalytics = typeof props.analytics === "object" ? props.analytics : undefined;
+    const statusCounts = roundAnalytics ?? summary;
+    const participantJoins = roundAnalytics?.participantJoins;
     const ready = props.items.filter((item) => item.status === "ready");
     dateBasis = t("resultsOverview.roundDateBasis");
     links = ready.map((item) => ({
@@ -286,7 +288,7 @@ export function ResultsOverview(props: Props) {
         status: "failed",
       },
     ];
-    if (typeof props.analytics === "object") {
+    if (roundAnalytics) {
       shownLabel = t("resultsOverview.matchingReports");
       shownCount = statusCounts.ready + statusCounts.pending + statusCounts.failed;
     }
@@ -308,13 +310,23 @@ export function ResultsOverview(props: Props) {
       <>
         <dt>{t("resultsOverview.participantJoins")}</dt>
         <dd>
-          {summary.ready
-            ? number(ready.reduce((sum, item) => sum + item.participantCount, 0))
-            : "—"}
-          <p>{t("resultsOverview.readyOnly")}</p>
+          {participantJoins === undefined ? "—" : number(participantJoins)}
+          {roundAnalytics ? (
+            <p>
+              {t(
+                participantJoins === undefined
+                  ? "resultsOverview.roundJoinTotalUnavailable"
+                  : "resultsOverview.roundJoinScope",
+              )}
+            </p>
+          ) : null}
         </dd>
-        <dt className={styles.additionalMetric}>{t("resultsOverview.followups")}</dt>
-        <dd>{number(summary.followups)}</dd>
+        {hasLoadedEvidence ? (
+          <>
+            <dt className={styles.additionalMetric}>{t("resultsOverview.followups")}</dt>
+            <dd>{number(summary.followups)}</dd>
+          </>
+        ) : null}
       </>
     );
   } else if (props.kind === "practice") {
@@ -522,11 +534,9 @@ export function ResultsOverview(props: Props) {
             ) : null}
           </div>
           {hasLoadedEvidence || (props.kind !== "rounds" && hasFullAnalytics) ? (
-            <>
-              <div className={styles.widget}>{primary}</div>
-              <dl className={styles.widget}>{secondary}</dl>
-            </>
+            <div className={styles.widget}>{primary}</div>
           ) : null}
+          <dl className={styles.widget}>{secondary}</dl>
         </div>
       ) : null}
       {hasFullAnalytics || hasLoadedEvidence ? (

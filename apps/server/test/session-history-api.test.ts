@@ -506,7 +506,7 @@ describe("Results history search APIs", () => {
     expect((await request(analyticsPath, { status: "ready" })).statusCode).toBe(400);
   });
 
-  it("returns private report totals and optional activity across all pages with the report history filters", async () => {
+  it("returns private report totals and optional activity and participant joins across all pages", async () => {
     const f = await fixture();
     const owned = await f.seedRounds(f.owner.creator, 28);
     const foreign = await f.seedRounds(f.outsider.creator, 1);
@@ -516,6 +516,7 @@ describe("Results history search APIs", () => {
       workspaceId: string,
       sessionId: string,
       status: "ready" | "pending" | "failed",
+      participantCount: number,
     ) => {
       const id = randomUUID();
       await f.repository.saveReport(workspaceId, {
@@ -524,7 +525,7 @@ describe("Results history search APIs", () => {
         status,
         generatedAt: status === "ready" ? from.toISOString() : null,
         expiresAt,
-        metrics: { participantCount: 0, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
+        metrics: { participantCount, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
         questions: [],
         participants: [],
       });
@@ -532,15 +533,16 @@ describe("Results history search APIs", () => {
     };
     const reportIds = [];
     for (const [index, { id }] of owned.rounds.entries()) {
-      reportIds.push(
-        await seedReport(
-          f.owner.creator.workspaceId,
-          id,
-          index === 0 ? "pending" : index === 1 ? "failed" : "ready",
-        ),
+      const reportId = await seedReport(
+        f.owner.creator.workspaceId,
+        id,
+        index === 0 ? "pending" : index === 1 ? "failed" : "ready",
+        [10, 10, 5][index] ?? (index === 27 ? 8 : 0),
       );
+      reportIds.push(reportId);
+      f.repository.reportCreatedAt.set(reportId, new Date(from.getTime() + index));
     }
-    await seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready");
+    await seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready", 11);
 
     const path = "/v1/reports/totals";
     const getTotals = (query = "", headers = f.owner.headers) =>
@@ -562,6 +564,7 @@ describe("Results history search APIs", () => {
       headers: f.owner.headers,
     });
     expect(page.json().items).toHaveLength(25);
+    expect(page.json().items.map(({ id }: { id: string }) => id)).not.toContain(reportIds[2]);
     expect(page.json().nextCursor).toEqual(expect.any(String));
     const pagination = new URLSearchParams({ limit: "1", cursor: page.json().nextCursor });
     expect((await getTotals(`?${pagination}`)).json()).toEqual(response.json());
@@ -595,7 +598,7 @@ describe("Results history search APIs", () => {
     const older = new Date("2025-03-31T23:59:59.999Z");
     const newer = new Date("2025-04-01T00:00:00.000Z");
     reportIds.forEach((id, index) =>
-      f.repository.reportCreatedAt.set(id, index === 0 ? older : newer),
+      f.repository.reportCreatedAt.set(id, index === 0 || index === 2 ? older : newer),
     );
     const analytics = vi.spyOn(f.repository, "getReportHistoryAnalytics");
     expect(
@@ -612,14 +615,15 @@ describe("Results history search APIs", () => {
     expect(activity.headers["cache-control"]).toBe("private, no-store");
     expect(ReportHistoryAnalyticsSchema.parse(activity.json())).toEqual({
       ...response.json(),
+      participantJoins: 13,
       activity: {
         month: [
-          { start: "2025-03-01", count: 1 },
-          { start: "2025-04-01", count: 27 },
+          { start: "2025-03-01", count: 2 },
+          { start: "2025-04-01", count: 26 },
         ],
         quarter: [
-          { start: "2025-01-01", count: 1 },
-          { start: "2025-04-01", count: 27 },
+          { start: "2025-01-01", count: 2 },
+          { start: "2025-04-01", count: 26 },
         ],
       },
     });
@@ -632,6 +636,19 @@ describe("Results history search APIs", () => {
       ready: 0,
       pending: 1,
       failed: 0,
+      participantJoins: 0,
+      activity: {
+        month: [{ start: "2025-03-01", count: 1 }],
+        quarter: [{ start: "2025-01-01", count: 1 }],
+      },
+    });
+    filters.set("search", "  ReCeNt room  ");
+    filters.set("status", "ready");
+    expect((await getTotals(`?includeActivity=true&${filters}`)).json()).toEqual({
+      ready: 1,
+      pending: 0,
+      failed: 0,
+      participantJoins: 5,
       activity: {
         month: [{ start: "2025-03-01", count: 1 }],
         quarter: [{ start: "2025-01-01", count: 1 }],
@@ -641,7 +658,12 @@ describe("Results history search APIs", () => {
       ready: 0,
       pending: 0,
       failed: 0,
+      participantJoins: 0,
       activity: { month: [], quarter: [] },
+    });
+    expect((await getTotals("?includeActivity=true", f.outsider.headers)).json()).toMatchObject({
+      ready: 1,
+      participantJoins: 11,
     });
   });
 

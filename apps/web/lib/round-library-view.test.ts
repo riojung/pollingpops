@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   readRoundLibraryView,
   roundLibraryViewStorageKey,
@@ -18,6 +18,8 @@ function memoryStorage(initial: Record<string, string> = {}) {
 }
 
 describe("Round library view preference", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("versions and scopes the key to the workspace", () => {
     expect(roundLibraryViewStorageKey("workspace-a")).toBe(
       "openround:round-library-view:v1:workspace-a",
@@ -28,11 +30,11 @@ describe("Round library view preference", () => {
   });
 
   it("round-trips an allowlisted view without crossing workspaces", () => {
-    const storage = memoryStorage();
-    writeRoundLibraryView(storage, "workspace-a", "list");
+    vi.stubGlobal("window", { localStorage: memoryStorage() });
+    writeRoundLibraryView("workspace-a", "list");
 
-    expect(readRoundLibraryView(storage, "workspace-a")).toBe("list");
-    expect(readRoundLibraryView(storage, "workspace-b")).toBe("grid");
+    expect(readRoundLibraryView("workspace-a")).toBe("list");
+    expect(readRoundLibraryView("workspace-b")).toBe("grid");
   });
 
   it("falls back to grid for stale or unavailable storage", () => {
@@ -45,7 +47,20 @@ describe("Round library view preference", () => {
       },
     };
 
-    expect(readRoundLibraryView(stale, "workspace-a")).toBe("grid");
-    expect(readRoundLibraryView(unavailable, "workspace-a")).toBe("grid");
+    vi.stubGlobal("window", { localStorage: stale });
+    expect(readRoundLibraryView("workspace-a")).toBe("grid");
+    vi.stubGlobal("window", { localStorage: unavailable });
+    expect(readRoundLibraryView("workspace-a")).toBe("grid");
+  });
+
+  it("handles a blocked localStorage getter when reading and writing", () => {
+    vi.stubGlobal("window", {
+      get localStorage() {
+        throw new DOMException("Storage is blocked", "SecurityError");
+      },
+    });
+
+    expect(readRoundLibraryView("workspace-a")).toBe("grid");
+    expect(() => writeRoundLibraryView("workspace-a", "list")).not.toThrow();
   });
 });

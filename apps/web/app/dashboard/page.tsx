@@ -718,7 +718,7 @@ function BetaDashboard() {
     if (!workspaceId) return;
     setLibraryViewState({
       workspaceId,
-      view: readRoundLibraryView(window.localStorage, workspaceId),
+      view: readRoundLibraryView(workspaceId),
     });
   }, [workspaceId]);
 
@@ -729,7 +729,7 @@ function BetaDashboard() {
   function setLibraryView(view: RoundLibraryView) {
     if (!workspaceId) return;
     setLibraryViewState({ workspaceId, view });
-    writeRoundLibraryView(window.localStorage, workspaceId, view);
+    writeRoundLibraryView(workspaceId, view);
   }
 
   async function duplicate(quizId: string) {

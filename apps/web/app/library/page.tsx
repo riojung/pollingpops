@@ -34,6 +34,7 @@ import {
   libraryBulkActionIds,
   libraryDiscoveryHref,
   readLibraryDiscoveryQuery,
+  type LibraryDiscoveryQuery,
   type LibraryItemStatus,
   type LibraryOwnershipFilter,
   type LibraryStatusFilter,
@@ -121,7 +122,7 @@ function dateLabel(locale: string, value: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value));
 }
 
-function LibraryContent() {
+function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
   const { locale, t } = useLocale();
   const flowCopy = workspaceFlowMessages(locale);
   const discoveryCopy = libraryDiscoveryCopy(locale);
@@ -138,11 +139,9 @@ function LibraryContent() {
       (organization) => organization.role === "owner" || organization.role === "admin",
     ),
   );
-  const scope = libraryScope(searchParams.get("scope"));
   const workspaceId = creator?.workspaceId ?? "";
   const canDelete = creator?.role === "owner";
   const presentationsEnabled = productFeatures?.presentations === true;
-  const requestedType = searchParams.get("type");
   const [type, setType] = useState<LibraryType>(
     requestedType === "surveys"
       ? "surveys"
@@ -150,10 +149,9 @@ function LibraryContent() {
         ? "presentations"
         : "rounds",
   );
+  const contentKind = type === "rounds" ? "round" : type === "surveys" ? "survey" : "presentation";
   const creation = workspaceCreationOptions({ canEdit, productFeatures }).find(
-    (option) =>
-      option.kind ===
-      (type === "rounds" ? "round" : type === "surveys" ? "survey" : "presentation"),
+    (option) => option.kind === contentKind,
   );
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
   const [presentations, setPresentations] = useState<PresentationRecord[]>([]);
@@ -193,11 +191,6 @@ function LibraryContent() {
   const refresh = useCallback(async () => {
     if (!mounted.current) return;
     const sequence = ++refreshSequence.current;
-    if (scope !== "workspace") {
-      setLoading(false);
-      setLoadedWorkspaceId(workspaceId);
-      return;
-    }
     setLoading(true);
     setError("");
     try {
@@ -268,7 +261,7 @@ function LibraryContent() {
     } finally {
       if (sequence === refreshSequence.current) setLoading(false);
     }
-  }, [presentationsEnabled, router, scope, workspaceId]);
+  }, [presentationsEnabled, router, workspaceId]);
   const refreshCurrent = useRef(refresh);
   refreshCurrent.current = refresh;
 
@@ -333,14 +326,8 @@ function LibraryContent() {
 
   useEffect(() => {
     if (!creator?.workspaceId) return;
-    setView(readRoundLibraryView(window.localStorage, creator.workspaceId));
+    setView(readRoundLibraryView(creator.workspaceId));
   }, [creator?.workspaceId]);
-
-  useEffect(() => {
-    ++selectionSequence.current;
-    setSelectedIds(new Set());
-    setAnnouncement("");
-  }, [scope]);
 
   useEffect(() => {
     const available = new Set(
@@ -489,7 +476,7 @@ function LibraryContent() {
   function chooseView(next: RoundLibraryView) {
     setView(next);
     if (creator?.workspaceId) {
-      writeRoundLibraryView(window.localStorage, creator.workspaceId, next);
+      writeRoundLibraryView(creator.workspaceId, next);
     }
   }
 
@@ -723,35 +710,34 @@ function LibraryContent() {
     }
   }
 
-  if (scope !== "workspace") {
-    return (
-      <SharedLibrary
-        scope={scope}
-        type={
-          requestedType === "surveys"
-            ? "surveys"
-            : requestedType === "presentations"
-              ? "presentations"
-              : "rounds"
-        }
-      />
-    );
-  }
+  const discoveryQuery: LibraryDiscoveryQuery = {
+    ...readLibraryDiscoveryQuery(searchParams),
+    q: search.trim().slice(0, 160),
+    kind: contentKind,
+    status,
+    favorites: favoritesOnly,
+    folder: folderId,
+  };
 
   return (
     <WorkspaceShell
       actions={
-        creation ? (
-          <Link className="button" href={creation.href}>
-            {t(
-              type === "surveys"
-                ? "pages.library.createSurvey"
-                : type === "rounds"
-                  ? "pages.library.createRound"
-                  : "pages.library.createPresentation",
-            )}
+        <>
+          <Link className="button-quiet" href={libraryDiscoveryHref(discoveryQuery)}>
+            {t("pages.sessions.backToLibrary", { type: t(`pages.common.${contentKind}`) })}
           </Link>
-        ) : null
+          {creation ? (
+            <Link className="button" href={creation.href}>
+              {t(
+                type === "surveys"
+                  ? "pages.library.createSurvey"
+                  : type === "rounds"
+                    ? "pages.library.createRound"
+                    : "pages.library.createPresentation",
+              )}
+            </Link>
+          ) : null}
+        </>
       }
       description={t("page.library.description")}
       eyebrow={t("page.library.eyebrow")}
@@ -765,16 +751,7 @@ function LibraryContent() {
         canManage={canManageShares}
       />
       <p>
-        <Link
-          href={libraryDiscoveryHref({
-            ...readLibraryDiscoveryQuery(searchParams),
-            q: search.trim().slice(0, 160),
-            kind: "all",
-            status,
-            favorites: favoritesOnly,
-            folder: folderId,
-          })}
-        >
+        <Link href={libraryDiscoveryHref({ ...discoveryQuery, kind: "all" })}>
           {discoveryCopy.allContent}
         </Link>
       </p>
@@ -1611,6 +1588,6 @@ function LibraryRoute() {
     requested === "rounds" || requested === "presentations" || requested === "surveys"
       ? requested
       : "all";
-  if (scope !== "workspace") return <SharedLibrary scope={scope} type={type} />;
-  return type === "all" ? <LibraryDiscovery /> : <LibraryContent />;
+  if (scope === "workspace" && type !== "all") return <LibraryContent requestedType={type} />;
+  return scope === "workspace" ? <LibraryDiscovery /> : <SharedLibrary scope={scope} type={type} />;
 }

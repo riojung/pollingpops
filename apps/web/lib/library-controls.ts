@@ -1,6 +1,51 @@
+import { LibraryFilterDateSchema } from "@openround/contracts";
+import type { LibraryType } from "./folders";
+
 export type LibraryItemStatus = "draft" | "published" | "archived";
 export type LibraryStatusFilter = "active" | LibraryItemStatus | "all";
 export type LibraryOwnershipFilter = "all" | "workspace";
+
+export interface LibraryDateRange {
+  dateFrom: string;
+  dateTo: string;
+}
+
+export function isLibraryDateRangeReversed({ dateFrom, dateTo }: LibraryDateRange): boolean {
+  return Boolean(dateFrom && dateTo && dateFrom > dateTo);
+}
+
+function normalizeLibraryDateRange(
+  from: string | null | undefined,
+  to: string | null | undefined,
+): LibraryDateRange {
+  const dateFrom = from ? (LibraryFilterDateSchema.safeParse(from).data ?? "") : "";
+  const dateTo = to ? (LibraryFilterDateSchema.safeParse(to).data ?? "") : "";
+  const range = { dateFrom, dateTo };
+  return isLibraryDateRangeReversed(range) ? { dateFrom: "", dateTo: "" } : range;
+}
+
+export function readLibraryDateRange(params: Pick<URLSearchParams, "get">): LibraryDateRange {
+  return normalizeLibraryDateRange(params.get("dateFrom"), params.get("dateTo"));
+}
+
+export function setLibraryDateRange(params: URLSearchParams, range: LibraryDateRange) {
+  const { dateFrom, dateTo } = normalizeLibraryDateRange(range.dateFrom, range.dateTo);
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  else params.delete("dateFrom");
+  if (dateTo) params.set("dateTo", dateTo);
+  else params.delete("dateTo");
+}
+
+export function libraryDateRangeBounds(range: Partial<LibraryDateRange>) {
+  const { dateFrom, dateTo } = normalizeLibraryDateRange(range.dateFrom, range.dateTo);
+  const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : undefined;
+  const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : undefined;
+  // Time zone offsets at the outer calendar bounds can cross the API's four-digit year range.
+  return {
+    from: from && from.getUTCFullYear() < 1 ? new Date("0001-01-01T00:00:00.000Z") : from,
+    to: to && to.getUTCFullYear() > 9999 ? new Date("9999-12-31T23:59:59.999Z") : to,
+  };
+}
 
 /** Keep header searches on the current content surface without forwarding private URL context. */
 export function librarySearchHref(query: string, pathname: string, search: string) {
@@ -37,6 +82,7 @@ export function librarySearchHref(query: string, pathname: string, search: strin
     (scope === "organization" || scope === "shared" || scope === "managed")
   )
     params.set("scope", scope);
+  if (pathname === "/library") setLibraryDateRange(params, readLibraryDateRange(current));
   if (query.trim()) params.set("q", query.trim().slice(0, 160));
   return `${sessions ? "/sessions" : "/library"}${params.size ? `?${params}` : ""}`;
 }
@@ -50,9 +96,10 @@ export interface LibraryFilterableItem {
   searchTerms?: readonly string[];
   folderId?: string | null;
   favorite?: boolean;
+  updatedAt?: string;
 }
 
-export interface LibraryFilters {
+export interface LibraryFilters extends Partial<LibraryDateRange> {
   query: string;
   status: LibraryStatusFilter;
   ownership: LibraryOwnershipFilter;
@@ -66,6 +113,9 @@ export function filterLibraryItems<T extends LibraryFilterableItem>(
   filters: LibraryFilters,
 ) {
   const query = filters.query.trim().toLocaleLowerCase("en-CA");
+  const bounds = libraryDateRangeBounds(filters);
+  const from = bounds.from?.getTime() ?? -Infinity;
+  const to = bounds.to?.getTime() ?? Infinity;
 
   return items.filter((item) => {
     if (
@@ -90,6 +140,10 @@ export function filterLibraryItems<T extends LibraryFilterableItem>(
       item.folderId !== filters.folderId
     ) {
       return false;
+    }
+    if (bounds.from || bounds.to) {
+      const updatedAt = Date.parse(item.updatedAt ?? "");
+      if (!Number.isFinite(updatedAt) || updatedAt < from || updatedAt > to) return false;
     }
 
     if (!query) return true;
@@ -123,7 +177,7 @@ export const libraryBulkActionIds = roundBulkActionIds;
 const discoveryKinds = ["all", "round", "presentation", "survey"] as const;
 export type LibraryDiscoveryKind = (typeof discoveryKinds)[number];
 export type LibraryDiscoverySort = "recent" | "title_asc" | "title_desc";
-export interface LibraryDiscoveryQuery {
+export interface LibraryDiscoveryQuery extends LibraryDateRange {
   q: string;
   kind: LibraryDiscoveryKind;
   status: LibraryStatusFilter;
@@ -168,6 +222,7 @@ export function readLibraryDiscoveryQuery(
     progress: option(params.get("progress"), ["all", "new", "in_progress", "done"], "all"),
     permission: option(params.get("permission"), ["all", "view", "use"], "all"),
     organizationId: organization && uuid.test(organization) ? organization : "",
+    ...readLibraryDateRange(params),
   };
 }
 
@@ -176,6 +231,7 @@ export function libraryDiscoveryParams(query: LibraryDiscoveryQuery, shared = fa
   if (query.q) params.set("q", query.q);
   if (query.kind !== "all") params.set("kind", query.kind);
   if (query.sort !== "recent") params.set("sort", query.sort);
+  setLibraryDateRange(params, query);
   if (shared) {
     if (query.progress !== "all") params.set("progress", query.progress);
     if (query.permission !== "all") params.set("permission", query.permission);
@@ -200,4 +256,14 @@ export function libraryDiscoveryHref(
     params.delete("kind");
   }
   return `/library${params.size ? `?${params}` : ""}`;
+}
+
+export function libraryFolderNavigationHref(
+  path: "/library" | "/library/folders",
+  type: LibraryType,
+  range: LibraryDateRange,
+) {
+  const params = new URLSearchParams({ type });
+  setLibraryDateRange(params, range);
+  return `${path}?${params}`;
 }

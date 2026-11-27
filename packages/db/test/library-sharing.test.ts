@@ -464,6 +464,85 @@ for (const backend of ["memory", "postgres"] as const)
           }
         }
       });
+      it("filters all sharing scopes and facet counts by inclusive share time before paginating", async () => {
+        const f = await fixture(repository);
+        const after = (milliseconds: number) => new Date(f.now.getTime() + milliseconds);
+        const from = after(1_000).toISOString();
+        const to = after(2_000).toISOString();
+        const publish = async (audience: LibraryShareCreate["audience"], now: Date) =>
+          (
+            await f.shares.create({
+              actorId: f.owner.userId,
+              workspaceId: f.source.id,
+              input: f.input({
+                audience,
+                recipientIds: audience === "people" ? [f.recipient.userId] : [],
+                permission: audience === "people" ? "use" : "view",
+              }),
+              now,
+            })
+          ).share.id;
+        await publish("people", after(999));
+        const olderPersonal = await publish("people", after(1_000));
+        const newerPersonal = await publish("people", after(1_750));
+        const olderOrganization = await publish("organization", after(1_250));
+        const newerOrganization =
+          repository instanceof PostgresRepository
+            ? await createPostgresLibrarySharingRun(repository)(f.owner.userId, async (tx) => {
+                const share = await tx.get(olderOrganization);
+                if (!share) throw new Error("Expected an organization share");
+                const id = randomUUID();
+                await tx.insert({
+                  ...share,
+                  id,
+                  requestId: randomUUID(),
+                  sharedAt: to.replace(/Z$/, "999Z"),
+                });
+                return id;
+              })
+            : await publish("organization", after(2_000));
+        await publish("organization", after(2_001));
+
+        for (const { scope, actorId, expected, permissions } of [
+          {
+            scope: "shared",
+            actorId: f.recipient.userId,
+            expected: [newerPersonal, olderPersonal],
+            permissions: { view: 0, use: 2 },
+          },
+          {
+            scope: "organization",
+            actorId: f.recipient.userId,
+            expected: [newerOrganization, olderOrganization],
+            permissions: { view: 2, use: 0 },
+          },
+          {
+            scope: "managed",
+            actorId: f.owner.userId,
+            expected: [newerOrganization, newerPersonal, olderOrganization, olderPersonal],
+            permissions: { view: 2, use: 2 },
+          },
+        ] as const) {
+          const input = { scope, actorId, from, to, limit: 1 };
+          const first = await f.shares.list(input);
+          expect(first.shares.map((row) => row.id)).toEqual(expected.slice(0, 1));
+          if (scope !== "shared") expect(first.shares[0]?.sharedAt).toBe(to);
+          expect(first.facets).toEqual({
+            kinds: { round: expected.length, presentation: 0, survey: 0 },
+            progress: { new: expected.length, in_progress: 0, done: 0 },
+            permissions,
+            total: expected.length,
+          });
+          expect(first.nextCursor).not.toBeNull();
+          const second = await f.shares.list({ ...input, cursor: first.nextCursor! });
+          expect(second.shares.map((row) => row.id)).toEqual(expected.slice(1, 2));
+          expect(second.facets).toEqual(first.facets);
+          await expect(
+            f.shares.list({ ...input, to: undefined, cursor: first.nextCursor! }),
+          ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        }
+      });
+
       it("binds strict cursors to actor/query/scope, accepts default legacy cursors and rechecks access between pages", async () => {
         const f = await fixture(repository);
         const targets = [];
@@ -494,6 +573,8 @@ for (const backend of ["memory", "postgres"] as const)
           { progress: "new" as const },
           { permission: "use" as const },
           { sort: "title_asc" as const },
+          { from: f.now.toISOString() },
+          { to: f.now.toISOString() },
         ])
           await expect(
             f.shares.list({ ...input, ...change, cursor: first.nextCursor! }),
@@ -523,6 +604,9 @@ for (const backend of ["memory", "postgres"] as const)
         expect((await f.shares.list({ ...input, cursor: legacy })).shares).toHaveLength(1);
         await expect(
           f.shares.list({ ...input, q: "Pinned", cursor: legacy }),
+        ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+        await expect(
+          f.shares.list({ ...input, from: f.now.toISOString(), cursor: legacy }),
         ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
         await f.shares.revoke({ actorId: f.owner.userId, id: first.shares[0]!.id, now: f.now });
         expect((await f.shares.list({ ...input, cursor: first.nextCursor! })).facets?.total).toBe(

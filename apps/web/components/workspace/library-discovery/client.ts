@@ -6,7 +6,11 @@ import {
   type LibraryShareListFacets,
 } from "@openround/contracts";
 import { apiFetch } from "../../../lib/api";
-import { libraryDiscoveryParams, type LibraryDiscoveryQuery } from "../../../lib/library-controls";
+import {
+  libraryDateRangeBounds,
+  libraryDiscoveryParams,
+  type LibraryDiscoveryQuery,
+} from "../../../lib/library-controls";
 import type { LibraryScope } from "../library-sharing/client";
 
 export type WorkspaceLibraryItem = LibraryItemsResponse["items"][number];
@@ -25,6 +29,11 @@ export async function readLibraryDiscovery(
 ): Promise<DiscoveryPage> {
   const shared = scope !== "workspace";
   const params = libraryDiscoveryParams(query, shared);
+  const bounds = libraryDateRangeBounds(query);
+  params.delete("dateFrom");
+  params.delete("dateTo");
+  if (bounds.from) params.set("from", bounds.from.toISOString());
+  if (bounds.to) params.set("to", bounds.to.toISOString());
   params.set("limit", "30");
   if (cursor) params.set("cursor", cursor);
   if (shared) {

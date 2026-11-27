@@ -8,6 +8,7 @@ import {
   type LibraryItemsQuery,
   type LibraryItemsResponse,
 } from "@openround/contracts";
+import { libraryDateRangeFilter } from "./library-date-range.js";
 import { MemoryRepository } from "./memory.js";
 import { PostgresRepository } from "./postgres.js";
 import { getMemoryPlatformRepository } from "./platform-memory.js";
@@ -81,6 +82,8 @@ function scopeFingerprint(input: LibraryDiscoveryInput, query: LibraryItemsQuery
     favorites: query.favorites ?? null,
     folder: query.folder,
     limit: query.limit,
+    from: query.from,
+    to: query.to,
   };
   return createHash("sha256")
     .update(
@@ -245,8 +248,10 @@ export class MemoryLibraryDiscoveryRepository implements LibraryDiscoveryReposit
       })),
     ];
     const needle = normalized(query.q);
+    const matchesDate = libraryDateRangeFilter(query);
     const matches = items.filter(
       (item) =>
+        matchesDate(item.updatedAt) &&
         (!needle || normalized(`${item.title}\n${item.description}`).includes(needle)) &&
         (query.favorites === undefined || item.favorite === query.favorites) &&
         (query.folder === "all" ||
@@ -328,6 +333,9 @@ export class PostgresLibraryDiscoveryRepository implements LibraryDiscoveryRepos
       const operator = direction === "ASC" ? ">" : "<";
       const cursorKey = query.sort === "recent" ? "$9::timestamptz" : '$9::text COLLATE "C"';
       const order = `${key} ${direction}, artifact_type COLLATE "C" ASC, id ASC`;
+      // Include the entire millisecond represented by the upper bound.
+      const updatedDuringRange = `($13::timestamptz IS NULL OR updated_at >= $13)
+        AND ($14::timestamptz IS NULL OR updated_at < ($14 + interval '1 millisecond'))`;
       const result = await client.query(
         `
         WITH raw AS (
@@ -335,16 +343,19 @@ export class PostgresLibraryDiscoveryRepository implements LibraryDiscoveryRepos
             date_trunc('milliseconds', updated_at) updated_at, folder_id, current_version_id,
             jsonb_array_length(draft->'questions') item_count
           FROM quizzes WHERE workspace_id = $1 AND 'round' = ANY($3::text[])
+            AND ${updatedDuringRange}
           UNION ALL
           SELECT id, 'presentation', title, description, status,
             date_trunc('milliseconds', updated_at), folder_id, current_version_id,
             jsonb_array_length(draft->'blocks')
           FROM presentations WHERE workspace_id = $1 AND 'presentation' = ANY($3::text[])
+            AND ${updatedDuringRange}
           UNION ALL
           SELECT id, 'survey', data->'draft'->>'title', coalesce(data->'draft'->>'description', ''), data->>'status',
             date_trunc('milliseconds', updated_at), folder_id, (data->>'versionId')::uuid,
             jsonb_array_length(data->'draft'->'items')
           FROM surveys WHERE workspace_id = $1 AND 'survey' = ANY($3::text[])
+            AND ${updatedDuringRange}
         ), metadata AS (
           SELECT raw.*, EXISTS(SELECT 1 FROM library_favorites f WHERE f.workspace_id = $1 AND f.user_id = $2 AND f.artifact_type = raw.artifact_type AND f.artifact_id = raw.id) favorite
           FROM raw
@@ -384,6 +395,8 @@ export class PostgresLibraryDiscoveryRepository implements LibraryDiscoveryRepos
           cursor?.artifactType ?? null,
           cursor?.id ?? null,
           query.limit + 1,
+          query.from ?? null,
+          query.to ?? null,
         ],
       );
       await client.query("COMMIT");

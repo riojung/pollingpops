@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { LibraryItemsQuerySchema, LibraryItemSummarySchema } from "../src/library-discovery";
+import {
+  LibraryFilterDateSchema,
+  LibraryItemsQuerySchema,
+  LibraryItemSummarySchema,
+} from "../src/library-discovery";
 
 describe("Library discovery contracts", () => {
   it("normalizes bounded HTTP filters and parses false literally", () => {
@@ -27,6 +31,24 @@ describe("Library discovery contracts", () => {
     ]) {
       expect(LibraryItemsQuerySchema.safeParse(invalid).success).toBe(false);
     }
+  });
+
+  it("validates calendar dates and canonicalizes inclusive timestamp bounds", () => {
+    expect(LibraryFilterDateSchema.parse("2024-02-29")).toBe("2024-02-29");
+    for (const date of ["2026-02-29", "2026-11-1", "0000-01-01"])
+      expect(LibraryFilterDateSchema.safeParse(date).success).toBe(false);
+    expect(
+      LibraryItemsQuerySchema.parse({
+        from: "2024-02-29T00:00:00Z",
+        to: "2024-02-29T00:00:00.0Z",
+      }),
+    ).toMatchObject({
+      from: "2024-02-29T00:00:00.000Z",
+      to: "2024-02-29T00:00:00.000Z",
+    });
+    expect(LibraryItemsQuerySchema.safeParse({ from: "2024-02-29T00:00:00.0001Z" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects content and private draft fields in metadata summaries", () => {

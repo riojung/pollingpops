@@ -12,9 +12,14 @@ import {
 } from "@openround/contracts";
 import { MAX_SURVEY_PAGES, SurveyPageSchema, type SurveyPage } from "@openround/contracts/surveys";
 import { apiFetch } from "../../../lib/api";
+import { setLibraryDateRange, type LibraryDateRange } from "../../../lib/library-controls";
 
 export type LibraryScope = "workspace" | "organization" | "shared" | "managed";
 export type SharedLibraryScope = Exclude<LibraryScope, "workspace">;
+export interface SharedLibraryReturnContext {
+  scope: SharedLibraryScope;
+  dateRange: LibraryDateRange;
+}
 export type SharedArtifactType = "round" | "presentation" | "survey";
 export type { LibraryShareSummary };
 export interface LibraryShareSource {
@@ -50,11 +55,21 @@ export function libraryScope(value: string | null): LibraryScope {
     : "workspace";
 }
 
-export function libraryScopeHref(scope: LibraryScope, type: string) {
+export function libraryScopeHref(scope: LibraryScope, type: string, dateRange?: LibraryDateRange) {
   const query = new URLSearchParams();
   if (scope !== "workspace") query.set("scope", scope);
   if (type === "rounds" || type === "surveys" || type === "presentations") query.set("type", type);
+  if (dateRange) setLibraryDateRange(query, dateRange);
   return `/library${query.size ? `?${query}` : ""}`;
+}
+
+export function librarySharedReaderHref(id: string, context?: SharedLibraryReturnContext) {
+  const query = new URLSearchParams();
+  if (context) {
+    if (context.scope !== "shared") query.set("scope", context.scope);
+    setLibraryDateRange(query, context.dateRange);
+  }
+  return `/library/shared/${id}${query.size ? `?${query}` : ""}`;
 }
 
 export function librarySharePath(id: string) {

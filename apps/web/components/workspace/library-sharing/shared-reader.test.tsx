@@ -1,4 +1,4 @@
-import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import type { LibraryShareSummary, SupportedLocale } from "@openround/contracts"
 import type { SurveyPage } from "@openround/contracts/surveys";
 import type { SharedLibraryDetail, SharedQuestion } from "./client";
 import type * as ClientModule from "./client";
+import SharedLibraryPage from "../../../app/library/shared/[id]/page";
 import { surveyPagesCopy } from "../../../lib/i18n/survey-pages-copy";
 
 type Hooks = {
@@ -78,9 +79,18 @@ vi.mock("../workspace-provider", () => ({
   useWorkspace: () => ({ creator: { userId: mocked.userId, workspaceId: mocked.workspaceId } }),
 }));
 vi.mock("../workspace-shell", () => ({
-  WorkspaceShell: ({ children, title }: { children: ReactNode; title: string }) => (
+  WorkspaceShell: ({
+    actions,
+    children,
+    title,
+  }: {
+    actions?: ReactNode;
+    children: ReactNode;
+    title: string;
+  }) => (
     <main>
       <h1>{title}</h1>
+      {actions}
       {children}
     </main>
   ),
@@ -149,17 +159,17 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 const cleanups: Array<() => void> = [];
-function harness() {
+function harness(props: ComponentProps<typeof SharedLibraryReader> = { shareId: id(100) }) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: [], cleanups: new Map() };
-  const wrapper = SharedLibraryReader({ shareId: id(100) });
+  const wrapper = SharedLibraryReader(props);
   const child = wrapper.props.children as ReactElement;
-  const Reader = child.type as (props: { shareId: string }) => ReactNode;
+  const Reader = child.type as (props: ComponentProps<typeof SharedLibraryReader>) => ReactNode;
   let tree: ReactNode;
   const render = () => {
     hooks.cursor = 0;
     mocked.hooks = hooks;
     try {
-      tree = Reader({ shareId: id(100) });
+      tree = Reader(props);
     } finally {
       mocked.hooks = null;
     }
@@ -200,6 +210,48 @@ afterEach(() => {
 });
 
 describe("shared Survey page reader", () => {
+  it.each(["organization", "shared", "managed"])(
+    "returns to the %s Library with only the validated date range",
+    async (scope) => {
+      const page = await SharedLibraryPage({
+        params: Promise.resolve({ id: id(100) }),
+        searchParams: Promise.resolve({
+          scope,
+          dateFrom: "2026-11-01",
+          dateTo: "2026-11-30",
+          q: "private",
+          organizationId: id(101),
+          returnTo: "https://example.com/",
+        }),
+      });
+      const view = harness(page.props);
+      view.render();
+      await settle();
+      const markup = view.render();
+      expect(markup).toContain(
+        `href="/library?scope=${scope}&amp;type=surveys&amp;dateFrom=2026-11-01&amp;dateTo=2026-11-30"`,
+      );
+      expect(markup).not.toMatch(/q=private|organizationId=|returnTo=|example\.com/);
+    },
+  );
+
+  it("defaults to shared links and validates date parameters before building the return link", async () => {
+    const page = await SharedLibraryPage({
+      params: Promise.resolve({ id: id(100) }),
+      searchParams: Promise.resolve({
+        scope: "https://example.com/",
+        dateFrom: ["2026-11-01", "2026-10-01"],
+        dateTo: "2026-11-30",
+      }),
+    });
+    const view = harness(page.props);
+    view.render();
+    await settle();
+    expect(view.render()).toContain(
+      'href="/library?scope=shared&amp;type=surveys&amp;dateTo=2026-11-30"',
+    );
+  });
+
   it("renders every page group in order, associates each question, and uses h3 under page h2", () => {
     const source = detail();
     const before = JSON.stringify(source);
@@ -279,6 +331,7 @@ describe("shared Survey page reader", () => {
     view.render();
     await settle();
     const markup = view.render();
+    expect(markup).toContain('href="/library?scope=shared&amp;type=surveys"');
     expect(markup.match(/data-shared-survey-page=/g)).toHaveLength(3);
     expect(markup).toContain('data-copy-allowed="false"');
     expect(markup).not.toMatch(/<input|<form|Use a copy/);

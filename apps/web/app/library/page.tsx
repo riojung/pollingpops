@@ -13,6 +13,7 @@ import { LibraryScopeNavigation } from "../../components/workspace/library-shari
 import { ShareLibraryButton } from "../../components/workspace/library-sharing/share-dialog";
 import { SharedLibrary } from "../../components/workspace/library-sharing/shared-library";
 import { LibraryDiscovery } from "../../components/workspace/library-discovery/library-discovery";
+import { LibraryDateRangeFields } from "../../components/workspace/library-discovery/library-date-range-fields";
 import { libraryDiscoveryCopy } from "../../lib/i18n/library-discovery-copy";
 import { libraryScope } from "../../components/workspace/library-sharing/client";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
@@ -33,7 +34,11 @@ import {
   filterLibraryItems,
   libraryBulkActionIds,
   libraryDiscoveryHref,
+  libraryFolderNavigationHref,
+  readLibraryDateRange,
   readLibraryDiscoveryQuery,
+  setLibraryDateRange,
+  type LibraryDateRange,
   type LibraryDiscoveryQuery,
   type LibraryItemStatus,
   type LibraryOwnershipFilter,
@@ -94,6 +99,7 @@ type LibraryType = "rounds" | "presentations" | "surveys";
 type ArtifactType = "round" | "presentation" | "survey";
 type BulkAction = "duplicate" | "archive" | "restore" | "delete";
 const EMPTY_FOLDERS: FolderRecord[] = [];
+const EMPTY_DATE_RANGE: LibraryDateRange = { dateFrom: "", dateTo: "" };
 
 interface FavoriteRecord {
   artifactType: ArtifactType;
@@ -171,6 +177,11 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
   );
   const [folderId, setFolderId] = useState(searchParams.get("folder") ?? "all");
   const [favoritesOnly, setFavoritesOnly] = useState(searchParams.get("favorites") === "true");
+  const [appliedDateRange, setAppliedDateRange] = useState(() =>
+    readLibraryDateRange(searchParams),
+  );
+  const [dateRangeReset, setDateRangeReset] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
   const [view, setView] = useState<RoundLibraryView>(DEFAULT_ROUND_LIBRARY_VIEW);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [targetFolderId, setTargetFolderId] = useState("unfiled");
@@ -183,6 +194,7 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
   const mounted = useRef(false);
   const activeType = useRef(type);
   const activeWorkspace = useRef(workspaceId);
+  const pendingLocalQuery = useRef<string | null>(null);
   const selectionSequence = useRef(0);
   const loading = fetching || loadedWorkspaceId !== workspaceId;
   const folders = loadedWorkspaceId === workspaceId ? foldersByType[type] : EMPTY_FOLDERS;
@@ -289,6 +301,13 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
   }, [refresh, workspaceId]);
 
   useEffect(() => {
+    const query = searchParams.toString();
+    const localQuery = pendingLocalQuery.current;
+    if (localQuery !== null) {
+      // Next.js can still be rendering an older query after the address bar has changed.
+      if (query !== new URLSearchParams(window.location.search).toString()) return;
+      pendingLocalQuery.current = null;
+    }
     const nextType =
       requestedType === "surveys"
         ? "surveys"
@@ -303,11 +322,14 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
       setAnnouncement("");
     }
     setType(nextType);
+    // In-page URL writes already applied their control changes.
+    if (query === localQuery) return;
     setSearch(searchParams.get("q") ?? "");
     setStatus(statusFromQuery(searchParams.get("status")));
     setOwnership(searchParams.get("owner") === "workspace" ? "workspace" : "all");
     setFolderId(searchParams.get("folder") ?? "all");
     setFavoritesOnly(searchParams.get("favorites") === "true");
+    setAppliedDateRange(readLibraryDateRange(searchParams));
   }, [presentationsEnabled, requestedType, searchParams]);
 
   useEffect(() => {
@@ -349,8 +371,9 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
       workspaceId: creator?.workspaceId ?? "",
       folderId,
       favoritesOnly,
+      ...appliedDateRange,
     }),
-    [creator?.workspaceId, favoritesOnly, folderId, ownership, search, status],
+    [appliedDateRange, creator?.workspaceId, favoritesOnly, folderId, ownership, search, status],
   );
 
   const visibleRounds = useMemo(
@@ -440,7 +463,8 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
     status !== "active" ||
     ownership !== "all" ||
     folderId !== "all" ||
-    favoritesOnly;
+    favoritesOnly ||
+    Boolean(appliedDateRange.dateFrom || appliedDateRange.dateTo);
   const visibleCount =
     type === "rounds"
       ? visibleRounds.length
@@ -449,28 +473,46 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
         : visiblePresentations.length;
   const totalCount =
     type === "rounds" ? rounds.length : type === "surveys" ? surveys.length : presentations.length;
+  const advancedFilterCount =
+    Number(folderId !== "all") + Number(ownership !== "all") + Number(favoritesOnly);
+
+  function replaceLibraryQuery(params: URLSearchParams) {
+    const url = new URL(window.location.href);
+    const query = params.toString();
+    if (query === url.searchParams.toString()) return;
+    url.search = query;
+    pendingLocalQuery.current = query;
+    window.history.replaceState(null, "", url);
+  }
 
   function chooseType(next: LibraryType) {
-    if (next === type) return;
+    if (next === activeType.current) return;
+    const nextSearch = search.trim();
+    const currentQuery = readLibraryDiscoveryQuery(new URLSearchParams(window.location.search));
+    const params = new URLSearchParams({ type: next });
+    if (nextSearch) params.set("q", nextSearch);
+    if (status !== "active") params.set("status", status);
+    if (ownership === "workspace") params.set("owner", "workspace");
+    if (favoritesOnly) params.set("favorites", "true");
+    if (currentQuery.sort !== "recent") params.set("sort", currentQuery.sort);
+    setLibraryDateRange(params, currentQuery);
+
     activeType.current = next;
     ++selectionSequence.current;
     setType(next);
     setSelectedIds(new Set());
+    setSearch(nextSearch);
     setFolderId("all");
     setTargetFolderId("unfiled");
     setAnnouncement("");
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("type", next);
-    if (search.trim()) params.set("q", search.trim());
-    else params.delete("q");
-    if (status === "active") params.delete("status");
-    else params.set("status", status);
-    if (ownership === "workspace") params.set("owner", "workspace");
-    else params.delete("owner");
-    params.delete("folder");
-    if (favoritesOnly) params.set("favorites", "true");
-    else params.delete("favorites");
-    router.replace(`/library${params.size ? `?${params}` : ""}`);
+    replaceLibraryQuery(params);
+  }
+
+  function updateDateRange(next: LibraryDateRange) {
+    const params = new URLSearchParams(window.location.search);
+    setLibraryDateRange(params, next);
+    setAppliedDateRange(next);
+    replaceLibraryQuery(params);
   }
 
   function chooseView(next: RoundLibraryView) {
@@ -486,9 +528,9 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
     setOwnership("all");
     setFolderId("all");
     setFavoritesOnly(false);
-    const params = new URLSearchParams();
-    params.set("type", type);
-    router.replace(`/library${params.size ? `?${params}` : ""}`);
+    setAppliedDateRange(EMPTY_DATE_RANGE);
+    setDateRangeReset((current) => current + 1);
+    replaceLibraryQuery(new URLSearchParams({ type }));
   }
 
   function toggleSelection(artifactId: string) {
@@ -717,6 +759,7 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
     status,
     favorites: favoritesOnly,
     folder: folderId,
+    ...appliedDateRange,
   };
 
   return (
@@ -747,15 +790,11 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
       <LibraryScopeNavigation
         scope="workspace"
         type={type}
+        discoveryQuery={discoveryQuery}
         organization={hasOrganizationLibrary}
         canManage={canManageShares}
       />
-      <p>
-        <Link href={libraryDiscoveryHref({ ...discoveryQuery, kind: "all" })}>
-          {discoveryCopy.allContent}
-        </Link>
-      </p>
-      <p>{discoveryCopy.loadedSearch}</p>
+      <p className={styles.loadedSearch}>{discoveryCopy.loadedSearch}</p>
       <div className={styles.toolbar}>
         <div
           className={styles.tabs}
@@ -833,104 +872,135 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
             value={search}
           />
         </label>
+        <Link
+          className={styles.manageLink}
+          href={libraryDiscoveryHref({ ...discoveryQuery, kind: "all" })}
+        >
+          {discoveryCopy.allContent}
+        </Link>
       </div>
 
       <section className={styles.filterBar} aria-label={t("pages.library.filtersLabel")}>
-        <label className={styles.filterField}>
-          <span>{t("pages.common.statusLabel")}</span>
-          <select
-            aria-label={t("pages.library.filterStatus")}
-            onChange={(event) => setStatus(event.target.value as LibraryStatusFilter)}
-            value={status}
+        <div className={styles.filterRow}>
+          <label className={styles.filterField}>
+            <span>{t("pages.common.statusLabel")}</span>
+            <select
+              aria-label={t("pages.library.filterStatus")}
+              onChange={(event) => setStatus(event.target.value as LibraryStatusFilter)}
+              value={status}
+            >
+              <option value="active">{t("pages.common.status.active")}</option>
+              <option value="draft">{t("pages.common.status.draft")}</option>
+              <option value="published">{t("pages.common.status.published")}</option>
+              <option value="archived">{t("pages.common.status.archived")}</option>
+              <option value="all">{t("pages.library.allStatuses")}</option>
+            </select>
+          </label>
+          <LibraryDateRangeFields
+            key={`${type}-${dateRangeReset}`}
+            range={appliedDateRange}
+            onChange={updateDateRange}
+            fromLabel={discoveryCopy.updatedFrom}
+            toLabel={discoveryCopy.updatedTo}
+            invalidRangeMessage={discoveryCopy.invalidDateRange}
+            fieldClassName={styles.filterField}
+            errorClassName={styles.dateRangeError}
+          />
+          <button
+            aria-controls="library-management-advanced-filters"
+            aria-expanded={showFilters}
+            className={styles.advancedFilterToggle}
+            onClick={() => setShowFilters((open) => !open)}
+            type="button"
           >
-            <option value="active">{t("pages.common.status.active")}</option>
-            <option value="draft">{t("pages.common.status.draft")}</option>
-            <option value="published">{t("pages.common.status.published")}</option>
-            <option value="archived">{t("pages.common.status.archived")}</option>
-            <option value="all">{t("pages.library.allStatuses")}</option>
-          </select>
-        </label>
-        <details className={styles.advancedFilters}>
-          <summary>
             {flowCopy.filters}
-            {folderId !== "all" || ownership !== "all" || favoritesOnly
-              ? ` · ${Number(folderId !== "all") + Number(ownership !== "all") + Number(favoritesOnly)}`
-              : ""}
-          </summary>
-          <div className={styles.advancedFilterPanel}>
-            <label className={styles.filterField}>
-              <span>{t("pages.library.folder")}</span>
-              <select
-                aria-label={t("pages.library.filterFolder")}
-                onChange={(event) => setFolderId(event.target.value)}
-                value={folderId}
-              >
-                <option value="all">{t("pages.library.allFolders")}</option>
-                <option value="unfiled">{t("pages.library.unfiled")}</option>
-                {folderOptions.map((folder) => (
-                  <option key={folder.id} lang="" value={folder.id}>
-                    {folder.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {advancedFilterCount > 0 ? ` · ${advancedFilterCount}` : ""}
+          </button>
+          <p className={styles.resultSummary} role="status">
+            {loading
+              ? t("pages.library.loadingContent")
+              : t("pages.library.resultCount", {
+                  visible: visibleCount,
+                  total: totalCount,
+                  type: typeLabel,
+                })}
+          </p>
+          <div
+            aria-label={t("pages.library.layoutLabel")}
+            className={styles.viewToggle}
+            role="group"
+          >
             <button
-              aria-pressed={favoritesOnly}
-              className={styles.favoriteFilter}
-              onClick={() => setFavoritesOnly((current) => !current)}
+              aria-label={t("pages.library.gridView")}
+              aria-pressed={view === "grid"}
+              onClick={() => chooseView("grid")}
               type="button"
             >
-              <span aria-hidden="true">★</span> {t("pages.library.favorites")}
+              {t("pages.library.gridView")}
             </button>
-            <label className={styles.filterField}>
-              <span>{t("pages.library.ownership")}</span>
-              <select
-                aria-label={t("pages.library.filterOwnership")}
-                onChange={(event) => setOwnership(event.target.value as LibraryOwnershipFilter)}
-                value={ownership}
-              >
-                <option value="all">{t("pages.library.allOwners")}</option>
-                <option value="workspace">{t("pages.library.workspaceOwned")}</option>
-              </select>
-            </label>
-            <Link className={styles.manageLink} href={`/library/folders?type=${type}`}>
-              {t("pages.library.manageFolders")}
-            </Link>
-            <Link className={styles.manageLink} href="/recovery-packs" lang="en-CA">
-              Recovery Packs
-            </Link>
+            <button
+              aria-label={t("pages.library.listView")}
+              aria-pressed={view === "list"}
+              onClick={() => chooseView("list")}
+              type="button"
+            >
+              {t("pages.library.listView")}
+            </button>
           </div>
-        </details>
-        <p className={styles.resultSummary} role="status">
-          {loading
-            ? t("pages.library.loadingContent")
-            : t("pages.library.resultCount", {
-                visible: visibleCount,
-                total: totalCount,
-                type: typeLabel,
-              })}
-        </p>
-        <div aria-label={t("pages.library.layoutLabel")} className={styles.viewToggle} role="group">
+        </div>
+        <div
+          className={styles.advancedFilterPanel}
+          hidden={!showFilters}
+          id="library-management-advanced-filters"
+        >
+          <label className={styles.filterField}>
+            <span>{t("pages.library.folder")}</span>
+            <select
+              aria-label={t("pages.library.filterFolder")}
+              onChange={(event) => setFolderId(event.target.value)}
+              value={folderId}
+            >
+              <option value="all">{t("pages.library.allFolders")}</option>
+              <option value="unfiled">{t("pages.library.unfiled")}</option>
+              {folderOptions.map((folder) => (
+                <option key={folder.id} lang="" value={folder.id}>
+                  {folder.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
-            aria-label={t("pages.library.gridView")}
-            aria-pressed={view === "grid"}
-            onClick={() => chooseView("grid")}
+            aria-pressed={favoritesOnly}
+            className={styles.favoriteFilter}
+            onClick={() => setFavoritesOnly((current) => !current)}
             type="button"
           >
-            {t("pages.library.gridView")}
+            <span aria-hidden="true">★</span> {t("pages.library.favorites")}
           </button>
-          <button
-            aria-label={t("pages.library.listView")}
-            aria-pressed={view === "list"}
-            onClick={() => chooseView("list")}
-            type="button"
+          <label className={styles.filterField}>
+            <span>{t("pages.library.ownership")}</span>
+            <select
+              aria-label={t("pages.library.filterOwnership")}
+              onChange={(event) => setOwnership(event.target.value as LibraryOwnershipFilter)}
+              value={ownership}
+            >
+              <option value="all">{t("pages.library.allOwners")}</option>
+              <option value="workspace">{t("pages.library.workspaceOwned")}</option>
+            </select>
+          </label>
+          <Link
+            className={styles.manageLink}
+            href={libraryFolderNavigationHref("/library/folders", type, appliedDateRange)}
           >
-            {t("pages.library.listView")}
-          </button>
+            {t("pages.library.manageFolders")}
+          </Link>
+          <Link className={styles.manageLink} href="/recovery-packs" lang="en-CA">
+            Recovery Packs
+          </Link>
         </div>
       </section>
 
-      {folderId !== "all" || ownership !== "all" || favoritesOnly ? (
+      {advancedFilterCount > 0 || appliedDateRange.dateFrom || appliedDateRange.dateTo ? (
         <div className={styles.appliedFilters}>
           {folderId !== "all" ? (
             <button type="button" onClick={() => setFolderId("all")}>
@@ -949,6 +1019,23 @@ function LibraryContent({ requestedType }: { requestedType: LibraryType }) {
           {favoritesOnly ? (
             <button type="button" onClick={() => setFavoritesOnly(false)}>
               {t("pages.library.favorites")} ×
+            </button>
+          ) : null}
+          {appliedDateRange.dateFrom ? (
+            <button
+              type="button"
+              onClick={() => updateDateRange({ ...appliedDateRange, dateFrom: "" })}
+            >
+              {discoveryCopy.updatedFrom}{" "}
+              {dateLabel(locale, `${appliedDateRange.dateFrom}T00:00:00`)} ×
+            </button>
+          ) : null}
+          {appliedDateRange.dateTo ? (
+            <button
+              type="button"
+              onClick={() => updateDateRange({ ...appliedDateRange, dateTo: "" })}
+            >
+              {discoveryCopy.updatedTo} {dateLabel(locale, `${appliedDateRange.dateTo}T00:00:00`)} ×
             </button>
           ) : null}
         </div>

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   filterLibraryItems,
+  isLibraryDateRangeReversed,
   libraryBulkActionIds,
   roundBulkActionIds,
   librarySearchHref,
+  readLibraryDateRange,
   readLibraryDiscoveryQuery,
   libraryDiscoveryHref,
+  setLibraryDateRange,
 } from "./library-controls";
 
 const items = [
@@ -63,6 +66,47 @@ describe("Library controls", () => {
     expect(libraryDiscoveryHref(query, "shared", "rounds")).toBe(
       "/library?q=north&sort=title_desc&scope=shared&type=rounds",
     );
+  });
+  it("roundtrips calendar dates in workspace and shared scopes and keeps the explicit type", () => {
+    const query = readLibraryDiscoveryQuery(
+      new URLSearchParams("type=surveys&dateFrom=2024-02-29&dateTo=2024-02-29&token=private"),
+    );
+
+    for (const scope of ["workspace", "organization", "shared", "managed"]) {
+      const href = libraryDiscoveryHref(query, scope, "surveys");
+      const params = new URL(href, "https://example.test").searchParams;
+      expect(params.get("type")).toBe("surveys");
+      expect(params.get("scope")).toBe(scope === "workspace" ? null : scope);
+      expect(params.has("kind")).toBe(false);
+      expect(params.has("token")).toBe(false);
+      expect(readLibraryDiscoveryQuery(params)).toEqual(query);
+      expect(readLibraryDateRange(params)).toEqual({
+        dateFrom: "2024-02-29",
+        dateTo: "2024-02-29",
+      });
+    }
+  });
+  it.each([
+    ["dateFrom=2026-02-29&dateTo=2026-03-01", "", "2026-03-01"],
+    ["dateFrom=2026-03-01&dateTo=2026-04-31", "2026-03-01", ""],
+    ["dateFrom=2026-03-02&dateTo=2026-03-01", "", ""],
+    ["dateFrom=2026-2-01&dateTo=2026-03-02T00:00:00Z", "", ""],
+    ["dateFrom=0000-01-01&dateTo=2026-13-01", "", ""],
+  ])("normalizes invalid URL bounds in %s before serializing them", (search, dateFrom, dateTo) => {
+    const query = readLibraryDiscoveryQuery(new URLSearchParams(search));
+    expect(query).toMatchObject({ dateFrom, dateTo });
+
+    const params = new URLSearchParams(search);
+    setLibraryDateRange(params, query);
+    expect(params.get("dateFrom")).toBe(dateFrom || null);
+    expect(params.get("dateTo")).toBe(dateTo || null);
+  });
+  it("compares ordered calendar dates and allows a single bound", () => {
+    expect(isLibraryDateRangeReversed({ dateFrom: "2026-03-02", dateTo: "2026-03-01" })).toBe(true);
+    expect(isLibraryDateRangeReversed({ dateFrom: "2026-03-02", dateTo: "2026-03-02" })).toBe(
+      false,
+    );
+    expect(isLibraryDateRangeReversed({ dateFrom: "", dateTo: "2026-03-01" })).toBe(false);
   });
   it("bounds search and canonicalizes invalid discovery controls", () => {
     const query = readLibraryDiscoveryQuery(
@@ -132,6 +176,17 @@ describe("Library controls", () => {
     );
     expect(librarySearchHref("", "/home", "?scope=shared")).toBe("/library");
   });
+  it("keeps validated date bounds on Library header searches only", () => {
+    const search = "?type=surveys&scope=shared&dateFrom=2026-03-08&dateTo=2026-03-09&token=private";
+    expect(librarySearchHref("ready", "/library", search)).toBe(
+      "/library?type=surveys&scope=shared&dateFrom=2026-03-08&dateTo=2026-03-09&q=ready",
+    );
+    expect(librarySearchHref("ready", "/sessions", search)).toBe("/sessions?type=surveys&q=ready");
+    expect(librarySearchHref("ready", "/boards", search)).toBe("/boards?q=ready");
+    expect(librarySearchHref("ready", "/library", "?dateFrom=tomorrow&dateTo=invalid")).toBe(
+      "/library?q=ready",
+    );
+  });
   it("searches the selected Sessions type without forwarding control credentials or stale filters", () => {
     expect(
       librarySearchHref("  workshop  ", "/sessions", "?type=surveys&source=old&token=secret"),
@@ -180,6 +235,37 @@ describe("Library controls", () => {
         workspaceId: "workspace-b",
       }).map((item) => item.id),
     ).toEqual(["round-3"]);
+  });
+
+  it("includes both local-day edges when filtering loaded items by updated date", () => {
+    const dated = [
+      { ...items[0]!, id: "before", updatedAt: new Date("2026-03-07T23:59:59.999").toISOString() },
+      { ...items[0]!, id: "start", updatedAt: new Date("2026-03-08T00:00:00").toISOString() },
+      { ...items[1]!, id: "end", updatedAt: new Date("2026-03-08T23:59:59.999").toISOString() },
+      { ...items[1]!, id: "after", updatedAt: new Date("2026-03-09T00:00:00").toISOString() },
+      { ...items[2]!, id: "missing" },
+    ];
+    const filters = {
+      query: "",
+      status: "all",
+      ownership: "all",
+      workspaceId: "workspace-a",
+    } as const;
+    const date = "2026-03-08";
+
+    expect(
+      filterLibraryItems(dated, { ...filters, dateFrom: date, dateTo: date }).map(({ id }) => id),
+    ).toEqual(["start", "end"]);
+    expect(filterLibraryItems(dated, { ...filters, dateFrom: date }).map(({ id }) => id)).toEqual([
+      "start",
+      "end",
+      "after",
+    ]);
+    expect(filterLibraryItems(dated, { ...filters, dateTo: date }).map(({ id }) => id)).toEqual([
+      "before",
+      "start",
+      "end",
+    ]);
   });
 
   it("derives safe bulk targets from the selected Round statuses", () => {

@@ -17,6 +17,7 @@ import {
   type FolderRecord,
   type LibraryType,
 } from "../../../lib/folders";
+import { libraryFolderNavigationHref, readLibraryDateRange } from "../../../lib/library-controls";
 import { FolderPaginationError, loadFolderContent, type ContentRecord } from "./folder-content";
 import { FolderTree, type FolderCommand } from "./folder-tree";
 import styles from "./folders.module.css";
@@ -532,6 +533,7 @@ function FolderManager({ type, workspaceId }: { type: LibraryType; workspaceId: 
 function FolderManagerContent() {
   const { t } = useLocale();
   const searchParams = useSearchParams();
+  const dateRange = readLibraryDateRange(searchParams);
   const { creator, productFeatures, loading } = useWorkspace();
   const requestedType = searchParams.get("type");
   const presentationsEnabled = productFeatures?.presentations === true;
@@ -547,7 +549,10 @@ function FolderManagerContent() {
   return (
     <WorkspaceShell
       actions={
-        <Link className={styles.backLink} href={`/library?type=${type}`}>
+        <Link
+          className={styles.backLink}
+          href={libraryFolderNavigationHref("/library", type, dateRange)}
+        >
           {t("pages.folders.backToLibrary")}
         </Link>
       }
@@ -561,7 +566,7 @@ function FolderManagerContent() {
           <Link
             aria-current={entry === type ? "page" : undefined}
             className={entry === type ? styles.tabActive : styles.tab}
-            href={`/library/folders?type=${entry}`}
+            href={libraryFolderNavigationHref("/library/folders", entry, dateRange)}
             key={entry}
           >
             {t(`pages.common.${entry}`)}

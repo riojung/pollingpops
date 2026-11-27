@@ -183,7 +183,7 @@ describe("Library discovery API boundary", () => {
   it("accepts bounded filters and derives actor and active workspace from current auth", async () => {
     const { state, auth, discovery } = await setup();
     const result = await app.inject(
-      "/v1/library/items?q=%20Needle%20&favorites=false&limit=100&folder=unfiled&sort=title_desc",
+      "/v1/library/items?q=%20Needle%20&favorites=false&limit=100&folder=unfiled&sort=title_desc&from=2026-11-17T07:00:00Z&to=2026-11-18T06:59:59.999Z",
     );
     expect(result.statusCode).toBe(200);
     expect(LibraryItemsResponseSchema.safeParse(result.json()).success).toBe(true);
@@ -201,6 +201,8 @@ describe("Library discovery API boundary", () => {
         status: "active",
         sort: "title_desc",
         limit: 100,
+        from: "2026-11-17T07:00:00.000Z",
+        to: "2026-11-18T06:59:59.999Z",
       },
     });
     state.creator = {
@@ -228,6 +230,9 @@ describe("Library discovery API boundary", () => {
       "kind=board",
       "status=unknown",
       "cursor=bad%3D",
+      "from=2026-11-17",
+      "from=2026-02-29T00:00:00Z",
+      "from=2026-11-18T00:00:00Z&to=2026-11-17T00:00:00Z",
       "q=%00",
       `q=${"x".repeat(161)}`,
       `workspaceId=${creator.workspaceId}`,

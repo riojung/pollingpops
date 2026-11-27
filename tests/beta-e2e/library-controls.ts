@@ -1,11 +1,10 @@
 import { expect, type Page } from "@playwright/test";
 
 export async function openLibraryFilters(page: Page) {
-  const filters = page
+  const toggle = page
     .getByRole("region", { name: "Library filters and layout", exact: true })
-    .locator("details")
-    .filter({ has: page.locator("summary").filter({ hasText: /^Filters(?: · \d+)?$/ }) });
-  await expect(filters).toHaveCount(1);
-  if ((await filters.getAttribute("open")) === null) await filters.locator("summary").click();
-  await expect(filters).toHaveAttribute("open", "");
+    .getByRole("button", { name: /^Filters(?: · \d+)?$/ });
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }

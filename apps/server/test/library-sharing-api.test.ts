@@ -732,6 +732,17 @@ describe("organization Library sharing APIs", () => {
     const optedIn = await f.app.inject({ url: "/v1/library/shares?includeFacets=true" });
     expect(optedIn.statusCode, optedIn.body).toBe(200);
     expect(optedIn.json().facets).toMatchObject({ kinds: { round: 1 }, total: 1 });
+    const exact = await f.app.inject({
+      url: `/v1/library/shares?from=${encodeURIComponent(entry.sharedAt)}&to=${encodeURIComponent(entry.sharedAt)}&includeFacets=true`,
+    });
+    expect(exact.statusCode, exact.body).toBe(200);
+    expect(exact.json().shares.map((share: { id: string }) => share.id)).toEqual([entry.id]);
+    const later = await f.app.inject({
+      url: `/v1/library/shares?from=${encodeURIComponent(new Date(Date.parse(entry.sharedAt) + 1).toISOString())}&includeFacets=true`,
+    });
+    expect(later.statusCode, later.body).toBe(200);
+    expect(later.json().shares).toEqual([]);
+    expect(later.json().facets.total).toBe(0);
     expect(list.mock.calls.every(([input]) => !("includeFacets" in input))).toBe(true);
   });
   it("validates every discovery query field without weakening legacy defaults", async () => {
@@ -743,6 +754,9 @@ describe("organization Library sharing APIs", () => {
       "permission=edit",
       "progress=started",
       "limit=0",
+      "to=2026-11-17",
+      "to=2026-04-31T23:59:59Z",
+      "from=2026-11-18T00:00:00Z&to=2026-11-17T00:00:00Z",
       "unexpected=value",
       "includeFacets=1",
       "includeFacets=TRUE",

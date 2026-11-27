@@ -2,9 +2,9 @@ import type {
   FollowupHistoryAnalytics,
   PresentationResultSummary,
   ReportHistoryAnalytics,
+  SurveyResultSummary,
 } from "@openround/contracts";
 import type { FollowupSummary, ReportSummary } from "../../components/workspace/workspace-types";
-import type { SurveySessionSummary } from "../../lib/session-controls";
 
 export type { PresentationResultSummary } from "@openround/contracts";
 
@@ -28,41 +28,6 @@ export function utcHistoryActivity(
     end.setUTCMonth(start.getUTCMonth() + monthsPerPeriod, 0);
     return { start, end, count: bucket.count };
   });
-}
-
-/** Returns the most recent represented periods using inclusive local calendar days. */
-export function resultsActivity(dates: readonly string[], grouping: ResultsActivityGrouping) {
-  const monthsPerPeriod = grouping === "month" ? 1 : 3;
-  const buckets = new Map<number, ResultsActivityPeriod>();
-  for (const value of dates) {
-    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-    const date = new Date(dateOnly ? `${value}T00:00:00` : value);
-    if (
-      !Number.isFinite(date.getTime()) ||
-      (dateOnly && date.getDate() !== Number(value.slice(-2)))
-    )
-      continue;
-
-    const year = date.getFullYear();
-    const month = Math.floor(date.getMonth() / monthsPerPeriod) * monthsPerPeriod;
-    const key = year * 12 + month;
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.count += 1;
-    } else {
-      const start = new Date(date);
-      start.setFullYear(year, month, 1);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setFullYear(year, month + monthsPerPeriod, 0);
-      end.setHours(0, 0, 0, 0);
-      buckets.set(key, { start, end, count: 1 });
-    }
-  }
-
-  return [...buckets.values()]
-    .sort((left, right) => left.start.getTime() - right.start.getTime())
-    .slice(-6);
 }
 
 /** Zero opportunities means no rate evidence, rather than a measured zero percent. */
@@ -138,6 +103,6 @@ export function presentationOverview(
   };
 }
 
-export function surveyOverview(items: readonly Pick<SurveySessionSummary, "surveyId">[]) {
+export function surveyOverview(items: readonly Pick<SurveyResultSummary, "surveyId">[]) {
   return { count: items.length, sources: new Set(items.map((item) => item.surveyId)).size };
 }

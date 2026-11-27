@@ -14,6 +14,7 @@ import { signInBeta } from "./sign-in";
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const web = `http://127.0.0.1:${Number(process.env.BETA_E2E_WEB_PORT ?? 3200)}`;
 const presentationResultsPath = "/v1/presentation-sessions/results";
+const surveyResultsPath = "/v1/survey-rooms/results";
 
 test.use({ timezoneId: "America/Edmonton" });
 
@@ -245,31 +246,39 @@ async function mockHistory(page: Page) {
       };
     },
   );
-  const surveys = [
-    {
-      id: randomUUID(),
-      surveyId: randomUUID(),
-      title: "Synthetic closed Survey",
-      code: "123456",
-      closed: true,
-      closesAt: createdAt,
-      expiresAt,
-    },
-    {
-      id: randomUUID(),
-      surveyId: randomUUID(),
-      title: "Synthetic collecting Survey",
-      code: "654321",
-      closed: false,
-      closesAt: "2099-09-01T12:00:00.000Z",
-      expiresAt,
-    },
-  ];
+  const surveySources = ["Current Survey source", "Older Survey source"].map((title) => ({
+    id: randomUUID(),
+    title,
+  }));
+  const olderSurveyDates = ["2026-10-01T00:15:00.000Z", "2026-07-01T00:15:00.000Z"];
+  const surveys = Array.from({ length: 25 + olderSurveyDates.length }, (_, index) => ({
+    id: randomUUID(),
+    surveyId: surveySources[Number(index >= 25)]!.id,
+    title: `Synthetic Survey run ${index + 1}`,
+    code: String(1234567 + index),
+    closesAt: index === 0 ? recentReportDate : (olderSurveyDates[index - 25] ?? createdAt),
+    expiresAt,
+  }));
+  const matchingSurveys = (query: URLSearchParams) => {
+    const search = query.get("search")?.toLowerCase();
+    const surveyId = query.get("surveyId");
+    const from = query.get("from");
+    const to = query.get("to");
+    return surveys.filter(
+      (room) =>
+        (!search || room.title.toLowerCase().includes(search) || room.code.includes(search)) &&
+        (!surveyId || room.surveyId === surveyId) &&
+        (!from || room.closesAt >= from) &&
+        (!to || room.closesAt <= to),
+    );
+  };
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
   const totalsReads: URLSearchParams[] = [];
   const practiceAnalyticsReads: URLSearchParams[] = [];
   const presentationAnalyticsReads: URLSearchParams[] = [];
   const presentationSourceReads: URLSearchParams[] = [];
+  const surveyAnalyticsReads: URLSearchParams[] = [];
+  const surveySourceReads: URLSearchParams[] = [];
   await page.route(`${api}/v1/quizzes?*`, (route) =>
     route.fulfill({
       json: {
@@ -376,9 +385,41 @@ async function mockHistory(page: Page) {
       return route.fulfill({ json: { sources: presentationSources } });
     },
   );
-  await page.route(`${api}/v1/survey-rooms?*`, (route) =>
-    route.fulfill({ json: { rooms: surveys, nextCursor: null } }),
-  );
+  await page.route(`${api}${surveyResultsPath}?*`, (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    reads.push({ path: surveyResultsPath, query });
+    const filtered = matchingSurveys(query);
+    const start = Number(query.get("cursor") ?? 0);
+    const limit = Number(query.get("limit") ?? 25);
+    return route.fulfill({
+      json: {
+        items: filtered.slice(start, start + limit),
+        nextCursor: filtered.length > start + limit ? String(start + limit) : null,
+        sampledAt: new Date().toISOString(),
+      },
+    });
+  });
+  await page.route(`${api}${surveyResultsPath}/analytics?*`, (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    surveyAnalyticsReads.push(query);
+    const filtered = matchingSurveys(query);
+    const dates = filtered.map(({ closesAt }) => ({ createdAt: closesAt }));
+    return route.fulfill({
+      json: {
+        rooms: filtered.length,
+        surveys: new Set(filtered.map(({ surveyId }) => surveyId)).size,
+        refreshAfterMs: null,
+        activity: {
+          month: activityPeriods(dates, "month"),
+          quarter: activityPeriods(dates, "quarter"),
+        },
+      },
+    });
+  });
+  await page.route(`${api}${surveyResultsPath}/sources?*`, (route) => {
+    surveySourceReads.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ json: { sources: surveySources, refreshAfterMs: null } });
+  });
   return {
     quizId,
     otherQuizId,
@@ -392,6 +433,9 @@ async function mockHistory(page: Page) {
     presentationAnalyticsReads,
     presentationSources,
     presentationSourceReads,
+    surveySources,
+    surveyAnalyticsReads,
+    surveySourceReads,
   };
 }
 
@@ -811,10 +855,75 @@ for (const mobile of [false, true]) {
 
     await views.getByRole("link", { name: "Surveys", exact: true }).click();
     await expect(page).toHaveURL(/\/results\?view=surveys$/);
-    await expect(reportLinks.getByRole("link")).toHaveCount(1);
+    const surveyCollection = page.getByRole("region", { name: "Survey results", exact: true });
+    const matchingRuns = overview
+      .getByText("Matching Survey runs", { exact: true })
+      .locator("..")
+      .locator("dd");
+    const surveysRepresented = overview
+      .getByText("Surveys represented", { exact: true })
+      .locator("..")
+      .locator("dd");
+    const surveyReads = () =>
+      fixture.reads
+        .filter(({ path }) => path === surveyResultsPath)
+        .map(({ query }) => Object.fromEntries(query));
+    await expect(surveyCollection.getByRole("article")).toHaveCount(25);
+    await expect(matchingRuns).toHaveText("27");
+    await expect(surveysRepresented).toHaveText("2");
+    await expect(activity).toContainText("Grouped by scheduled collection deadline in UTC.");
+    const surveyPeriods = activity.getByRole("listitem");
+    const surveyMonthCounts = [/Jul.*2026\s*1$/, /Oct.*2026\s*25$/, /Nov.*2026\s*1$/];
+    await expect(surveyPeriods).toHaveText(surveyMonthCounts);
+    await expect(overview.getByRole("meter")).toHaveCount(0);
+    await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
     await expect(
       reportLinks.getByRole("link", { name: fixture.surveys[0]!.title, exact: true }),
     ).toHaveAttribute("href", `/results/surveys/${fixture.surveys[0]!.id}`);
+    expect(surveyReads()).toEqual([{ limit: "25", expectedWorkspaceId }]);
+    await page.getByRole("button", { name: "Load More", exact: true }).press("Enter");
+    await expect(surveyCollection.getByRole("article")).toHaveCount(27);
+    await expect(
+      surveyCollection.getByRole("article", { name: fixture.surveys[25]!.title }),
+    ).toBeFocused();
+    await expect(matchingRuns).toHaveText("27");
+    await expect(surveyPeriods).toHaveText(surveyMonthCounts);
+    await grouping.selectOption("quarter");
+    await expect(surveyPeriods).toHaveText([/Jul.*Sep.*2026\s*1$/, /Oct.*Dec.*2026\s*26$/]);
+    expect(surveyReads().at(-1)).toEqual({ limit: "25", expectedWorkspaceId, cursor: "25" });
+    expect(fixture.surveyAnalyticsReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
+    expect(fixture.surveySourceReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
+
+    const olderSurvey = fixture.surveys[25]!;
+    await page
+      .getByRole("combobox", { name: "Survey", exact: true })
+      .selectOption(olderSurvey.surveyId);
+    await expect(surveyCollection.getByRole("article")).toHaveCount(2);
+    await page.getByLabel("Collection deadline from", { exact: true }).fill("2026-09-30");
+    await page.getByLabel("Collection deadline to", { exact: true }).fill("2026-09-30");
+    await page
+      .getByRole("searchbox", { name: "Search Survey results", exact: true })
+      .fill(olderSurvey.code);
+    const scopedSurveyFilters = {
+      expectedWorkspaceId,
+      search: olderSurvey.code,
+      surveyId: olderSurvey.surveyId,
+      from: "2026-09-30T06:00:00.000Z",
+      to: "2026-10-01T05:59:59.999Z",
+    };
+    await expect.poll(() => surveyReads().at(-1)).toEqual({ limit: "25", ...scopedSurveyFilters });
+    await expect
+      .poll(() => Object.fromEntries(fixture.surveyAnalyticsReads.at(-1)!))
+      .toEqual(scopedSurveyFilters);
+    await expect(surveyCollection.getByRole("article")).toHaveCount(1);
+    await expect(matchingRuns).toHaveText("1");
+    await expect(surveysRepresented).toHaveText("1");
+    await expect(surveyPeriods).toHaveText([/Oct.*Dec.*2026\s*1$/]);
+    await toolbarClear(page).click();
 
     await views.getByRole("link", { name: "Presentations", exact: true }).click();
     await expect(page).toHaveURL(/\/results\?view=presentations$/);

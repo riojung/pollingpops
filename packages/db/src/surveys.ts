@@ -21,6 +21,11 @@ import { assertAudienceAdmissionInMemory, getMemoryPlatformRepository } from "./
 import { assertAudienceAdmissionForTransaction } from "./platform-postgres.js";
 import { PlatformError } from "./platform-types.js";
 import {
+  MemorySurveyResultsHistory,
+  PostgresSurveyResultsHistory,
+  type SurveyResultsHistoryRepository,
+} from "./survey-results-history.js";
+import {
   PublishedQuizLimitError,
   SessionCodeConflictError,
   type Repository,
@@ -226,7 +231,10 @@ function compatibleGuest(room: SurveyRoom, guest: Guest) {
 
 /** Shared business rules; PostgreSQL and memory differ only in transaction/storage mechanics. */
 export class SurveyRepository {
-  constructor(private readonly run: Run) {}
+  constructor(
+    private readonly run: Run,
+    readonly resultsHistory: SurveyResultsHistoryRepository,
+  ) {}
   private async mutate<T>(
     tx: Transaction,
     owner: { workspaceId: string; surveyId: string; roomId?: string; ownerId: string },
@@ -720,6 +728,9 @@ class MemorySurveyStore {
   readonly surveys = new Map<string, SurveyRecord>();
   readonly survey_versions = new Map<string, SurveyVersion>();
   readonly survey_feedback_rooms = new Map<string, SurveyRoom>();
+  readonly resultsHistory = new MemorySurveyResultsHistory(this.survey_feedback_rooms, (read) =>
+    this.queue.then(read),
+  );
   readonly survey_guests = new Map<string, Guest>();
   private receipts = new Map<string, Receipt>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -1140,13 +1151,16 @@ function postgresRun(repository: PostgresRepository): Run {
 }
 export function createSurveyRepository(repository: Repository) {
   if (repository instanceof PostgresRepository)
-    return new SurveyRepository(postgresRun(repository));
+    return new SurveyRepository(
+      postgresRun(repository),
+      new PostgresSurveyResultsHistory(repository.pool),
+    );
   if (repository instanceof MemoryRepository) {
     const store = repository.getOrCreateLifecycleExtension(
       "surveys",
       () => new MemorySurveyStore(repository),
     );
-    return new SurveyRepository(store.run);
+    return new SurveyRepository(store.run, store.resultsHistory);
   }
   throw new Error("Unsupported survey repository");
 }

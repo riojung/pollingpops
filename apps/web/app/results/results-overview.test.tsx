@@ -105,14 +105,13 @@ describe("Results overview widgets", () => {
       'href="/presentation-session/session-1/report"',
     ]);
   });
-  it("labels Survey metadata as shown runs and identifies report-level response evidence", () => {
+  it("uses matching run and source totals without lifting response evidence out of Survey reports", () => {
     const items = [
       {
         id: "run",
         surveyId: "survey",
         title: "Feedback",
-        code: "123456",
-        closed: true,
+        code: "1234567",
         closesAt: "2026-10-01",
         expiresAt: "2099-10-01",
       },
@@ -122,17 +121,31 @@ describe("Results overview widgets", () => {
         kind="surveys"
         items={items}
         hasMore
+        analytics={{
+          rooms: 29,
+          surveys: 4,
+          refreshAfterMs: null,
+          activity: {
+            month: [{ start: "2026-10-01", count: 29 }],
+            quarter: [{ start: "2026-10-01", count: 29 }],
+          },
+        }}
+        onAnalyticsRetry={() => undefined}
         grouping="month"
         onGroupingChange={() => undefined}
       />,
     );
     expect(markup).toContain("Results analytics");
-    expect(markup).toContain("current filters");
-    expect(markup).toContain("Survey runs shown");
-    expect(markup).toContain("Response counts are available inside each Survey report.");
+    expect(markup).toContain(
+      "Totals and activity cover all closed Survey runs that match your filters and have retained results.",
+    );
+    expect(markup).toContain("<dt>Matching Survey runs</dt><dd>29</dd>");
+    expect(markup).toMatch(/<dt>Surveys represented<\/dt><dd[^>]*>4<\/dd>/);
+    expect(markup).toContain("Grouped by scheduled collection deadline in UTC.");
+    expect(markup).toContain("Survey reports show results when privacy rules allow.");
     expect(markup).toContain('href="/results/surveys/run"');
-    expect(markup).toContain("Load more to expand this overview");
+    expect(markup).not.toContain("Load more to expand this overview");
     expect(markup).not.toContain('role="meter"');
-    expect(markup).not.toContain("participants");
+    expect(markup).not.toContain("Participant joins");
   });
 });

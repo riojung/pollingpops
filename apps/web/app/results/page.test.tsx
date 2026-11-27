@@ -197,6 +197,9 @@ function practice(id = "practice-first", title = "First practice") {
 const presentationResultsPath = "/v1/presentation-sessions/results";
 const presentationAnalyticsPath = `${presentationResultsPath}/analytics`;
 const presentationSourcesPath = `${presentationResultsPath}/sources`;
+const surveyResultsPath = "/v1/survey-rooms/results";
+const surveyAnalyticsPath = `${surveyResultsPath}/analytics`;
+const surveySourcesPath = `${surveyResultsPath}/sources`;
 const presentation = {
   id: "presentation-first",
   presentationId: "presentation-source",
@@ -214,11 +217,13 @@ function survey(id = "survey-first", title = "First Survey result") {
     id,
     surveyId: "survey-source",
     title,
-    code: "654321",
-    closed: true,
+    code: "6543210",
     closesAt: "2026-10-10T12:00:00Z",
     expiresAt: "2099-10-10T12:00:00Z",
   };
+}
+function surveyPage(items: ReturnType<typeof survey>[], nextCursor: string | null = null) {
+  return { items, nextCursor, sampledAt: new Date(Date.now()).toISOString() };
 }
 function reportAnalytics(ready = 2, pending = 0, failed = 0) {
   const count = ready + pending + failed;
@@ -241,6 +246,10 @@ function presentationAnalytics(active: number, finished: number, participantJoin
   const count = active + finished;
   const periods = count > 0 ? [{ start: "2026-10-01", count }] : [];
   return { active, finished, participantJoins, activity: { month: periods, quarter: periods } };
+}
+function surveyAnalytics(rooms = 2, surveys = 1, refreshAfterMs: number | null = null) {
+  const periods = rooms > 0 ? [{ start: "2026-10-01", count: rooms }] : [];
+  return { rooms, surveys, activity: { month: periods, quarter: periods }, refreshAfterMs };
 }
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
@@ -286,7 +295,26 @@ function response(path: string) {
       return { items: [older], nextCursor: null };
     return { items: [presentation], nextCursor: "presentation-next" };
   }
-  if (path.startsWith("/v1/survey-rooms?")) return { rooms: [survey()], nextCursor: null };
+  if (matchesRequest(path, surveyAnalyticsPath)) {
+    const search = new URLSearchParams(path.split("?")[1]).get("search");
+    return search === "missing" ? surveyAnalytics(0, 0) : surveyAnalytics();
+  }
+  if (matchesRequest(path, surveySourcesPath)) {
+    return {
+      sources: [
+        { id: "survey-source", title: "Source Survey" },
+        { id: "older-survey", title: "Older Survey source" },
+      ],
+      refreshAfterMs: null,
+    };
+  }
+  if (matchesRequest(path, surveyResultsPath)) {
+    const query = new URLSearchParams(path.split("?")[1]);
+    const older = { ...survey("survey-later", "Later Survey result"), surveyId: "older-survey" };
+    if (query.get("search") === "missing") return surveyPage([]);
+    if (query.has("cursor") || query.get("surveyId") === "older-survey") return surveyPage([older]);
+    return surveyPage([survey()], "survey-next+ /");
+  }
   throw new Error(`Unexpected request: ${path}`);
 }
 
@@ -307,8 +335,8 @@ beforeEach(() => {
   });
   vi.stubGlobal("window", {
     localStorage: { getItem: vi.fn(() => null), setItem: vi.fn() },
-    setInterval: vi.fn(() => 1),
-    clearInterval: vi.fn(),
+    setTimeout,
+    clearTimeout,
   });
 });
 afterEach(() => {
@@ -322,6 +350,7 @@ describe("Results workspace", () => {
   it.each([
     { view: "practice", endpoints: ["/v1/followups", practiceAnalyticsPath] },
     { view: "presentations", endpoints: [presentationResultsPath, presentationAnalyticsPath] },
+    { view: "surveys", endpoints: [surveyResultsPath, surveyAnalyticsPath] },
   ])(
     "coalesces $view search typing into one scoped list read and one analytics read",
     async ({ view, endpoints }) => {
@@ -667,7 +696,7 @@ describe("Results workspace", () => {
       path: presentationResultsPath,
       title: "First Presentation result",
     },
-    { view: "surveys", path: "/v1/survey-rooms", title: "First Survey result" },
+    { view: "surveys", path: surveyResultsPath, title: "First Survey result" },
   ])(
     "keeps $view loading, failure, and held retry distinct from zero results",
     async ({ view, path, title }) => {
@@ -707,6 +736,11 @@ describe("Results workspace", () => {
         expect(loadingMarkup).not.toContain("<dt>Participant joins</dt>");
         expect(activityCounts()).toEqual(["2"]);
       }
+      if (view === "surveys") {
+        expect(resultsPanel().props["aria-busy"]).toBeUndefined();
+        expect(loadingMarkup).toContain("<dt>Matching Survey runs</dt><dd>2</dd>");
+        expect(activityCounts()).toEqual(["2"]);
+      }
       const placeholders = elements(fixtures.tree).find(
         (node) => node.props["aria-hidden"] === "true" && node.props["data-view"] === "list",
       );
@@ -722,6 +756,10 @@ describe("Results workspace", () => {
       if (view === "results") {
         expect(failedMarkup).toContain("<dt>Matching reports</dt><dd>2</dd>");
         expect(failedMarkup).not.toContain("<dt>Participant joins</dt>");
+        expect(activityCounts()).toEqual(["2"]);
+      }
+      if (view === "surveys") {
+        expect(failedMarkup).toContain("<dt>Matching Survey runs</dt><dd>2</dd>");
         expect(activityCounts()).toEqual(["2"]);
       }
       expect(failedMarkup).not.toMatch(/0 (?:results|practice items) shown|No .+ yet/);
@@ -753,6 +791,7 @@ describe("Results workspace", () => {
       ).toBe(false);
       expect(markup).toContain('data-view="list"');
       if (view === "results") expect(historyCalls(reportTotalsPath)).toHaveLength(1);
+      if (view === "surveys") expect(historyCalls(surveyAnalyticsPath)).toHaveLength(1);
       expect(new URLSearchParams(fixtures.query).get("q")).toBe("First");
       harness.dispose();
     },
@@ -769,7 +808,7 @@ describe("Results workspace", () => {
     },
     {
       view: "surveys",
-      path: "/v1/survey-rooms",
+      path: surveyResultsPath,
       empty: "No Survey results yet",
       destination: "/sessions?type=surveys",
     },
@@ -781,8 +820,9 @@ describe("Results workspace", () => {
         if (matchesRequest(url, reportTotalsPath)) return reportAnalytics(0);
         if (matchesRequest(url, practiceAnalyticsPath)) return practiceAnalytics(0);
         if (matchesRequest(url, presentationAnalyticsPath)) return presentationAnalytics(0, 0, 0);
+        if (matchesRequest(url, surveyAnalyticsPath)) return surveyAnalytics(0, 0);
         if (!matchesRequest(url, path)) return response(url);
-        if (view === "surveys") return { rooms: [], nextCursor: null };
+        if (view === "surveys") return surveyPage([]);
         return { items: [], nextCursor: null };
       });
       const harness = resultsHarness();
@@ -792,6 +832,7 @@ describe("Results workspace", () => {
       if (view === "practice") expect(markup).toContain("No practice items match these filters.");
       if (view === "presentations")
         expect(markup).toContain("No Presentation sessions match these filters.");
+      if (view === "surveys") expect(markup).toContain("No Survey runs match these filters.");
       expect(markup).toContain(view === "practice" ? "0 practice items shown" : "0 results shown");
       expect(resultsBusyScope(view).props["aria-busy"]).toBe(false);
       expect(markup).not.toContain("Clear filters");
@@ -830,7 +871,7 @@ describe("Results workspace", () => {
     },
     {
       view: "surveys",
-      path: "/v1/survey-rooms",
+      path: surveyResultsPath,
       title: "First Survey result",
       source: "Survey",
       sourceId: "survey-source",
@@ -867,12 +908,10 @@ describe("Results workspace", () => {
         changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
         changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
         changeSearch("missing");
-        if (view === "practice" || view === "presentations") elapseHistorySearchDelay(harness);
-        if (view !== "surveys") {
-          harness.render();
-          expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
-          expect(field("Group by")).toBeUndefined();
-        }
+        if (view !== "results") elapseHistorySearchDelay(harness);
+        harness.render();
+        expect(resultsBusyScope(view).props["aria-busy"]).toBe(true);
+        expect(field("Group by")).toBeUndefined();
         const markup = await harness.settle();
         expect(field("Group by")).toBeUndefined();
         expect(headings()).toEqual([
@@ -908,10 +947,6 @@ describe("Results workspace", () => {
           filterFields.every((node) => node.props.value === (node.type === "select" ? "all" : "")),
         ).toBe(true);
       }
-      if (view === "surveys")
-        expect(
-          fixtures.apiFetch.mock.calls.filter(([url]) => matchesRequest(url, path)),
-        ).toHaveLength(1);
       harness.dispose();
     },
   );
@@ -936,6 +971,13 @@ describe("Results workspace", () => {
       path: presentationResultsPath,
       title: "First Presentation result",
       later: "Later Presentation result",
+      more: "Load More",
+    },
+    {
+      view: "surveys",
+      path: surveyResultsPath,
+      title: "First Survey result",
+      later: "Later Survey result",
       more: "Load More",
     },
   ])(
@@ -981,7 +1023,7 @@ describe("Results workspace", () => {
         elements(fixtures.tree).find(
           (node) =>
             node.type === "button" && elementText(node.props.children as ReactNode) === "Loading",
-        )?.props[view === "presentations" ? "aria-disabled" : "disabled"],
+        )?.props[view === "presentations" || view === "surveys" ? "aria-disabled" : "disabled"],
       ).toBe(true);
       pendingRetry.resolve(response(historyCalls(path).at(-1)![0]));
       markup = await harness.settle();
@@ -994,6 +1036,11 @@ describe("Results workspace", () => {
         expect(markup).toContain("<dt>Matching sessions</dt><dd>2</dd>");
         expect(historyCalls(presentationAnalyticsPath)).toHaveLength(1);
         expect(historyCalls(presentationSourcesPath)).toHaveLength(1);
+      }
+      if (view === "surveys") {
+        expect(markup).toContain("<dt>Matching Survey runs</dt><dd>2</dd>");
+        expect(historyCalls(surveyAnalyticsPath)).toHaveLength(1);
+        expect(historyCalls(surveySourcesPath)).toHaveLength(1);
       }
       harness.dispose();
     },
@@ -1031,7 +1078,7 @@ describe("Results workspace", () => {
     { view: "results", path: "/v1/reports" },
     { view: "practice", path: "/v1/followups" },
     { view: "presentations", path: presentationResultsPath },
-    { view: "surveys", path: "/v1/survey-rooms" },
+    { view: "surveys", path: surveyResultsPath },
   ])("ignores an obsolete $view retry after the workspace changes", async ({ view, path }) => {
     fixtures.query = `view=${view}&q=First`;
     const pendingRetry = deferred<unknown>();
@@ -1159,7 +1206,7 @@ describe("Results workspace", () => {
     },
     {
       view: "surveys",
-      path: "/v1/survey-rooms",
+      path: surveyResultsPath,
       title: "First Survey result",
       search: "Search Survey results",
       library: "surveys",
@@ -1174,7 +1221,7 @@ describe("Results workspace", () => {
         "/v1/reports",
         "/v1/followups",
         presentationResultsPath,
-        "/v1/survey-rooms",
+        surveyResultsPath,
       ])
         expect(paths.some((url) => matchesRequest(url, other))).toBe(other === path);
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
@@ -1209,270 +1256,243 @@ describe("Results workspace", () => {
     ).toBe("needle");
   });
 
-  it("loads every Survey metadata page and links retained completed runs directly when creation is disabled", async () => {
+  it("links retained Survey reports directly when creation is disabled", async () => {
     fixtures.query = "view=surveys";
     fixtures.surveysEnabled = false;
-    fixtures.apiFetch.mockImplementation(async (path: string) => {
-      if (path.startsWith("/v1/survey-rooms?"))
-        return path.includes("cursor=")
-          ? {
-              rooms: [
-                {
-                  ...survey("closed-later", "Closed early"),
-                  closesAt: "2099-01-01T12:00:00Z",
-                },
-                { ...survey("elapsed", "Deadline reached"), closed: false },
-                {
-                  ...survey("boundary", "Deadline reached now"),
-                  closed: false,
-                  closesAt: "2026-10-14T12:00:00Z",
-                },
-              ],
-              nextCursor: null,
-            }
-          : {
-              rooms: [
-                {
-                  ...survey("closed-later", "Closed early"),
-                  closesAt: "2099-01-01T12:00:00Z",
-                },
-                {
-                  ...survey("active", "Active Survey"),
-                  closed: false,
-                  closesAt: "2099-01-01T12:00:00Z",
-                },
-                {
-                  ...survey("expired", "Expired Survey"),
-                  expiresAt: "2026-10-14T12:00:00Z",
-                },
-              ],
-              nextCursor: "survey-next+ /",
-            };
-      return response(path);
-    });
-    const markup = await resultsHarness().settle();
-    expect(headings()).toEqual(["Closed early", "Deadline reached now", "Deadline reached"]);
-    expect(markup).toContain('href="/results/surveys/closed-later"');
-    expect(markup).toContain('href="/results/surveys/elapsed"');
+    const harness = resultsHarness();
+    const markup = await harness.settle();
+    expect(headings()).toEqual(["First Survey result"]);
+    expect(markup).toContain('href="/results/surveys/survey-first"');
     expect(markup).toContain('href="/library?type=surveys"');
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain("Collection deadline:");
     expect(markup).toContain("Retained until");
-    expect(markup).toContain("Run code: 654321");
-    expect(markup).toContain("3 results shown");
-    expect(markup).not.toContain("Active Survey");
-    expect(markup).not.toContain("Expired Survey");
+    expect(markup).toContain("Run code: 6543210");
+    expect(markup).toContain("1 results shown");
     expect(markup).not.toContain('href="/surveys/rooms/');
     expect(markup).not.toContain("Survey runs and results");
-    expect(
-      elements(historyFilters())
-        .filter((element) => element.type === "select")
-        .map((element) => element.props.value),
-    ).toEqual(["all"]);
-    const calls = historyCalls("/v1/survey-rooms");
-    expect(
-      calls.map(([url]) => Object.fromEntries(new URLSearchParams(url.split("?")[1]))),
-    ).toEqual([{ limit: "50" }, { limit: "50", cursor: "survey-next+ /" }]);
-    expect(
-      fixtures.apiFetch.mock.calls.some(([path]) => /^\/v1\/survey-rooms\//.test(String(path))),
-    ).toBe(false);
-  });
-
-  it("filters Survey metadata by title, code, source, and inclusive collection deadlines without refetching", async () => {
-    fixtures.query = "view=surveys";
-    fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path.startsWith("/v1/survey-rooms?")
-        ? {
-            rooms: [
-              { ...survey(), code: "AbC123" },
-              {
-                ...survey("start", "First Survey at start"),
-                closesAt: new Date("2026-10-10T00:00:00").toISOString(),
-              },
-              {
-                ...survey("end", "First Survey at end"),
-                closesAt: new Date("2026-10-10T23:59:59.999").toISOString(),
-              },
-              { ...survey("other", "First Survey other source"), surveyId: "other-source" },
-              {
-                ...survey("old", "First Survey before range"),
-                closesAt: new Date("2026-10-09T23:59:59.999").toISOString(),
-              },
-              {
-                ...survey("next", "First Survey after range"),
-                closesAt: new Date("2026-10-11T00:00:00").toISOString(),
-              },
-            ],
-            nextCursor: null,
-          }
-        : response(path),
-    );
-    const harness = resultsHarness();
-    await harness.settle();
-    changeSearch("  FIRST SURVEY  ");
-    changeField("Survey", "survey-source");
-    changeField("Collection deadline from", "2026-10-10");
-    changeField("Collection deadline to", "2026-10-10");
-    let markup = await harness.settle();
-    expect(headings()).toEqual([
-      "First Survey at end",
-      "First Survey result",
-      "First Survey at start",
-    ]);
-    expect(markup).toContain("3 results shown");
-    changeSearch("  abc123  ");
-    await harness.settle();
-    expect(headings()).toEqual(["First Survey result"]);
-    changeSearch("missing");
-    markup = await harness.settle();
-    expect(markup).toContain("No results match these filters.");
-    expect(markup).not.toContain('href="/sessions?type=surveys"');
-    expect(fixtures.replace).not.toHaveBeenCalledWith("/sessions?type=surveys", expect.anything());
-    clickButton("Clear filters");
-    await harness.settle();
-    expect(headings()).toHaveLength(6);
-    expect(new URLSearchParams(fixtures.query).get("view")).toBe("surveys");
-    expect(new URLSearchParams(fixtures.query).has("q")).toBe(false);
-    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
-  });
-
-  it("paginates Survey cards locally and resets the display limit when source filters change", async () => {
-    fixtures.query = "view=surveys";
-    fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path.startsWith("/v1/survey-rooms?")
-        ? {
-            rooms: Array.from({ length: 27 }, (_, index) => ({
-              ...survey(`survey-${String(index).padStart(2, "0")}`, `Survey ${index}`),
-              surveyId: index === 26 ? "other-source" : "survey-source",
-            })),
-            nextCursor: null,
-          }
-        : response(path),
-    );
-    const harness = resultsHarness();
-    let markup = await harness.settle();
-    expect(headings()).toHaveLength(25);
-    expect(markup).toContain("25 results shown · More available");
-    clickButton("Load More");
-    markup = await harness.settle();
-    expect(headings()).toHaveLength(27);
-    expect(markup).toContain("27 results shown");
-    changeField("Survey", "other-source");
-    await harness.settle();
-    expect(headings()).toEqual(["Survey 26"]);
-    changeField("Survey", "survey-source");
-    await harness.settle();
-    expect(headings()).toHaveLength(25);
-    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
-  });
-
-  it("updates Survey eligibility when collection deadlines and retention dates pass", async () => {
-    fixtures.query = "view=surveys";
-    fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path.startsWith("/v1/survey-rooms?")
-        ? {
-            rooms: [
-              {
-                ...survey("expiring", "Retained briefly"),
-                expiresAt: "2026-10-14T12:00:30Z",
-              },
-              {
-                ...survey("closing", "Newly completed"),
-                closed: false,
-                closesAt: "2026-10-14T12:00:30Z",
-              },
-            ],
-            nextCursor: null,
-          }
-        : response(path),
-    );
-    const harness = resultsHarness();
-    await harness.settle();
-    expect(headings()).toEqual(["Retained briefly"]);
-    vi.mocked(Date.now).mockReturnValue(new Date("2026-10-14T12:00:30Z").getTime());
-    const refresh = vi.mocked(window.setInterval).mock.calls[0]![0];
-    if (typeof refresh !== "function") throw new Error("Missing Survey eligibility refresh");
-    refresh();
-    await harness.settle();
-    expect(headings()).toEqual(["Newly completed"]);
-    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+    expect(historyCalls("/v1/survey-rooms")).toHaveLength(0);
+    expect(historyCalls(surveyResultsPath)).toHaveLength(1);
+    expect(historyCalls(surveyAnalyticsPath)).toHaveLength(1);
+    expect(historyCalls(surveySourcesPath)).toHaveLength(1);
     harness.dispose();
-    expect(window.clearInterval).toHaveBeenCalledWith(1);
   });
 
-  it("rejects repeated Survey metadata cursors without looping or showing partial results", async () => {
+  it("retries Survey totals without refetching the list or sourcing counts from loaded reports", async () => {
     fixtures.query = "view=surveys";
-    fixtures.apiFetch.mockImplementation(async (path: string) =>
-      path.startsWith("/v1/survey-rooms?")
-        ? { rooms: [survey()], nextCursor: "repeated" }
-        : response(path),
-    );
-    const markup = await resultsHarness().settle();
-    expect(historyCalls("/v1/survey-rooms")).toHaveLength(2);
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("Survey results could not be loaded. Try again.");
-    expect(headings()).toEqual([]);
-    expect(markup).not.toContain("No Survey results yet");
-  });
-
-  it("uses current Survey source filters when a pending metadata page completes", async () => {
-    fixtures.query = "view=surveys";
-    const pending = deferred<unknown>();
-    fixtures.apiFetch.mockImplementation((path: string) =>
-      path.startsWith("/v1/survey-rooms?") ? pending.promise : Promise.resolve(response(path)),
-    );
-    const harness = resultsHarness();
-    await harness.settle();
-    changeField("Survey", "other-source");
-    changeSearch("wanted");
-    await harness.settle();
-    pending.resolve({
-      rooms: [
-        survey("wrong", "Wanted wrong source"),
-        { ...survey("wanted", "Wanted current source"), surveyId: "other-source" },
-      ],
-      nextCursor: null,
+    const retry = deferred<unknown>();
+    let reads = 0;
+    fixtures.apiFetch.mockImplementation(async (url: string) => {
+      if (matchesRequest(url, surveyAnalyticsPath)) {
+        if (++reads === 1) throw new Error("Survey analytics unavailable");
+        return retry.promise;
+      }
+      return response(url);
     });
-    await harness.settle();
-    expect(headings()).toEqual(["Wanted current source"]);
-    expect(historyCalls("/v1/survey-rooms")).toHaveLength(1);
+    const harness = resultsHarness();
+    const failed = await harness.settle();
+    expect(failed).toContain("Survey totals and activity could not load.");
+    expect(failed).toContain('href="/results/surveys/survey-first"');
+    expect(failed).not.toContain("<dt>Matching Survey runs</dt>");
+    expect(activityCounts()).toEqual([]);
+
+    const heading = elements(fixtures.tree).find(
+      (node) =>
+        node.type === "h2" && elementText(node.props.children as ReactNode) === "Results analytics",
+    )!;
+    const focus = attachFocus(heading);
+    clickButton("Retry Survey analytics");
+    expect(focus).toHaveBeenCalledOnce();
+    const pending = await harness.settle();
+    expect(pending).toContain("Loading Survey totals and activity…");
+    expect(pending).toContain('href="/results/surveys/survey-first"');
+    expect(activityCounts()).toEqual([]);
+
+    retry.resolve({
+      rooms: 27,
+      surveys: 4,
+      refreshAfterMs: null,
+      activity: {
+        month: [
+          { start: "2026-09-01", count: 9 },
+          { start: "2026-10-01", count: 18 },
+        ],
+        quarter: [
+          { start: "2026-07-01", count: 9 },
+          { start: "2026-10-01", count: 18 },
+        ],
+      },
+    });
+    const recovered = await harness.settle();
+    expect(recovered).toContain("<dt>Matching Survey runs</dt><dd>27</dd>");
+    expect(recovered).toContain("Survey reports show results when privacy rules allow.");
+    expect(recovered).not.toContain('role="meter"');
+    expect(recovered).not.toContain("Participant joins");
+    expect(activityCounts()).toEqual(["9", "18"]);
+    expect(historyCalls(surveyResultsPath)).toHaveLength(1);
+    expect(historyCalls(surveySourcesPath)).toHaveLength(1);
+    expect(historyCalls(surveyAnalyticsPath).map(([path]) => path)).toEqual([
+      `${surveyAnalyticsPath}?expectedWorkspaceId=workspace-a`,
+      `${surveyAnalyticsPath}?expectedWorkspaceId=workspace-a`,
+    ]);
+    harness.dispose();
   });
 
-  it.each(["first", "later"] as const)(
-    "aborts stale Survey %s metadata pages after a workspace change",
-    async (stage) => {
-      fixtures.query = "view=surveys";
-      const stale = deferred<unknown>();
-      let reads = 0;
-      fixtures.apiFetch.mockImplementation((path: string) => {
-        if (path.startsWith("/v1/survey-rooms?")) {
-          reads++;
-          if (reads === (stage === "first" ? 1 : 2)) return stale.promise;
-          if (stage === "later" && reads === 1)
-            return Promise.resolve({ rooms: [survey()], nextCursor: "next" });
-          return Promise.resolve({
-            rooms: [survey("fresh", "Fresh Survey history")],
-            nextCursor: null,
-          });
+  it("refreshes Survey Results at the next eligibility change without changing filter scope", async () => {
+    fixtures.query = "view=surveys&q=Survey";
+    const boundary = Date.parse("2026-10-14T12:00:30Z");
+    fixtures.apiFetch.mockImplementation(async (url: string) => {
+      const beforeBoundary = Date.now() < boundary;
+      if (matchesRequest(url, surveyResultsPath)) {
+        const item = beforeBoundary
+          ? {
+              ...survey("expiring", "Survey retained briefly"),
+              expiresAt: new Date(boundary).toISOString(),
+            }
+          : {
+              ...survey("closing", "Survey now completed"),
+              surveyId: "closing-survey",
+              closesAt: new Date(boundary).toISOString(),
+            };
+        return surveyPage([item]);
+      }
+      if (matchesRequest(url, surveyAnalyticsPath)) {
+        return surveyAnalytics(
+          beforeBoundary ? 2 : 1,
+          1,
+          beforeBoundary ? boundary - Date.now() : null,
+        );
+      }
+      if (matchesRequest(url, surveySourcesPath)) {
+        return {
+          sources: beforeBoundary
+            ? [{ id: "survey-source", title: "Retained Survey source" }]
+            : [{ id: "closing-survey", title: "Newly completed Survey source" }],
+          refreshAfterMs: beforeBoundary ? boundary - Date.now() : null,
+        };
+      }
+      return response(url);
+    });
+    const harness = resultsHarness();
+    expect(await harness.settle()).toContain("<dt>Matching Survey runs</dt><dd>2</dd>");
+    expect(headings()).toEqual(["Survey retained briefly"]);
+    expect(activityCounts()).toEqual(["2"]);
+    vi.advanceTimersByTime(29_999);
+    for (const path of [surveyResultsPath, surveyAnalyticsPath, surveySourcesPath])
+      expect(historyCalls(path)).toHaveLength(1);
+
+    vi.mocked(Date.now).mockReturnValue(boundary);
+    vi.advanceTimersByTime(1);
+    const refreshed = await harness.settle();
+    expect(refreshed).toContain("<dt>Matching Survey runs</dt><dd>1</dd>");
+    expect(refreshed).toContain("Newly completed Survey source");
+    expect(headings()).toEqual(["Survey now completed"]);
+    expect(activityCounts()).toEqual(["1"]);
+    for (const path of [surveyResultsPath, surveyAnalyticsPath, surveySourcesPath]) {
+      const calls = historyCalls(path);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]![0]).toBe(calls[0]![0]);
+    }
+    harness.dispose();
+  });
+
+  it.each(["loaded run", "off-page run"] as const)(
+    "revalidates a stale %s snapshot after a newer Survey source response succeeds",
+    async (scope) => {
+      fixtures.query = "view=surveys&q=Survey";
+      const boundary = Date.now() + 30_000;
+      const serverClockOffset = 60_000;
+      const loadedRunExpires = scope === "loaded run";
+      const initialSources = deferred<unknown>();
+      const initialAnalytics = deferred<unknown>();
+      const run = loadedRunExpires
+        ? { ...survey(), expiresAt: new Date(boundary + serverClockOffset).toISOString() }
+        : survey();
+      let sourceReads = 0;
+      let analyticsReads = 0;
+      fixtures.apiFetch.mockImplementation(async (url: string) => {
+        const remaining = boundary - Date.now();
+        if (matchesRequest(url, surveyResultsPath)) {
+          return {
+            ...surveyPage(remaining <= 0 && loadedRunExpires ? [] : [run]),
+            sampledAt: new Date(Date.now() + serverClockOffset).toISOString(),
+          };
         }
-        return Promise.resolve(response(path));
+        if (matchesRequest(url, surveyAnalyticsPath)) {
+          if (++analyticsReads === 1 && loadedRunExpires) return initialAnalytics.promise;
+          if (remaining > 0) return surveyAnalytics(2, 1, remaining);
+          return loadedRunExpires ? surveyAnalytics(0, 0) : surveyAnalytics(1);
+        }
+        if (matchesRequest(url, surveySourcesPath) && ++sourceReads === 1) {
+          return initialSources.promise;
+        }
+        return response(url);
       });
       const harness = resultsHarness();
+      expect(await harness.settle()).toContain('href="/results/surveys/survey-first"');
+      if (!loadedRunExpires) expect(activityCounts()).toEqual(["2"]);
+
+      vi.mocked(Date.now).mockReturnValue(boundary);
+      initialSources.resolve(response(surveySourcesPath));
+      initialAnalytics.resolve(surveyAnalytics(0, 0));
       await harness.settle();
-      const request = historyCalls("/v1/survey-rooms").at(-1)!;
-      fixtures.workspaceId = "workspace-b";
-      expect(harness.render()).not.toContain("First Survey result");
-      await harness.settle();
-      expect(request[1].signal?.aborted).toBe(true);
-      stale.resolve({ rooms: [survey("stale", "Stale Survey history")], nextCursor: "stale-next" });
-      expect(await harness.settle()).not.toContain("Stale Survey history");
-      expect(headings()).toEqual(["Fresh Survey history"]);
-      expect(historyCalls("/v1/survey-rooms").some(([path]) => path.includes("stale-next"))).toBe(
-        false,
-      );
+      vi.advanceTimersByTime(30_000);
+      const refreshed = await harness.settle();
+      if (loadedRunExpires) {
+        expect(refreshed).not.toContain('href="/results/surveys/survey-first"');
+        expect(refreshed).toContain("<dt>Matching Survey runs</dt><dd>0</dd>");
+        expect(historyCalls(surveyResultsPath)).toHaveLength(2);
+      } else {
+        expect(refreshed).toContain('href="/results/surveys/survey-first"');
+        expect(refreshed).toContain("<dt>Matching Survey runs</dt><dd>1</dd>");
+        expect(activityCounts()).toEqual(["1"]);
+        expect(historyCalls(surveyAnalyticsPath)).toHaveLength(2);
+      }
       harness.dispose();
     },
   );
+
+  it("retains all opened Survey pages until lifecycle revalidation of the list completes", async () => {
+    fixtures.query = "view=surveys";
+    const boundary = Date.now() + 30_000;
+    const newSecondPage = deferred<ReturnType<typeof surveyPage>>();
+    const first = survey();
+    const second = survey("second", "Second Survey result");
+    const newest = survey("newest", "Newly closed Survey");
+    fixtures.apiFetch.mockImplementation(async (url: string) => {
+      const remaining = boundary - Date.now();
+      if (matchesRequest(url, surveyResultsPath)) {
+        const cursor = new URLSearchParams(url.split("?")[1]).get("cursor");
+        if (remaining > 0) return cursor ? surveyPage([second]) : surveyPage([first], "second");
+        return cursor ? newSecondPage.promise : surveyPage([newest], "new-second");
+      }
+      if (matchesRequest(url, surveyAnalyticsPath)) return surveyAnalytics(remaining > 0 ? 2 : 3);
+      if (matchesRequest(url, surveySourcesPath)) {
+        return {
+          sources: [{ id: "survey-source", title: "Source Survey" }],
+          refreshAfterMs: remaining > 0 ? remaining : null,
+        };
+      }
+      return response(url);
+    });
+    const harness = resultsHarness();
+    await harness.settle();
+    clickButton("Load More");
+    await harness.settle();
+    expect(headings()).toEqual([first.title, second.title]);
+
+    vi.mocked(Date.now).mockReturnValue(boundary);
+    vi.advanceTimersByTime(30_000);
+    await harness.settle();
+    expect(headings()).toEqual([first.title, second.title]);
+    expect(historyCalls(surveyResultsPath).at(-1)?.[0]).toContain("cursor=new-second");
+
+    newSecondPage.resolve(surveyPage([first, second]));
+    const completed = await harness.settle();
+    expect(completed).toContain("<dt>Matching Survey runs</dt><dd>3</dd>");
+    expect(headings()).toEqual([newest.title, first.title, second.title]);
+    harness.dispose();
+  });
 
   it.each([
     {
@@ -1514,6 +1534,19 @@ describe("Results workspace", () => {
       more: "Load More",
       later: "Later Presentation result",
     },
+    {
+      view: "surveys",
+      path: surveyResultsPath,
+      statusLabel: null,
+      sourceLabel: "Survey",
+      sourceKey: "surveyId",
+      sourceId: "survey-source",
+      cursor: "survey-next+ /",
+      analyticsPath: surveyAnalyticsPath,
+      status: null,
+      more: "Load More",
+      later: "Later Survey result",
+    },
   ])(
     "sends $view search and filters on every page and clears all filters together",
     async ({
@@ -1532,10 +1565,10 @@ describe("Results workspace", () => {
       fixtures.query = `view=${view}`;
       const harness = resultsHarness();
       await harness.settle();
-      changeField(statusLabel, status);
+      if (statusLabel && status) changeField(statusLabel, status);
       changeField(sourceLabel, sourceId);
-      changeField("From", "2026-10-01");
-      changeField("To", "2026-10-31");
+      changeField(view === "surveys" ? "Collection deadline from" : "From", "2026-10-01");
+      changeField(view === "surveys" ? "Collection deadline to" : "To", "2026-10-31");
       changeSearch("  NeEdLe %_  ");
       if (analyticsPath) elapseHistorySearchDelay(harness);
       await harness.settle();
@@ -1547,7 +1580,7 @@ describe("Results workspace", () => {
         limit: "25",
         ...scope,
         search: "NeEdLe %_",
-        status,
+        ...(status ? { status } : {}),
         [sourceKey]: sourceId,
         from: new Date("2026-10-01T00:00:00").toISOString(),
         to: new Date("2026-10-31T23:59:59.999").toISOString(),
@@ -1588,6 +1621,7 @@ describe("Results workspace", () => {
       factory: (id: string, title: string) => ({ ...presentation, id, title }),
       more: "Load More",
     },
+    { view: "surveys", path: surveyResultsPath, factory: survey, more: "Load More" },
   ])(
     "discards stale $view first pages and load-more responses after query or workspace changes",
     async ({ view, path, factory, more }) => {
@@ -1597,6 +1631,8 @@ describe("Results workspace", () => {
           fixtures.workspaceId = "workspace-a";
           fixtures.apiFetch.mockReset();
           const stale = deferred<unknown>();
+          const sampledAt =
+            view === "surveys" ? { sampledAt: new Date(Date.now()).toISOString() } : {};
           let reads = 0;
           fixtures.apiFetch.mockImplementation((url: string) => {
             if (url.startsWith(`${path}?`)) {
@@ -1606,6 +1642,7 @@ describe("Results workspace", () => {
                 return Promise.resolve({
                   items: [factory("fresh", "Fresh history")],
                   nextCursor: null,
+                  ...sampledAt,
                 });
             }
             return Promise.resolve(response(url));
@@ -1622,7 +1659,11 @@ describe("Results workspace", () => {
           let markup = await harness.settle();
           expect(request[1]?.signal?.aborted).toBe(true);
           expect(markup).toContain('<h2 lang="">Fresh history</h2>');
-          stale.resolve({ items: [factory("stale", "Stale history")], nextCursor: null });
+          stale.resolve({
+            items: [factory("stale", "Stale history")],
+            nextCursor: null,
+            ...sampledAt,
+          });
           markup = await harness.settle();
           expect(markup).not.toContain("Stale history");
           expect(markup).toContain('<h2 lang="">Fresh history</h2>');
@@ -1843,13 +1884,14 @@ function resultsPanel() {
 }
 function resultsBusyScope(view: string) {
   const panel = resultsPanel();
-  if (view === "surveys") return panel;
   const collectionLabel =
     view === "results"
       ? "Results"
       : view === "practice"
         ? "Practice assignments and follow-ups"
-        : "Presentation Results";
+        : view === "surveys"
+          ? "Survey results"
+          : "Presentation Results";
   return elements(panel).find(
     (node) => node.type === "section" && node.props["aria-label"] === collectionLabel,
   )!;

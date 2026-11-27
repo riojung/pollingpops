@@ -230,19 +230,49 @@ Treat small or conflicting samples as unresolved when deciding which workflow to
   [Wooclap report access and export](https://docs.wooclap.com/en/articles/674961-how-to-download-or-export-event-results)
 
 Keep filled records and provider evidence in the approved private research system. Use reviewed
-aggregate counts and redacted evidence handles in Git. The technical check for the Polling Pops
-arm is the existing Recovery Loop browser fixture:
+aggregate counts and redacted evidence handles in Git. Run the Recovery Loop browser fixture
+against the production beta build to check both Polling Pops kits.
 
 ```sh
 node scripts/build/browser.mjs build beta
-PLAYWRIGHT_PRODUCTION=true pnpm test:e2e:beta tests/beta-e2e/ux-beta.spec.ts \
+PLAYWRIGHT_PRODUCTION=true PLAYWRIGHT_REUSE_BUILD=true pnpm test:e2e:beta \
+  tests/beta-e2e/ux-beta.spec.ts \
   --project=chromium-beta --grep 'creator and participants complete a beta Recovery loop through report'
 ```
 
-The fixture exercises Kit A, including response acknowledgement after reload, intervention,
-recheck, and report reconciliation. Record it as technical calibration for one arm. The
-head-to-head task remains a separately reviewed R2-00 comparison. Use the existing campaign
-workflow for real sessions, usability results, and gate decisions.
+Each kit uses a fresh Round and five independent synthetic guests. The cases check saved response
+receipts, the unrevealed diagnostic distribution, and the linked recheck after the intervention.
+The cases verify that the server sets the deadline to 30 seconds after the recorded opening, locks
+at or after that deadline, and shows the lock to the host within 35 seconds of opening. The recheck
+receipts must appear within 5–15 seconds of the recorded opening. The host and report checks
+reconcile 0/5 correct diagnostic responses, 4/5 correct recheck responses, and one unresolved
+response for the concept. The timing attachments record the server's opening-to-lock elapsed
+time, the host's command-to-observation and lock-to-observation times, and the elapsed times from
+opening to the guest receipt observations.
+
+Use these results for technical calibration of the Polling Pops arm. Record the head-to-head
+facilitator task in the private comparison record and use the existing campaign workflow for
+observed sessions, usability results, and gate decisions.
+
+## Technical checks for the other R2-00 workflows
+
+Reuse the production beta build above to check the existing standalone practice and Session
+Summary flows.
+
+```sh
+PLAYWRIGHT_PRODUCTION=true PLAYWRIGHT_REUSE_BUILD=true pnpm test:e2e:beta \
+  tests/beta-e2e/ux-beta.spec.ts \
+  --project=chromium-beta --grep 'creator assigns immutable practice and manages accountless progress'
+BETA_E2E_SESSION_SUMMARIES=true PLAYWRIGHT_PRODUCTION=true PLAYWRIGHT_REUSE_BUILD=true \
+  pnpm test:e2e:beta \
+  tests/beta-e2e/session-summaries.spec.ts --project=chromium-beta \
+  --grep 'session summaries publish real Round, Presentation and closed Survey evidence'
+```
+
+The practice case checks an assignment pinned to published content, accountless learner access,
+and facilitator progress. The Session Summary case checks publishing and downloading summaries
+and revoking their links. Record the multi-site handoff and assistive-technology observations in
+the private workflow task records.
 
 ## Counting rules
 

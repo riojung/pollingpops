@@ -1179,12 +1179,14 @@ describe("game engine", () => {
     });
     expect(participantReveal).not.toHaveProperty("correctChoiceId");
     expect(participantReveal).not.toHaveProperty("correctResponse");
+    expect(participantReveal).not.toHaveProperty("checkpointTiming");
     expect(participantReveal.question).not.toHaveProperty("purpose");
     expect(participantReveal.question).not.toHaveProperty("linkedRecheckAvailable");
 
     const presenterReveal = snapshotForRole(explaining.state, { role: "presenter" });
     expect(presenterReveal).not.toHaveProperty("correctChoiceId");
     expect(presenterReveal).not.toHaveProperty("correctResponse");
+    expect(presenterReveal).not.toHaveProperty("checkpointTiming");
     expect(presenterReveal.question).toMatchObject({
       purpose: "diagnostic",
       linkedRecheckAvailable: true,
@@ -1195,6 +1197,10 @@ describe("game engine", () => {
       correctChoiceId: mainCorrect,
       correctResponse: { kind: "choice", choiceIds: [mainCorrect] },
       question: { purpose: "diagnostic", linkedRecheckAvailable: true },
+      checkpointTiming: {
+        openedAt: new Date(1_000).toISOString(),
+        lockedAt: new Date(3_000).toISOString(),
+      },
     });
 
     const discussed = applyHostCommand(intervention.state, {
@@ -1220,6 +1226,10 @@ describe("game engine", () => {
       questionCount: 1,
       question: { id: recheckId },
       intervention: { type: "peer_discussion" },
+    });
+    expect(snapshotForRole(recheck.state, { role: "host" }).checkpointTiming).toEqual({
+      openedAt: new Date(6_000).toISOString(),
+      lockedAt: null,
     });
 
     const recovered = acceptAnswer(recheck.state, {

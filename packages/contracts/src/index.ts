@@ -2371,6 +2371,10 @@ export const SessionSnapshotSchema = z.object({
   questionCount: z.number().int().nonnegative(),
   question: LiveQuestionSchema.nullable(),
   deadline: z.string().datetime().nullable(),
+  /** Host-only timestamps recorded when the current checkpoint opens and locks. */
+  checkpointTiming: z
+    .object({ openedAt: z.string().datetime(), lockedAt: z.string().datetime().nullable() })
+    .optional(),
   participants: z.array(ParticipantViewSchema),
   /** Optional for legacy rooms and omitted entirely when public competition is disabled. */
   competitionStandings: CompetitionStandingsSchema.optional(),

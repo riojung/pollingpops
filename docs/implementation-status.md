@@ -27,6 +27,17 @@ visibly locked its diagnostic and linked recheck about 30 seconds after the open
 The report verified 0/5 correct on the diagnostic, 4/5 paired recoveries, and one unresolved
 response for the concept.
 
+On November 27, 2026, both Polling Pops kits passed the production beta Chromium preflight on
+the `211655e5` baseline with five independent synthetic guests each. Both verified saved receipts
+after reload, 0/5 correct diagnostic responses, 4/5 correct recheck responses, 4/5 paired recoveries,
+and one unresolved response. The server recorded a 30-second response deadline and locked each
+question 30.057–30.062 seconds after opening. The host view showed each lock 4–6 milliseconds
+later. Recheck receipts appeared 5.154–5.201 seconds after opening.
+
+The same build passed the standalone practice assignment and the Round, Presentation, and Survey
+Session Summary publication, download, and revocation checks. Multi-site assignment and
+assistive-technology observations remain pending.
+
 On November 25, 2026, the live Wooclap Starter workspace showed 0 of 5 active questions used
 before the rehearsal. Staff saved two synthetic events, each with two answer-keyed MCQs,
 Certainty Check, 30-second timers, and host-controlled result display. Kit A's lobby showed
@@ -35,10 +46,11 @@ and recheck response per event. Both rechecks visibly closed in about 31 seconds
 open command. The live certainty view showed the confident wrong diagnostic answer, and the
 Starter Grid placed both responses on one anonymous row in each event with 0/1 and 1/1 correct.
 
-The five-response Wooclap preflight is pending for each kit. The browser controls could not
-coordinate the five timed submissions in the smoke run. The next preflight needs five
-independent responders through both items, the scripted 0/5 and 4/5 results, and a review of
-response receipts, timing, certainty, report counts, and pairing coverage for the full sample.
+On November 27, 2026, the Wooclap Starter workspace showed 0 of 5 active questions used, and a
+fresh synthetic Kit A copy reached the host lobby. The browser blocked opening the guest join
+link. The five-response Wooclap preflight remains pending for both kits. It needs five independent
+responders through both items, the scripted 0/5 and 4/5 results, and a review of response receipts,
+timing, certainty, report counts, and pairing coverage for the full sample.
 
 Facilitator sessions and independent review remain pending. R2-00 requires the frozen Phase 0
 campaign, including real sessions and accepted usability evidence before acquisition-segment and

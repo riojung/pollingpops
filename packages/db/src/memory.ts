@@ -3,6 +3,7 @@ import {
   SessionPolicySchema,
   type FollowupHistoryAnalytics,
   type FolderArtifactType,
+  type ReportHistorySources,
   type ReportHistoryTotals,
   type SessionPolicy,
 } from "@openround/contracts";
@@ -4699,6 +4700,26 @@ export class MemoryRepository implements Repository {
       const beforeTo = !filters.to || createdAt.getTime() <= filters.to.getTime();
       if (afterFrom && beforeTo) yield { report, session, quizId: version.quizId, createdAt };
     }
+  }
+
+  async listReportHistorySources(workspaceId: string): Promise<ReportHistorySources["sources"]> {
+    const sources = new Map<string, { title: string; createdAt: Date; reportId: string }>();
+    for (const { report, session, quizId, createdAt } of this.matchingReportHistory(
+      workspaceId,
+      {},
+    )) {
+      const latest = sources.get(quizId);
+      if (
+        !latest ||
+        createdAt > latest.createdAt ||
+        (createdAt.getTime() === latest.createdAt.getTime() && report.id > latest.reportId)
+      ) {
+        sources.set(quizId, { title: session.state.quiz.title, createdAt, reportId: report.id });
+      }
+    }
+    return [...sources]
+      .map(([id, { title }]) => ({ id, title }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   }
 
   async getReportHistoryTotals(workspaceId: string, filters: ReportHistoryFilters) {

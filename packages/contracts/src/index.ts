@@ -3571,6 +3571,12 @@ export const ReportHistoryTotalsSchema = z.object({
   failed: z.number().int().nonnegative(),
 });
 export type ReportHistoryTotals = z.infer<typeof ReportHistoryTotalsSchema>;
+export const ReportHistorySourcesSchema = z.object({
+  sources: z.array(
+    z.object({ id: ReportSummarySchema.shape.quizId, title: ReportSummarySchema.shape.title }),
+  ),
+});
+export type ReportHistorySources = z.infer<typeof ReportHistorySourcesSchema>;
 export const REPORT_HISTORY_ACTIVITY_BUCKET_LIMIT = 6;
 const HistoryActivityBucketSchema = z.object({
   start: z.iso.date().endsWith("-01"),

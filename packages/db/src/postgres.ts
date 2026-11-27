@@ -52,6 +52,7 @@ import {
   type FolderArtifactType,
   type QuizDraft,
   type Report,
+  type ReportHistorySources,
   type ReportHistoryTotals,
   type SupportedLocale,
   type SessionPolicy,
@@ -725,14 +726,14 @@ function normalizeAccountExportReport(metrics: unknown, sourceTrustMode: unknown
 const REPORT_HISTORY_SOURCE = `FROM reports
   JOIN game_sessions ON game_sessions.id = reports.session_id
   JOIN quiz_versions ON quiz_versions.id = game_sessions.quiz_version_id`;
+const REPORT_HISTORY_TITLE = "game_sessions.state_snapshot #>> '{quiz,title}'";
 
 const REPORT_HISTORY_WHERE = `WHERE reports.workspace_id = $1
   AND ($2::text IS NULL OR reports.status = $2)
   AND ($3::uuid IS NULL OR quiz_versions.quiz_id = $3)
   AND ($4::timestamptz IS NULL OR reports.created_at >= $4)
   AND ($5::timestamptz IS NULL OR reports.created_at <= $5)
-  AND ($6::text IS NULL
-    OR strpos(lower(game_sessions.state_snapshot #>> '{quiz,title}'), lower($6)) > 0)`;
+  AND ($6::text IS NULL OR strpos(lower(${REPORT_HISTORY_TITLE}), lower($6)) > 0)`;
 
 function reportHistoryFilterParams(workspaceId: string, filters: ReportHistoryFilters) {
   return [
@@ -6797,6 +6798,23 @@ export class PostgresRepository implements Repository {
     return { reports, hasMoreReports: result.rows.length > limit };
   }
 
+  async listReportHistorySources(workspaceId: string): Promise<ReportHistorySources["sources"]> {
+    const { rows } = await this.workspaceQuery(
+      workspaceId,
+      `SELECT latest.id, ${REPORT_HISTORY_TITLE} AS title
+       FROM (
+         SELECT DISTINCT ON (quiz_versions.quiz_id) quiz_versions.quiz_id AS id, reports.session_id
+         ${REPORT_HISTORY_SOURCE}
+         WHERE reports.workspace_id = $1
+         ORDER BY quiz_versions.quiz_id, reports.created_at DESC, reports.id DESC
+       ) latest
+       JOIN game_sessions ON game_sessions.id = latest.session_id
+       ORDER BY latest.id`,
+      [workspaceId],
+    );
+    return rows.map((row) => ({ id: row.id, title: row.title }));
+  }
+
   async getReportHistoryTotals(
     workspaceId: string,
     filters: ReportHistoryFilters,
@@ -6883,7 +6901,7 @@ export class PostgresRepository implements Repository {
     const result = await this.workspaceQuery(
       workspaceId,
       `SELECT reports.*, game_sessions.retention_expires_at, quiz_versions.quiz_id,
-              game_sessions.state_snapshot->'quiz'->>'title' AS quiz_title,
+              ${REPORT_HISTORY_TITLE} AS quiz_title,
               followups.id AS followup_id,
               to_char(
                 reports.created_at AT TIME ZONE 'UTC',

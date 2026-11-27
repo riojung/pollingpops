@@ -84,6 +84,8 @@ export const resultsOverviewEnglishMessages = {
   "resultsOverview.surveySourcesUnavailable": "Survey filter options could not load.",
   "resultsOverview.retrySurveySources": "Retry Survey options",
   "resultsOverview.selectedSurveySource": "Selected Survey",
+  "resultsOverview.roundSourcesUnavailable": "Round filter options could not load.",
+  "resultsOverview.retryRoundSources": "Retry Round options",
 } as const;
 
 export type ResultsOverviewMessageKey = keyof typeof resultsOverviewEnglishMessages;
@@ -168,6 +170,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Impossible de charger les options de filtrage des sondages.",
     "Recharger les options de filtrage des sondages",
     "Sondage sélectionné",
+    "Impossible de charger les options de filtrage des tours.",
+    "Recharger les options de filtrage des tours",
   ],
   "de-DE": [
     "Ergebnisauswertung",
@@ -247,6 +251,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Die Filteroptionen für Umfragen konnten nicht geladen werden.",
     "Filteroptionen für Umfragen erneut laden",
     "Ausgewählte Umfrage",
+    "Die Filteroptionen für Runden konnten nicht geladen werden.",
+    "Filteroptionen für Runden erneut laden",
   ],
   "es-ES": [
     "Análisis de resultados",
@@ -326,6 +332,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "No se han podido cargar las opciones de filtrado de encuestas.",
     "Volver a cargar las opciones de filtrado de encuestas",
     "Encuesta seleccionada",
+    "No se han podido cargar las opciones de filtrado de rondas.",
+    "Volver a cargar las opciones de filtrado de rondas",
   ],
   "it-IT": [
     "Analisi dei risultati",
@@ -405,6 +413,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Impossibile caricare le opzioni di filtro dei sondaggi.",
     "Ricarica le opzioni di filtro dei sondaggi",
     "Sondaggio selezionato",
+    "Impossibile caricare le opzioni di filtro dei turni.",
+    "Ricarica le opzioni di filtro dei turni",
   ],
   "pt-PT": [
     "Análise de resultados",
@@ -484,6 +494,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "Não foi possível carregar as opções de filtragem dos inquéritos.",
     "Voltar a carregar as opções de filtragem dos inquéritos",
     "Inquérito selecionado",
+    "Não foi possível carregar as opções de filtragem das rodadas.",
+    "Voltar a carregar as opções de filtragem das rodadas",
   ],
   "ja-JP": [
     "結果分析",
@@ -563,6 +575,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "アンケートのフィルターの選択肢を読み込めませんでした。",
     "アンケートのフィルターの選択肢を再読み込み",
     "選択中のアンケート",
+    "ラウンドのフィルターの選択肢を読み込めませんでした。",
+    "ラウンドのフィルターの選択肢を再読み込み",
   ],
   "ko-KR": [
     "결과 분석",
@@ -642,6 +656,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "설문 필터 옵션을 불러오지 못했습니다.",
     "설문 필터 옵션 다시 불러오기",
     "선택한 설문",
+    "라운드 필터 옵션을 불러오지 못했습니다.",
+    "라운드 필터 옵션 다시 불러오기",
   ],
   "zh-CN": [
     "结果分析",
@@ -721,6 +737,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "无法加载问卷筛选选项。",
     "重新加载问卷筛选选项",
     "已选问卷",
+    "无法加载回合筛选选项。",
+    "重新加载回合筛选选项",
   ],
   "zh-TW": [
     "結果分析",
@@ -800,6 +818,8 @@ const copy: Record<SupportedLocale, readonly string[]> = {
     "無法載入問卷篩選選項。",
     "重新載入問卷篩選選項",
     "已選問卷",
+    "無法載入回合篩選選項。",
+    "重新載入回合篩選選項",
   ],
 };
 

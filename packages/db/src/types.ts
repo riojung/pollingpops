@@ -24,6 +24,7 @@ import type {
   RecoveryPackPracticeSequence,
   Report,
   ReportHistoryAnalytics,
+  ReportHistorySources,
   ReportHistoryTotals,
   ResponsePayload,
   SessionDecisionEvent,
@@ -1658,6 +1659,7 @@ export interface Repository {
     workspaceId: string,
     options: ReportHistoryListOptions,
   ): Promise<HistoryPage<ReportHistoryRecord>>;
+  listReportHistorySources(workspaceId: string): Promise<ReportHistorySources["sources"]>;
   getReportHistoryTotals(
     workspaceId: string,
     filters: ReportHistoryFilters,

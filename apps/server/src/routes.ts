@@ -77,6 +77,7 @@ import {
   RestoreRoundDraftHistorySchema,
   ReportContextSchema,
   ReportHistoryAnalyticsSchema,
+  ReportHistorySourcesSchema,
   ReportHistoryTotalsSchema,
   ReportSummaryPageSchema,
   RoundFilterOptionsResponseSchema,
@@ -1982,6 +1983,7 @@ export async function registerRoutes(
     reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
     const creator = await auth.requireCreator(request, reply);
     if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
     const query = QuizListQuerySchema.parse(request.query);
     const quizzes = await repository.listQuizzes(creator.workspaceId, query.archived === "true");
     return query.summary === "true"
@@ -3151,6 +3153,16 @@ export async function registerRoutes(
     return ReportHistoryTotalsSchema.parse(
       await repository.getReportHistoryTotals(creator.workspaceId, filters),
     );
+  });
+
+  app.get("/v1/reports/sources", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    return ReportHistorySourcesSchema.parse({
+      sources: await repository.listReportHistorySources(creator.workspaceId),
+    });
   });
 
   app.get("/v1/reports/:id", async (request, reply) => {

@@ -1913,6 +1913,9 @@ chart by UTC month or quarter of report creation. It shows the six most recent p
 reports. Set the date filters to see earlier periods. Totals and activity can load while the report
 list is loading or unavailable. **Retry report analytics** retries both while the loaded reports
 stay available. **Load More** expands the recovery and follow-up evidence and report shortcuts.
+The **Round** filter lists sources alphabetically from the workspace's report history, including
+archived Rounds with reports. Each choice uses the session title associated with the latest report.
+**Retry Round options** reloads those choices independently.
 
 In the **Practice** view, **Matching practice items**, its status counts, recorded attempts, and
 **Activity over time** cover every page matching the workspace and filters. The chart counts

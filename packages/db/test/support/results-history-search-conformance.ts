@@ -45,7 +45,11 @@ export async function expectResultsHistorySearchConformance(
     ],
   };
 
-  async function seed(actor: CreatorContext, count: number) {
+  async function seed(
+    actor: CreatorContext,
+    count: number,
+    firstStatus: "pending" | "failed" = "pending",
+  ) {
     const quiz = await repository.createQuiz({
       id: randomUUID(),
       workspaceId: actor.workspaceId,
@@ -71,7 +75,12 @@ export async function expectResultsHistorySearchConformance(
     const reportIdPrefix = randomUUID().slice(0, 24);
     for (let index = 0; index < count; index += 1) {
       const sessionId = randomUUID();
-      const title = index < 2 ? `Frozen needle ${index === 0 ? "50%_" : "second"}` : "Recent room";
+      const title =
+        index < 2
+          ? `Frozen needle ${index === 0 ? "50%_" : "second"}`
+          : index === 27
+            ? "Renamed delivered Round"
+            : "Recent room";
       const createdAt = new Date(now.getTime() - (count - index) * 1_000);
       await repository.createSession({
         id: sessionId,
@@ -97,7 +106,7 @@ export async function expectResultsHistorySearchConformance(
         updatedAt: createdAt,
       });
       const reportId = `${reportIdPrefix}${index.toString(16).padStart(12, "0")}`;
-      const status = index === 0 ? "pending" : index === 2 ? "failed" : "ready";
+      const status = index === 0 ? firstStatus : index === 2 ? "failed" : "ready";
       await repository.saveReport(actor.workspaceId, {
         id: reportId,
         sessionId,
@@ -468,4 +477,36 @@ export async function expectResultsHistorySearchConformance(
   ]) {
     expect(await practiceAnalytics(filters)).toEqual(emptyPractice);
   }
+
+  const pending = await seed(owner, 1);
+  const failed = await seed(owner, 1, "failed");
+  await seed(owner, 0);
+  await setReportDates(
+    owner.workspaceId,
+    [...pending.reports, ...failed.reports],
+    [firstDate, firstDate],
+  );
+  const recentReportIds = (await reports()).items.map(({ id }) => id);
+  expect(recentReportIds).not.toContain(pending.reports[0]);
+  expect(recentReportIds).not.toContain(failed.reports[0]);
+
+  const latestReport = LegacyReportSchema.parse(
+    await repository.getReport(owner.workspaceId, owned.reports.at(-1)!),
+  );
+  await repository.saveReport(owner.workspaceId, {
+    ...latestReport,
+    metrics: { ...latestReport.metrics, participantCount: -1 },
+  });
+  expect(await repository.listReportHistorySources(owner.workspaceId)).toEqual(
+    [
+      { id: owned.quizId, title: "Renamed delivered Round" },
+      { id: pending.quizId, title: "Frozen needle 50%_" },
+      { id: failed.quizId, title: "Frozen needle 50%_" },
+    ].sort((left, right) => left.id.localeCompare(right.id)),
+  );
+  expect(await repository.listReportHistorySources(outsider.workspaceId)).toEqual([
+    { id: foreign.quizId, title: "Frozen needle second" },
+  ]);
+  expect(await repository.listReportHistorySources(randomUUID())).toEqual([]);
+  await repository.saveReport(owner.workspaceId, latestReport);
 }

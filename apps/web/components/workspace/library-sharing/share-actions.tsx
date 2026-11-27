@@ -9,9 +9,11 @@ import { ApiClientError } from "../../../lib/api";
 import { librarySharingMessages } from "../../../lib/i18n/library-sharing-messages";
 import {
   copyLibraryShare,
+  librarySharedReaderHref,
   revokeLibraryShare,
   updateLibraryShareProgress,
   type LibraryShareSummary,
+  type SharedLibraryReturnContext,
 } from "./client";
 import styles from "./library-sharing.module.css";
 import {
@@ -25,12 +27,14 @@ export function LibraryShareActions({
   onChange,
   onRevoked,
   showOpen = true,
+  returnContext,
   onAccessChanged,
 }: {
   share: LibraryShareSummary;
   onChange: (share: LibraryShareSummary) => void;
   onRevoked: () => void;
   showOpen?: boolean;
+  returnContext?: SharedLibraryReturnContext;
   onAccessChanged?: () => void;
 }) {
   const { locale } = useLocale();
@@ -113,7 +117,10 @@ export function LibraryShareActions({
     <>
       <div className={styles.actions}>
         {showOpen && share.capabilities.view ? (
-          <Link href={`/library/shared/${share.id}`} className="button-quiet small-button">
+          <Link
+            href={librarySharedReaderHref(share.id, returnContext)}
+            className="button-quiet small-button"
+          >
             {copy.open}
           </Link>
         ) : null}

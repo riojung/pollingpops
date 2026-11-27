@@ -773,5 +773,13 @@ describe("All content discovery", () => {
     expect(library.category("Presentations").props.href).toBe(
       "/library?kind=presentation&progress=done&permission=view&scope=shared",
     );
+
+    mocked.query = "scope=shared&q=private&dateFrom=2026-11-01&dateTo=2026-11-30";
+    await library.settle();
+    const filteredAction = library.render().find((element) => element.type === LibraryShareActions);
+    expect(filteredAction?.props.returnContext).toEqual({
+      scope: "shared",
+      dateRange: { dateFrom: "2026-11-01", dateTo: "2026-11-30" },
+    });
   });
 });

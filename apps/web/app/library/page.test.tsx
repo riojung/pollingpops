@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnglishLocale } from "../../test-utils/english-locale";
 import type * as ApiModule from "../../lib/api";
 import { SURVEY_READER_HEADER } from "@openround/contracts/surveys";
+import { LibraryDateRangeFields } from "../../components/workspace/library-discovery/library-date-range-fields";
 import { SurveyLibraryCards } from "../../components/workspace/survey-library-cards";
 import { surveyBranchingFixture } from "../../../../packages/contracts/test/support/survey-branching-fixture";
 
@@ -20,8 +21,10 @@ const fixtures = vi.hoisted(() => ({
   surveysEnabled: true,
   workspaceId: "",
   query: "",
+  browserQuery: null as string | null,
   push: vi.fn(),
   replace: vi.fn(),
+  replaceState: vi.fn(),
   apiFetch: vi.fn(),
   hooks: null as LibraryHooks | null,
   tree: null as ReactNode,
@@ -175,6 +178,7 @@ describe("Library workspace", () => {
     fixtures.surveysEnabled = true;
     fixtures.workspaceId = "";
     fixtures.query = "type=rounds";
+    fixtures.browserQuery = null;
     fixtures.hooks = null;
     fixtures.tree = null;
     fixtures.apiFetch.mockReset();
@@ -184,6 +188,10 @@ describe("Library workspace", () => {
     fixtures.replace.mockReset();
     fixtures.replace.mockImplementation((href: string) => {
       fixtures.query = href.split("?")[1] ?? "";
+    });
+    fixtures.replaceState.mockReset();
+    fixtures.replaceState.mockImplementation((_state: unknown, _title: string, href: URL) => {
+      fixtures.query = href.searchParams.toString();
     });
   });
 
@@ -309,6 +317,90 @@ describe("Library workspace", () => {
     expect(markup).toMatch(/<option value="workspace" selected="">Workspace-owned<\/option>/);
     expect(markup).toMatch(/<option value="unfiled" selected="">Unfiled<\/option>/);
     expect(markup).toContain('aria-pressed="true"');
+  });
+
+  it.each(["rounds", "presentations", "surveys"])(
+    "shows and filters loaded %s by inclusive updated dates, and clears one bound at a time",
+    async (type) => {
+      fixtures.query = `type=${type}&dateFrom=2026-10-01&dateTo=2026-10-01`;
+      const harness = libraryHarness();
+      let markup = await harness.settle();
+
+      expect(markup).toMatch(/Updated from<\/span><input[^>]+type="date"[^>]+value="2026-10-01"/);
+      expect(markup).toMatch(/Updated to<\/span><input[^>]+type="date"[^>]+value="2026-10-01"/);
+      expect(markup).toContain(`aria-label="Select ${type} filed"`);
+      expect(markup).not.toContain(`aria-label="Select ${type} unfiled"`);
+      expect(markup).toMatch(
+        /href="\/library\?dateFrom=2026-10-01&amp;dateTo=2026-10-01"[^>]*>All content<\/a>/,
+      );
+      expect(markup).toContain(
+        `href="/library/folders?type=${type}&amp;dateFrom=2026-10-01&amp;dateTo=2026-10-01"`,
+      );
+
+      const label = new Intl.DateTimeFormat("en-CA", { dateStyle: "medium" }).format(
+        new Date("2026-10-01T00:00:00"),
+      );
+      clickButton(`Updated from ${label} ×`);
+      markup = await harness.settle();
+
+      expect(new URLSearchParams(fixtures.query).get("dateFrom")).toBeNull();
+      expect(new URLSearchParams(fixtures.query).get("dateTo")).toBe("2026-10-01");
+      expect(markup).toContain(`aria-label="Select ${type} filed"`);
+      expect(markup).toContain(`aria-label="Select ${type} unfiled"`);
+    },
+  );
+
+  it("keeps newer live filters through date URL updates and hydrates an external query", async () => {
+    const initialQuery =
+      "type=rounds&q=original&status=draft&owner=workspace&folder=rounds-child&favorites=true&sort=title_asc";
+    fixtures.query = initialQuery;
+    fixtures.browserQuery = initialQuery;
+    fixtures.replaceState.mockImplementation((_state: unknown, _title: string, href: URL) => {
+      fixtures.browserQuery = href.searchParams.toString();
+    });
+    const harness = libraryHarness();
+    await harness.settle();
+
+    changeDateRange({ dateFrom: "2026-10-01", dateTo: "" });
+    const firstQuery = fixtures.browserQuery;
+    harness.render();
+    const search = elements(fixtures.tree).find(
+      (candidate) => candidate.type === "input" && candidate.props.type === "search",
+    );
+    if (!search) throw new Error("Expected Library search input");
+    const { onChange } = search.props as ComponentProps<"input">;
+    onChange?.({ target: { value: "newer" } } as Parameters<NonNullable<typeof onChange>>[0]);
+    changeField("Filter by status", "published");
+    changeField("Filter by ownership", "all");
+    changeField("Filter by folder", "unfiled");
+    clickButton("Favorites ×");
+    harness.render();
+
+    changeDateRange({ dateFrom: "2026-10-01", dateTo: "2026-10-02" });
+    const lastQuery = fixtures.browserQuery;
+    expect(firstQuery).toBe(`${initialQuery}&dateFrom=2026-10-01`);
+    expect(lastQuery).toBe(`${initialQuery}&dateFrom=2026-10-01&dateTo=2026-10-02`);
+    for (const query of [firstQuery, lastQuery]) {
+      if (query === null) throw new Error("Expected a date query in the browser URL");
+      fixtures.query = query;
+      const markup = await harness.settle();
+      expect(markup).toContain('value="newer"');
+      expect(field("Filter by status").value).toBe("published");
+      expect(field("Filter by ownership").value).toBe("all");
+      expect(field("Filter by folder").value).toBe("unfiled");
+      expect(markup).not.toContain("Favorites ×");
+      expect(markup).toMatch(/Updated to<\/span><input[^>]+value="2026-10-02"/);
+    }
+
+    fixtures.browserQuery = null;
+    fixtures.query = `${initialQuery}&dateFrom=2026-10-03`;
+    const markup = await harness.settle();
+    expect(markup).toContain('value="original"');
+    expect(field("Filter by status").value).toBe("draft");
+    expect(field("Filter by ownership").value).toBe("workspace");
+    expect(field("Filter by folder").value).toBe("rounds-child");
+    expect(markup).toContain("Favorites ×");
+    expect(markup).toMatch(/Updated from<\/span><input[^>]+value="2026-10-03"/);
   });
 
   it("retains Survey management while pausing new Survey creation", () => {
@@ -591,7 +683,7 @@ describe("Library workspace", () => {
 
   it("clears folder, destination, and item selection when switching types, while retaining other filters", async () => {
     fixtures.query =
-      "type=rounds&folder=rounds-child&q=filed&status=draft&owner=workspace&favorites=true";
+      "type=rounds&folder=rounds-child&q=filed&status=draft&owner=workspace&favorites=true&dateFrom=2026-10-01&dateTo=2026-10-02";
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       path === "/v1/library/favorites"
         ? {
@@ -619,6 +711,8 @@ describe("Library workspace", () => {
     expect(new URLSearchParams(fixtures.query).get("folder")).toBeNull();
     expect(new URLSearchParams(fixtures.query).get("status")).toBe("draft");
     expect(new URLSearchParams(fixtures.query).get("owner")).toBe("workspace");
+    expect(new URLSearchParams(fixtures.query).get("dateFrom")).toBe("2026-10-01");
+    expect(new URLSearchParams(fixtures.query).get("dateTo")).toBe("2026-10-02");
     selectAll();
     harness.render();
     expect(field("Destination folder").value).toBe("unfiled");
@@ -730,7 +824,6 @@ describe("Library workspace", () => {
   });
 
   it("immediately hides old workspace folders and selections while the new workspace loads", async () => {
-    vi.stubGlobal("window", { localStorage: { getItem: () => null } });
     fixtures.workspaceId = "first-workspace";
     const harness = libraryHarness();
     await harness.settle();
@@ -797,7 +890,6 @@ function libraryResponse(path: string) {
     status: "draft",
     description: "",
     currentVersionId: null,
-    updatedAt: "2026-10-01T00:00:00.000Z",
   };
   if (path.startsWith("/v1/folders?")) {
     const artifactType = new URLSearchParams(path.split("?")[1]).get("artifactType");
@@ -839,6 +931,9 @@ function libraryResponse(path: string) {
       id: `${type}-${suffix}`,
       title: `${type} ${suffix}`,
       folderId: suffix === "filed" ? `${type}-child` : null,
+      updatedAt: new Date(
+        suffix === "filed" ? "2026-10-01T23:59:59.999" : "2026-09-30T23:59:59.999",
+      ).toISOString(),
     }));
   if (path.startsWith("/v1/quizzes?"))
     return {
@@ -907,6 +1002,20 @@ function libraryResponseWithStatus(path: string, status: "published" | "archived
 
 // Exercise the page's callbacks and effect ordering without adding a browser test dependency.
 function libraryHarness() {
+  vi.stubGlobal("window", {
+    location: {
+      get href() {
+        return `https://example.com/library${this.search}`;
+      },
+      get search() {
+        return `?${fixtures.browserQuery ?? fixtures.query}`;
+      },
+    },
+    history: { replaceState: fixtures.replaceState },
+    localStorage: { getItem: () => null },
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
   const hooks: LibraryHooks = { cursor: 0, slots: [], pendingEffects: [] };
   const render = () => {
     hooks.cursor = 0;
@@ -959,6 +1068,14 @@ function changeField(label: string, value: string) {
   field(label).onChange?.({ target: { value } } as Parameters<
     NonNullable<ComponentProps<"select">["onChange"]>
   >[0]);
+}
+
+function changeDateRange(range: ComponentProps<typeof LibraryDateRangeFields>["range"]) {
+  const fields = elements(fixtures.tree).find(
+    (candidate) => candidate.type === LibraryDateRangeFields,
+  );
+  if (!fields) throw new Error("Expected Library date fields");
+  (fields.props as ComponentProps<typeof LibraryDateRangeFields>).onChange(range);
 }
 
 function selectAll() {

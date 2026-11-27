@@ -59,14 +59,17 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
     });
     expect(foreign.ok()).toBe(true);
 
-    await page.goto(`/library?type=${journey.type}`);
+    const dateFrom = "2000-01-02";
+    const dateTo = "2099-10-02";
+    const libraryQuery = new URLSearchParams({ type: journey.type, dateFrom, dateTo });
+    await page.goto(`/library?${libraryQuery}`);
     await expect(page.getByRole("tab", { name: new RegExp(`^${journey.label}`) })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     await openLibraryFilters(page);
     const manageLink = page.getByRole("link", { name: "Manage folders", exact: true });
-    await expect(manageLink).toHaveAttribute("href", `/library/folders?type=${journey.type}`);
+    await expect(manageLink).toHaveAttribute("href", `/library/folders?${libraryQuery}`);
     await manageLink.click();
     await expect(page.getByRole("heading", { name: "Manage folders", exact: true })).toBeVisible();
     await expect(
@@ -136,7 +139,7 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
       )
       .toBe(second.id);
 
-    await page.goto(`/library/folders?type=${journey.type}`);
+    await page.goto(`/library/folders?${libraryQuery}`);
     await page.getByRole("checkbox", { name: `Select ${title}`, exact: true }).check();
     if (journey.artifactType === "round") {
       const concurrentTagEdit = await page.request.patch(
@@ -195,5 +198,8 @@ for (const journey of [...cases, { ...cases[0], mobile: true }]) {
       path: `test-results-beta/folders-${journey.type}-${test.info().project.name}.png`,
       fullPage: true,
     });
+    await page.getByRole("link", { name: "Back to Library", exact: true }).click();
+    await expect(page.getByLabel("Updated from", { exact: true })).toHaveValue(dateFrom);
+    await expect(page.getByLabel("Updated to", { exact: true })).toHaveValue(dateTo);
   });
 }

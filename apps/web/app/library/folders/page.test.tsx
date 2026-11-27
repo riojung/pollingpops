@@ -117,6 +117,35 @@ describe("dedicated folder manager", () => {
     expect(markup).toContain("Create folder");
   });
 
+  it("keeps Library dates while switching folder types and returning to the Library", () => {
+    fixtures.query =
+      "type=rounds&dateFrom=2026-10-01&dateTo=2026-10-15&returnTo=https://example.com&q=private";
+    const markup = renderToStaticMarkup(withEnglishLocale(<FoldersPage />));
+    const dates = "&amp;dateFrom=2026-10-01&amp;dateTo=2026-10-15";
+    expect(markup).toContain(`href="/library?type=rounds${dates}"`);
+    for (const type of ["rounds", "presentations", "surveys"]) {
+      expect(markup).toContain(`href="/library/folders?type=${type}${dates}"`);
+    }
+    expect(markup).not.toMatch(/returnTo=|q=private/);
+
+    fixtures.query = "type=surveys&dateFrom=2026-10-01&dateTo=2026-10-15";
+    expect(renderToStaticMarkup(withEnglishLocale(<FoldersPage />))).toContain(
+      `href="/library?type=surveys${dates}"`,
+    );
+  });
+
+  it("keeps a valid single bound and drops a reversed range from folder links", () => {
+    fixtures.query = "type=surveys&dateFrom=2026-02-30&dateTo=2026-03-01";
+    const openEnded = renderToStaticMarkup(withEnglishLocale(<FoldersPage />));
+    expect(openEnded).toContain('href="/library?type=surveys&amp;dateTo=2026-03-01"');
+    expect(openEnded).not.toContain("dateFrom");
+
+    fixtures.query = "type=surveys&dateFrom=2026-03-03&dateTo=2026-03-01";
+    const reversed = renderToStaticMarkup(withEnglishLocale(<FoldersPage />));
+    expect(reversed).toContain('href="/library?type=surveys"');
+    expect(reversed).not.toMatch(/dateFrom|dateTo/);
+  });
+
   it("guards a disabled Presentation type and defaults unknown types to Rounds", () => {
     fixtures.query = "type=presentations";
     fixtures.presentations = false;

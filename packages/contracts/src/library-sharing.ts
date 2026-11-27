@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LibraryDateRangeQuerySchema } from "./library-date-range";
 
 export const LibraryArtifactKindSchema = z.enum(["round", "presentation", "survey"]);
 export type LibraryArtifactKind = z.infer<typeof LibraryArtifactKindSchema>;
@@ -6,28 +7,26 @@ export const LibrarySharePermissionSchema = z.enum(["view", "use"]);
 export const LibraryShareProgressStatusSchema = z.enum(["new", "in_progress", "done"]);
 export type LibraryShareProgress = z.infer<typeof LibraryShareProgressStatusSchema>;
 
-export const LibraryShareListQuerySchema = z
-  .object({
-    scope: z.enum(["organization", "shared", "managed"]).default("organization"),
-    organizationId: z.string().uuid().optional(),
-    q: z
-      .string()
-      .trim()
-      .max(160)
-      .refine((value) => !value.includes("\0"), "Search text cannot contain NUL")
-      .default(""),
-    kind: z.enum(["all", "round", "presentation", "survey"]).default("all"),
-    sort: z.enum(["recent", "title_asc", "title_desc"]).default("recent"),
-    progress: z.enum(["all", "new", "in_progress", "done"]).default("all"),
-    permission: z.enum(["all", "view", "use"]).default("all"),
-    includeFacets: z
-      .enum(["true", "false"])
-      .transform((value) => value === "true")
-      .default(false),
-    cursor: z.string().max(4096).optional(),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
-  })
-  .strict();
+export const LibraryShareListQuerySchema = LibraryDateRangeQuerySchema.safeExtend({
+  scope: z.enum(["organization", "shared", "managed"]).default("organization"),
+  organizationId: z.string().uuid().optional(),
+  q: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((value) => !value.includes("\0"), "Search text cannot contain NUL")
+    .default(""),
+  kind: z.enum(["all", "round", "presentation", "survey"]).default("all"),
+  sort: z.enum(["recent", "title_asc", "title_desc"]).default("recent"),
+  progress: z.enum(["all", "new", "in_progress", "done"]).default("all"),
+  permission: z.enum(["all", "view", "use"]).default("all"),
+  includeFacets: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .default(false),
+  cursor: z.string().max(4096).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
 export type LibraryShareListQuery = z.infer<typeof LibraryShareListQuerySchema>;
 const Count = z.number().int().nonnegative();
 export const LibraryShareListFacetsSchema = z

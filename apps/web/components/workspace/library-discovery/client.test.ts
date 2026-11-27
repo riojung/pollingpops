@@ -55,7 +55,7 @@ describe("metadata Library client", () => {
   it("requests one bounded server query and rejects eager private snapshots", async () => {
     const query = readLibraryDiscoveryQuery(
       new URLSearchParams(
-        "q= readiness &kind=survey&status=published&sort=title_desc&favorites=true&folder=unfiled",
+        "q= readiness &kind=survey&status=published&sort=title_desc&favorites=true&folder=unfiled&dateFrom=2026-03-08&dateTo=2026-03-08",
       ),
     );
     mocked.fetch.mockResolvedValue(page());
@@ -69,6 +69,10 @@ describe("metadata Library client", () => {
     expect(params.get("sort")).toBe("title_desc");
     expect(params.get("favorites")).toBe("true");
     expect(params.get("folder")).toBe("unfiled");
+    expect(params.get("from")).toBe(new Date("2026-03-08T00:00:00").toISOString());
+    expect(params.get("to")).toBe(new Date("2026-03-08T23:59:59.999").toISOString());
+    expect(params.has("dateFrom")).toBe(false);
+    expect(params.has("dateTo")).toBe(false);
     expect(params.get("limit")).toBe("30");
     expect(params.get("cursor")).toBe("next-page");
     expect(options).toEqual({ signal: active.signal, cache: "no-store" });
@@ -84,7 +88,7 @@ describe("metadata Library client", () => {
     mocked.fetch.mockResolvedValue({ shares: [], nextCursor: null });
     const query = readLibraryDiscoveryQuery(
       new URLSearchParams(
-        `q=team&kind=presentation&sort=title_asc&progress=done&permission=view&organizationId=${id}&favorites=true&status=draft`,
+        `q=team&kind=presentation&sort=title_asc&progress=done&permission=view&organizationId=${id}&favorites=true&status=draft&dateTo=2026-10-01`,
       ),
     );
     await readLibraryDiscovery("organization", query, null, new AbortController().signal);
@@ -96,6 +100,7 @@ describe("metadata Library client", () => {
       progress: "done",
       permission: "view",
       organizationId: id,
+      to: new Date("2026-10-01T23:59:59.999").toISOString(),
       limit: "30",
       scope: "organization",
       includeFacets: "true",

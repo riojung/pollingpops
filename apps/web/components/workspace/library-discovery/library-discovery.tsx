@@ -38,6 +38,7 @@ import {
   type DiscoveryItem,
   type DiscoverySnapshot,
 } from "./client";
+import { LibraryDateRangeFields } from "./library-date-range-fields";
 import styles from "./library-discovery.module.css";
 
 export type LibraryManagementType = "all" | "rounds" | "presentations" | "surveys";
@@ -132,6 +133,7 @@ export function LibraryDiscovery({
   if (!pager.current) pager.current = new LibraryDiscoveryPager(setSnapshot);
   const currentPager = pager.current;
   const [searchDraft, setSearchDraft] = useState({ key: query.q, value: query.q });
+  const [dateResetEpoch, setDateResetEpoch] = useState(0);
   const search = searchDraft.key === query.q ? searchDraft.value : query.q;
   const current = !blocked && snapshot.key === key;
   const state = current ? snapshot : emptyDiscoverySnapshot;
@@ -270,6 +272,7 @@ export function LibraryDiscovery({
   }
   function clearFilters() {
     if (activeKey.current !== key || blocked) return;
+    setDateResetEpoch((epoch) => epoch + 1);
     searchInput.current?.focus();
     // Center the handoff so sticky workspace navigation cannot cover the search field.
     searchInput.current?.scrollIntoView({
@@ -285,6 +288,8 @@ export function LibraryDiscovery({
       folder: "all",
       progress: "all",
       permission: "all",
+      dateFrom: "",
+      dateTo: "",
     });
   }
   const kinds = ["round", "presentation", "survey"] as const;
@@ -303,6 +308,8 @@ export function LibraryDiscovery({
   const filtered = Boolean(
     query.q ||
     query.kind !== "all" ||
+    query.dateFrom ||
+    query.dateTo ||
     (shared
       ? query.progress !== "all" || query.permission !== "all"
       : query.status !== "active" || query.favorites || query.folder !== "all"),
@@ -364,6 +371,7 @@ export function LibraryDiscovery({
             {kinds.map((kind) => (
               <Link
                 key={kind}
+                data-kind={kind}
                 href={libraryDiscoveryHref({ ...query, kind }, scope)}
                 aria-current={query.kind === kind ? "page" : undefined}
                 scroll={false}
@@ -404,6 +412,8 @@ export function LibraryDiscovery({
               {copy.searchAction}
             </button>
           </form>
+        </div>
+        <div className={styles.filterRow}>
           <section
             className={styles.filters}
             aria-describedby="library-discovery-facet-help"
@@ -503,7 +513,7 @@ export function LibraryDiscovery({
                 </button>
               </>
             )}
-            <label>
+            <label className={styles.sortField}>
               <span>{copy.sort}</span>
               <select
                 className="select"
@@ -517,6 +527,15 @@ export function LibraryDiscovery({
                 <option value="title_desc">{copy.titleDesc}</option>
               </select>
             </label>
+            <LibraryDateRangeFields
+              key={`${scope}/${query.kind}/${workspaceId}/${dateResetEpoch}`}
+              range={query}
+              fromLabel={shared ? copy.sharedFrom : copy.updatedFrom}
+              toLabel={shared ? copy.sharedTo : copy.updatedTo}
+              invalidRangeMessage={copy.invalidDateRange}
+              onChange={(range) => change(range)}
+              errorClassName={styles.dateError}
+            />
             {filtered ? (
               <button className="button-quiet" type="button" onClick={clearFilters}>
                 {t("pages.results.clearFilters")}
@@ -526,16 +545,6 @@ export function LibraryDiscovery({
           <p id="library-discovery-facet-help" className="sr-only">
             {copy.facetHelp}
           </p>
-        </div>
-        <section
-          ref={resultsPanel}
-          data-library-results=""
-          className={styles.results}
-          aria-label={copy.allContent}
-          aria-describedby="library-discovery-summary"
-          aria-busy={busy}
-          tabIndex={-1}
-        >
           <div className={styles.resultsBar}>
             <p
               id="library-discovery-summary"
@@ -590,6 +599,16 @@ export function LibraryDiscovery({
               </div>
             </div>
           </div>
+        </div>
+        <section
+          ref={resultsPanel}
+          data-library-results=""
+          className={styles.results}
+          aria-label={copy.allContent}
+          aria-describedby="library-discovery-summary"
+          aria-busy={busy}
+          tabIndex={-1}
+        >
           {initialError ? (
             <div role="alert" className={styles.error}>
               <p>{copy.initialError}</p>
@@ -701,6 +720,14 @@ export function LibraryDiscovery({
                       {isShare ? (
                         <LibraryShareActions
                           share={item}
+                          returnContext={
+                            scope === "workspace"
+                              ? undefined
+                              : {
+                                  scope,
+                                  dateRange: { dateFrom: query.dateFrom, dateTo: query.dateTo },
+                                }
+                          }
                           onChange={refresh}
                           onRevoked={refresh}
                           onAccessChanged={refresh}

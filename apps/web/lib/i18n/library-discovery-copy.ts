@@ -1,6 +1,11 @@
 import type { SupportedLocale } from "@openround/contracts";
 
 const english = {
+  updatedFrom: "Updated from",
+  updatedTo: "Updated to",
+  sharedFrom: "Shared from",
+  sharedTo: "Shared to",
+  invalidDateRange: "The end date must be on or after the start date.",
   sharedDate: "Shared {date}",
   recentShared: "Recently shared",
   facetHelp: "Filter counts include all search matches.",
@@ -35,6 +40,11 @@ const english = {
 export type LibraryDiscoveryCopy = Record<keyof typeof english, string>;
 const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
   "en-CA": {
+    updatedFrom: "Updated from",
+    updatedTo: "Updated to",
+    sharedFrom: "Shared from",
+    sharedTo: "Shared to",
+    invalidDateRange: "The end date must be on or after the start date.",
     sharedDate: "Shared {date}",
     recentShared: "Recently shared",
     facetHelp: "Filter counts include all search matches.",
@@ -66,6 +76,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "These management filters search loaded content. Use All content to search the complete collection.",
   },
   "fr-FR": {
+    updatedFrom: "Mis à jour à partir du",
+    updatedTo: "Mis à jour jusqu’au",
+    sharedFrom: "Partagé à partir du",
+    sharedTo: "Partagé jusqu’au",
+    invalidDateRange: "La date de fin doit être égale ou postérieure à la date de début.",
     sharedDate: "Partagé le {date}",
     recentShared: "Partagé récemment",
     facetHelp: "Les nombres des filtres incluent tous les résultats de recherche.",
@@ -98,6 +113,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "Ces filtres de gestion recherchent le contenu chargé. Utilisez Tout le contenu pour rechercher dans toute la collection.",
   },
   "de-DE": {
+    updatedFrom: "Aktualisiert ab",
+    updatedTo: "Aktualisiert bis",
+    sharedFrom: "Geteilt ab",
+    sharedTo: "Geteilt bis",
+    invalidDateRange: "Das Enddatum darf nicht vor dem Startdatum liegen.",
     sharedDate: "Geteilt am {date}",
     recentShared: "Zuletzt geteilt",
     facetHelp: "Filterzahlen umfassen alle Suchtreffer.",
@@ -130,6 +150,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "Diese Verwaltungsfilter durchsuchen geladene Inhalte. Durchsuchen Sie mit Alle Inhalte die gesamte Sammlung.",
   },
   "es-ES": {
+    updatedFrom: "Actualizado desde",
+    updatedTo: "Actualizado hasta",
+    sharedFrom: "Compartido desde",
+    sharedTo: "Compartido hasta",
+    invalidDateRange: "La fecha de fin debe ser igual o posterior a la fecha de inicio.",
     sharedDate: "Compartido el {date}",
     recentShared: "Compartido recientemente",
     facetHelp: "Los recuentos de los filtros incluyen todas las coincidencias de búsqueda.",
@@ -162,6 +187,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "Estos filtros de gestión buscan en el contenido cargado. Usa Todo el contenido para buscar en toda la colección.",
   },
   "it-IT": {
+    updatedFrom: "Aggiornato dal",
+    updatedTo: "Aggiornato al",
+    sharedFrom: "Condiviso dal",
+    sharedTo: "Condiviso al",
+    invalidDateRange: "La data di fine deve essere uguale o successiva alla data di inizio.",
     sharedDate: "Condiviso il {date}",
     recentShared: "Condivisi di recente",
     facetHelp: "I conteggi dei filtri includono tutte le corrispondenze della ricerca.",
@@ -193,6 +223,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "Questi filtri di gestione cercano nei contenuti caricati. Usa Tutti i contenuti per cercare nell’intera raccolta.",
   },
   "pt-PT": {
+    updatedFrom: "Atualizado desde",
+    updatedTo: "Atualizado até",
+    sharedFrom: "Partilhado desde",
+    sharedTo: "Partilhado até",
+    invalidDateRange: "A data de fim deve ser igual ou posterior à data de início.",
     sharedDate: "Partilhado em {date}",
     recentShared: "Partilhado recentemente",
     facetHelp: "As contagens dos filtros incluem todas as correspondências da pesquisa.",
@@ -224,6 +259,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "Estes filtros de gestão pesquisam o conteúdo carregado. Use Todo o conteúdo para pesquisar toda a coleção.",
   },
   "ja-JP": {
+    updatedFrom: "更新日（開始）",
+    updatedTo: "更新日（終了）",
+    sharedFrom: "共有日（開始）",
+    sharedTo: "共有日（終了）",
+    invalidDateRange: "終了日は開始日以降にしてください。",
     sharedDate: "共有日 {date}",
     recentShared: "共有が新しい順",
     facetHelp: "フィルターの件数には、すべての検索結果が含まれます。",
@@ -255,6 +295,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "この管理フィルターは読み込み済みのコンテンツを検索します。コレクション全体を検索するには「すべてのコンテンツ」を使用してください。",
   },
   "ko-KR": {
+    updatedFrom: "수정 시작일",
+    updatedTo: "수정 종료일",
+    sharedFrom: "공유 시작일",
+    sharedTo: "공유 종료일",
+    invalidDateRange: "종료일은 시작일과 같거나 그 이후여야 합니다.",
     sharedDate: "공유일 {date}",
     recentShared: "최근 공유순",
     facetHelp: "필터 수에는 전체 검색 결과가 포함됩니다.",
@@ -286,6 +331,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
       "이 관리 필터는 불러온 콘텐츠를 검색합니다. 전체 컬렉션을 검색하려면 모든 콘텐츠를 사용하세요.",
   },
   "zh-CN": {
+    updatedFrom: "更新起始日期",
+    updatedTo: "更新截止日期",
+    sharedFrom: "分享起始日期",
+    sharedTo: "分享截止日期",
+    invalidDateRange: "结束日期不得早于开始日期。",
     sharedDate: "分享于 {date}",
     recentShared: "最近分享",
     facetHelp: "筛选条件的数量包含所有搜索结果。",
@@ -316,6 +366,11 @@ const translations: Record<SupportedLocale, LibraryDiscoveryCopy> = {
     loadedSearch: "这些管理筛选条件仅搜索已加载的内容。使用“所有内容”搜索整个集合。",
   },
   "zh-TW": {
+    updatedFrom: "更新開始日期",
+    updatedTo: "更新結束日期",
+    sharedFrom: "分享開始日期",
+    sharedTo: "分享結束日期",
+    invalidDateRange: "結束日期不得早於開始日期。",
     sharedDate: "分享於 {date}",
     recentShared: "最近分享",
     facetHelp: "篩選條件的數量包含所有搜尋結果。",

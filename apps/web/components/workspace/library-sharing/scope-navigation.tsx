@@ -24,7 +24,8 @@ export function LibraryScopeNavigation({
   const copy = librarySharingMessages(locale);
   function href(target: LibraryScope) {
     if (!discoveryQuery) return libraryScopeHref(target, type);
-    if (target === scope) return libraryDiscoveryHref(discoveryQuery, target);
+    if (target === scope)
+      return libraryDiscoveryHref(discoveryQuery, target, scope === "workspace" ? type : "all");
     return libraryDiscoveryHref(
       {
         ...discoveryQuery,

@@ -237,7 +237,7 @@ export function createPostgresLibrarySharingRun(
             const boundary =
               input.sort === "recent"
                 ? "(share.shared_at,share.id)<($9::timestamptz,$10::uuid)"
-                : `(${normalizedTitle} ${input.sort === "title_asc" ? ">" : "<"} $11::text COLLATE "C" OR (${normalizedTitle}=$11::text COLLATE "C" AND share.id<$10::uuid))`;
+                : `(${normalizedTitle} ${input.sort === "title_asc" ? ">" : "<"} $13::text COLLATE "C" OR (${normalizedTitle}=$13::text COLLATE "C" AND share.id<$10::uuid))`;
             const search = input.q
               .normalize("NFC")
               .toLowerCase()
@@ -253,6 +253,8 @@ export function createPostgresLibrarySharingRun(
                 JOIN workspaces workspace ON workspace.id=share.workspace_id AND workspace.organization_id=share.organization_id
                 LEFT JOIN library_share_progress progress ON progress.share_id=share.id AND progress.user_id=$3::uuid
                 WHERE share.revoked_at IS NULL
+                  AND ($11::timestamptz IS NULL OR share.shared_at >= $11)
+                  AND ($12::timestamptz IS NULL OR share.shared_at < ($12 + interval '1 millisecond'))
                   AND openround_library_actor_access(share.workspace_id,share.organization_id,share.audience,share.recipient_ids,'read',share.shared_at)
                   AND ($1::uuid IS NULL OR share.organization_id=$1)
                   AND CASE $2 WHEN 'organization' THEN share.audience='organization'
@@ -287,6 +289,8 @@ export function createPostgresLibrarySharingRun(
                 input.limit,
                 input.after?.sharedAt ?? null,
                 input.after?.id ?? null,
+                input.from ?? null,
+                input.to ?? null,
                 ...(input.sort === "recent" ? [] : [input.after?.title ?? null]),
               ],
             );

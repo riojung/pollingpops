@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { LibraryShareListFacets, LibraryShareSummary } from "@openround/contracts";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 import { openLibraryFilters } from "./library-controls";
 import { expectDocumentReflow } from "./option-b-accessibility-support";
 import { specialistLocale } from "./option-b-specialist-support";
@@ -103,7 +103,14 @@ async function installIncomingShares(page: Page, query: string) {
     const progress = searchParams.get("progress");
     const kind = searchParams.get("kind");
     const search = searchParams.get("q")?.toLowerCase() ?? "";
-    const matching = shares.filter((share) => share.title.toLowerCase().includes(search));
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const matching = shares.filter(
+      (share) =>
+        share.title.toLowerCase().includes(search) &&
+        (!from || share.sharedAt >= from) &&
+        (!to || share.sharedAt <= to),
+    );
     const progressMatches = matching.filter((share) => !progress || share.progress === progress);
     const items = progressMatches.filter((share) => !kind || share.artifactType === kind);
     if (searchParams.get("sort") === "title_desc") items.reverse();
@@ -182,6 +189,19 @@ for (const mobile of [false, true]) {
 
     await expect(workspace).toHaveAttribute("aria-current", "page");
     await expect(category("All content")).toHaveAttribute("aria-current", "page");
+    if (!mobile) {
+      const tabBounds = await category("All content").boundingBox();
+      const searchBounds = await workspaceSearch.boundingBox();
+      expect(Math.abs(tabBounds!.y - searchBounds!.y)).toBeLessThan(6);
+      const dateBounds = await root.getByLabel("Updated from", { exact: true }).boundingBox();
+      const gridBounds = await grid.boundingBox();
+      expect(Math.abs(dateBounds!.y - gridBounds!.y)).toBeLessThan(6);
+    }
+    const kindInks = await root
+      .getByRole("navigation", { name: "Library content types" })
+      .locator("a[data-kind] svg")
+      .evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).color));
+    expect(new Set(kindInks).size).toBe(3);
     await workspaceSearch.fill(query);
     await workspaceSearch.press("Enter");
     await expect(page).toHaveURL((url) => url.searchParams.get("q") === query);
@@ -322,3 +342,88 @@ for (const mobile of [false, true]) {
     await expect(titles).toHaveText([filteredTitle]);
   });
 }
+
+test("Library date ranges filter workspace and shared content throughout navigation", async ({
+  page,
+}) => {
+  await signInBeta(page, undefined, { returnTo: "/library" });
+  await specialistLocale(page, "en-CA");
+  const query = `Library dates ${randomUUID().slice(0, 8)}`;
+  await createWorkspaceItems(page, query);
+  const shares = await installIncomingShares(page, query);
+  const sharedRound = shares.find(
+    (share) => share.artifactType === "round" && share.progress === "done",
+  )!;
+  await page.route(`${api}/v1/library/shares/${sharedRound.id}`, (route) =>
+    route.fulfill({ json: { share: sharedRound, questions: [] } }),
+  );
+  await page.goto(`/library?${new URLSearchParams({ q: query })}`);
+
+  const root = page.locator("[data-library-discovery]");
+  const cards = root.locator("[data-library-collection]").getByRole("article");
+  const updatedFrom = root.getByLabel("Updated from", { exact: true });
+  const updatedTo = root.getByLabel("Updated to", { exact: true });
+  const rangeError = root.getByRole("alert");
+  await expect(cards).toHaveCount(4);
+
+  let releaseNavigation!: () => void;
+  const navigationGate = new Promise<void>((resolve) => {
+    releaseNavigation = resolve;
+  });
+  const isFirstDateUrl = (url: URL) =>
+    url.pathname === "/library" && url.searchParams.get("dateTo") === "2000-01-01";
+  const isFirstDateNavigation = (request: Request) =>
+    isFirstDateUrl(new URL(request.url())) && request.headers().rsc === "1";
+  await page.route(isFirstDateUrl, async (route) => {
+    if (isFirstDateNavigation(route.request())) await navigationGate;
+    await route.continue();
+  });
+
+  try {
+    const request = page.waitForRequest(isFirstDateNavigation);
+    await updatedTo.fill("2000-01-01");
+    await request;
+    await updatedFrom.fill("2000-01-02");
+    await expect(rangeError).toHaveText("The end date must be on or after the start date.");
+    await expect(page).toHaveURL((url) => !url.searchParams.has("dateTo"));
+  } finally {
+    releaseNavigation();
+  }
+  await expect(page).toHaveURL((url) => url.searchParams.get("dateTo") === "2000-01-01");
+  await expect(root.getByRole("heading", { name: "No matching content" })).toBeVisible();
+  await expect(updatedFrom).toHaveValue("2000-01-02");
+  await expect(rangeError).toHaveText("The end date must be on or after the start date.");
+  await expect(page).toHaveURL((url) => !url.searchParams.has("dateFrom"));
+  await updatedTo.fill("2099-10-02");
+  await expect(page).toHaveURL(
+    (url) =>
+      url.searchParams.get("dateFrom") === "2000-01-02" &&
+      url.searchParams.get("dateTo") === "2099-10-02",
+  );
+  await expect(rangeError).toHaveCount(0);
+  await expect(cards).toHaveCount(4);
+
+  await root.getByRole("link", { name: "Shared with me", exact: true }).click();
+  const sharedFrom = root.getByLabel("Shared from", { exact: true });
+  const sharedTo = root.getByLabel("Shared to", { exact: true });
+  await expect(sharedFrom).toHaveValue("2000-01-02");
+  await expect(sharedTo).toHaveValue("2099-10-02");
+  await expect(cards).toHaveCount(4);
+  await sharedFrom.fill("2026-10-03");
+  await expect(root.getByRole("heading", { name: "No matching content" })).toBeVisible();
+  await page.goBack();
+  await expect(sharedFrom).toHaveValue("2000-01-02");
+  await expect(cards).toHaveCount(4);
+  await cards
+    .filter({ hasText: sharedRound.title })
+    .getByRole("link", { name: "Open", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: sharedRound.title, level: 1 })).toBeVisible();
+  await page.getByRole("link", { name: "Back to library", exact: true }).click();
+  await expect(sharedFrom).toHaveValue("2000-01-02");
+  await expect(sharedTo).toHaveValue("2099-10-02");
+  await expect(cards).toHaveCount(3);
+  await root.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(sharedFrom).toHaveValue("");
+  await expect(sharedTo).toHaveValue("");
+});

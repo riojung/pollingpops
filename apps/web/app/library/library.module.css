@@ -1,36 +1,47 @@
+.loadedSearch {
+  margin: 0 0 8px;
+  color: var(--ui-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .toolbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--workspace-card-gap, 0.625rem);
+  grid-template-columns: auto minmax(8rem, 1fr) fit-content(25%);
+  gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
-  padding: 10px;
+  margin-bottom: 8px;
+  padding: 8px;
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--ui-surface-raised);
 }
 
-.advancedFilters {
-  min-width: 0;
-  max-width: 100%;
-  align-self: end;
-}
-.advancedFilters > summary {
+.advancedFilterToggle {
   min-height: var(--workspace-control-height, 2.25rem);
-  padding: 7px 12px;
+  max-width: 100%;
+  padding: 6px 10px;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
+  color: var(--ui-text);
   background: var(--ui-surface);
   cursor: pointer;
+  font: inherit;
   font-size: 13px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
-.advancedFilterPanel {
+.advancedFilterToggle[aria-expanded="true"] {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface-soft);
+}
+.advancedFilterPanel:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--workspace-card-gap, 0.625rem);
+  gap: 8px;
   align-items: end;
-  padding: var(--workspace-card-padding, 0.875rem);
+  padding: 8px;
   margin-top: 8px;
   border: 1px solid var(--ui-border);
   border-radius: var(--radius-small);
@@ -161,6 +172,9 @@
 
 .tab:focus-visible,
 .tabActive:focus-visible,
+.advancedFilterToggle:focus-visible,
+.appliedFilters button:focus-visible,
+.manageLink:focus-visible,
 .viewToggle button:focus-visible,
 .favoriteFilter:focus-visible,
 .favoriteButton:focus-visible,
@@ -189,7 +203,8 @@
 }
 
 .searchField input:focus,
-.filterField select:focus {
+.filterField select:focus,
+.filterField input:focus {
   border-color: var(--ui-accent);
   outline: 3px solid var(--ui-focus);
   background: var(--ui-surface);
@@ -209,19 +224,22 @@
 }
 
 .filterBar {
+  margin-bottom: 12px;
+}
+
+.filterRow {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--workspace-card-gap, 0.625rem);
+  gap: 8px;
   align-items: end;
-  margin-bottom: 12px;
 }
 
 .filterField {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
-  flex: 0 1 165px;
+  flex: 0 1 9rem;
 }
 
 .filterField > span {
@@ -233,11 +251,12 @@
   overflow-wrap: anywhere;
 }
 
-.filterField select {
+.filterField select,
+.filterField input {
   min-width: 0;
   max-width: 100%;
   min-height: var(--workspace-control-height, 2.25rem);
-  padding: 7px 34px 7px 10px;
+  padding: 6px 10px;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
   color: var(--ui-text);
@@ -245,6 +264,23 @@
   font-size: 13px;
   font-weight: 700;
   background: var(--ui-surface);
+}
+
+.filterField select {
+  contain: layout;
+  padding-inline-end: 28px;
+}
+
+.filterField input[aria-invalid="true"] {
+  border-color: var(--ui-danger-border);
+}
+
+.dateRangeError {
+  order: 5;
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ui-danger-text);
+  font-size: 13px;
 }
 
 .favoriteFilter {
@@ -861,7 +897,15 @@
 
 @media (max-width: 920px) {
   .toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .tabs {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar > .manageLink {
+    max-width: min(100%, 9rem);
   }
 }
 
@@ -871,7 +915,8 @@
     flex: 1 1 140px;
   }
 
-  .filterField select {
+  .filterField select,
+  .filterField input {
     width: 100%;
   }
 
@@ -915,12 +960,24 @@
   }
 }
 
+@media (max-width: 430px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .toolbar > .manageLink {
+    justify-self: start;
+    max-width: 100%;
+  }
+}
+
 @media (pointer: coarse) {
   .tab,
   .tabActive,
   .searchField input,
   .filterField select,
-  .advancedFilters > summary,
+  .filterField input,
+  .advancedFilterToggle,
   .appliedFilters button,
   .favoriteFilter,
   .viewToggle button,

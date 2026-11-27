@@ -71,11 +71,28 @@ describe("library access controls", () => {
     const markup = renderToStaticMarkup(
       <LibraryShareActions share={share} onChange={vi.fn()} onRevoked={vi.fn()} />,
     );
-    expect(markup).toContain(`/library/shared/${id}`);
+    expect(markup).toContain(`href="/library/shared/${id}"`);
     expect(markup).toContain("Mark reviewed");
     expect(markup).not.toContain("Use a copy");
     expect(markup).not.toContain("Revoke access");
     expect(markup).not.toContain(`/quiz/${id}`);
+  });
+
+  it("links to the reader with the shared Library scope and dates", () => {
+    const markup = renderToStaticMarkup(
+      <LibraryShareActions
+        share={share}
+        returnContext={{
+          scope: "organization",
+          dateRange: { dateFrom: "2026-10-01", dateTo: "2026-11-01" },
+        }}
+        onChange={vi.fn()}
+        onRevoked={vi.fn()}
+      />,
+    );
+    expect(markup).toContain(
+      `href="/library/shared/${id}?scope=organization&amp;dateFrom=2026-10-01&amp;dateTo=2026-11-01"`,
+    );
   });
 
   it("explains unavailable copy destinations while keeping shared viewing available", () => {

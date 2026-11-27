@@ -17,6 +17,7 @@ import {
 } from "@openround/contracts";
 import { SurveyDraftSchema } from "@openround/contracts/surveys";
 import type { SurveyReadableDraft } from "@openround/contracts/survey-branching";
+import { libraryDateRangeFilter } from "./library-date-range.js";
 import {
   MemoryRepository,
   type MemoryRepositoryLifecycleContext,
@@ -266,6 +267,8 @@ function cursorContext(actorId: string, query: LibraryShareListQuery) {
     sort: query.sort,
     progress: query.progress,
     permission: query.permission,
+    from: query.from,
+    to: query.to,
   };
   return createHash("sha256")
     .update(stablePlatformJson({ actorId, ...context, q: normalizeLibraryShareText(context.q) }))
@@ -303,7 +306,9 @@ function cursor(value: string | undefined, context: string, query: LibraryShareL
       query.kind !== "all" ||
       query.sort !== "recent" ||
       query.progress !== "all" ||
-      query.permission !== "all"
+      query.permission !== "all" ||
+      query.from ||
+      query.to
     ) {
       return fail("VALIDATION_ERROR", "Invalid Library cursor");
     }
@@ -845,7 +850,9 @@ export class MemoryLibrarySharingStore implements MemoryRepositoryLifecycleExten
             total: 0,
           };
           const contexts = new Map<string, LibrarySharingContext | null>();
+          const matchesDate = libraryDateRangeFilter(input);
           for (const row of this.shares.values()) {
+            if (!matchesDate(row.sharedAt)) continue;
             if (!contexts.has(row.sourceWorkspaceId))
               contexts.set(row.sourceWorkspaceId, await context(row.sourceWorkspaceId));
             const access = contexts.get(row.sourceWorkspaceId)!;

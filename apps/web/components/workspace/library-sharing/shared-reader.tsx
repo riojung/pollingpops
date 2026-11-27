@@ -19,6 +19,7 @@ import {
   readLibraryShare,
   updateLibraryShareProgress,
   type SharedLibraryDetail,
+  type SharedLibraryReturnContext,
   type SharedQuestion,
 } from "./client";
 import styles from "./library-sharing.module.css";
@@ -177,7 +178,12 @@ export function SharedLibrarySurveyPages({
   );
 }
 
-function SharedLibraryReaderContent({ shareId }: { shareId: string }) {
+interface SharedLibraryReaderProps {
+  shareId: string;
+  returnContext?: SharedLibraryReturnContext;
+}
+
+function SharedLibraryReaderContent({ shareId, returnContext }: SharedLibraryReaderProps) {
   const { locale } = useLocale();
   const copy = librarySharingMessages(locale);
   const { creator } = useWorkspace();
@@ -263,7 +269,10 @@ function SharedLibraryReaderContent({ shareId }: { shareId: string }) {
       eyebrow={copy.shared}
       translationLevel="full"
       actions={
-        <Link className="button-quiet" href={libraryScopeHref("shared", type)}>
+        <Link
+          className="button-quiet"
+          href={libraryScopeHref(returnContext?.scope ?? "shared", type, returnContext?.dateRange)}
+        >
           {copy.back}
         </Link>
       }
@@ -415,10 +424,10 @@ function SharedLibraryReaderContent({ shareId }: { shareId: string }) {
   );
 }
 
-export function SharedLibraryReader({ shareId }: { shareId: string }) {
+export function SharedLibraryReader(props: SharedLibraryReaderProps) {
   return (
     <WorkspaceProvider>
-      <SharedLibraryReaderContent shareId={shareId} />
+      <SharedLibraryReaderContent {...props} />
     </WorkspaceProvider>
   );
 }

@@ -394,6 +394,56 @@ for (const backend of ["memory", "postgres"] as const) {
         ).toEqual(["survey"]);
       });
 
+      it("filters all artifact types and facet counts by inclusive update time before paginating", async () => {
+        const from = "2026-11-17T07:00:00.000Z";
+        const to = "2026-11-18T06:59:59.999Z";
+        const firstBoundary = await add("round", { updatedAt: new Date(from) });
+        const lastBoundary = await add("presentation", { updatedAt: new Date(to) });
+        if (repository instanceof PostgresRepository) {
+          const client = await repository.pool.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query("SELECT set_config('app.workspace_id', $1, true)", [
+              owner.workspaceId,
+            ]);
+            const updated = await client.query(
+              "UPDATE presentations SET updated_at = $1::timestamptz + interval '999 microseconds' WHERE id = $2",
+              [to, lastBoundary],
+            );
+            expect(updated.rowCount).toBe(1);
+            await client.query("COMMIT");
+          } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+          } finally {
+            client.release();
+          }
+        }
+        const middle = await add("survey");
+        await add("presentation", { updatedAt: new Date(Date.parse(from) - 1) });
+        await add("round", { updatedAt: new Date(Date.parse(to) + 1) });
+
+        const range = { from, to, limit: 2 };
+        const first = await list(range);
+        expect(first.items.map((item) => item.id)).toEqual([lastBoundary, middle]);
+        expect(first.items[0]?.updatedAt).toBe(to);
+        expect(first.facets).toEqual({
+          kinds: { round: 1, presentation: 1, survey: 1 },
+          statuses: { draft: 3, published: 0, archived: 0 },
+          total: 3,
+        });
+        expect(first.nextCursor).not.toBeNull();
+        const second = await list({ ...range, cursor: first.nextCursor });
+        expect(second.items.map((item) => item.id)).toEqual([firstBoundary]);
+        expect(second.facets).toEqual(first.facets);
+        expect(second.nextCursor).toBeNull();
+        expect((await list({ from })).facets.total).toBe(4);
+        expect((await list({ to })).facets.total).toBe(4);
+        await expect(
+          list({ from, limit: range.limit, cursor: first.nextCursor }),
+        ).rejects.toBeInstanceOf(LibraryDiscoveryCursorError);
+      });
+
       it("binds cursors to actor, workspace, filters and features and validates boundaries", async () => {
         await add("round");
         await add("survey");
@@ -407,6 +457,8 @@ for (const backend of ["memory", "postgres"] as const) {
           { status: "all" },
           { kind: "round" },
           { sort: "title_asc" },
+          { from: instant.toISOString() },
+          { to: instant.toISOString() },
         ]) {
           await expect(
             list({ limit: 1, ...query, cursor: first.nextCursor }),

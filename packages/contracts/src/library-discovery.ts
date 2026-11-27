@@ -1,41 +1,41 @@
 import { z } from "zod";
+import { LibraryDateRangeQuerySchema } from "./library-date-range";
 import { LibraryArtifactKindSchema } from "./library-sharing";
+export { LibraryFilterDateSchema } from "./library-date-range";
 
 /** HTTP booleans deliberately avoid z.coerce.boolean(), which treats "false" as true. */
 const QueryBooleanSchema = z
   .union([z.boolean(), z.enum(["true", "false"])])
   .transform((value) => value === true || value === "true");
 
-export const LibraryItemsQuerySchema = z
-  .object({
-    q: z
-      .string()
-      .trim()
-      .max(160)
-      .refine((value) => !value.includes("\u0000"), "Search cannot contain a null character")
-      .default(""),
-    kind: z.enum(["all", "round", "presentation", "survey"]).default("all"),
-    status: z.enum(["active", "draft", "published", "archived", "all"]).default("active"),
-    sort: z.enum(["recent", "title_asc", "title_desc"]).default("recent"),
-    favorites: QueryBooleanSchema.optional(),
-    folder: z
-      .union([
-        z.enum(["all", "unfiled"]),
-        z
-          .string()
-          .uuid()
-          .transform((id) => id.toLowerCase()),
-      ])
-      .default("all"),
-    limit: z.coerce.number().int().min(1).max(100).default(30),
-    cursor: z
-      .string()
-      .min(1)
-      .max(4096)
-      .regex(/^[A-Za-z0-9_-]+$/)
-      .optional(),
-  })
-  .strict();
+export const LibraryItemsQuerySchema = LibraryDateRangeQuerySchema.safeExtend({
+  q: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((value) => !value.includes("\u0000"), "Search cannot contain a null character")
+    .default(""),
+  kind: z.enum(["all", "round", "presentation", "survey"]).default("all"),
+  status: z.enum(["active", "draft", "published", "archived", "all"]).default("active"),
+  sort: z.enum(["recent", "title_asc", "title_desc"]).default("recent"),
+  favorites: QueryBooleanSchema.optional(),
+  folder: z
+    .union([
+      z.enum(["all", "unfiled"]),
+      z
+        .string()
+        .uuid()
+        .transform((id) => id.toLowerCase()),
+    ])
+    .default("all"),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  cursor: z
+    .string()
+    .min(1)
+    .max(4096)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+});
 export type LibraryItemsQuery = z.infer<typeof LibraryItemsQuerySchema>;
 
 export const LibraryItemSummarySchema = z

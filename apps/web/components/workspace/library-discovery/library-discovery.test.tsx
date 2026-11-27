@@ -208,6 +208,12 @@ function mount(
       (element) => element.type === "button" && text(element.props.children as ReactNode) === label,
     )!;
   }
+  function category(label: string) {
+    const nav = render().find((element) => element.props["aria-label"] === "Library content types");
+    return elements(nav).find(
+      (element) => element.props.href && text(element.props.children as ReactNode) === label,
+    )!;
+  }
   function click(label: string) {
     (button(label).props.onClick as () => void)();
   }
@@ -226,6 +232,7 @@ function mount(
     select,
     change,
     button,
+    category,
     click,
     input,
     targets,
@@ -234,6 +241,7 @@ function mount(
     },
     pagination: () => render().find((element) => element.props["data-library-pagination"] === "")!,
     results: () => render().find((element) => element.props["data-library-results"] === "")!,
+    collection: () => render().find((element) => element.props["data-library-collection"] === "")!,
     titles: () =>
       render()
         .filter((element) => element.type === "h2")
@@ -251,7 +259,13 @@ function mount(
   };
 }
 beforeEach(() => {
-  const browser = new EventTarget();
+  const preferences = new Map<string, string>();
+  const browser = Object.assign(new EventTarget(), {
+    localStorage: {
+      getItem: (key: string) => preferences.get(key) ?? null,
+      setItem: (key: string, value: string) => preferences.set(key, value),
+    },
+  });
   const document = Object.assign(new EventTarget(), { visibilityState: "visible" });
   vi.stubGlobal("window", browser);
   vi.stubGlobal("document", document);
@@ -285,9 +299,8 @@ describe("All content discovery", () => {
     expect(
       text(tree.find((element) => element.props.role === "status")?.props.children as ReactNode),
     ).toBe("Results: 140Loaded: 1");
-    expect(text(library.select("Library content type").props.children as ReactNode)).toContain(
-      "Rounds (80)",
-    );
+    expect(text(library.select("Status").props.children as ReactNode)).toContain("Draft (90)");
+    expect(library.category("All content").props["aria-current"]).toBe("page");
     expect(
       tree.filter((element) => element.type === "input" && element.props.type === "checkbox"),
     ).toEqual([]);
@@ -300,7 +313,10 @@ describe("All content discovery", () => {
     const library = mount();
     await library.settle();
     expect(library.input().props.value).toBe("north");
-    expect(library.select("Library content type").props.value).toBe("survey");
+    expect(library.category("Surveys").props["aria-current"]).toBe("page");
+    expect(library.category("Rounds").props.href).toBe(
+      "/library?q=north&kind=round&sort=title_desc&status=published",
+    );
     expect(library.select("Status").props.value).toBe("published");
     expect(library.select("Sort by").props.value).toBe("title_desc");
     library.search("  south  ");
@@ -319,6 +335,62 @@ describe("All content discovery", () => {
       sort: "title_desc",
     });
     expect(mocked.list.mock.calls.every((call) => call[2] === null)).toBe(true);
+  });
+
+  it("remembers grid and list across tabs and reload without requesting another page", async () => {
+    mocked.query = "kind=round";
+    const library = mount();
+    await library.settle();
+    expect(library.collection().props["data-view"]).toBe("grid");
+    expect(library.button("Grid view").props["aria-pressed"]).toBe(true);
+    library.click("List view");
+    await library.settle();
+    expect(library.collection().props["data-view"]).toBe("list");
+    expect(library.button("List view").props["aria-pressed"]).toBe(true);
+    expect(mocked.list).toHaveBeenCalledTimes(1);
+    library.setScope("shared");
+    await library.settle();
+    expect(library.collection().props["data-view"]).toBe("list");
+    expect(library.category("Rounds").props.href).toBe("/library?kind=round&scope=shared");
+    const reloaded = mount();
+    await reloaded.settle();
+    expect(reloaded.collection().props["data-view"]).toBe("list");
+    mocked.workspaceId = "workspace-b";
+    await reloaded.settle();
+    expect(reloaded.collection().props["data-view"]).toBe("grid");
+  });
+
+  it("opens management with the active workspace category and filters", async () => {
+    mocked.query =
+      "q=north&kind=round&status=archived&favorites=true&folder=unfiled&sort=title_desc";
+    const library = mount();
+    const tree = await library.settle();
+
+    const manage = tree.find(
+      (element) =>
+        element.props.href && text(element.props.children as ReactNode) === "Manage Rounds",
+    );
+    expect(manage?.props.href).toBe(
+      "/library?q=north&sort=title_desc&status=archived&favorites=true&folder=unfiled&type=rounds",
+    );
+  });
+
+  it("loads discovery and switches layouts in memory when browser storage is blocked", async () => {
+    Object.defineProperty(window, "localStorage", {
+      get() {
+        throw new DOMException("Storage access is denied", "SecurityError");
+      },
+    });
+
+    const library = mount();
+    await library.settle();
+    expect(library.titles()).toEqual(["Readiness"]);
+    expect(library.collection().props["data-view"]).toBe("grid");
+
+    library.click("List view");
+    await library.settle();
+    expect(library.collection().props["data-view"]).toBe("list");
+    expect(mocked.list).toHaveBeenCalledTimes(1);
   });
 
   it("distinguishes loading, empty, no result, initial error and failed page retry", async () => {
@@ -637,22 +709,10 @@ describe("All content discovery", () => {
       const library = mount();
       await library.settle();
       expect(library.titles()).toEqual(["Readiness", "Retained Presentation", "Retained Survey"]);
-      const filterOptions = elements(library.select("Library content type")).filter(
-        (element) => element.type === "option",
-      );
-      expect(filterOptions.map((element) => element.props.value)).toEqual([
-        "all",
-        "round",
-        "presentation",
-        "survey",
-      ]);
+      expect(library.category("Rounds").props.href).toBe("/library?kind=round");
+      expect(library.category("Presentations").props.href).toBe("/library?kind=presentation");
+      expect(library.category("Surveys").props.href).toBe("/library?kind=survey");
       const links = library.render().filter((element) => element.props.href);
-      expect(
-        links.some((element) => String(element.props.href).includes("type=presentations")),
-      ).toBe(false);
-      expect(links.some((element) => String(element.props.href).includes("type=surveys"))).toBe(
-        true,
-      );
       expect(links.some((element) => element.props.href === "/presentation/same-id")).toBe(true);
       expect(links.some((element) => element.props.href === "/surveys/same-id")).toBe(true);
       expect(links.some((element) => text(element.props.children as ReactNode) === "View")).toBe(
@@ -710,13 +770,8 @@ describe("All content discovery", () => {
       progress: "done",
       permission: "view",
     });
-    expect(
-      library
-        .render()
-        .some(
-          (element) =>
-            element.props.href === "/library?kind=presentation&scope=shared&type=presentations",
-        ),
-    ).toBe(false);
+    expect(library.category("Presentations").props.href).toBe(
+      "/library?kind=presentation&progress=done&permission=view&scope=shared",
+    );
   });
 });

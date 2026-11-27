@@ -42,6 +42,7 @@ async function reads(page: Page) {
     terminated: ReturnType<typeof gate>;
   }> = [];
   const gates: Array<ReturnType<typeof gate>> = [];
+  let initialFailure: ReturnType<typeof gate> | null = null;
   const requestEnds = new Map<Request, ReturnType<typeof gate>>();
   const finishRequest = (request: Request) => {
     requestEnds.get(request)?.release();
@@ -62,18 +63,19 @@ async function reads(page: Page) {
     if (url.pathname !== "/v1/library/items") return route.continue();
     url.searchParams.set("limit", "1");
     requests.push(url);
-    const index = pending.findIndex((entry) => entry.cursor === url.searchParams.has("cursor"));
+    const cursor = url.searchParams.has("cursor");
+    const failInitialRead = cursor ? null : initialFailure;
+    const index = pending.findIndex((entry) => entry.cursor === cursor);
     const held = index === -1 ? undefined : pending.splice(index, 1)[0];
     if (held) requestEnds.set(request, held.terminated);
     try {
-      if (held) {
-        await held.gate.promise;
-        if (held.fail)
-          return await route.fulfill({
-            status: 503,
-            json: { error: { code: "UNAVAILABLE", message: "Synthetic Library read unavailable" } },
-          });
-      }
+      if (held) await held.gate.promise;
+      if (failInitialRead) await failInitialRead.promise;
+      if (held?.fail || failInitialRead)
+        return await route.fulfill({
+          status: 503,
+          json: { error: { code: "UNAVAILABLE", message: "Synthetic Library read unavailable" } },
+        });
       return await route.continue({ url: url.toString() });
     } finally {
       held?.handled.release();
@@ -82,6 +84,18 @@ async function reads(page: Page) {
   return {
     requests,
     mutations,
+    holdInitialFailure() {
+      // Workspace hydration can replace an initial read before its response arrives.
+      const failure = gate();
+      gates.push(failure);
+      initialFailure = failure;
+      return {
+        release: failure.release,
+        recover() {
+          initialFailure = null;
+        },
+      };
+    },
     hold(cursor: boolean, fail = false) {
       const held = gate();
       const handled = gate();
@@ -225,7 +239,7 @@ for (const mobile of [false, true]) {
     await specialistLocale(page, "en-CA");
     const href = await collection(page);
     const fixture = await reads(page);
-    const fail = fixture.hold(false, true);
+    const fail = fixture.holdInitialFailure();
     try {
       await page.goto(`${href}-missing`);
       const root = page.locator("[data-library-discovery]");
@@ -237,6 +251,7 @@ for (const mobile of [false, true]) {
       fail.release();
       await expect(root.getByRole("alert")).toContainText("Content could not be loaded");
       await expect(root.locator("#library-discovery-summary")).not.toContainText("Results: 0");
+      fail.recover();
       const recover = fixture.hold(false);
       await tabTo(page, root.getByRole("button", { name: "Retry", exact: true }));
       await page.keyboard.press("Enter");
@@ -273,9 +288,10 @@ for (const mobile of [false, true]) {
       await tabTo(page, more);
       await page.keyboard.press("Enter");
       await expect(footer).toHaveAttribute("aria-busy", "true");
-      const kind = root.getByRole("combobox", { name: "Library content type", exact: true });
+      const kind = root.getByRole("link", { name: /^Rounds\b/ });
       await kind.focus();
-      await kind.selectOption("round");
+      await page.keyboard.press("Enter");
+      await expect(kind).toHaveAttribute("aria-current", "page");
       await expect(rows).toHaveCount(1);
       await expect(rows).toContainText("Alpha Round");
       stale.release();

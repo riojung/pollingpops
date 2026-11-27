@@ -7,6 +7,7 @@ import { useLocale } from "../../locale-provider";
 import { useWorkspace } from "../workspace-provider";
 import { WorkspaceShell } from "../workspace-shell";
 import { WorkspaceKindIcon, WorkspaceStatus } from "../workspace-signals";
+import { workspaceCreationOptions } from "../workspace-creation-model";
 import { LibraryScopeNavigation } from "../library-sharing/scope-navigation";
 import { LibraryShareActions } from "../library-sharing/share-actions";
 import { LibraryShareDue } from "../library-sharing/share-due";
@@ -24,6 +25,12 @@ import {
   type LibraryDiscoveryQuery,
 } from "../../../lib/library-controls";
 import {
+  DEFAULT_ROUND_LIBRARY_VIEW,
+  readRoundLibraryView,
+  writeRoundLibraryView,
+  type RoundLibraryView,
+} from "../../../lib/round-library-view";
+import {
   emptyDiscoverySnapshot,
   LibraryDiscoveryPager,
   readLibraryDiscovery,
@@ -34,6 +41,35 @@ import {
 import styles from "./library-discovery.module.css";
 
 export type LibraryManagementType = "all" | "rounds" | "presentations" | "surveys";
+
+const kindLabels = {
+  round: "pages.common.rounds",
+  presentation: "pages.common.presentations",
+  survey: "pages.common.surveys",
+} as const;
+
+const managementTypes = {
+  round: "rounds",
+  presentation: "presentations",
+  survey: "surveys",
+} as const;
+const createLabels = {
+  round: "pages.library.createRound",
+  presentation: "pages.library.createPresentation",
+  survey: "pages.library.createSurvey",
+} as const;
+
+function LayoutIcon({ view }: { view: RoundLibraryView }) {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+      {view === "grid" ? (
+        <path d="M3.5 3.5h5v5h-5zm8 0h5v5h-5zm-8 8h5v5h-5zm8 0h5v5h-5z" />
+      ) : (
+        <path d="M3.5 5h2m3 0h8m-13 5h2m3 0h8m-13 5h2m3 0h8" />
+      )}
+    </svg>
+  );
+}
 
 export function LibraryDiscovery({
   scope = "workspace",
@@ -49,6 +85,16 @@ export function LibraryDiscovery({
   const searchParams = useSearchParams();
   const context = useWorkspace();
   const { creator, workspace, management, productFeatures, canEdit } = context;
+  const workspaceId = creator?.workspaceId ?? "";
+  const [viewPreference, setViewPreference] = useState<{
+    workspaceId: string;
+    view: RoundLibraryView;
+  }>({
+    workspaceId: "",
+    view: DEFAULT_ROUND_LIBRARY_VIEW,
+  });
+  const view =
+    viewPreference.workspaceId === workspaceId ? viewPreference.view : DEFAULT_ROUND_LIBRARY_VIEW;
   const shared = scope !== "workspace";
   const query = readLibraryDiscoveryQuery(searchParams);
   const queryKey = JSON.stringify(query);
@@ -109,6 +155,14 @@ export function LibraryDiscovery({
       (organization) => organization.role === "owner" || organization.role === "admin",
     ),
   );
+
+  useEffect(() => {
+    if (workspaceId)
+      setViewPreference({
+        workspaceId,
+        view: readRoundLibraryView(workspaceId),
+      });
+  }, [workspaceId]);
 
   useEffect(() => {
     setSearchDraft({ key: query.q, value: query.q });
@@ -179,11 +233,15 @@ export function LibraryDiscovery({
     };
   }, [actor, currentPager]);
 
-  function change(patch: Partial<LibraryDiscoveryQuery>, nextType = type) {
+  function change(patch: Partial<LibraryDiscoveryQuery>) {
     if (activeKey.current !== key) return;
     paginationFocusKey.current = null;
     if (patch.q !== undefined) setSearchDraft({ key: query.q, value: patch.q });
-    router.push(libraryDiscoveryHref({ ...query, ...patch }, scope, nextType), { scroll: false });
+    router.push(libraryDiscoveryHref({ ...query, ...patch }, scope), { scroll: false });
+  }
+  function changeView(next: RoundLibraryView) {
+    setViewPreference({ workspaceId, view: next });
+    if (workspaceId) writeRoundLibraryView(workspaceId, next);
   }
   function refresh() {
     if (activeKey.current === key && !blocked) currentPager.refresh(key);
@@ -219,33 +277,29 @@ export function LibraryDiscovery({
       inline: "nearest",
       behavior: "instant",
     });
-    change(
-      {
-        q: "",
-        kind: "all",
-        status: "active",
-        favorites: false,
-        folder: "all",
-        progress: "all",
-        permission: "all",
-      },
-      "all",
-    );
+    change({
+      q: "",
+      kind: "all",
+      status: "active",
+      favorites: false,
+      folder: "all",
+      progress: "all",
+      permission: "all",
+    });
   }
   const kinds = ["round", "presentation", "survey"] as const;
-  const managementKinds = kinds.filter(
-    (kind) => shared || kind !== "presentation" || productFeatures?.presentations === true,
-  );
-  const kindLabel = (kind: (typeof kinds)[number]) =>
-    t(
-      kind === "round"
-        ? "pages.common.rounds"
-        : kind === "presentation"
-          ? "pages.common.presentations"
-          : "pages.common.surveys",
-    );
-  const managementType = (kind: (typeof kinds)[number]) =>
-    kind === "round" ? "rounds" : kind === "presentation" ? "presentations" : "surveys";
+  const kindLabel = (kind: (typeof kinds)[number]) => t(kindLabels[kind]);
+  const managedKind =
+    !shared &&
+    query.kind !== "all" &&
+    (query.kind !== "presentation" || productFeatures?.presentations === true)
+      ? query.kind
+      : null;
+  const creation = managedKind
+    ? workspaceCreationOptions({ canEdit, productFeatures }).find(
+        (option) => option.kind === managedKind,
+      )
+    : undefined;
   const filtered = Boolean(
     query.q ||
     query.kind !== "all" ||
@@ -271,6 +325,14 @@ export function LibraryDiscovery({
     <WorkspaceShell
       title={shared ? sharing[scope] : t("page.library.title")}
       eyebrow={t("page.library.eyebrow")}
+      headerDensity="compact"
+      actions={
+        managedKind && creation ? (
+          <Link href={creation.href} className="button">
+            {t(createLabels[managedKind])}
+          </Link>
+        ) : null
+      }
       description={
         shared
           ? scope === "organization"
@@ -286,192 +348,185 @@ export function LibraryDiscovery({
         <LibraryScopeNavigation
           scope={scope}
           type={type}
+          discoveryQuery={query}
           organization={hasOrganizationLibrary}
           canManage={canManageShares}
         />
-        <nav className={styles.views} aria-label={copy.managementViews}>
-          <Link
-            href={libraryDiscoveryHref({ ...query, kind: "all" }, scope)}
-            aria-current={type === "all" ? "page" : undefined}
-          >
-            {copy.allContent}
-          </Link>
-          {managementKinds.map((kind) => (
+        <div className={styles.toolbar}>
+          <nav className={styles.views} aria-label={copy.contentTypes}>
             <Link
-              key={kind}
-              href={libraryDiscoveryHref({ ...query, kind }, scope, managementType(kind))}
-              aria-current={type === managementType(kind) ? "page" : undefined}
+              href={libraryDiscoveryHref({ ...query, kind: "all" }, scope)}
+              aria-current={query.kind === "all" ? "page" : undefined}
+              scroll={false}
             >
-              <WorkspaceKindIcon kind={kind} />
-              {kindLabel(kind)}
+              {copy.allContent}
             </Link>
-          ))}
-        </nav>
-        {shared ? <p className={styles.help}>{copy.intro}</p> : null}
-        <form
-          className={styles.search}
-          onSubmit={(event) => {
-            event.preventDefault();
-            change({ q: search.trim().slice(0, 160) });
-          }}
-          role="search"
-        >
-          <label htmlFor="library-discovery-search" className="sr-only">
-            {shared ? sharing.search : copy.search}
-          </label>
-          <input
-            ref={searchInput}
-            id="library-discovery-search"
-            className="input"
-            type="search"
-            maxLength={160}
-            value={search}
-            placeholder={shared ? sharing.search : copy.search}
-            onChange={(event) => setSearchDraft({ key: query.q, value: event.target.value })}
-          />
-          <button className="button-quiet" type="submit">
-            {copy.searchAction}
-          </button>
-        </form>
-        <section
-          className={styles.filters}
-          aria-describedby="library-discovery-facet-help"
-          aria-label={t("pages.library.filtersLabel")}
-        >
-          <label>
-            <span>{t("pages.library.typeLabel")}</span>
-            <select
-              className="select"
-              value={query.kind}
-              onChange={(event) =>
-                change({ kind: event.target.value as LibraryDiscoveryQuery["kind"] }, "all")
-              }
-            >
-              <option value="all">{copy.allContent}</option>
-              {kinds.map((kind) => (
-                <option key={kind} value={kind}>
-                  {countLabel(kindLabel(kind), facets?.kinds[kind])}
-                </option>
-              ))}
-            </select>
-          </label>
-          {shared ? (
-            <>
-              <label>
-                <span>{copy.progress}</span>
-                <select
-                  className="select"
-                  value={query.progress}
-                  onChange={(event) =>
-                    change({ progress: event.target.value as LibraryDiscoveryQuery["progress"] })
-                  }
-                >
-                  <option value="all">{copy.allValues}</option>
-                  {(["new", "in_progress", "done"] as const).map((progress) => (
-                    <option key={progress} value={progress}>
-                      {countLabel(
-                        sharing[progress],
-                        facets && "progress" in facets ? facets.progress[progress] : undefined,
-                      )}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>{sharing.permission}</span>
-                <select
-                  className="select"
-                  value={query.permission}
-                  onChange={(event) =>
-                    change({
-                      permission: event.target.value as LibraryDiscoveryQuery["permission"],
-                    })
-                  }
-                >
-                  <option value="all">{copy.allValues}</option>
-                  {(["view", "use"] as const).map((permission) => (
-                    <option key={permission} value={permission}>
-                      {countLabel(
-                        permission === "use" ? sharing.canUse : sharing.canView,
-                        facets && "permissions" in facets
-                          ? facets.permissions[permission]
-                          : undefined,
-                      )}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <>
-              <label>
-                <span>{t("pages.common.statusLabel")}</span>
-                <select
-                  className="select"
-                  value={query.status}
-                  onChange={(event) =>
-                    change({ status: event.target.value as LibraryDiscoveryQuery["status"] })
-                  }
-                >
-                  <option value="active">{t("pages.common.status.active")}</option>
-                  {(["draft", "published", "archived"] as const).map((status) => (
-                    <option key={status} value={status}>
-                      {countLabel(
-                        t(`pages.common.status.${status}`),
-                        facets && "statuses" in facets ? facets.statuses[status] : undefined,
-                      )}
-                    </option>
-                  ))}
-                  <option value="all">{t("pages.library.allStatuses")}</option>
-                </select>
-              </label>
-              <label>
-                <span>{t("pages.library.folder")}</span>
-                <select
-                  className="select"
-                  value={query.folder}
-                  onChange={(event) => change({ folder: event.target.value })}
-                >
-                  <option value="all">{t("pages.library.allFolders")}</option>
-                  <option value="unfiled">{t("pages.library.unfiled")}</option>
-                  {query.folder !== "all" && query.folder !== "unfiled" ? (
-                    <option value={query.folder}>{copy.selectedFolder}</option>
-                  ) : null}
-                </select>
-              </label>
-              <button
-                className="button-quiet"
-                type="button"
-                aria-pressed={query.favorites}
-                onClick={() => change({ favorites: !query.favorites })}
+            {kinds.map((kind) => (
+              <Link
+                key={kind}
+                href={libraryDiscoveryHref({ ...query, kind }, scope)}
+                aria-current={query.kind === kind ? "page" : undefined}
+                scroll={false}
               >
-                {t("pages.library.favorites")}
-              </button>
-            </>
-          )}
-          <label>
-            <span>{copy.sort}</span>
-            <select
-              className="select"
-              value={query.sort}
-              onChange={(event) =>
-                change({ sort: event.target.value as LibraryDiscoveryQuery["sort"] })
-              }
-            >
-              <option value="recent">{shared ? copy.recentShared : copy.recent}</option>
-              <option value="title_asc">{copy.titleAsc}</option>
-              <option value="title_desc">{copy.titleDesc}</option>
-            </select>
-          </label>
-          {filtered ? (
-            <button className="button-quiet" type="button" onClick={clearFilters}>
-              {t("pages.results.clearFilters")}
+                <WorkspaceKindIcon kind={kind} />
+                {kindLabel(kind)}
+              </Link>
+            ))}
+          </nav>
+          <form
+            className={styles.search}
+            onSubmit={(event) => {
+              event.preventDefault();
+              change({ q: search.trim().slice(0, 160) });
+            }}
+            role="search"
+          >
+            <label htmlFor="library-discovery-search" className="sr-only">
+              {shared ? sharing.search : copy.search}
+            </label>
+            <div className={styles.searchField}>
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                <circle cx="8.5" cy="8.5" r="4.75" />
+                <path d="m12 12 4 4" />
+              </svg>
+              <input
+                ref={searchInput}
+                id="library-discovery-search"
+                className="input"
+                type="search"
+                maxLength={160}
+                value={search}
+                placeholder={shared ? sharing.search : copy.search}
+                onChange={(event) => setSearchDraft({ key: query.q, value: event.target.value })}
+              />
+            </div>
+            <button className="button" type="submit">
+              {copy.searchAction}
             </button>
-          ) : null}
-        </section>
-        <p id="library-discovery-facet-help" className={styles.help}>
-          {copy.facetHelp}
-        </p>
+          </form>
+          <section
+            className={styles.filters}
+            aria-describedby="library-discovery-facet-help"
+            aria-label={t("pages.library.filtersLabel")}
+          >
+            {shared ? (
+              <>
+                <label>
+                  <span>{copy.progress}</span>
+                  <select
+                    className="select"
+                    value={query.progress}
+                    onChange={(event) =>
+                      change({ progress: event.target.value as LibraryDiscoveryQuery["progress"] })
+                    }
+                  >
+                    <option value="all">{copy.allValues}</option>
+                    {(["new", "in_progress", "done"] as const).map((progress) => (
+                      <option key={progress} value={progress}>
+                        {countLabel(
+                          sharing[progress],
+                          facets && "progress" in facets ? facets.progress[progress] : undefined,
+                        )}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>{sharing.permission}</span>
+                  <select
+                    className="select"
+                    value={query.permission}
+                    onChange={(event) =>
+                      change({
+                        permission: event.target.value as LibraryDiscoveryQuery["permission"],
+                      })
+                    }
+                  >
+                    <option value="all">{copy.allValues}</option>
+                    {(["view", "use"] as const).map((permission) => (
+                      <option key={permission} value={permission}>
+                        {countLabel(
+                          permission === "use" ? sharing.canUse : sharing.canView,
+                          facets && "permissions" in facets
+                            ? facets.permissions[permission]
+                            : undefined,
+                        )}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <>
+                <label>
+                  <span>{t("pages.common.statusLabel")}</span>
+                  <select
+                    className="select"
+                    value={query.status}
+                    onChange={(event) =>
+                      change({ status: event.target.value as LibraryDiscoveryQuery["status"] })
+                    }
+                  >
+                    <option value="active">{t("pages.common.status.active")}</option>
+                    {(["draft", "published", "archived"] as const).map((status) => (
+                      <option key={status} value={status}>
+                        {countLabel(
+                          t(`pages.common.status.${status}`),
+                          facets && "statuses" in facets ? facets.statuses[status] : undefined,
+                        )}
+                      </option>
+                    ))}
+                    <option value="all">{t("pages.library.allStatuses")}</option>
+                  </select>
+                </label>
+                <label>
+                  <span>{t("pages.library.folder")}</span>
+                  <select
+                    className="select"
+                    value={query.folder}
+                    onChange={(event) => change({ folder: event.target.value })}
+                  >
+                    <option value="all">{t("pages.library.allFolders")}</option>
+                    <option value="unfiled">{t("pages.library.unfiled")}</option>
+                    {query.folder !== "all" && query.folder !== "unfiled" ? (
+                      <option value={query.folder}>{copy.selectedFolder}</option>
+                    ) : null}
+                  </select>
+                </label>
+                <button
+                  className="button-quiet"
+                  type="button"
+                  aria-pressed={query.favorites}
+                  onClick={() => change({ favorites: !query.favorites })}
+                >
+                  {t("pages.library.favorites")}
+                </button>
+              </>
+            )}
+            <label>
+              <span>{copy.sort}</span>
+              <select
+                className="select"
+                value={query.sort}
+                onChange={(event) =>
+                  change({ sort: event.target.value as LibraryDiscoveryQuery["sort"] })
+                }
+              >
+                <option value="recent">{shared ? copy.recentShared : copy.recent}</option>
+                <option value="title_asc">{copy.titleAsc}</option>
+                <option value="title_desc">{copy.titleDesc}</option>
+              </select>
+            </label>
+            {filtered ? (
+              <button className="button-quiet" type="button" onClick={clearFilters}>
+                {t("pages.results.clearFilters")}
+              </button>
+            ) : null}
+          </section>
+          <p id="library-discovery-facet-help" className="sr-only">
+            {copy.facetHelp}
+          </p>
+        </div>
         <section
           ref={resultsPanel}
           data-library-results=""
@@ -481,33 +536,60 @@ export function LibraryDiscovery({
           aria-busy={busy}
           tabIndex={-1}
         >
-          <p
-            id="library-discovery-summary"
-            className={styles.summary}
-            role="status"
-            aria-live="polite"
-          >
-            {state.phase === "loading" ? (
-              sharing.loading
-            ) : initialError ? (
-              ""
-            ) : (
-              <>
-                {facets ? (
-                  <strong>
-                    {text(copy.total, {
-                      count: new Intl.NumberFormat(locale).format(facets.total),
-                    })}
-                  </strong>
-                ) : null}
-                <span>
-                  {text(copy.shown, {
-                    count: new Intl.NumberFormat(locale).format(state.items.length),
-                  })}
-                </span>
-              </>
-            )}
-          </p>
+          <div className={styles.resultsBar}>
+            <p
+              id="library-discovery-summary"
+              className={styles.summary}
+              role="status"
+              aria-live="polite"
+            >
+              {state.phase === "loading" ? (
+                sharing.loading
+              ) : initialError ? (
+                ""
+              ) : (
+                <>
+                  {facets ? (
+                    <strong>
+                      {text(copy.total, {
+                        count: new Intl.NumberFormat(locale).format(facets.total),
+                      })}
+                    </strong>
+                  ) : null}
+                  {facets?.total !== state.items.length ? (
+                    <span>
+                      {text(copy.shown, {
+                        count: new Intl.NumberFormat(locale).format(state.items.length),
+                      })}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </p>
+            <div className={styles.resultsActions}>
+              {managedKind ? (
+                <Link
+                  className={`button-quiet ${styles.manage}`}
+                  href={libraryDiscoveryHref(query, scope, managementTypes[managedKind])}
+                >
+                  {text(copy.manageKind, { kind: kindLabel(managedKind) })}
+                </Link>
+              ) : null}
+              <div className={styles.layout} role="group" aria-label={copy.layout}>
+                {(["grid", "list"] as const).map((layout) => (
+                  <button
+                    key={layout}
+                    type="button"
+                    aria-pressed={view === layout}
+                    onClick={() => changeView(layout)}
+                  >
+                    <LayoutIcon view={layout} />
+                    {t(layout === "grid" ? "pages.library.gridView" : "pages.library.listView")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           {initialError ? (
             <div role="alert" className={styles.error}>
               <p>{copy.initialError}</p>
@@ -529,7 +611,13 @@ export function LibraryDiscovery({
               ) : null}
             </section>
           ) : null}
-          <ul className={styles.list} aria-label={copy.allContent} aria-busy={busy}>
+          <ul
+            className={styles.collection}
+            data-library-collection=""
+            data-view={view}
+            aria-label={copy.allContent}
+            aria-busy={busy}
+          >
             {state.items.map((item) => {
               const isShare = "capabilities" in item;
               const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
@@ -541,19 +629,21 @@ export function LibraryDiscovery({
                   data-library-item={discoveryItemKey(item)}
                   data-kind={item.artifactType}
                 >
-                  <article className={styles.row}>
+                  <article className={styles.card}>
                     <div className={styles.content}>
                       <div className={styles.meta}>
                         <span className={styles.kind}>
-                          <WorkspaceKindIcon kind={item.artifactType} />
+                          <span className={styles.kindTile}>
+                            <WorkspaceKindIcon kind={item.artifactType} />
+                          </span>
                           {kindLabel(item.artifactType)}
                         </span>
                         {isShare ? (
                           <>
-                            <span>
+                            <span className={styles.permission}>
                               {item.permission === "use" ? sharing.canUse : sharing.canView}
                             </span>
-                            <span>{sharing[item.progress]}</span>
+                            <span className={styles.progress}>{sharing[item.progress]}</span>
                           </>
                         ) : (
                           <WorkspaceStatus status={item.status}>
@@ -643,7 +733,10 @@ export function LibraryDiscovery({
                 {copy.pageError}
               </p>
             ) : null}
-            {!initialError ? (
+            {!initialError &&
+            (state.nextCursor ||
+              paginationFocusKey.current === key ||
+              (state.items.length > 0 && facets?.total !== state.items.length)) ? (
               <p className={styles.help}>
                 {state.phase === "loading"
                   ? sharing.loading

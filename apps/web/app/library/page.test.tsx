@@ -187,16 +187,54 @@ describe("Library workspace", () => {
     });
   });
 
-  it("defaults to metadata All content with explicit specialized management links", () => {
+  it("defaults to All content with Discovery category links", () => {
     fixtures.query = "";
     const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
     expect(markup).toContain('data-library-discovery=""');
     expect(markup).toContain('placeholder="Search all content"');
-    expect(markup).toContain('href="/library?type=rounds"');
-    expect(markup).toContain('href="/library?type=presentations"');
-    expect(markup).toContain('href="/library?type=surveys"');
+    expect(markup).toContain('href="/library?kind=round"');
+    expect(markup).toContain('href="/library?kind=presentation"');
+    expect(markup).toContain('href="/library?kind=survey"');
     expect(markup).not.toContain('role="tablist"');
     expect(markup).not.toContain("Select all");
+  });
+
+  it.each([
+    ["My workspace", ""],
+    ["Shared with me", "&scope=shared"],
+  ])("keeps all four category destinations in %s Discovery", (_scope, suffix) => {
+    for (const kind of ["round", "presentation", "survey"]) {
+      fixtures.query = `kind=${kind}${suffix}`;
+      const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+      expect(markup).toContain('data-library-discovery=""');
+      expect(markup).not.toContain('role="tablist"');
+      expect(markup).toMatch(
+        new RegExp(
+          `<a(?=[^>]+href="/library\\?kind=${kind}${suffix.replace("&", "&amp;")}")(?=[^>]+aria-current="page")[^>]*>`,
+        ),
+      );
+    }
+    fixtures.query = suffix.slice(1);
+    const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(markup).toContain('data-library-discovery=""');
+    expect(markup).toMatch(/<a[^>]*aria-current="page"[^>]*>All content<\/a>/);
+  });
+
+  it("keeps category, search and sort when changing scopes and resets the previous scope's filters", () => {
+    fixtures.query =
+      "kind=survey&q=preparedness&sort=title_asc&status=archived&folder=unfiled&favorites=true";
+    const workspace = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(workspace).toMatch(
+      /<a[^>]*href="\/library\?q=preparedness&amp;kind=survey&amp;sort=title_asc&amp;scope=shared"[^>]*>Shared with me<\/a>/,
+    );
+
+    fixtures.query =
+      "scope=shared&type=surveys&q=preparedness&sort=title_asc&progress=done&permission=view&organizationId=00000000-0000-4000-8000-000000000001";
+    const shared = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
+    expect(shared).toMatch(
+      /<a[^>]*href="\/library\?q=preparedness&amp;kind=survey&amp;sort=title_asc"[^>]*>My workspace<\/a>/,
+    );
+    expect(shared).toContain('value="preparedness"');
   });
 
   it("preserves the explicit Round management route with search and creation actions", () => {
@@ -208,6 +246,7 @@ describe("Library workspace", () => {
     expect(markup).toContain('placeholder="Search rounds"');
     expect(markup).toContain('href="/create?product=round"');
     expect(markup).toContain("Create Round");
+    expect(markup).toMatch(/<a[^>]*href="\/library\?kind=round"[^>]*>Back to Round library<\/a>/);
     expect(markup).toContain('href="/library/folders?type=rounds"');
     expect(markup).toContain('aria-label="Filter by status"');
     expect(markup).toContain('aria-label="Filter by ownership"');
@@ -241,6 +280,9 @@ describe("Library workspace", () => {
     expect(markup).toContain('href="/create/presentation"');
     expect(markup).toContain("Create Presentation");
     expect(markup).toContain('href="/library/folders?type=presentations"');
+    expect(markup).toMatch(
+      /<a[^>]*href="\/library\?q=recovery&amp;kind=presentation"[^>]*>Back to Presentation library<\/a>/,
+    );
     expect(markup).toContain("Manage folders");
   });
   it("includes Surveys as a first-class Library tab with the same filters and layouts", () => {

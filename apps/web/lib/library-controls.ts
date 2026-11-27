@@ -13,7 +13,8 @@ export function librarySearchHref(query: string, pathname: string, search: strin
     if (query.trim()) params.set("q", query.trim().normalize("NFC").slice(0, 160));
     return `/boards${params.size ? `?${params}` : ""}`;
   }
-  const requested = new URLSearchParams(search).get("type");
+  const current = new URLSearchParams(search);
+  const requested = current.get("type");
   const sessions = pathname === "/sessions";
   const type =
     pathname === "/surveys" || pathname.startsWith("/surveys/")
@@ -26,7 +27,11 @@ export function librarySearchHref(query: string, pathname: string, search: strin
         : null;
   const params = new URLSearchParams();
   if (type) params.set("type", type);
-  const scope = new URLSearchParams(search).get("scope");
+  else if (pathname === "/library") {
+    const kind = option(current.get("kind"), discoveryKinds, "all");
+    if (kind !== "all") params.set("kind", kind);
+  }
+  const scope = current.get("scope");
   if (
     pathname === "/library" &&
     (scope === "organization" || scope === "shared" || scope === "managed")
@@ -115,7 +120,8 @@ export function roundBulkActionIds<T extends { id: string; status: LibraryItemSt
 
 export const libraryBulkActionIds = roundBulkActionIds;
 
-export type LibraryDiscoveryKind = "all" | "round" | "presentation" | "survey";
+const discoveryKinds = ["all", "round", "presentation", "survey"] as const;
+export type LibraryDiscoveryKind = (typeof discoveryKinds)[number];
 export type LibraryDiscoverySort = "recent" | "title_asc" | "title_desc";
 export interface LibraryDiscoveryQuery {
   q: string;
@@ -150,7 +156,7 @@ export function readLibraryDiscoveryQuery(
           ? "presentation"
           : type === "surveys"
             ? "survey"
-            : option(params.get("kind"), ["all", "round", "presentation", "survey"], "all"),
+            : option(params.get("kind"), discoveryKinds, "all"),
     status: option(
       params.get("status"),
       ["active", "draft", "published", "archived", "all"],

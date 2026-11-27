@@ -28,12 +28,21 @@ async function appearance(page: Page, info: TestInfo, name: string, mobile: bool
           : mode === "high-contrast"
             ? /rgb\((?:0, 0, 0|48, 54, 64)\)/
             : "rgb(48, 54, 64)";
+      const strongForeground =
+        colorScheme === "dark"
+          ? "rgb(246, 247, 249)"
+          : mode === "high-contrast"
+            ? /rgb\((?:0, 0, 0|36, 41, 49)\)/
+            : "rgb(36, 41, 49)";
+      await expect(page.locator("[data-library-discovery] label > span").first()).toHaveCSS(
+        "color",
+        foreground,
+      );
       for (const text of [
-        page.locator("[data-library-discovery] label > span").first(),
         page.locator('[data-library-discovery] p[role="status"] strong'),
         page.locator("[data-library-item] article").first().locator("span").first(),
       ])
-        await expect(text).toHaveCSS("color", foreground);
+        await expect(text).toHaveCSS("color", strongForeground);
       const message = page.locator("[data-library-share-message]").first();
       if (await message.count()) await expect(message).toHaveCSS("color", foreground);
       for (const control of await page.locator("[data-library-discovery] select").all()) {
@@ -119,20 +128,20 @@ for (const mobile of [false, true]) {
     await page.goto("/library?sort=title_asc");
     const root = page.locator("[data-library-discovery]");
     const rows = root.locator("[data-library-item]");
+    const summary = root.locator("#library-discovery-summary");
+    const footer = root.locator("[data-library-pagination]");
     await expect(rows).toHaveCount(2);
-    await expect(root.getByText("Results: 3", { exact: true })).toBeVisible();
-    await expect(root.locator("#library-discovery-summary")).toContainText("Loaded: 2");
+    await expect(summary).toContainText("Results: 3");
+    await expect(summary).toContainText("Loaded: 2");
     await root.getByRole("button", { name: "Load more", exact: true }).click();
     await expect(root.getByRole("alert")).toContainText("Your current results are kept");
-    await expect(root.locator("[data-library-pagination]")).toBeFocused();
+    await expect(footer).toBeFocused();
     await expect(rows).toHaveCount(2);
-    await root
-      .locator("[data-library-pagination]")
-      .getByRole("button", { name: "Retry", exact: true })
-      .click();
+    await footer.getByRole("button", { name: "Retry", exact: true }).click();
     await expect(rows).toHaveCount(3);
-    await expect(root.locator("#library-discovery-summary")).toContainText("Loaded: 3");
-    await expect(root.locator("[data-library-pagination]")).toBeFocused();
+    await expect(summary).toContainText("Results: 3");
+    await expect(footer).toContainText("Loaded: 3");
+    await expect(footer).toBeFocused();
     await expect(root.getByRole("button", { name: "Load more", exact: true })).toHaveCount(0);
     await appearance(page, info, "all-content", mobile);
 
@@ -147,9 +156,7 @@ for (const mobile of [false, true]) {
     await page.reload();
     await expect(search).toHaveValue("Charlie");
     await expect(rows).toHaveCount(1);
-    await root
-      .getByRole("combobox", { name: "Library content type", exact: true })
-      .selectOption("round");
+    await root.getByRole("link", { name: /^Rounds\b/ }).click();
     await expect(
       root.getByRole("heading", { name: "No matching content", exact: true }),
     ).toBeVisible();
@@ -168,7 +175,16 @@ for (const mobile of [false, true]) {
     await root.getByRole("button", { name: "Favorites", exact: true }).click();
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText("Charlie event pulse");
-    await root.getByRole("link", { name: "Surveys", exact: true }).click();
+    const surveys = root.getByRole("link", { name: /^Surveys\b/ });
+    await surveys.click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get("kind") === "survey" && url.searchParams.get("favorites") === "true",
+    );
+    await expect(surveys).toHaveAttribute("aria-current", "page");
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText("Charlie event pulse");
+    await root.getByRole("link", { name: "Manage Surveys", exact: true }).click();
     await expect(page).toHaveURL(/type=surveys/);
     await expect(page.getByRole("tab", { name: /^Surveys/ })).toHaveAttribute(
       "aria-selected",

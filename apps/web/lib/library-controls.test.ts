@@ -38,12 +38,16 @@ const items = [
 ];
 
 describe("Library controls", () => {
-  it("keeps All discovery and explicit Round management header searches distinct", () => {
+  it("keeps Discovery header searches in the selected category and explicit management in its own view", () => {
+    expect(librarySearchHref("readiness", "/library", "")).toBe("/library?q=readiness");
     expect(
       librarySearchHref("readiness", "/library", "?kind=survey&status=draft&cursor=private"),
-    ).toBe("/library?q=readiness");
-    expect(librarySearchHref("readiness", "/library", "?type=rounds")).toBe(
+    ).toBe("/library?kind=survey&q=readiness");
+    expect(librarySearchHref("readiness", "/library", "?type=rounds&kind=survey")).toBe(
       "/library?type=rounds&q=readiness",
+    );
+    expect(librarySearchHref("readiness", "/library", "?kind=unknown")).toBe(
+      "/library?q=readiness",
     );
   });
   it("roundtrips authoritative discovery filters without carrying cursors or access tokens", () => {
@@ -102,6 +106,13 @@ describe("Library controls", () => {
     expect(librarySearchHref("", "/home", "?type=unknown")).toBe("/library");
   });
   it("preserves the shared Library surface without forwarding private or unrelated context", () => {
+    expect(
+      librarySearchHref(
+        " workshop ",
+        "/library",
+        "?scope=shared&kind=presentation&permission=use&organizationId=private",
+      ),
+    ).toBe("/library?kind=presentation&scope=shared&q=workshop");
     expect(
       librarySearchHref(
         " workshop ",

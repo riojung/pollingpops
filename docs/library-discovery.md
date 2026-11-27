@@ -7,15 +7,17 @@ new sharing grants or a new published-content format.
 
 ## Entry points and actions
 
-`/library` opens **All content** for the active workspace. The organization, Shared with me and
-Manage sharing scopes also have an All content view. A content-kind filter narrows the mixed
-list without downloading draft bodies. Existing explicit `type=rounds|presentations|surveys`
-links remain available for their specialized management workflows.
+`/library` opens **All content** for the active workspace. The **All content**, **Rounds**,
+**Presentations** and **Surveys** navigation works in My workspace, Shared with me, Organization
+and Manage sharing. Category links set the `kind` query and filter metadata across the collection.
+Discovery offers grid and list layouts and shares the per-workspace layout preference with the
+specialized management views.
 
 Own-workspace results open the existing canonical editor/reader. The user's current role still
-controls editing, publishing, delivery and deletion. Folder management, grid/list layout, favorites
-and bulk mutations remain in the specialized management views; All content is a discovery list.
-It can filter existing favorites and folder links without starting a mixed-kind bulk operation.
+controls editing, publishing, delivery and deletion. A workspace category offers its own management
+link, such as **Manage Rounds**, for folder management, favorites and bulk actions. Existing
+`type=rounds|presentations|surveys` management links continue to work. Discovery can filter by
+existing favorites and folders.
 
 Shared results retain the pinned version, source attribution, permission, personal follow-up,
 review date and authoritative actions. **Can view** does not become **Can use** because a result
@@ -25,8 +27,9 @@ Already-created independent copies retain their existing lifecycle.
 ## Queries and pagination
 
 Search is submitted with the Search action or Enter. Content kind, status, sort and applicable
-scope-specific filters update the URL. Reload and back/forward restore those controls. New query
-or authority context starts a new first page; a failed next-page request keeps the loaded results
+scope-specific filters update the URL. Reload and back/forward restore those controls. Switching
+scopes preserves the search, category and sort while resetting scope-specific filters. A new query
+or authority context starts a new first page. A failed next-page request keeps the loaded results
 and offers retry. An initial failure is distinct from an empty collection or no matching results.
 
 The workspace endpoint is `GET /v1/library/items`, authenticated with the current creator cookie:

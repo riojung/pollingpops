@@ -201,8 +201,9 @@ describe("Library workspace", () => {
 
   it.each([
     ["My workspace", ""],
-    ["Shared with me", "&scope=shared"],
+    ["Shared with me", "&sort=title_asc&scope=shared"],
   ])("keeps all four category destinations in %s Discovery", (_scope, suffix) => {
+    const escapedSuffix = suffix.replaceAll("&", "&amp;");
     for (const kind of ["round", "presentation", "survey"]) {
       fixtures.query = `kind=${kind}${suffix}`;
       const markup = renderToStaticMarkup(withEnglishLocale(<LibraryPage />));
@@ -210,7 +211,7 @@ describe("Library workspace", () => {
       expect(markup).not.toContain('role="tablist"');
       expect(markup).toMatch(
         new RegExp(
-          `<a(?=[^>]+href="/library\\?kind=${kind}${suffix.replace("&", "&amp;")}")(?=[^>]+aria-current="page")[^>]*>`,
+          `<a(?=[^>]+href="/library\\?kind=${kind}${escapedSuffix}")(?=[^>]+aria-current="page")[^>]*>`,
         ),
       );
     }

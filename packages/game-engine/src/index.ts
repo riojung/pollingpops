@@ -1895,6 +1895,7 @@ export function snapshotForRole(
   options: { role: "host" | "participant" | "presenter"; participantId?: string },
 ): SessionSnapshot {
   const state = upgradeGameState(inputState);
+  const hostRound = options.role === "host" && state.roundId ? state.rounds[state.roundId] : null;
   const question =
     state.questionIndex === null ? undefined : state.quiz.questions[state.questionIndex];
   const standings = competitionStandings(state);
@@ -1999,6 +2000,15 @@ export function snapshotForRole(
         ? participantQuestion(question, state.settings)
         : publicQuestion(question, state.settings),
     deadline: state.deadlineMs ? new Date(state.deadlineMs).toISOString() : null,
+    ...(hostRound && hostRound.openedAtMs > 0
+      ? {
+          checkpointTiming: {
+            openedAt: new Date(hostRound.openedAtMs).toISOString(),
+            lockedAt:
+              hostRound.lockedAtMs === null ? null : new Date(hostRound.lockedAtMs).toISOString(),
+          },
+        }
+      : {}),
     participants: visibleParticipants,
     ...(standings ? { competitionStandings: standings } : {}),
     ...(myScoredResponseSummary ? { myScoredResponseSummary } : {}),

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import type { QuizDraft } from "@openround/contracts";
+import type { QuizDraft, SessionSnapshot } from "@openround/contracts";
 import { currentRoundClientCapabilities } from "../../packages/contracts/src/round-protocol";
 import { betaEmail, signInBeta } from "./sign-in";
 import { clickHostCommand } from "./host-controls";
@@ -72,6 +73,7 @@ async function submitChoice(page: Page, choice: string) {
   await page.getByRole("button", { name: "Very sure" }).click();
   await page.getByRole("button", { name: "Submit response" }).click();
   await expect(page.getByText("Answer received and saved.")).toBeVisible();
+  return Date.now();
 }
 
 async function advanceRehearsal(page: Page, from: string, buttonName: string, to: string) {
@@ -649,13 +651,11 @@ test("creator assigns immutable practice and manages accountless progress", asyn
   await expect(page).toHaveTitle("Assign practice · Polling Pops");
   await expect(page.getByRole("heading", { name: publishedTitle, level: 2 })).toBeVisible();
   await expect(page.getByText("Published v1", { exact: true })).toBeVisible();
-  await expect(page.getByText("main question(s)", { exact: true }).locator("..")).toContainText(
-    "1",
-  );
+  await expect(page.getByText("1 main question(s)", { exact: true })).toBeVisible();
   await expect(page.getByText(/newer draft edits/i)).toBeVisible();
   await expect(page.getByText(/Conditional live rechecks are not repeated/i)).toBeVisible();
 
-  await page.getByText("Create personal one-attempt links (optional)", { exact: true }).click();
+  await page.locator("summary").filter({ hasText: "Create personal one-attempt links" }).click();
   await page.getByLabel("One label per line").fill("Learner Alpha");
   const createdMetricBefore = await productEventMetricValue(page, "practice_assignment_created");
   const creationResponsePromise = page.waitForResponse(
@@ -675,9 +675,15 @@ test("creator assigns immutable practice and manages accountless progress", asyn
   expect(creation.personalAccess).toEqual([
     expect.objectContaining({ label: "Learner Alpha", url: expect.stringContaining("#token=") }),
   ]);
-  await expect(page.getByRole("heading", { name: "Save and share these links now" })).toBeFocused();
-  await expect(page.getByLabel("Generic anonymous link")).toHaveValue(creation.genericUrl);
-  await expect(page.getByLabel("Learner Alpha")).toHaveValue(creation.personalAccess[0]!.url);
+  await expect(
+    page.getByRole("heading", { name: "Save your private links", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("textbox", { name: "Generic anonymous practice link", exact: true }),
+  ).toHaveValue(creation.genericUrl);
+  await expect(page.getByRole("textbox", { name: "Learner Alpha", exact: true })).toHaveValue(
+    creation.personalAccess[0]!.url,
+  );
 
   const sharedMetricBefore = await productEventMetricValue(page, "practice_assignment_shared");
   const shareTelemetryPromise = page.waitForResponse((response) => {
@@ -693,7 +699,7 @@ test("creator assigns immutable practice and manages accountless progress", asyn
     return body.events?.[0]?.name === "practice_assignment_shared";
   });
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download links as CSV" }).click();
+  await page.getByRole("button", { name: "Download links CSV", exact: true }).click();
   const [shareTelemetry, download] = await Promise.all([shareTelemetryPromise, downloadPromise]);
   expect(shareTelemetry.status()).toBe(202);
   expect(shareTelemetry.request().postDataJSON()).toEqual({
@@ -738,16 +744,27 @@ test("creator assigns immutable practice and manages accountless progress", asyn
   await expect(page).toHaveTitle("Manage practice · Polling Pops");
   await expect(page.getByRole("heading", { name: publishedTitle, level: 2 })).toBeVisible();
   await expect(page.getByText("Published v1", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Open", exact: true });
+  await expect(
+    summary.getByText("Attempts", { exact: true }).locator("..").getByRole("definition"),
+  ).toHaveText("1");
+  await expect(
+    summary.getByText("Completed", { exact: true }).locator("..").getByRole("definition"),
+  ).toHaveText("1");
+
+  const accessTab = page.getByRole("tab", { name: "Private access", exact: true });
+  await accessTab.click();
+  await page.getByText("Timing accommodation", { exact: true }).click();
   await expect(page.getByText(/already has unlimited response time/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Create accommodation pass" })).toHaveCount(0);
-  await expect(page.getByLabel("Generic anonymous link")).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Generic anonymous practice link", exact: true }),
+  ).toHaveCount(0);
   const managementInputValues = await page
     .locator("input")
     .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
   expect(managementInputValues).not.toContain(creation.genericUrl);
   expect(managementInputValues).not.toContain(creation.personalAccess[0]!.url);
-  await expect(page.getByText("attempts", { exact: true }).locator("..")).toContainText("1");
-  await expect(page.getByText("completed", { exact: true }).locator("..")).toContainText("1");
 
   await page.route("**/v1/auth/me", async (route) => {
     const response = await route.fetch();
@@ -764,36 +781,41 @@ test("creator assigns immutable practice and manages accountless progress", asyn
     });
   });
   await page.reload();
+  await accessTab.click();
   await expect(page.getByRole("heading", { name: "Private access", level: 2 })).toBeVisible();
-  await expect(
-    page.getByText(/Creating new personal assignment links requires Pro/i),
-  ).toBeVisible();
+  await expect(page.getByText(/New personal links require Pro/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Compare plans" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create personal link" })).toHaveCount(0);
   await expect(
     page.getByRole("row").filter({ hasText: "Learner Alpha" }).getByRole("button", {
-      name: "Revoke",
+      name: "Revoke private link: Learner Alpha",
     }),
   ).toBeVisible();
   await page.unroute("**/v1/auth/me");
   await page.reload();
+  await accessTab.click();
   await expect(page.getByRole("heading", { name: "Private access", level: 2 })).toBeVisible();
 
   const personalRow = page.getByRole("row").filter({ hasText: "Learner Alpha" });
   await expect(personalRow).toContainText("Active");
   page.once("dialog", (dialog) => void dialog.accept());
-  await personalRow.getByRole("button", { name: "Revoke" }).click();
+  await personalRow.getByRole("button", { name: "Revoke private link: Learner Alpha" }).click();
   await expect(personalRow).toContainText("Revoked");
-  await expect(page.getByText("Learner Alpha link revoked.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Private link revoked. Learner Alpha" }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Private access", level: 2 })).toBeFocused();
 
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page.getByText("Close practice", { exact: true }).click();
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Close practice for everyone" }).click();
-  await expect(page.getByText("closed", { exact: true })).toBeVisible();
+  const closed = page.getByRole("heading", { name: "Closed", exact: true });
+  await expect(closed).toBeVisible();
   await expect(
     page.getByText("Practice closed for every participant.", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: publishedTitle, level: 2 })).toBeFocused();
+  await expect(closed).toBeFocused();
   await expect(page.getByRole("button", { name: "Close practice for everyone" })).toHaveCount(0);
 
   await expect
@@ -905,11 +927,136 @@ test("signed-in creator replaces one stale host credential and resumes", async (
   }
 });
 
-test("creator and participants complete a beta Recovery loop through report", async ({
-  browser,
-  page,
-}) => {
-  test.setTimeout(120_000);
+const recoveryDeadlineSeconds = 30;
+const recoveryObservationAllowanceMs = 5_000;
+const recoveryKitB = {
+  diagnostic: {
+    prompt:
+      "A team paid a nonrefundable deposit for an in-person workshop. Most attendees now need to join remotely. What should guide the team's decision about using the venue?",
+    labels: [
+      "Compare the remaining costs and benefits of using the venue with the remote alternatives.",
+      "Use the venue because the team already paid the deposit.",
+      "Keep the original plan regardless of the new information.",
+    ],
+    explanation:
+      "The deposit cannot be recovered. Compare the future costs and benefits of the venue and the remote alternatives.",
+  },
+  recheck: {
+    prompt:
+      "A team prepaid for a reporting tool. Its reports are now produced automatically elsewhere. What should guide the decision about doing the extra work to keep using the prepaid tool?",
+    labels: [
+      "Compare the future value of both approaches and the effort each one takes.",
+      "Keep using the prepaid tool so the original payment is worthwhile.",
+    ],
+    explanation:
+      "The past payment is unchanged. Compare the future value of the approaches and the extra effort each one takes.",
+  },
+};
+
+function withRecoveryPrompt(
+  question: Extract<
+    QuizDraft["questions"][number],
+    { type: "single_select" | "true_false" | "multi_select" | "poll" }
+  >,
+  content: typeof recoveryKitB.diagnostic,
+) {
+  expect(question.choices).toHaveLength(content.labels.length);
+  return {
+    ...question,
+    prompt: content.prompt,
+    explanation: content.explanation,
+    choices: question.choices.map((choice, index) => ({
+      ...choice,
+      label: content.labels[index]!,
+    })),
+  };
+}
+
+type RecoveryRoom = { sessionId: string; hostToken: string };
+
+async function readRecoveryHostSnapshot(page: Page, room: RecoveryRoom) {
+  const response = await page.request.get(
+    `${apiUrl}/v1/sessions/${room.sessionId}/snapshot?role=host`,
+    { headers: { authorization: `Bearer ${room.hostToken}` } },
+  );
+  expect(response.ok()).toBeTruthy();
+  const { snapshot } = (await response.json()) as { snapshot: SessionSnapshot };
+  return snapshot;
+}
+
+async function openRecoveryQuestion(
+  page: Page,
+  room: RecoveryRoom,
+  command: string,
+  question: { id: string; prompt: string },
+) {
+  const commandAtMs = Date.now();
+  await clickHostCommand(page, command);
+  await expect(page.getByTestId("host-session")).toHaveAttribute("data-phase", "question_open");
+  await expect(page.getByRole("heading", { name: question.prompt, exact: true })).toBeVisible();
+  const snapshot = await readRecoveryHostSnapshot(page, room);
+  expect(snapshot.phase).toBe("question_open");
+  expect(snapshot.question?.id).toBe(question.id);
+  if (!snapshot.roundId || !snapshot.checkpointTiming || !snapshot.deadline)
+    throw new Error("The open checkpoint must have a recorded opening and a response deadline");
+  expect(snapshot.checkpointTiming.lockedAt).toBeNull();
+  const openedAtMs = Date.parse(snapshot.checkpointTiming.openedAt);
+  const deadlineAtMs = Date.parse(snapshot.deadline);
+  expect(deadlineAtMs - openedAtMs).toBe(recoveryDeadlineSeconds * 1_000);
+  return { roundId: snapshot.roundId, commandAtMs, openedAtMs, deadlineAtMs };
+}
+
+async function waitForRecoveryDeadline(
+  page: Page,
+  room: RecoveryRoom,
+  checkpoint: Awaited<ReturnType<typeof openRecoveryQuestion>>,
+) {
+  const observationCutoffMs = checkpoint.deadlineAtMs + recoveryObservationAllowanceMs;
+  // Measure the rendered phase transition instead of the next assertion poll.
+  const observedAtMs = await page.getByTestId("host-session").evaluate(
+    (host, cutoffMs) =>
+      new Promise<number | null>((resolve) => {
+        if (host.getAttribute("data-phase") === "question_locked") {
+          resolve(Date.now());
+          return;
+        }
+        const observer = new MutationObserver(() => {
+          if (host.getAttribute("data-phase") !== "question_locked") return;
+          clearTimeout(timeout);
+          observer.disconnect();
+          resolve(Date.now());
+        });
+        const timeout = window.setTimeout(
+          () => {
+            observer.disconnect();
+            resolve(null);
+          },
+          Math.max(0, cutoffMs - Date.now()),
+        );
+        observer.observe(host, { attributes: true, attributeFilter: ["data-phase"] });
+      }),
+    observationCutoffMs,
+  );
+  if (observedAtMs === null) throw new Error("The host did not show the lock within 35 seconds");
+  expect(observedAtMs).toBeLessThanOrEqual(observationCutoffMs);
+
+  const snapshot = await readRecoveryHostSnapshot(page, room);
+  expect(snapshot.phase).toBe("question_locked");
+  expect(snapshot.roundId).toBe(checkpoint.roundId);
+  if (!snapshot.checkpointTiming?.lockedAt)
+    throw new Error("The locked checkpoint must have a recorded lock time");
+  expect(Date.parse(snapshot.checkpointTiming.openedAt)).toBe(checkpoint.openedAtMs);
+  const lockedAtMs = Date.parse(snapshot.checkpointTiming.lockedAt);
+  expect(lockedAtMs).toBeGreaterThanOrEqual(checkpoint.deadlineAtMs);
+  expect(observedAtMs).toBeGreaterThanOrEqual(lockedAtMs);
+  return {
+    lockMilliseconds: lockedAtMs - checkpoint.openedAtMs,
+    lockToObservationMilliseconds: observedAtMs - lockedAtMs,
+    commandToObservationMilliseconds: observedAtMs - checkpoint.commandAtMs,
+  };
+}
+
+async function verifyRecoveryKit(browser: Browser, page: Page, kit: "A" | "B") {
   await signIn(page, betaEmail);
 
   const starterResponse = await page.request.post(`${apiUrl}/v1/starters/misconception-check/use`, {
@@ -921,22 +1068,49 @@ test("creator and participants complete a beta Recovery loop through report", as
   const diagnostic = quiz.draft.questions.find((question) => question.linkedRecheckQuestionId);
   if (!diagnostic || diagnostic.type !== "single_select")
     throw new Error("The Recovery starter needs a diagnostic choice and linked recheck");
-  const misconception = diagnostic.choices.find(
-    (choice) => choice.misconceptionKey && !choice.isCorrect,
-  );
   const recheck = quiz.draft.questions.find(
     (question) => question.id === diagnostic.linkedRecheckQuestionId,
   );
-  if (
-    !misconception ||
-    !recheck ||
-    recheck.type !== "single_select" ||
-    recheck.delivery !== "recheck"
-  )
-    throw new Error("The Recovery starter must identify the misconception and its transfer check");
-  const recovered = recheck.choices.find((choice) => choice.isCorrect);
-  const notRecovered = recheck.choices.find((choice) => !choice.isCorrect);
-  if (!recovered || !notRecovered) throw new Error("The linked recheck must distinguish recovery");
+  if (!recheck || recheck.type !== "single_select" || recheck.delivery !== "recheck")
+    throw new Error("The Recovery starter needs a linked transfer check");
+
+  const [diagnosticQuestion, recheckQuestion] =
+    kit === "A"
+      ? [diagnostic, recheck]
+      : [
+          withRecoveryPrompt(diagnostic, recoveryKitB.diagnostic),
+          withRecoveryPrompt(recheck, recoveryKitB.recheck),
+        ];
+  if (kit === "B") {
+    const update = await page.request.patch(`${apiUrl}/v1/quizzes/${quizId}`, {
+      data: {
+        ...quiz.draft,
+        title: "Misconception check: Recovery comparison Kit B",
+        questions: [diagnosticQuestion, recheckQuestion],
+      },
+    });
+    expect(update.ok()).toBeTruthy();
+  }
+
+  const [, misconception] = diagnosticQuestion.choices;
+  const [recovered, notRecovered] = recheckQuestion.choices;
+  expect(diagnosticQuestion.choices.map((choice) => choice.isCorrect)).toEqual([
+    true,
+    false,
+    false,
+  ]);
+  expect(recheckQuestion.choices.map((choice) => choice.isCorrect)).toEqual([true, false]);
+  expect(misconception?.misconceptionKey).toBeTruthy();
+  if (!misconception || !recovered || !notRecovered)
+    throw new Error("The Recovery questions need their authored answer choices");
+  expect(diagnosticQuestion.timeLimitSeconds).toBe(recoveryDeadlineSeconds);
+  expect(recheckQuestion.timeLimitSeconds).toBe(recoveryDeadlineSeconds);
+  expect(diagnosticQuestion.purpose).toBe("diagnostic");
+  expect(recheckQuestion.purpose).toBe("practice");
+  expect(diagnosticQuestion.confidence).toBe("required");
+  expect(recheckQuestion.confidence).toBe("required");
+  expect(recheckQuestion.conceptKeys).toEqual(diagnosticQuestion.conceptKeys);
+  expect(recheckQuestion.prompt).not.toBe(diagnosticQuestion.prompt);
   const publishResponse = await page.request.post(`${apiUrl}/v1/quizzes/${quizId}/publish`, {
     data: {},
   });
@@ -981,40 +1155,83 @@ test("creator and participants complete a beta Recovery loop through report", as
         .getByRole("img", { name: "Owl avatar" }),
     ).toHaveCount(5);
 
-    await clickHostCommand(page, "Start round");
-    await Promise.all(
-      participants.map(({ page: participant }) => submitChoice(participant, misconception.label)),
+    const diagnosticCheckpoint = await openRecoveryQuestion(
+      page,
+      session,
+      "Start round",
+      diagnosticQuestion,
     );
-
-    await participants[0]!.page.reload();
-    await expect(participants[0]!.page.getByText("Answer received and saved.")).toBeVisible();
-    await expect(
-      participants[0]!.page.getByRole("button", {
-        name: misconception.label,
-        exact: true,
+    const [diagnosticTiming] = await Promise.all([
+      waitForRecoveryDeadline(page, session, diagnosticCheckpoint),
+      test.step("Save five high-confidence diagnostic responses and verify the receipt after reload", async () => {
+        await Promise.all(
+          participants.map(({ page: participant }) =>
+            submitChoice(participant, misconception.label),
+          ),
+        );
+        const guest = participants[0]!.page;
+        await guest.reload();
+        await expect(guest.getByText("Answer received and saved.")).toBeVisible();
+        await expect(
+          guest.getByRole("button", { name: misconception.label, exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
       }),
-    ).toHaveAttribute("aria-pressed", "true");
-
-    await clickHostCommand(page, "Lock answers");
+    ]);
     const distribution = page.getByRole("region", { name: "Post-lock response distribution" });
     await expect(distribution).toContainText("5 respondents");
     await expect(distribution).toContainText(misconception.label);
+    await expect(page.locator("[data-correct=true]")).toHaveCount(0);
     await clickHostCommand(page, "Reveal answer");
     await expect(page.getByText("Address the confident misconception")).toBeVisible();
     await clickHostCommand(page, "Address the misconception");
     await expect(page.getByText(/Active intervention: explain/)).toBeVisible();
     await clickHostCommand(page, "Finish intervention");
-    await clickHostCommand(page, "Open linked recheck");
-
-    await Promise.all(
-      participants.map(({ page: participant }, index) =>
-        submitChoice(
-          participant,
-          index === participants.length - 1 ? notRecovered.label : recovered.label,
-        ),
-      ),
+    const recheckCheckpoint = await openRecoveryQuestion(
+      page,
+      session,
+      "Open linked recheck",
+      recheckQuestion,
     );
-    await clickHostCommand(page, "Lock answers");
+    const [recheckTiming, recheckReceiptMilliseconds] = await Promise.all([
+      waitForRecoveryDeadline(page, session, recheckCheckpoint),
+      test.step("Save all five recheck responses during the 5–15 second window", async () => {
+        await wait(Math.max(0, recheckCheckpoint.openedAtMs + 5_000 - Date.now()));
+        const receipts = await Promise.all(
+          participants.map(({ page: participant }, index) =>
+            submitChoice(
+              participant,
+              index === participants.length - 1 ? notRecovered.label : recovered.label,
+            ),
+          ),
+        );
+        return receipts.map((receivedAt) => {
+          const elapsed = receivedAt - recheckCheckpoint.openedAtMs;
+          expect(elapsed).toBeGreaterThanOrEqual(5_000);
+          expect(elapsed).toBeLessThanOrEqual(15_000);
+          return elapsed;
+        });
+      }),
+    ]);
+    await test.info().attach("synthetic-recovery-timing", {
+      body: JSON.stringify(
+        {
+          kit,
+          diagnosticTiming,
+          recheckTiming,
+          recheckReceiptMilliseconds,
+        },
+        null,
+        2,
+      ),
+      contentType: "application/json",
+    });
+    await expect(distribution).toContainText("5 respondents");
+    await expect(
+      distribution.getByRole("listitem").filter({ hasText: recovered.label }),
+    ).toContainText("4 · 80%");
+    await expect(
+      distribution.getByRole("listitem").filter({ hasText: notRecovered.label }),
+    ).toContainText("1 · 20%");
     await clickHostCommand(page, "Reveal answer");
     await clickHostCommand(page, "Continue after recheck");
     await expect(page.getByText("Results are ready.")).toBeVisible();
@@ -1031,9 +1248,24 @@ test("creator and participants complete a beta Recovery loop through report", as
     await expect(page.getByRole("heading", { name: "Recovery evidence" }).last()).toBeVisible({
       timeout: 20_000,
     });
-    const recoveryRow = page.getByRole("row", { name: /Linked recheck/ });
-    await expect(recoveryRow).toContainText("4");
-    await expect(recoveryRow).toContainText("5");
+    const recoveryRow = page
+      .getByRole("region", { name: "Recovery evidence", exact: true })
+      .getByRole("row", { name: /Linked recheck/ });
+    await expect(recoveryRow.getByRole("cell")).toHaveText([
+      "Linked recheck",
+      "4",
+      "5",
+      "80%",
+      "Larger sample",
+    ]);
+    const conceptRow = page
+      .getByRole("region", { name: "Concept follow-up", exact: true })
+      .getByRole("row", { name: /topic.core-model/ });
+    await expect(conceptRow.getByRole("cell")).toHaveText(["topic.core-model", "5", "4", "1"]);
+    const confidenceRow = page
+      .getByRole("region", { name: "Confidence and correctness", exact: true })
+      .getByRole("row", { name: /Very sure/ });
+    await expect(confidenceRow.getByRole("cell")).toHaveText(["Very sure", "0", "5", "5"]);
     await page.getByText("Recovery story and interpretation", { exact: true }).click();
     await expect(
       page
@@ -1042,8 +1274,13 @@ test("creator and participants complete a beta Recovery loop through report", as
     ).toBeVisible();
     await page.getByRole("tab", { name: "Questions" }).click();
     const questionsPanel = page.getByRole("tabpanel", { name: "Questions" });
-    await questionsPanel.getByText("5 respondents").first().click();
-    await expect(questionsPanel.getByText(`${misconception.label}: 5 (100%`)).toBeVisible();
+    const diagnosticRow = questionsPanel.getByRole("row").filter({
+      hasText: diagnosticQuestion.prompt,
+    });
+    await expect(diagnosticRow.getByRole("cell").nth(1)).toHaveText("5");
+    await expect(diagnosticRow.getByRole("cell").nth(2)).toHaveText("0");
+    await diagnosticRow.getByText("5 respondents").click();
+    await expect(diagnosticRow.getByText(`${misconception.label}: 5 (100%`)).toBeVisible();
 
     await page.getByRole("tab", { name: "Participants" }).click();
     const participantsPanel = page.getByRole("tabpanel", { name: "Participants" });
@@ -1058,7 +1295,17 @@ test("creator and participants complete a beta Recovery loop through report", as
   } finally {
     await Promise.all(participants.map(({ context }) => context.close()));
   }
-});
+}
+
+for (const kit of ["A", "B"] as const) {
+  test(`creator and participants complete a beta Recovery loop through report (Kit ${kit})`, async ({
+    browser,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await verifyRecoveryKit(browser, page, kit);
+  });
+}
 
 test("every remaining response type requires explicit Submit before it is saved", async ({
   browser,

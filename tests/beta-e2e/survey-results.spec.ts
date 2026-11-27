@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { SurveyDraftSchema, type SurveyResponses } from "../../packages/contracts/src/surveys";
 import { signInBeta } from "./sign-in";
 
@@ -144,6 +144,12 @@ for (const mobile of [false, true]) {
     ).toBeVisible();
     await closeRun(page, fixture.ready.id);
 
+    const reportReads: string[] = [];
+    const trackReportReads = (request: Request) => {
+      const path = new URL(request.url()).pathname;
+      if (/^\/v1\/survey-rooms\/[^/]+\/results$/.test(path)) reportReads.push(path);
+    };
+    page.on("request", trackReportReads);
     await page.goto(`/results?view=surveys&q=${encodeURIComponent(fixture.title)}`);
     const tabs = page.getByRole("navigation", { name: "Evidence views" });
     await expect(tabs.getByRole("link", { name: "Surveys", exact: true })).toHaveAttribute(
@@ -157,7 +163,25 @@ for (const mobile of [false, true]) {
       page.getByRole("link", { name: "Back to Survey library", exact: true }),
     ).toHaveAttribute("href", "/library?type=surveys");
     const results = page.getByRole("region", { name: "Survey results", exact: true });
+    const overview = page.getByRole("region", { name: "Results analytics", exact: true });
+    const matchingRuns = overview
+      .getByText("Matching Survey runs", { exact: true })
+      .locator("..")
+      .getByRole("definition");
     await expect(results.getByRole("article")).toHaveCount(2);
+    await expect(matchingRuns).toHaveText("2");
+    await expect(
+      overview
+        .getByText("Surveys represented", { exact: true })
+        .locator("..")
+        .getByRole("definition"),
+    ).toHaveText("1");
+    await expect(
+      overview.getByRole("region", { name: "Activity over time", exact: true }),
+    ).toContainText("Grouped by scheduled collection deadline in UTC.");
+    await expect(overview.getByRole("meter")).toHaveCount(0);
+    await expect(overview.getByText("Participant joins", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/\b\d+ finalized submissions\b/)).toHaveCount(0);
     await expect(
       results.locator(`a[href="/results/surveys/${fixture.collecting.id}"]`),
     ).toHaveCount(0);
@@ -172,9 +196,11 @@ for (const mobile of [false, true]) {
     await expect(results.getByRole("article")).toHaveCount(2);
     await page.getByRole("searchbox", { name: "Search Survey results" }).fill(fixture.ready.code);
     await expect(results.getByRole("article")).toHaveCount(1);
+    await expect(matchingRuns).toHaveText("1");
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
     await page.getByRole("searchbox", { name: "Search Survey results" }).fill(fixture.title);
     await expect(results.getByRole("article")).toHaveCount(2);
+    await expect(matchingRuns).toHaveText("2");
 
     const viewport = page.viewportSize()!;
     await page.setViewportSize({ width: 320, height: 844 });
@@ -187,6 +213,8 @@ for (const mobile of [false, true]) {
       fullPage: true,
     });
     await page.setViewportSize(viewport);
+    page.off("request", trackReportReads);
+    expect(reportReads).toEqual([]);
     await results.locator(`a[href="/results/surveys/${fixture.ready.id}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/results/surveys/${fixture.ready.id}$`));
     await expect(

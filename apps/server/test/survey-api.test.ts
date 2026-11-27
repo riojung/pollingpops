@@ -13,6 +13,7 @@ import {
 import { buildApp } from "../src/app.js";
 import { MemorySessionCache } from "../src/cache.js";
 import { ConfigSchema } from "../src/config.js";
+import { instantiateSurveyStarter } from "../src/starters.js";
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -62,6 +63,116 @@ async function signIn(app: FastifyInstance) {
   return { cookie };
 }
 describe("Survey creator and participant APIs", () => {
+  it("fences Survey Results history by creator workspace and returns only retained room metadata", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const sampledAt = "2026-06-01T00:30:00.000Z";
+    vi.setSystemTime(new Date(sampledAt));
+    const { app, headers, repository, workspaceId } = await fixture(false);
+    const surveys = createSurveyRepository(repository);
+    const surveyId = randomUUID();
+    const draft = instantiateSurveyStarter("training-feedback", "en-CA")!;
+    await surveys.create(workspaceId, surveyId, draft, randomUUID());
+    await surveys.publish(workspaceId, surveyId, 0, randomUUID(), null);
+    const seed = (code: string, closesAt: string, expiresAt: string) =>
+      surveys.createRoom(workspaceId, surveyId, 0, randomUUID(), {
+        code,
+        closesAt,
+        expiresAt,
+        windowDays: 1,
+        participantLimit: 20,
+        joinPasswordHash: "private-verifier",
+      });
+    const retainedUntil = "2026-09-01T00:00:00.000Z";
+    const manual = await seed("1234567", "2026-07-01T00:00:00.000Z", retainedUntil);
+    const closed = await seed("1234568", "2026-05-31T23:59:59.999Z", retainedUntil);
+    await seed("1234569", "2026-06-01T00:31:00.000Z", retainedUntil);
+    await seed("1234570", "2026-05-01T00:00:00.000Z", new Date().toISOString());
+    await surveys.admit(manual.id, "private-guest-token-hash", new Date());
+    await surveys.close(workspaceId, manual.id);
+
+    const endpoints = "/v1/survey-rooms/results";
+    for (const path of [endpoints, `${endpoints}/analytics`, `${endpoints}/sources`]) {
+      const unauthorized = await app.inject({ method: "GET", url: path });
+      expect(unauthorized.statusCode, unauthorized.body).toBe(401);
+      const stale = await app.inject({
+        method: "GET",
+        url: `${path}?expectedWorkspaceId=${randomUUID()}`,
+        headers,
+      });
+      expect(stale.statusCode, stale.body).toBe(409);
+      expect(stale.json().error.code).toBe("CONFLICT");
+    }
+    const list = await app.inject({
+      method: "GET",
+      url: `${endpoints}?expectedWorkspaceId=${workspaceId}&limit=1`,
+      headers,
+    });
+    expect(list.statusCode, list.body).toBe(200);
+    expect(list.headers["cache-control"]).toBe("private, no-store");
+    expect(list.json()).toEqual({
+      items: [
+        {
+          id: manual.id,
+          surveyId,
+          title: draft.title,
+          code: manual.code,
+          closesAt: manual.closesAt,
+          expiresAt: manual.expiresAt,
+        },
+      ],
+      nextCursor: expect.any(String),
+      sampledAt,
+    });
+    const anotherPage = await app.inject({
+      method: "GET",
+      url: `${endpoints}?limit=1&cursor=${list.json().nextCursor}`,
+      headers,
+    });
+    expect(anotherPage.json()).toEqual({
+      items: [
+        {
+          id: closed.id,
+          surveyId,
+          title: draft.title,
+          code: closed.code,
+          closesAt: closed.closesAt,
+          expiresAt: closed.expiresAt,
+        },
+      ],
+      nextCursor: null,
+      sampledAt,
+    });
+    const totals = await app.inject({ method: "GET", url: `${endpoints}/analytics`, headers });
+    expect(totals.headers["cache-control"]).toBe("private, no-store");
+    expect(totals.json()).toEqual({
+      rooms: 2,
+      surveys: 1,
+      activity: {
+        month: [
+          { start: "2026-05-01", count: 1 },
+          { start: "2026-07-01", count: 1 },
+        ],
+        quarter: [
+          { start: "2026-04-01", count: 1 },
+          { start: "2026-07-01", count: 1 },
+        ],
+      },
+      refreshAfterMs: 60_000,
+    });
+    const sources = await app.inject({ method: "GET", url: `${endpoints}/sources`, headers });
+    expect(sources.headers["cache-control"]).toBe("private, no-store");
+    expect(sources.json()).toEqual({
+      sources: [{ id: surveyId, title: draft.title }],
+      refreshAfterMs: 60_000,
+    });
+    const invalid = await app.inject({
+      method: "GET",
+      url: `${endpoints}/analytics?search=%00`,
+      headers,
+    });
+    expect(invalid.statusCode, invalid.body).toBe(400);
+  });
+
   // Nine real scrypt derivations cover creation retries and both admission paths on shared CI CPUs.
   it("gates protected rooms, admits exact passwords through codes and direct links, and preserves bearer resume", async () => {
     const { app, headers, repository, workspaceId } = await fixture();

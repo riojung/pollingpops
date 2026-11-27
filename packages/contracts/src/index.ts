@@ -3587,6 +3587,38 @@ export const ReportHistoryAnalyticsSchema = ReportHistoryTotalsSchema.extend({
   activity: HistoryActivitySchema,
 });
 export type ReportHistoryAnalytics = z.infer<typeof ReportHistoryAnalyticsSchema>;
+
+export const SurveyResultSummarySchema = z.strictObject({
+  id: z.string().uuid(),
+  surveyId: z.string().uuid(),
+  title: z.string(),
+  code: z.string().regex(/^\d{7}$/),
+  closesAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+});
+export type SurveyResultSummary = z.infer<typeof SurveyResultSummarySchema>;
+
+export const SurveyResultsPageSchema = z.strictObject({
+  items: z.array(SurveyResultSummarySchema),
+  nextCursor: z.string().nullable(),
+  sampledAt: z.string().datetime(),
+});
+export type SurveyResultsPage = z.infer<typeof SurveyResultsPageSchema>;
+
+export const SurveyResultsAnalyticsSchema = z.strictObject({
+  rooms: z.number().int().nonnegative(),
+  surveys: z.number().int().nonnegative(),
+  activity: HistoryActivitySchema,
+  refreshAfterMs: z.number().int().nonnegative().nullable(),
+});
+export type SurveyResultsAnalytics = z.infer<typeof SurveyResultsAnalyticsSchema>;
+
+export const SurveyResultsSourcesSchema = z.strictObject({
+  sources: z.array(SurveyResultSummarySchema.pick({ id: true, title: true })),
+  refreshAfterMs: z.number().int().nonnegative().nullable(),
+});
+export type SurveyResultsSources = z.infer<typeof SurveyResultsSourcesSchema>;
+
 export const FollowupHistoryAnalyticsSchema = z.object({
   open: z.number().int().nonnegative(),
   scheduled: z.number().int().nonnegative(),

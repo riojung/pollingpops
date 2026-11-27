@@ -2,7 +2,14 @@ import { workspaceFeatureEnabled } from "./feature-policy.js";
 import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { StarterIdSchema, SupportedLocaleSchema } from "@openround/contracts";
+import {
+  SessionHistorySearchSchema,
+  StarterIdSchema,
+  SupportedLocaleSchema,
+  SurveyResultsAnalyticsSchema,
+  SurveyResultsPageSchema,
+  SurveyResultsSourcesSchema,
+} from "@openround/contracts";
 import {
   SurveyDraftSchema,
   SurveyMutationSchema,
@@ -21,6 +28,7 @@ import {
 } from "@openround/db";
 import type { AppConfig } from "./config.js";
 import type { AuthService } from "./auth.js";
+import { requireExpectedWorkspace } from "./customer-account.js";
 import {
   entitlementsFor,
   workspaceEntitlements,
@@ -36,6 +44,7 @@ import {
 } from "./starters.js";
 import { STARTER_CONTENT_VERSION, surveyCreationCopy } from "./starter-localization.js";
 import { StarterLocaleRequestSchema } from "./starter-locale-request.js";
+import { HistoryDateRangeQuery, HistoryPaginationQuery, historyCursor } from "./history-query.js";
 
 const Id = z.object({ id: z.string().uuid() }).strict();
 const Key = z
@@ -57,6 +66,31 @@ const Page = z
     limit: z.coerce.number().int().min(1).max(50).default(50),
   })
   .strict();
+const SurveyResultsFiltersSchema = z.object({
+  ...HistoryDateRangeQuery,
+  surveyId: z.string().uuid().optional(),
+  search: SessionHistorySearchSchema.refine(
+    (value) => !value.includes("\u0000"),
+    "Search cannot contain a null character",
+  ).optional(),
+});
+const SurveyResultsQuerySchema = SurveyResultsFiltersSchema.extend(HistoryPaginationQuery);
+
+function surveyResultsFilters({
+  from,
+  to,
+  surveyId,
+  search,
+}: z.infer<typeof SurveyResultsFiltersSchema>) {
+  return {
+    now: new Date(),
+    from: from ? new Date(from) : undefined,
+    to: to ? new Date(to) : undefined,
+    surveyId,
+    search,
+  };
+}
+
 const Password = z.string().max(128).optional();
 const Join = z.object({ code: z.string().regex(/^\d{7}$/), password: Password }).strict();
 const DirectJoin = z.object({ password: Password }).strict();
@@ -478,6 +512,48 @@ export async function registerSurveyRoutes(
         rooms: page.map(publicRoom),
         nextCursor: rooms.length > input.limit ? page.at(-1)!.id : null,
       };
+    });
+    scoped.get("/v1/survey-rooms/results", async (request, reply) => {
+      const actor = await creator(request, reply);
+      if (!actor) return;
+      requireExpectedWorkspace(request.query, actor.workspaceId);
+      const query = SurveyResultsQuerySchema.parse(request.query);
+      const filters = surveyResultsFilters(query);
+      const { items, next } = await deps.surveys.resultsHistory.list(actor.workspaceId, {
+        ...filters,
+        limit: query.limit,
+        cursor: query.cursor
+          ? { id: query.cursor.id, closesAt: query.cursor.createdAt }
+          : undefined,
+      });
+      return SurveyResultsPageSchema.parse({
+        items,
+        sampledAt: filters.now.toISOString(),
+        nextCursor: next
+          ? historyCursor({
+              id: next.id,
+              createdAt: new Date(next.closesAt),
+              cursorCreatedAt: next.closesAt,
+            })
+          : null,
+      });
+    });
+    scoped.get("/v1/survey-rooms/results/analytics", async (request, reply) => {
+      const actor = await creator(request, reply);
+      if (!actor) return;
+      requireExpectedWorkspace(request.query, actor.workspaceId);
+      const query = SurveyResultsFiltersSchema.parse(request.query);
+      return SurveyResultsAnalyticsSchema.parse(
+        await deps.surveys.resultsHistory.analytics(actor.workspaceId, surveyResultsFilters(query)),
+      );
+    });
+    scoped.get("/v1/survey-rooms/results/sources", async (request, reply) => {
+      const actor = await creator(request, reply);
+      if (!actor) return;
+      requireExpectedWorkspace(request.query, actor.workspaceId);
+      return SurveyResultsSourcesSchema.parse(
+        await deps.surveys.resultsHistory.sources(actor.workspaceId, new Date()),
+      );
     });
     const admit = async (
       request: Parameters<AuthService["requireCreator"]>[0],

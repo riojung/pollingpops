@@ -3,7 +3,6 @@ import {
   evidencePercent,
   practiceOverview,
   presentationOverview,
-  resultsActivity,
   roundOverview,
   surveyOverview,
   utcHistoryActivity,
@@ -84,41 +83,6 @@ describe("summaries of shown Results evidence", () => {
       count: 3,
       sources: 2,
     });
-  });
-});
-
-describe("activity periods for shown Results", () => {
-  it("groups records by their local month and skips months with no records", () => {
-    const endOfJanuary = new Date(2026, 0, 31, 23, 59, 59).toISOString();
-    expect(resultsActivity(["2026-03-01", "2026-01-01", endOfJanuary], "month")).toEqual([
-      { start: new Date(2026, 0, 1), end: new Date(2026, 0, 31), count: 2 },
-      { start: new Date(2026, 2, 1), end: new Date(2026, 2, 31), count: 1 },
-    ]);
-  });
-
-  it("returns the latest six represented periods in chronological order", () => {
-    const dates = ["12", "03", "07", "05", "01", "09", "08"].map((month) => `2026-${month}-14`);
-    expect(resultsActivity(dates, "month").map(({ start }) => start.getMonth())).toEqual([
-      2, 4, 6, 7, 8, 11,
-    ]);
-  });
-
-  it("uses inclusive calendar quarter boundaries across a year change", () => {
-    expect(
-      resultsActivity(["2026-12-31", "2027-01-01", "2027-03-31", "2027-04-01"], "quarter"),
-    ).toEqual([
-      { start: new Date(2026, 9, 1), end: new Date(2026, 11, 31), count: 1 },
-      { start: new Date(2027, 0, 1), end: new Date(2027, 2, 31), count: 2 },
-      { start: new Date(2027, 3, 1), end: new Date(2027, 5, 30), count: 1 },
-    ]);
-  });
-
-  it("ignores invalid dates and leaves activity empty when none are available", () => {
-    expect(resultsActivity(["", "invalid", "2026-13-01", "2026-02-30"], "quarter")).toEqual([]);
-    expect(resultsActivity([], "month")).toEqual([]);
-    expect(resultsActivity(["invalid", "2024-02-29"], "month")).toEqual([
-      { start: new Date(2024, 1, 1), end: new Date(2024, 1, 29), count: 1 },
-    ]);
   });
 });
 

@@ -1648,12 +1648,23 @@ Open **Results → Surveys** to browse closed runs whose results remain retained
 explicit closure or their collection deadline; open and expired runs stay out of this results list.
 Search by the recorded Survey title or run code, select a source Survey, filter by collection
 deadline, and choose **Grid** or **List**. Results keeps its own workspace layout preference.
+While the tab is open, Results checks for updates automatically at the next known scheduled
+collection deadline or retention expiry.
 
-**View Results** opens `/results/surveys/{runId}`. **Survey analytics** shows finalized submissions
-and how many questions have results. **Question coverage** shows what share of finalized submissions
-answered each released question. Select a question to jump to its breakdown. Each option's share
-uses the respondents who answered that question, so multi-select shares can add up to more than
-100%. Rating questions with a complete histogram also show an average.
+**Matching Survey runs** and **Surveys represented** count runs and distinct Surveys across all
+pages of retained results matching your filters. Group **Activity over time** by the UTC month or
+quarter of the scheduled collection deadline. The chart shows up to six recent periods with
+matching runs. Use the date filters, which follow your local calendar, to see earlier periods.
+**Load More** adds rows, and **Retry Survey analytics** retries the totals and chart
+separately from the list. The Survey filter includes sources across the workspace's retained
+results. Use **Retry Survey options** if those options fail to load.
+
+**View Results** opens `/results/surveys/{runId}`. When results are available under the report's
+privacy rules, **Survey analytics** shows finalized submissions and how many questions have results.
+**Question coverage** shows what share of finalized submissions answered each released question.
+Select a question to jump to its breakdown. Each option's share uses the respondents who answered
+that question, so multi-select shares can add up to more than 100%. Rating questions with a complete
+histogram also show an average.
 
 Question distributions require at least five finalized respondents for the run and five answers
 to the question. Open runs and small samples show a status instead of charts. Conditional Survey
@@ -1916,16 +1927,14 @@ the six latest UTC months or quarters with matching session creation dates. The 
 filter offers sources from retained sessions across pages. **Load More** loads older matching
 rows. **Retry Presentation analytics** retries totals and activity separately from the list.
 
-Survey totals and charts use loaded runs, grouped by the scheduled collection deadline.
-Shortcuts open ready Round Analytics, available Presentation reports, retained Survey results,
-or practice details.
+See [Review Survey outcomes](#review-survey-outcomes) for the **Surveys** view. The shortcuts on
+each view use loaded rows to open ready Round Analytics, available Presentation reports, retained
+Survey results, or practice details.
 
 Round recovery combines recovered and eligible opportunities from ready reports. Practice completion
 uses completed attempts out of all recorded attempts in the matching runs. Round and Presentation
-join counts add participant records across the included sessions. Survey widgets show runs and the
-Surveys they represent.
-Open an individual Survey report for response counts and question results. No-evidence states remain
-separate from a measured zero.
+join counts add participant records across the included sessions. No-evidence states remain separate
+from a measured zero.
 
 Finished Presentation reports include **Session insights** for the session's frozen published
 version. **Overview** shows participant entries, accepted responses, blocks presented, and when

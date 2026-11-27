@@ -11,6 +11,11 @@ import {
   type RefObject,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type {
+  SurveyResultSummary,
+  SurveyResultsPage,
+  SurveyResultsSources,
+} from "@openround/contracts";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
 import {
@@ -18,7 +23,6 @@ import {
   buildHistoryQuery,
   type HistoryQueryFilters,
 } from "../../lib/history-query";
-import type { SurveySessionSummary } from "../../lib/session-controls";
 import { formatDateTime, formatNumber, pluralCategory } from "../../lib/i18n/format";
 import { WorkspaceProvider, useWorkspace } from "../../components/workspace/workspace-provider";
 import { WorkspaceShell } from "../../components/workspace/workspace-shell";
@@ -44,6 +48,7 @@ import {
   PracticeResultsOverview,
   PresentationResultsOverview,
   RoundResultsOverview,
+  useSurveyResultsAnalytics,
 } from "./history-results-overview";
 import {
   evidencePercent,
@@ -124,40 +129,57 @@ function useHistorySearch(input: string) {
   return search ? debouncedSearch : "";
 }
 
-function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
+function readHistoryPage<T>(path: string, signal?: AbortSignal) {
+  return apiFetch<CursorPage<T>>(path, { signal });
+}
+
+function useHistoryPage<T>(
+  path: string,
+  filters: HistoryQueryFilters,
+  {
+    revision = 0,
+    readPage = readHistoryPage<T>,
+  }: { revision?: number; readPage?: typeof readHistoryPage<T> } = {},
+) {
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
-  const { status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId } = filters;
-  const queryKey = `${workspaceId}\u0000${path}?${buildHistoryQuery(filters)}`;
+  const pageQuery = buildHistoryQuery(filters).toString();
+  const queryKey = `${workspaceId}\u0000${path}?${pageQuery}`;
   const activeQueryKey = useRef(queryKey);
   activeQueryKey.current = queryKey;
+  const activeRevision = useRef(revision);
+  activeRevision.current = revision;
+  const refreshedRevision = useRef(revision);
   const loadMoreController = useRef<AbortController | null>(null);
+  const refreshController = useRef<AbortController | null>(null);
   const [page, setPage] = useState<{
     key: string;
     items: T[];
     nextCursor: string | null;
-    loaded: boolean;
+    pageCount: number;
   }>({
     key: "",
     items: [],
     nextCursor: null,
-    loaded: false,
+    pageCount: 0,
   });
   const [fetching, setFetching] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [failure, setFailure] = useState<{
     key: string;
     message: string;
-    kind: "initial" | "more";
+    kind: "initial" | "more" | "refresh";
   }>({ key: "", message: "", kind: "initial" });
   const [reload, setReload] = useState(0);
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
   const fetchPage = useCallback(
-    (cursor?: string, signal?: AbortSignal) =>
-      apiFetch<CursorPage<T>>(
-        `${path}?${buildHistoryQuery({ status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId }, cursor)}`,
-        { signal },
-      ),
-    [path, status, quizId, presentationId, fromDate, toDate, search, expectedWorkspaceId],
+    (cursor?: string, signal?: AbortSignal) => {
+      const params = new URLSearchParams(pageQuery);
+      if (cursor) params.set("cursor", cursor);
+      return readPage(`${path}?${params}`, signal);
+    },
+    [path, pageQuery, readPage],
   );
 
   useEffect(() => {
@@ -165,20 +187,24 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
     const controller = new AbortController();
     loadMoreController.current?.abort();
     loadMoreController.current = null;
+    refreshController.current?.abort();
+    refreshController.current = null;
+    refreshedRevision.current = activeRevision.current;
     setFetching(true);
     setLoadingMore(false);
+    setRefreshing(false);
     setFailure({ key: queryKey, message: "", kind: "initial" });
     void fetchPage(undefined, controller.signal)
       .then((response) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
-        setPage({ key: queryKey, ...response, loaded: true });
+        setPage({ key: queryKey, ...response, pageCount: 1 });
       })
       .catch((caught) => {
         if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
         setPage((current) =>
           current.key === queryKey
             ? current
-            : { key: queryKey, items: [], nextCursor: null, loaded: false },
+            : { key: queryKey, items: [], nextCursor: null, pageCount: 0 },
         );
         setFailure({ key: queryKey, message: humanError(caught), kind: "initial" });
       })
@@ -188,11 +214,78 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
     return () => {
       controller.abort();
       loadMoreController.current?.abort();
+      refreshController.current?.abort();
     };
   }, [fetchPage, queryKey, workspaceId, reload]);
 
+  useEffect(() => {
+    if (
+      revision === refreshedRevision.current ||
+      fetching ||
+      loadingMore ||
+      refreshing ||
+      loadMoreController.current ||
+      refreshController.current ||
+      page.key !== queryKey ||
+      page.pageCount === 0
+    )
+      return;
+
+    const controller = new AbortController();
+    refreshController.current = controller;
+    refreshedRevision.current = revision;
+    setRefreshing(true);
+    const isCurrent = () => !controller.signal.aborted && activeQueryKey.current === queryKey;
+
+    async function refreshLoadedPages() {
+      // Rebuild the same slice from fresh cursors and publish it as one update.
+      // A closure or deletion can move rows across the previous page boundaries.
+      const items: T[] = [];
+      let nextCursor: string | null = null;
+      let pageCount = 0;
+      do {
+        const response = await fetchPage(nextCursor ?? undefined, controller.signal);
+        if (!isCurrent()) return;
+        items.push(...response.items);
+        nextCursor = response.nextCursor;
+        pageCount++;
+      } while (nextCursor && pageCount < page.pageCount);
+      setPage({ key: queryKey, items, nextCursor, pageCount });
+      setFailure({ key: queryKey, message: "", kind: "refresh" });
+    }
+
+    void refreshLoadedPages()
+      .catch((caught) => {
+        if (isCurrent())
+          setFailure({ key: queryKey, message: humanError(caught), kind: "refresh" });
+      })
+      .finally(() => {
+        if (refreshController.current === controller) {
+          refreshController.current = null;
+          if (isCurrent()) setRefreshing(false);
+        }
+      });
+  }, [
+    fetchPage,
+    fetching,
+    loadingMore,
+    page.key,
+    page.pageCount,
+    queryKey,
+    refreshing,
+    refreshAttempt,
+    revision,
+  ]);
+
   async function more() {
-    if (fetching || page.key !== queryKey || !page.nextCursor || loadMoreController.current) return;
+    if (
+      fetching ||
+      page.key !== queryKey ||
+      !page.nextCursor ||
+      loadMoreController.current ||
+      refreshController.current
+    )
+      return;
     const controller = new AbortController();
     loadMoreController.current = controller;
     setLoadingMore(true);
@@ -204,7 +297,7 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
         key: queryKey,
         items: [...current.items, ...response.items],
         nextCursor: response.nextCursor,
-        loaded: true,
+        pageCount: current.pageCount + 1,
       }));
     } catch (caught) {
       if (controller.signal.aborted || activeQueryKey.current !== queryKey) return;
@@ -219,21 +312,59 @@ function useHistoryPage<T>(path: string, filters: HistoryQueryFilters) {
 
   return {
     items: page.key === queryKey ? page.items : [],
-    loaded: page.key === queryKey && page.loaded,
+    loaded: page.key === queryKey && page.pageCount > 0,
     nextCursor: page.key === queryKey ? page.nextCursor : null,
     loading: fetching || page.key !== queryKey,
     loadingMore,
+    refreshing,
     error: failure.key === queryKey ? failure.message : "",
     retry: () => {
-      if (fetching || failure.key !== queryKey || !failure.message) return;
+      if (fetching || refreshing || failure.key !== queryKey || !failure.message) return;
       if (failure.kind === "more") void more();
-      else {
+      else if (failure.kind === "refresh") {
+        refreshedRevision.current = revision - 1;
+        setRefreshAttempt((value) => value + 1);
+      } else {
         setFetching(true);
         setFailure({ key: queryKey, message: "", kind: "initial" });
         setReload((value) => value + 1);
       }
     },
     more,
+  };
+}
+
+function useHistoryMoreFocus(
+  query: string,
+  count: number,
+  loadingMore: boolean,
+  collection: RefObject<HTMLElement | null>,
+  panel: RefObject<HTMLElement | null>,
+) {
+  const pending = useRef<{ query: string; count: number; button: HTMLButtonElement } | null>(null);
+
+  useEffect(() => {
+    const queued = pending.current;
+    if (!queued) return;
+    if (queued.query !== query) {
+      pending.current = null;
+      return;
+    }
+    if (loadingMore) return;
+    pending.current = null;
+    const triggerRemoved = !queued.button.isConnected;
+    if (
+      document.activeElement === queued.button ||
+      (triggerRemoved && document.activeElement === document.body)
+    ) {
+      const firstAdded = collection.current?.querySelectorAll<HTMLElement>("article")[queued.count];
+      if (firstAdded) firstAdded.focus();
+      else if (triggerRemoved) panel.current?.focus();
+    }
+  }, [query, count, loadingMore, collection, panel]);
+
+  return (button: HTMLButtonElement) => {
+    if (button?.matches(":focus")) pending.current = { query, count, button };
   };
 }
 
@@ -890,9 +1021,6 @@ function PresentationResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
   const collection = useRef<HTMLElement>(null);
-  const moreFocus = useRef<{ query: string; count: number; button: HTMLButtonElement } | null>(
-    null,
-  );
   const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
@@ -924,25 +1052,13 @@ function PresentationResultList(listControls: ListControls) {
     more,
   } = useHistoryPage<PresentationResultSummary>("/v1/presentation-sessions/results", filters);
 
-  useEffect(() => {
-    const queued = moreFocus.current;
-    if (!queued) return;
-    if (queued.query !== analyticsQuery) {
-      moreFocus.current = null;
-      return;
-    }
-    if (loadingMore) return;
-    moreFocus.current = null;
-    const triggerRemoved = !queued.button.isConnected;
-    if (
-      document.activeElement === queued.button ||
-      (triggerRemoved && document.activeElement === document.body)
-    ) {
-      const firstAdded = collection.current?.querySelectorAll<HTMLElement>("article")[queued.count];
-      if (firstAdded) firstAdded.focus();
-      else if (triggerRemoved) panel.current?.focus();
-    }
-  }, [analyticsQuery, loadingMore, nextCursor, sessions.length]);
+  const rememberLoadMoreFocus = useHistoryMoreFocus(
+    analyticsQuery,
+    sessions.length,
+    loadingMore,
+    collection,
+    panel,
+  );
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -1143,10 +1259,7 @@ function PresentationResultList(listControls: ListControls) {
             type="button"
             onClick={(event) => {
               if (loadingMore) return;
-              const button = event.currentTarget;
-              if (button?.matches(":focus")) {
-                moreFocus.current = { query: analyticsQuery, count: sessions.length, button };
-              }
+              rememberLoadMoreFocus(event.currentTarget);
               void more();
             }}
           >
@@ -1158,117 +1271,123 @@ function PresentationResultList(listControls: ListControls) {
   );
 }
 
+type TimedSurveyResult = SurveyResultSummary & { clientExpiresAt: number };
+
+async function readSurveyHistoryPage(path: string, signal?: AbortSignal) {
+  const requestedAt = Date.now();
+  const { sampledAt, items, nextCursor } = await apiFetch<SurveyResultsPage>(path, { signal });
+  const offset = requestedAt - Date.parse(sampledAt);
+  return {
+    items: items.map((room) => ({ ...room, clientExpiresAt: offset + Date.parse(room.expiresAt) })),
+    nextCursor,
+  };
+}
+
 function SurveyResultList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const panel = useRef<HTMLElement>(null);
-  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
+  const collection = useRef<HTMLElement>(null);
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId ?? "";
-  const activeWorkspace = useRef(workspaceId);
-  activeWorkspace.current = workspaceId;
-  const [snapshot, setSnapshot] = useState<{
-    workspaceId: string;
-    rooms: SurveySessionSummary[];
-    error: string;
-    loaded: boolean;
-  }>({ workspaceId: "", rooms: [], error: "", loaded: false });
+  const search = useHistorySearch(listControls.search);
+  const [grouping, setGrouping] = useState<ResultsActivityGrouping>("month");
   const [sourceId, setSourceId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [displayPage, setDisplayPage] = useState({ key: "", limit: 25 });
-  const [now, setNow] = useState(() => Date.now());
-  const [reload, setReload] = useState(0);
-  const [fetching, setFetching] = useState(true);
-  const loadingError = t("pages.results.surveyLoadError");
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const [revision, setRevision] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
+  const [sourceAttempt, setSourceAttempt] = useState(0);
+  const [sourceSnapshot, setSourceSnapshot] = useState<{
+    revision: number;
+    sources: RoundFilterOption[];
+    refreshAt: number | null;
+    unavailable: boolean;
+  } | null>(null);
+  const filters = {
+    status: "all",
+    surveyId: sourceId,
+    fromDate,
+    toDate,
+    search,
+    expectedWorkspaceId: workspaceId,
+  };
+  const analyticsQuery = buildHistoryFilterQuery(filters);
+  const { items, loaded, nextCursor, loading, loadingMore, refreshing, error, retry, more } =
+    useHistoryPage<TimedSurveyResult>("/v1/survey-rooms/results", filters, {
+      revision,
+      readPage: readSurveyHistoryPage,
+    });
+  const rooms = items.filter((room) => room.clientExpiresAt > clock);
+  const {
+    analytics,
+    refreshAt: analyticsRefreshAt,
+    onAnalyticsRetry,
+  } = useSurveyResultsAnalytics(workspaceId ? analyticsQuery : null, revision, clock);
+  const rememberLoadMoreFocus = useHistoryMoreFocus(
+    analyticsQuery,
+    rooms.length,
+    loadingMore,
+    collection,
+    panel,
+  );
 
   useEffect(() => {
     if (!workspaceId) return;
     const controller = new AbortController();
-    const isCurrent = () => !controller.signal.aborted && activeWorkspace.current === workspaceId;
-    setFetching(true);
-    setSnapshot((current) =>
-      current.workspaceId === workspaceId ? { ...current, error: "" } : current,
-    );
-    async function load() {
-      const rooms = new Map<string, SurveySessionSummary>();
-      const seenCursors = new Set<string>();
-      let cursor: string | null = null;
-      do {
-        if (cursor) {
-          if (seenCursors.has(cursor)) throw new Error(loadingError);
-          seenCursors.add(cursor);
-        }
-        const params = new URLSearchParams({ limit: "50" });
-        if (cursor) params.set("cursor", cursor);
-        const page = await apiFetch<{
-          rooms: SurveySessionSummary[];
-          nextCursor: string | null;
-        }>(`/v1/survey-rooms?${params}`, { signal: controller.signal });
-        if (!isCurrent()) return;
-        for (const room of page.rooms) rooms.set(room.id, room);
-        cursor = page.nextCursor;
-      } while (cursor);
-      if (isCurrent())
-        setSnapshot({ workspaceId, rooms: [...rooms.values()], error: "", loaded: true });
-    }
-    void load()
-      .catch((caught) => {
-        if (isCurrent())
-          setSnapshot((current) => ({
-            workspaceId,
-            rooms: current.workspaceId === workspaceId ? current.rooms : [],
-            error: humanError(caught),
-            loaded: current.workspaceId === workspaceId && current.loaded,
-          }));
+    const requestedAt = Date.now();
+    void apiFetch<SurveyResultsSources>(
+      `/v1/survey-rooms/results/sources?expectedWorkspaceId=${encodeURIComponent(workspaceId)}`,
+      { signal: controller.signal },
+    )
+      .then(({ sources, refreshAfterMs }) => {
+        if (controller.signal.aborted) return;
+        setSourceSnapshot({
+          revision,
+          sources: [...sources].sort((left, right) =>
+            left.title.localeCompare(right.title, locale),
+          ),
+          refreshAt: refreshAfterMs == null ? null : requestedAt + refreshAfterMs,
+          unavailable: false,
+        });
       })
-      .finally(() => {
-        if (isCurrent()) setFetching(false);
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSourceSnapshot({ revision, sources: [], refreshAt: null, unavailable: true });
       });
     return () => controller.abort();
-  }, [loadingError, workspaceId, reload]);
+  }, [workspaceId, revision, sourceAttempt, locale]);
 
-  const loading = fetching || !workspaceId || snapshot.workspaceId !== workspaceId;
-  const error = snapshot.workspaceId === workspaceId ? snapshot.error : "";
-  const retained = (snapshot.workspaceId === workspaceId ? snapshot.rooms : [])
-    .filter(
-      (room) =>
-        (room.closed || new Date(room.closesAt).getTime() <= now) &&
-        new Date(room.expiresAt).getTime() > now,
-    )
-    .sort(
-      (left, right) =>
-        new Date(right.closesAt).getTime() - new Date(left.closesAt).getTime() ||
-        left.id.localeCompare(right.id),
-    );
-  const sources = Array.from(
-    new Map(
-      retained.map((room) => [room.surveyId, { id: room.surveyId, title: room.title }]),
-    ).values(),
-  ).sort((left, right) => left.title.localeCompare(right.title));
-  const search = listControls.search.trim().toLocaleLowerCase();
-  const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : -Infinity;
-  const to = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : Infinity;
-  const filtered = retained.filter((room) => {
-    const deadline = new Date(room.closesAt).getTime();
-    return (
-      (!search ||
-        room.title.toLocaleLowerCase().includes(search) ||
-        room.code.toLocaleLowerCase().includes(search)) &&
-      (sourceId === "all" || room.surveyId === sourceId) &&
-      deadline >= from &&
-      deadline <= to
-    );
-  });
-  const filterKey = JSON.stringify([workspaceId, search, sourceId, fromDate, toDate]);
-  const displayLimit = displayPage.key === filterKey ? displayPage.limit : 25;
-  const visible = filtered.slice(0, displayLimit);
-  const hasMore = filtered.length > displayLimit;
-  const hasFilters = Boolean(search || sourceId !== "all" || fromDate || toDate);
+  const currentSources = sourceSnapshot?.revision === revision ? sourceSnapshot : null;
+  const sources = currentSources?.sources ?? [];
+  const sourceOptions =
+    sourceId === "all" || sources.some(({ id }) => id === sourceId)
+      ? sources
+      : [...sources, { id: sourceId, title: t("resultsOverview.selectedSurveySource") }];
+  const loadedExpiry = rooms.reduce(
+    (expiry, room) => Math.min(expiry, room.clientExpiresAt),
+    Infinity,
+  );
+  const nextChange = Math.min(
+    currentSources?.refreshAt ?? Infinity,
+    analyticsRefreshAt,
+    loadedExpiry,
+  );
+
+  useEffect(() => {
+    if (!Number.isFinite(nextChange)) return;
+    // Each endpoint uses its own clock sample. A later read may have already
+    // crossed a lifecycle boundary that still matters for another snapshot.
+    const delay = Math.min(Math.max(1_000, nextChange - Date.now()), 2_147_483_647);
+    const timer = window.setTimeout(() => {
+      setClock(Date.now());
+      setRevision((current) => current + 1);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [nextChange, revision]);
+
+  const hasFilters = Boolean(
+    listControls.search.trim() || sourceId !== "all" || fromDate || toDate,
+  );
 
   function clearFilters() {
     setSourceId("all");
@@ -1277,28 +1396,21 @@ function SurveyResultList(listControls: ListControls) {
     listControls.onSearchClear();
   }
 
-  function retryHistory() {
-    if (loading || !error) return;
-    setFetching(true);
-    setSnapshot((current) => ({ ...current, error: "" }));
-    setReload((value) => value + 1);
-  }
-
   return (
-    <ResultsPanel view="surveys" busy={loading} panelRef={panel}>
+    <ResultsPanel view="surveys" panelRef={panel}>
       <HistoryFilters
         listControls={listControls}
-        count={visible.length}
-        countAvailable={snapshot.workspaceId === workspaceId && snapshot.loaded}
+        count={rooms.length}
+        countAvailable={loaded}
         loading={loading}
-        hasMore={hasMore}
+        hasMore={Boolean(nextCursor)}
         hideStatus
         status="all"
         statusLabel=""
         statusOptions={[]}
         onStatusChange={() => undefined}
         quizId={sourceId}
-        rounds={sources}
+        rounds={sourceOptions}
         sourceLabel={t("pages.common.survey")}
         allSourcesLabel={t("pages.sessions.allSurveys")}
         fromDate={fromDate}
@@ -1310,11 +1422,29 @@ function SurveyResultList(listControls: ListControls) {
         onToDateChange={setToDate}
         onClear={clearFilters}
       />
-      {!loading && !error && visible.length > 0 ? (
+      {currentSources?.unavailable ? (
+        <div className={resultStyles.loadError}>
+          <p role="alert">{t("resultsOverview.surveySourcesUnavailable")}</p>
+          <button
+            className="button-quiet"
+            type="button"
+            onClick={() => {
+              panel.current?.focus();
+              setSourceSnapshot(null);
+              setSourceAttempt((current) => current + 1);
+            }}
+          >
+            {t("resultsOverview.retrySurveySources")}
+          </button>
+        </div>
+      ) : null}
+      {workspaceId ? (
         <ResultsOverview
           kind="surveys"
-          items={visible}
-          hasMore={hasMore}
+          items={rooms}
+          analytics={analytics}
+          onAnalyticsRetry={onAnalyticsRetry}
+          hasMore={Boolean(nextCursor)}
           grouping={grouping}
           onGroupingChange={setGrouping}
         />
@@ -1323,18 +1453,18 @@ function SurveyResultList(listControls: ListControls) {
         <ResultsLoading
           label={t("pages.results.loadingSurveys")}
           layout={listControls.layout}
-          hasRows={visible.length > 0}
+          hasRows={rooms.length > 0}
         />
       ) : null}
-      {error && !loading ? (
+      {error && !loading && !loadingMore ? (
         <ResultsLoadError
           error={error}
-          onRetry={retryHistory}
+          onRetry={retry}
           panelRef={panel}
-          retained={retained.length > 0}
+          retained={rooms.length > 0}
         />
       ) : null}
-      {!loading && !error && !visible.length ? (
+      {!loading && !error && !rooms.length ? (
         <div className={styles.emptyState}>
           <h2>{t(hasFilters ? "pages.results.noMatches" : "pages.results.emptySurveysTitle")}</h2>
           {hasFilters ? (
@@ -1355,13 +1485,17 @@ function SurveyResultList(listControls: ListControls) {
         className={resultStyles.collection}
         data-view={listControls.layout}
         aria-label={t("pages.results.surveyResults")}
+        aria-busy={loading || loadingMore}
+        ref={collection}
       >
-        {visible.map((room) => (
+        {rooms.map((room) => (
           <article
             className={`${styles.listCard} ${resultStyles.card} ${resultStyles.surveyCard} ${signals.surface}`}
+            aria-label={room.title}
             data-kind="survey"
             data-state-tone={workspaceStateTone("closed")}
             key={room.id}
+            tabIndex={-1}
           >
             <div className={`${styles.rowTopline} ${resultStyles.topline}`}>
               <div>
@@ -1397,14 +1531,19 @@ function SurveyResultList(listControls: ListControls) {
           </article>
         ))}
       </section>
-      {hasMore ? (
+      {nextCursor ? (
         <div className={styles.loadMore}>
           <button
             className="button-quiet"
-            onClick={() => setDisplayPage({ key: filterKey, limit: displayLimit + 25 })}
+            aria-disabled={loadingMore || refreshing}
+            onClick={(event) => {
+              if (loadingMore || refreshing) return;
+              rememberLoadMoreFocus(event.currentTarget);
+              void more();
+            }}
             type="button"
           >
-            {t("pages.results.loadMore")}
+            {loadingMore ? t("pages.common.loading") : t("pages.results.loadMore")}
           </button>
         </div>
       ) : null}

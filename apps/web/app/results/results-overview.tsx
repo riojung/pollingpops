@@ -2,6 +2,8 @@ import type {
   FollowupHistoryAnalytics,
   PresentationResultsAnalytics,
   ReportHistoryAnalytics,
+  SurveyResultSummary,
+  SurveyResultsAnalytics,
 } from "@openround/contracts";
 import { useRef, type ReactNode } from "react";
 import Link from "next/link";
@@ -12,13 +14,11 @@ import {
   workspaceStateTone,
 } from "../../components/workspace/workspace-signals";
 import { formatDate, formatNumber } from "../../lib/i18n/format";
-import type { SurveySessionSummary } from "../../lib/session-controls";
 import {
   evidencePercent,
   practiceOverview,
   practiceTotalsOverview,
   presentationOverview,
-  resultsActivity,
   roundOverview,
   surveyOverview,
   utcHistoryActivity,
@@ -108,7 +108,12 @@ type Props = ActivityGroupingControls & { hasMore?: boolean } & (
         analytics: PresentationResultsAnalytics | "loading" | "unavailable";
         onAnalyticsRetry: () => void;
       }
-    | { kind: "surveys"; items: readonly SurveySessionSummary[] }
+    | {
+        kind: "surveys";
+        items: readonly SurveyResultSummary[];
+        analytics: SurveyResultsAnalytics | "loading" | "unavailable";
+        onAnalyticsRetry: () => void;
+      }
   );
 
 interface ResultLink {
@@ -120,21 +125,23 @@ interface ResultLink {
 function ResultsActivity({
   periods,
   dateBasis,
-  timeZone,
   empty,
   grouping,
   onGroupingChange,
 }: ActivityGroupingControls & {
   periods: readonly ResultsActivityPeriod[];
   dateBasis: string;
-  timeZone?: "UTC";
   empty?: string;
 }) {
   const { locale, t } = useLocale();
   if (periods.length === 0 && !empty) return null;
 
   const max = Math.max(1, ...periods.map((period) => period.count));
-  const formatter = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric", timeZone });
+  const formatter = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   return (
     <section className={styles.widget} aria-label={t("resultsOverview.activity")}>
       <div className={styles.activityHeader}>
@@ -230,6 +237,13 @@ const historyAnalyticsCopy = {
     retry: "resultsOverview.retryPresentationAnalytics",
     empty: "resultsOverview.noMatchingPresentationActivity",
   },
+  surveys: {
+    scope: "resultsOverview.allSurveyScope",
+    loading: "resultsOverview.surveyAnalyticsLoading",
+    unavailable: "resultsOverview.surveyAnalyticsUnavailable",
+    retry: "resultsOverview.retrySurveyAnalytics",
+    empty: "resultsOverview.noMatchingSurveyActivity",
+  },
 } as const;
 
 export function ResultsOverview(props: Props) {
@@ -238,18 +252,16 @@ export function ResultsOverview(props: Props) {
   const number = (value: number) => formatNumber(locale, value);
   let primary: ReactNode;
   let secondary: ReactNode;
-  let dates: string[] = [];
   let links: ResultLink[];
   let dateBasis = t("resultsOverview.sessionDateBasis");
   let linksLabel = t("resultsOverview.reportsToOpen");
   let distribution: Array<{ label: string; count: number; status: string }> = [];
   let shownLabel = t("resultsOverview.shown");
   let shownCount = props.items.length;
-  const usesHistoryAnalytics = props.kind !== "surveys";
-  const historyCopy = usesHistoryAnalytics ? historyAnalyticsCopy[props.kind] : undefined;
-  const analytics = usesHistoryAnalytics ? props.analytics : undefined;
+  const historyCopy = historyAnalyticsCopy[props.kind];
+  const analytics = props.analytics;
   const hasFullAnalytics = typeof analytics === "object";
-  const hasLoadedEvidence = !usesHistoryAnalytics || props.items.length > 0;
+  const hasLoadedEvidence = props.items.length > 0;
 
   if (props.kind === "rounds") {
     const summary = roundOverview(props.items);
@@ -393,15 +405,20 @@ export function ResultsOverview(props: Props) {
       </>
     );
   } else {
-    const summary = surveyOverview(props.items);
-    dates = props.items.map((item) => item.closesAt);
+    const summary =
+      typeof props.analytics === "object"
+        ? { count: props.analytics.rooms, sources: props.analytics.surveys }
+        : surveyOverview(props.items);
     links = props.items.map((item) => ({
       title: item.title,
       date: item.closesAt,
       href: `/results/surveys/${item.id}`,
     }));
     dateBasis = t("resultsOverview.surveyDateBasis");
-    shownLabel = t("resultsOverview.surveys");
+    shownLabel = t(
+      hasFullAnalytics ? "resultsOverview.matchingSurveyRuns" : "resultsOverview.surveys",
+    );
+    shownCount = summary.count;
     primary = (
       <dl className={styles.sourceCount}>
         <dt>{t("resultsOverview.sources")}</dt>
@@ -419,9 +436,7 @@ export function ResultsOverview(props: Props) {
     );
   }
 
-  const periods = hasFullAnalytics
-    ? utcHistoryActivity(analytics.activity, props.grouping)
-    : resultsActivity(dates, props.grouping);
+  const periods = hasFullAnalytics ? utcHistoryActivity(analytics.activity, props.grouping) : [];
 
   return (
     <section
@@ -438,11 +453,11 @@ export function ResultsOverview(props: Props) {
       aria-label={t("resultsOverview.title")}
     >
       <div className={styles.header}>
-        <h2 ref={headingRef} tabIndex={usesHistoryAnalytics ? -1 : undefined}>
+        <h2 ref={headingRef} tabIndex={-1}>
           {t("resultsOverview.title")}
         </h2>
-        <p role={usesHistoryAnalytics ? "status" : undefined}>
-          {hasFullAnalytics && historyCopy
+        <p role="status">
+          {hasFullAnalytics
             ? t(historyCopy.scope)
             : hasLoadedEvidence
               ? t("resultsOverview.scope", { count: number(props.items.length) })
@@ -450,11 +465,11 @@ export function ResultsOverview(props: Props) {
           {props.kind === "rounds" && hasFullAnalytics && hasLoadedEvidence
             ? ` ${t("resultsOverview.loadedReportsEvidence")}`
             : null}
-          {historyCopy && (analytics === "loading" || analytics === "unavailable")
+          {analytics === "loading" || analytics === "unavailable"
             ? ` ${t(historyCopy[analytics])}`
             : null}
         </p>
-        {usesHistoryAnalytics && analytics === "unavailable" ? (
+        {analytics === "unavailable" ? (
           <button
             className="button-quiet"
             type="button"
@@ -463,7 +478,7 @@ export function ResultsOverview(props: Props) {
               props.onAnalyticsRetry();
             }}
           >
-            {t(historyAnalyticsCopy[props.kind].retry)}
+            {t(historyCopy.retry)}
           </button>
         ) : null}
       </div>
@@ -519,22 +534,19 @@ export function ResultsOverview(props: Props) {
           <ResultsActivity
             periods={periods}
             dateBasis={dateBasis}
-            timeZone={hasFullAnalytics ? "UTC" : undefined}
-            empty={hasFullAnalytics && historyCopy ? t(historyCopy.empty) : undefined}
+            empty={hasFullAnalytics ? t(historyCopy.empty) : undefined}
             grouping={props.grouping}
             onGroupingChange={props.onGroupingChange}
           />
           {hasLoadedEvidence ? <ResultLinks label={linksLabel} links={links} /> : null}
         </div>
       ) : null}
-      {props.hasMore && props.kind !== "presentations" ? (
+      {props.hasMore && (props.kind === "rounds" || props.kind === "practice") ? (
         <p className={styles.more}>
           {t(
             props.kind === "rounds"
               ? "resultsOverview.moreRoundEvidence"
-              : props.kind === "practice"
-                ? "resultsOverview.morePracticeItems"
-                : "resultsOverview.more",
+              : "resultsOverview.morePracticeItems",
           )}
         </p>
       ) : null}

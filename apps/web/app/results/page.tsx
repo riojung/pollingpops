@@ -845,7 +845,7 @@ function ReportList(listControls: ListControls) {
                 <Link
                   className={`button-quiet small-button ${signals.action}`}
                   data-action="view"
-                  href="/results?view=practice"
+                  href={`/practice/${report.followupId}`}
                 >
                   {t("pages.results.viewFollowup")}
                 </Link>

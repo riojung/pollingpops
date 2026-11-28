@@ -965,6 +965,7 @@ describe("Results workspace", () => {
       expect(markup).toContain(`</svg>${label}</span>`);
       expect(markup).toMatch(/aria-hidden="true"[^>]*data-icon="[^"]+"[^>]*focusable="false"/);
       expect(markup).toContain(`data-action="${action}" href="/report/report-first"`);
+      expect(markup).not.toContain("View Followup");
       expect(markup).not.toContain('data-action="resume"');
       if (status === "ready") {
         expect(markup).toContain('aria-valuenow="0"');
@@ -976,6 +977,33 @@ describe("Results workspace", () => {
       }
     },
   );
+
+  it("opens each Round report's linked Practice item directly", async () => {
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      matchesRequest(path, "/v1/reports")
+        ? {
+            items: [
+              { ...report(), followupId: "practice-first", followupStatus: "open" },
+              {
+                ...report("report-later", "Later Round result"),
+                followupId: "practice-other",
+                followupStatus: "closed",
+              },
+            ],
+            nextCursor: null,
+          }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    await harness.settle();
+    const cards = elements(fixtures.tree)
+      .filter((node) => node.type === "article")
+      .map((node) => renderToStaticMarkup(node));
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toContain('href="/practice/practice-first">View Followup</a>');
+    expect(cards[1]).toContain('href="/practice/practice-other">View Followup</a>');
+    harness.dispose();
+  });
 
   it.each([
     { view: "practice", kind: "practice", status: "open", tone: "active", label: "Open" },

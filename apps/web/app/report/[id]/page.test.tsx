@@ -718,6 +718,7 @@ describe("report follow-up access management", () => {
     closesAt: "2099-06-01T12:00:00.000Z",
     closedAt: null,
   };
+  const practiceHref = `href="/practice/${followup.id}"`;
   const personalPass = {
     id: "private-pass",
     nickname: "Participant 原名",
@@ -798,9 +799,41 @@ describe("report follow-up access management", () => {
       expect(markup(view.tree).includes("Delete session and report")).toBe(role === "owner");
       expect(html).toContain("Participant 原名");
       expect(html).toContain("Authored follow-up title");
+      expect(html).toContain(practiceHref);
       view.cleanup();
     },
   );
+
+  it.each([
+    { outcome: "succeeds", error: undefined },
+    { outcome: "fails", error: new Error("Private pass request failed") },
+  ])("blocks Practice navigation until private pass creation $outcome", async ({ error }) => {
+    const view = await load("editor");
+    const form = findElement(view.builder.render(), (node) => node.type === "form")!;
+    const privateUrl = "https://example.test/followup/private#token=one-time-secret";
+    let settlePass!: () => void;
+    fixtures.apiFetch.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        settlePass = error
+          ? () => reject(error)
+          : () => resolve({ access: { ...personalPass, id: "new-pass", url: privateUrl } });
+      }),
+    );
+
+    const submission = (
+      form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>
+    )({ preventDefault() {} });
+    const pending = view.builder.render();
+    expect(markup(pending)).not.toContain(practiceHref);
+    expect(action(pending, "Manage practice")?.props.disabled).toBe(true);
+
+    settlePass();
+    await submission;
+    const settled = markup(view.builder.render());
+    expect(settled).toContain(practiceHref);
+    expect(settled).toContain(error?.message ?? privateUrl);
+    view.cleanup();
+  });
 
   it("keeps a one-time private URL visible after blocked copy, without creating another pass", async () => {
     fixtures.locale = "fr-FR";
@@ -850,6 +883,7 @@ describe("report follow-up access management", () => {
 
   it("associates the one-time generic URL with its label and preserves the selected creation payload", async () => {
     const view = await load("owner", false);
+    expect(markup(view.builder.render())).not.toContain(practiceHref);
     const form = findElement(view.builder.render(), (node) => node.type === "form")!;
     const genericUrl = "https://example.test/followup/new#token=generic-secret";
     fixtures.apiFetch.mockResolvedValueOnce({ followup, genericUrl, personalAccess: [] });
@@ -861,6 +895,7 @@ describe("report follow-up access management", () => {
     expect(html).toContain('id="followup-generic-url"');
     expect(html).toContain(genericUrl);
     expect(html).toContain("Save these links now.");
+    expect(html).toContain(practiceHref);
     expect(
       JSON.parse(fixtures.apiFetch.mock.calls.find(([, init]) => init?.method === "POST")![1].body),
     ).toMatchObject({ conceptKeys: ["Authored concept"], timeMode: "flex" });
@@ -901,6 +936,7 @@ describe("report follow-up access management", () => {
     const failed = markup(view.builder.render());
     expect(failed).toContain("Participant 原名");
     expect(failed).toContain('lang="en-CA">Unknown access diagnostic 73');
+    expect(failed).toContain(practiceHref);
     const retry = action(view.builder.render(), "접근 패스 다시 불러오기");
     const callsBeforeRetry = fixtures.apiFetch.mock.calls.length;
     fixtures.apiFetch.mockResolvedValueOnce({ access: [] });
@@ -1060,6 +1096,7 @@ describe("report follow-up access management", () => {
     expect(html).not.toContain("Create private pass");
     expect(html).not.toContain("Delete session and report");
     expect(html).not.toContain("Authored follow-up title");
+    expect(html).not.toContain(practiceHref);
     cleanup();
   });
 
@@ -1071,5 +1108,20 @@ describe("report follow-up access management", () => {
     expect(html).toContain("Hosted Pro");
     expect(html).not.toContain("<form");
     view.cleanup();
+  });
+
+  it("links to retained practice after expiry without a creation entitlement", async () => {
+    fixtures.locale = "ko-KR";
+    const now = vi.spyOn(Date, "now").mockReturnValue(Date.parse(followup.closesAt) + 60_000);
+    try {
+      const view = await load("viewer", true, false);
+      const html = markup(view.builder.render());
+      expect(html).toContain(`${practiceHref}>실습 관리</a>`);
+      expect(html).toContain("에디션 비교");
+      expect(html).not.toContain("<form");
+      view.cleanup();
+    } finally {
+      now.mockRestore();
+    }
   });
 });

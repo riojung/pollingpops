@@ -101,6 +101,7 @@ async function mockHistory(page: Page) {
   const quizId = randomUUID();
   const otherQuizId = randomUUID();
   const versionId = randomUUID();
+  const olderVersionId = randomUUID();
   const createdAt = "2026-10-01T12:00:00.000Z";
   const recentReportDate = "2026-11-01T00:15:00.000Z";
   const expiresAt = "2099-10-01T12:00:00.000Z";
@@ -172,16 +173,33 @@ async function mockHistory(page: Page) {
     { length: 25 + olderPractice.length },
     (_, index) => {
       const older = olderPractice[index - 25];
+      const pack = index === 24;
       const common = {
         id: randomUUID(),
-        sourceQuizVersionId: versionId,
-        quizId: older ? otherQuizId : quizId,
-        recoveryPackSource: null,
+        sourceQuizVersionId: pack ? null : older ? olderVersionId : versionId,
+        quizId: pack ? null : older ? otherQuizId : quizId,
+        recoveryPackSource: pack
+          ? {
+              artifactType: "recovery_pack" as const,
+              packId: randomUUID(),
+              packVersionId: randomUUID(),
+              packVersion: 1,
+              packTitle: "Synthetic Recovery Pack",
+              contentHash: "a".repeat(64),
+              publishedAt: createdAt,
+              sourceItemId: randomUUID(),
+              role: "delayed_probe" as const,
+            }
+          : null,
         trustMode: "learning" as const,
         title:
-          index === 0 ? "Synthetic recovery practice" : `Synthetic assignment practice ${index}`,
+          index === 0
+            ? "Synthetic recovery practice"
+            : pack
+              ? "Synthetic Pack practice"
+              : `Synthetic assignment practice ${index}`,
         status: older?.status ?? "open",
-        checkpointCount: 2,
+        checkpointCount: pack ? 1 : 2,
         attemptCount: older?.attemptCount ?? 12,
         completedAttemptCount: older?.completedAttemptCount ?? 9,
         opensAt: createdAt,
@@ -277,6 +295,7 @@ async function mockHistory(page: Page) {
   const roundSourceReads: URLSearchParams[] = [];
   const catalogReads: URLSearchParams[] = [];
   const practiceAnalyticsReads: URLSearchParams[] = [];
+  const practiceSourceReads: URLSearchParams[] = [];
   const presentationAnalyticsReads: URLSearchParams[] = [];
   const presentationSourceReads: URLSearchParams[] = [];
   const surveyAnalyticsReads: URLSearchParams[] = [];
@@ -300,6 +319,17 @@ async function mockHistory(page: Page) {
         sources: [
           { id: quizId, title: "Synthetic source Round" },
           { id: otherQuizId, title: "Synthetic archived Round" },
+        ],
+      },
+    });
+  });
+  await page.route(`${api}/v1/followups/sources?*`, (route) => {
+    practiceSourceReads.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({
+      json: {
+        sources: [
+          { id: quizId, title: "Synthetic current Practice Round" },
+          { id: otherQuizId, title: "Synthetic archived Practice Round" },
         ],
       },
     });
@@ -452,6 +482,7 @@ async function mockHistory(page: Page) {
     roundSourceReads,
     catalogReads,
     practiceAnalyticsReads,
+    practiceSourceReads,
     presentationAnalyticsReads,
     presentationSources,
     presentationSourceReads,
@@ -761,6 +792,17 @@ for (const mobile of [false, true]) {
       /Oct.*Dec.*2026\s*25$/,
     ];
     await expect(practice.getByRole("article")).toHaveCount(25);
+    const practiceSource = page.getByRole("combobox", { name: "Round", exact: true });
+    await expect(practiceSource.getByRole("option")).toHaveText([
+      "All Rounds",
+      "Synthetic archived Practice Round",
+      "Synthetic current Practice Round",
+    ]);
+    await expect(practice.getByRole("heading", { name: "Synthetic Pack practice" })).toBeVisible();
+    expect(fixture.practiceSourceReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
+    expect(fixture.catalogReads).toHaveLength(0);
     await expectMatchingPractice(overview, allPracticeStatuses);
     await expect(overview).toContainText(
       "Practice totals and activity include every page matching your filters.",
@@ -836,16 +878,6 @@ for (const mobile of [false, true]) {
     const practiceSearch = page.getByRole("searchbox", { name: "Search practice", exact: true });
     await practiceSearch.fill("assignment practice");
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("assignment practice");
-    const practiceSource = page.getByRole("combobox", { name: "Round", exact: true });
-    await expect(practiceSource.getByRole("option")).toContainText([
-      "All Rounds",
-      "Renamed in the Library",
-      "Archived in the Library",
-      "Draft without reports",
-    ]);
-    expect(fixture.catalogReads.map((query) => Object.fromEntries(query))).toEqual([
-      { archived: "true", summary: "true", expectedWorkspaceId },
-    ]);
     await practiceSource.selectOption(fixture.otherQuizId);
     await from.fill("2026-09-01");
     await page.getByLabel("To", { exact: true }).fill("2026-10-31");

@@ -2,6 +2,7 @@ import {
   DEFAULT_SESSION_POLICY,
   SessionPolicySchema,
   type FollowupHistoryAnalytics,
+  type FollowupHistorySources,
   type FolderArtifactType,
   type ReportHistorySources,
   type ReportHistoryTotals,
@@ -5061,6 +5062,13 @@ export class MemoryRepository implements Repository {
     return followup ? structuredClone(followup) : null;
   }
 
+  private followupSourceVersion(followup: FollowupRecord) {
+    const version = followup.sourceQuizVersionId
+      ? this.versions.get(followup.sourceQuizVersionId)
+      : undefined;
+    return version?.workspaceId === followup.workspaceId ? version : undefined;
+  }
+
   private followupHistoryMatcher(workspaceId: string, filters: FollowupHistoryFilters) {
     const search = filters.search?.trim().toLowerCase();
     return (followup: FollowupRecord): Pick<FollowupHistoryRecord, "quizId" | "status"> | null => {
@@ -5070,9 +5078,7 @@ export class MemoryRepository implements Repository {
       const afterFrom = !filters.from || followup.createdAt >= filters.from;
       const beforeTo = !filters.to || followup.createdAt <= filters.to;
       if (!afterFrom || !beforeTo) return null;
-      const version = followup.sourceQuizVersionId
-        ? this.versions.get(followup.sourceQuizVersionId)
-        : undefined;
+      const version = this.followupSourceVersion(followup);
       const quizId = version?.quizId ?? null;
       if (
         (!version && !followup.recoveryPackSource) ||
@@ -5090,6 +5096,31 @@ export class MemoryRepository implements Repository {
               : "open";
       return filters.status && status !== filters.status ? null : { quizId, status };
     };
+  }
+
+  async listFollowupHistorySources(
+    workspaceId: string,
+  ): Promise<FollowupHistorySources["sources"]> {
+    const latestByRound = new Map<
+      string,
+      { followup: FollowupRecord; version: QuizVersionRecord }
+    >();
+    for (const followup of this.followups.values()) {
+      if (followup.workspaceId !== workspaceId) continue;
+      const version = this.followupSourceVersion(followup);
+      if (!version) continue;
+      const latest = latestByRound.get(version.quizId)?.followup;
+      if (
+        !latest ||
+        followup.createdAt > latest.createdAt ||
+        (followup.createdAt.getTime() === latest.createdAt.getTime() && followup.id > latest.id)
+      ) {
+        latestByRound.set(version.quizId, { followup, version });
+      }
+    }
+    return [...latestByRound]
+      .map(([id, { version }]) => ({ id, title: version.content.title }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   }
 
   async getFollowupHistoryAnalytics(workspaceId: string, filters: FollowupHistoryFilters) {

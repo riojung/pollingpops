@@ -822,6 +822,10 @@ the full filtered history. They include assignments and recovery follow-ups. Com
 completed attempts by all recorded attempts from matching items. The UTC chart counts practice
 items by creation date, with up to six represented months or quarters. The workspace-bound list
 and analytics load and retry independently. Practice shortcuts use loaded rows.
+Practice Round choices come from all pages of assignment and recovery follow-up history. Labels
+use the published Round version associated with the latest practice item for each source.
+**All Rounds** includes practice without a Round source. The choices load and retry independently
+of the list and analytics.
 
 Presentation Results totals, including participant joins and active and finished counts, cover the
 full filtered session history. The chart uses the six latest represented UTC months or quarters by

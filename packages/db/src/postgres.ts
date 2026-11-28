@@ -49,6 +49,7 @@ import {
   QuestionSchema,
   type BrandTheme,
   type FollowupHistoryAnalytics,
+  type FollowupHistorySources,
   type FolderArtifactType,
   type QuizDraft,
   type Report,
@@ -7193,6 +7194,32 @@ export class PostgresRepository implements Repository {
       [workspaceId, reportId],
     );
     return result.rows[0] ? mapFollowup(result.rows[0]) : null;
+  }
+
+  async listFollowupHistorySources(
+    workspaceId: string,
+  ): Promise<FollowupHistorySources["sources"]> {
+    const { rows } = await this.workspaceQuery(
+      workspaceId,
+      `WITH latest_by_version AS (
+         SELECT DISTINCT ON (source_quiz_version_id) source_quiz_version_id, created_at, id
+         FROM followups
+         WHERE workspace_id = $1 AND source_quiz_version_id IS NOT NULL
+         ORDER BY source_quiz_version_id, created_at DESC, id DESC
+       ), latest_by_round AS (
+         SELECT DISTINCT ON (version.quiz_id) version.quiz_id AS id, version.id AS version_id
+         FROM latest_by_version AS followup
+         JOIN quiz_versions AS version
+           ON version.id = followup.source_quiz_version_id AND version.workspace_id = $1
+         ORDER BY version.quiz_id, followup.created_at DESC, followup.id DESC
+       )
+       SELECT latest.id, version.content ->> 'title' AS title
+       FROM latest_by_round AS latest
+       JOIN quiz_versions AS version ON version.id = latest.version_id AND version.workspace_id = $1
+       ORDER BY latest.id`,
+      [workspaceId],
+    );
+    return rows.map((row) => ({ id: row.id, title: row.title }));
   }
 
   async getFollowupHistoryAnalytics(

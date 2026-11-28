@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import {
   FollowupHistoryAnalyticsSchema,
   ReportHistoryAnalyticsSchema,
+  ReportHistorySourcesSchema,
   ReportHistoryTotalsSchema,
   SessionCountsResponseSchema,
   type QuizDraft,
@@ -145,6 +146,26 @@ async function fixture(presentationsEnabled = true) {
     }
     return { quizId: quiz.id, versionId: version.id, rounds };
   }
+  async function seedReport(
+    workspaceId: string,
+    sessionId: string,
+    status: "ready" | "pending" | "failed",
+    participantCount = 0,
+    at = now,
+  ) {
+    const id = randomUUID();
+    await repository.saveReport(workspaceId, {
+      id,
+      sessionId,
+      status,
+      generatedAt: status === "ready" ? at.toISOString() : null,
+      expiresAt: new Date(at.getTime() + 86_400_000).toISOString(),
+      metrics: { participantCount, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
+      questions: [],
+      participants: [],
+    });
+    return id;
+  }
   async function seedOtherKinds(actor: CreatorContext) {
     const presentation = await built.presentationSessions.createSession({
       id: randomUUID(),
@@ -219,7 +240,7 @@ async function fixture(presentationsEnabled = true) {
     await surveys.close(actor.workspaceId, surveyRoom.id);
     return { presentation, surveyRoom, surveys };
   }
-  return { ...built, repository, owner, outsider, content, seedRounds, seedOtherKinds };
+  return { ...built, repository, owner, outsider, content, seedRounds, seedReport, seedOtherKinds };
 }
 
 describe("Sessions Library history APIs", () => {
@@ -351,6 +372,121 @@ describe("Results history search APIs", () => {
     expect(matching.statusCode).toBe(200);
     expect(matching.headers["cache-control"]).toBe("private, no-store");
     expect(read).toHaveBeenCalledExactlyOnceWith(f.owner.creator.workspaceId, expect.any(Object));
+  });
+
+  it.each([true, false])(
+    "checks the workspace before reading quizzes with summary=%s",
+    async (summary) => {
+      const f = await fixture();
+      const { workspaceId } = f.owner.creator;
+      const { quizId } = await f.seedRounds(f.owner.creator, 0);
+      const listQuizzes = vi.spyOn(f.repository, "listQuizzes");
+      const get = (expectedWorkspaceId?: string) =>
+        f.app.inject({
+          method: "GET",
+          url: "/v1/quizzes",
+          query: {
+            ...(summary ? { summary: "true" } : {}),
+            ...(expectedWorkspaceId ? { expectedWorkspaceId } : {}),
+          },
+          headers: f.owner.headers,
+        });
+
+      const mismatch = await get(f.outsider.creator.workspaceId);
+      expect(mismatch.statusCode).toBe(409);
+      expect(mismatch.json()).toMatchObject({
+        error: { code: "CONFLICT", message: "The active workspace changed" },
+      });
+      expect(mismatch.headers["cache-control"]).toBe("private, no-store");
+      expect(listQuizzes).not.toHaveBeenCalled();
+
+      const matching = await get(workspaceId);
+      expect(matching.statusCode).toBe(200);
+      const option = { id: quizId, title: f.content.title };
+      if (summary) {
+        expect(matching.json()).toEqual({ quizzes: [option] });
+      } else {
+        expect(matching.json()).toMatchObject({ quizzes: [{ ...option, draft: f.content }] });
+      }
+      expect(listQuizzes).toHaveBeenCalledExactlyOnceWith(workspaceId, false);
+
+      const unguarded = await get();
+      expect(unguarded.statusCode).toBe(200);
+      expect(unguarded.json()).toEqual(matching.json());
+    },
+  );
+
+  it("returns private Round source choices across report pages in the active workspace", async () => {
+    const f = await fixture();
+    const owner = f.owner.creator;
+    const outsider = f.outsider.creator;
+    const repeated = await f.seedRounds(owner, 26);
+    const pending = await f.seedRounds(owner, 1);
+    const failed = await f.seedRounds(owner, 1);
+    const foreign = await f.seedRounds(outsider, 1);
+    await f.seedRounds(owner, 1);
+    await f.repository.updateQuiz(owner.workspaceId, repeated.quizId, {
+      ...f.content,
+      title: "Renamed library source",
+    });
+
+    const older = new Date("2025-03-31T23:59:59.999Z");
+    const newer = new Date("2025-04-01T00:00:00.000Z");
+    for (const [index, { id }] of repeated.rounds.entries()) {
+      const reportId = await f.seedReport(owner.workspaceId, id, "ready");
+      f.repository.reportCreatedAt.set(
+        reportId,
+        index === 0 ? new Date(newer.getTime() + 1) : newer,
+      );
+    }
+    const pendingId = await f.seedReport(owner.workspaceId, pending.rounds[0]!.id, "pending");
+    const failedId = await f.seedReport(owner.workspaceId, failed.rounds[0]!.id, "failed");
+    f.repository.reportCreatedAt.set(pendingId, older);
+    f.repository.reportCreatedAt.set(failedId, older);
+    await f.seedReport(outsider.workspaceId, foreign.rounds[0]!.id, "ready");
+
+    const path = "/v1/reports/sources";
+    const get = (expectedWorkspaceId: string, headers = f.owner.headers) =>
+      f.app.inject({ url: `${path}?expectedWorkspaceId=${expectedWorkspaceId}`, headers });
+    const sources = vi.spyOn(f.repository, "listReportHistorySources");
+    const unauthorized = await f.app.inject({ url: path });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthorized.headers["cache-control"]).toBe("private, no-store");
+    const mismatch = await get(outsider.workspaceId);
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      error: { code: "CONFLICT", message: "The active workspace changed" },
+    });
+    expect(mismatch.headers["cache-control"]).toBe("private, no-store");
+    expect((await get("malformed")).statusCode).toBe(400);
+    expect(sources).not.toHaveBeenCalled();
+
+    const history = vi.spyOn(f.repository, "listReportHistory");
+    const response = await get(owner.workspaceId);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
+    expect(response.headers.pragma).toBe("no-cache");
+    expect(response.json()).toEqual({
+      sources: [repeated.quizId, pending.quizId, failed.quizId]
+        .sort()
+        .map((id) => ({ id, title: "Frozen needle 50%_" })),
+    });
+    expect(ReportHistorySourcesSchema.safeParse(response.json()).success).toBe(true);
+    expect(sources).toHaveBeenCalledExactlyOnceWith(owner.workspaceId);
+    expect(history).not.toHaveBeenCalled();
+    expect((await get(outsider.workspaceId, f.outsider.headers)).json()).toEqual({
+      sources: [{ id: foreign.quizId, title: "Frozen needle 50%_" }],
+    });
+
+    sources.mockRejectedValueOnce(new Error("Report sources unavailable"));
+    const failure = await get(owner.workspaceId);
+    expect(failure.statusCode).toBe(500);
+    expect(failure.headers["cache-control"]).toBe("private, no-store");
+    const page = await f.app.inject({ url: "/v1/reports", headers: f.owner.headers });
+    expect(page.statusCode).toBe(200);
+    expect(page.json().items).toHaveLength(25);
+    expect(page.json().items.map(({ id }: { id: string }) => id)).not.toContain(pendingId);
+    expect(page.json().items.map(({ id }: { id: string }) => id)).not.toContain(failedId);
   });
 
   it("returns private Practice Results analytics across pages using the list filters", async () => {
@@ -512,37 +648,19 @@ describe("Results history search APIs", () => {
     const foreign = await f.seedRounds(f.outsider.creator, 1);
     const from = new Date();
     const expiresAt = new Date(from.getTime() + 86_400_000).toISOString();
-    const seedReport = async (
-      workspaceId: string,
-      sessionId: string,
-      status: "ready" | "pending" | "failed",
-      participantCount: number,
-    ) => {
-      const id = randomUUID();
-      await f.repository.saveReport(workspaceId, {
-        id,
-        sessionId,
-        status,
-        generatedAt: status === "ready" ? from.toISOString() : null,
-        expiresAt,
-        metrics: { participantCount, completedCount: 0, answerCount: 0, accuracyPercent: 0 },
-        questions: [],
-        participants: [],
-      });
-      return id;
-    };
     const reportIds = [];
     for (const [index, { id }] of owned.rounds.entries()) {
-      const reportId = await seedReport(
+      const reportId = await f.seedReport(
         f.owner.creator.workspaceId,
         id,
         index === 0 ? "pending" : index === 1 ? "failed" : "ready",
         [10, 10, 5][index] ?? (index === 27 ? 8 : 0),
+        from,
       );
       reportIds.push(reportId);
       f.repository.reportCreatedAt.set(reportId, new Date(from.getTime() + index));
     }
-    await seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready", 11);
+    await f.seedReport(f.outsider.creator.workspaceId, foreign.rounds[0]!.id, "ready", 11, from);
 
     const path = "/v1/reports/totals";
     const getTotals = (query = "", headers = f.owner.headers) =>

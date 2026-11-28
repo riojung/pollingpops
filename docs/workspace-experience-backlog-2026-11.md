@@ -813,6 +813,9 @@ search, and report creation date filters as the list. Participant joins add the 
 from matching ready reports. The chart uses the six most recent represented UTC months or quarters,
 with earlier periods accessible through date filters. The list and analytics load and retry
 independently. Recovery, follow-ups, and report shortcuts use the loaded reports.
+The Round filter lists sources alphabetically across the workspace's report history, including
+archived Rounds with reports. Each choice uses the session title associated with the latest report.
+Source choices load and retry independently of the list and analytics.
 
 The Practice view's matching items, status counts, recorded attempts, and activity chart also cover
 the full filtered history. They include assignments and recovery follow-ups. Completion divides

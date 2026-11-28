@@ -146,7 +146,10 @@ vi.mock("../../components/workspace/workspace-shell", () => ({
 import ResultsPage from "./page";
 
 const reportTotalsPath = "/v1/reports/totals";
+const reportSourcesPath = "/v1/reports/sources";
 const practiceAnalyticsPath = "/v1/followups/analytics";
+const roundSourceId = "f12819a8-5395-4b89-a36a-e924a08791a3";
+const olderRoundSourceId = "fb50a942-41ae-4eaa-b367-1003d6952e70";
 
 function matchesRequest(path: string, endpoint: string) {
   return path === endpoint || path.startsWith(`${endpoint}?`);
@@ -156,7 +159,7 @@ function report(id = "report-first", title = "First Round result") {
   return {
     id,
     sessionId: `session-${id}`,
-    quizId: "round-source",
+    quizId: roundSourceId,
     title,
     status: "ready",
     trustMode: "learning",
@@ -180,7 +183,7 @@ function practice(id = "practice-first", title = "First practice") {
     sourceQuizVersionId: "round-version",
     sourceSessionId: "session-first",
     sourceReportId: "report-first",
-    quizId: "round-source",
+    quizId: roundSourceId,
     recoveryPackSource: null,
     title,
     status: "open",
@@ -259,19 +262,37 @@ function surveyAnalytics(rooms = 2, surveys = 1, refreshAfterMs: number | null =
 }
 function response(path: string) {
   if (path.startsWith("/v1/quizzes?"))
-    return { quizzes: [{ id: "round-source", title: "Source Round" }] };
+    return {
+      quizzes: [
+        { id: roundSourceId, title: "Source Round" },
+        { id: "unused-library-round", title: "Unused Library Round" },
+      ],
+    };
+  if (matchesRequest(path, reportSourcesPath))
+    return {
+      sources: [
+        { id: roundSourceId, title: "Source Round" },
+        { id: olderRoundSourceId, title: "Archived Round from older reports" },
+      ],
+    };
   if (matchesRequest(path, reportTotalsPath)) {
-    const search = new URLSearchParams(path.split("?")[1]).get("search");
-    return reportAnalytics(search === "missing" ? 0 : 2);
+    const query = new URLSearchParams(path.split("?")[1]);
+    if (query.get("search") === "missing") return reportAnalytics(0);
+    return reportAnalytics(query.get("quizId") === olderRoundSourceId ? 1 : 2);
   }
   if (matchesRequest(path, practiceAnalyticsPath)) {
     const search = new URLSearchParams(path.split("?")[1]).get("search");
     return practiceAnalytics(search === "missing" ? 0 : 2);
   }
-  if (path.startsWith("/v1/reports?"))
-    return path.includes("cursor=")
-      ? { items: [report("report-later", "Later Round result")], nextCursor: null }
+  if (path.startsWith("/v1/reports?")) {
+    const query = new URLSearchParams(path.split("?")[1]);
+    return query.has("cursor") || query.get("quizId") === olderRoundSourceId
+      ? {
+          items: [{ ...report("report-later", "Later Round result"), quizId: olderRoundSourceId }],
+          nextCursor: null,
+        }
       : { items: [report()], nextCursor: "report-next" };
+  }
   if (path.startsWith("/v1/followups?"))
     return path.includes("cursor=")
       ? { items: [practice("practice-later", "Later practice")], nextCursor: null }
@@ -482,6 +503,33 @@ describe("Results workspace", () => {
     harness.dispose();
   });
 
+  it("binds the Practice catalog to the displayed workspace during a switch in another tab", async () => {
+    const activeWorkspace = "workspace-b";
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (!matchesRequest(path, "/v1/quizzes")) return response(path);
+      const expectedWorkspace = new URLSearchParams(path.split("?")[1]).get("expectedWorkspaceId");
+      if (expectedWorkspace && expectedWorkspace !== activeWorkspace)
+        throw new Error("The active workspace changed");
+      return { quizzes: [{ id: "workspace-b-round", title: "Workspace B catalog Round" }] };
+    });
+    const harness = resultsHarness();
+    await harness.settle();
+
+    fixtures.query = "view=practice";
+    const beforeReconciliation = await harness.settle();
+    expect(beforeReconciliation).toContain("All Rounds");
+    expect(beforeReconciliation).not.toContain("Workspace B catalog Round");
+
+    fixtures.workspaceId = activeWorkspace;
+    expect(await harness.settle()).toContain("Workspace B catalog Round");
+    expect(
+      historyCalls("/v1/quizzes").map(([path]) =>
+        new URLSearchParams(path.split("?")[1]).get("expectedWorkspaceId"),
+      ),
+    ).toEqual(["workspace-a", "workspace-b"]);
+    harness.dispose();
+  });
+
   it("uses full-history Round joins and activity across pages without another totals request", async () => {
     fixtures.apiFetch.mockImplementation(async (path: string) =>
       matchesRequest(path, reportTotalsPath)
@@ -533,6 +581,109 @@ describe("Results workspace", () => {
     harness.dispose();
   });
 
+  it("filters Round results and totals by a historical source beyond the loaded page", async () => {
+    const harness = resultsHarness();
+    const initial = await harness.settle();
+    expect(headings()).toEqual(["First Round result"]);
+    expect(initial).toContain("Archived Round from older reports");
+    expect(initial).not.toContain("Unused Library Round");
+    const options = elements(field("Round")).filter((node) => node.type === "option");
+    expect(options.map(({ props }) => props.value)).toEqual([
+      "all",
+      olderRoundSourceId,
+      roundSourceId,
+    ]);
+
+    changeField("Round", olderRoundSourceId);
+    const filtered = await harness.settle();
+    expect(headings()).toEqual(["Later Round result"]);
+    expect(filtered).toContain("<dt>Matching reports</dt><dd>1</dd>");
+    changeField("Result Status", "ready");
+    changeField("From", "2026-10-01");
+    changeSearch("Later");
+    await harness.settle();
+    expect(field("Round")?.props.value).toBe(olderRoundSourceId);
+    for (const endpoint of ["/v1/reports", reportTotalsPath]) {
+      const params = new URLSearchParams(historyCalls(endpoint).at(-1)![0].split("?")[1]);
+      expect(params.get("quizId")).toBe(olderRoundSourceId);
+      expect(params.get("search")).toBe("Later");
+    }
+    expect(historyCalls(reportSourcesPath).map(([url]) => url)).toEqual([
+      `${reportSourcesPath}?expectedWorkspaceId=workspace-a`,
+    ]);
+    harness.dispose();
+  });
+
+  it.each(["network", "invalid payload"] as const)(
+    "retries Round source options independently after a failure from %s",
+    async (failure) => {
+      const pending = deferred<unknown>();
+      let sourceReads = 0;
+      fixtures.apiFetch.mockImplementation(async (path: string) => {
+        if (!matchesRequest(path, reportSourcesPath)) return response(path);
+        if (++sourceReads > 1) return pending.promise;
+        if (failure === "network") throw new Error("Source request failed");
+        return { sources: [{ id: "invalid", title: "Invalid source" }] };
+      });
+      const harness = resultsHarness();
+      const unavailable = await harness.settle();
+      expect(unavailable).toContain('role="alert">Round filter options could not load.');
+      expect(unavailable).toContain("First Round result");
+      expect(unavailable).toContain("<dt>Matching reports</dt><dd>2</dd>");
+      expect(unavailable).not.toContain("Invalid source");
+      const focus = attachFocus(resultsPanel());
+      clickButton("Retry Round options");
+      expect(focus).toHaveBeenCalledOnce();
+      const retrying = await harness.settle();
+      expect(retrying).not.toContain("Round filter options could not load.");
+      expect(retrying).toContain("First Round result");
+      expect(retrying).toContain("<dt>Matching reports</dt><dd>2</dd>");
+      pending.resolve(response(reportSourcesPath));
+      const recovered = await harness.settle();
+      expect(recovered).toContain("Archived Round from older reports");
+      expect(recovered).not.toContain("Retry Round options");
+      expect(historyCalls("/v1/reports")).toHaveLength(1);
+      expect(historyCalls(reportTotalsPath)).toHaveLength(1);
+      expect(historyCalls(reportSourcesPath).map(([url]) => url)).toEqual([
+        `${reportSourcesPath}?expectedWorkspaceId=workspace-a`,
+        `${reportSourcesPath}?expectedWorkspaceId=workspace-a`,
+      ]);
+      harness.dispose();
+    },
+  );
+
+  it.each(["view", "workspace"] as const)(
+    "aborts obsolete Round source options when the %s changes",
+    async (change) => {
+      const stale = deferred<unknown>();
+      let reads = 0;
+      fixtures.apiFetch.mockImplementation(async (path: string) =>
+        matchesRequest(path, reportSourcesPath) && ++reads === 1 ? stale.promise : response(path),
+      );
+      const harness = resultsHarness();
+      await harness.settle();
+      const obsolete = historyCalls(reportSourcesPath)[0]!;
+      if (change === "view") fixtures.query = "view=practice";
+      else fixtures.workspaceId = "workspace-b";
+      await harness.settle();
+      expect(obsolete[1].signal?.aborted).toBe(true);
+      stale.resolve({ sources: [{ id: olderRoundSourceId, title: "Obsolete Round source" }] });
+      const current = await harness.settle();
+      expect(current).not.toContain("Obsolete Round source");
+      expect(current).not.toContain("Round filter options could not load.");
+      if (change === "workspace") {
+        expect(historyCalls(reportSourcesPath).at(-1)![0]).toBe(
+          `${reportSourcesPath}?expectedWorkspaceId=workspace-b`,
+        );
+        expect(current).toContain("Archived Round from older reports");
+      } else {
+        expect(historyCalls(reportSourcesPath)).toHaveLength(1);
+        expect(current).toContain("Unused Library Round");
+      }
+      harness.dispose();
+    },
+  );
+
   it("uses the Round list filters for totals and ignores obsolete workspace responses", async () => {
     const previousTotals = deferred<unknown>();
     fixtures.apiFetch.mockImplementation(async (path: string) => {
@@ -548,7 +699,7 @@ describe("Results workspace", () => {
     expect(activityCounts()).toEqual([]);
     const first = historyCalls(reportTotalsPath)[0]!;
     changeField("Result Status", "ready");
-    changeField("Round", "round-source");
+    changeField("Round", roundSourceId);
     changeField("From", "2026-10-01");
     changeField("To", "2026-10-31");
     changeSearch("First");
@@ -568,7 +719,7 @@ describe("Results workspace", () => {
     expect(listParams.get("search")).toBe("First");
     expect(listParams.get("expectedWorkspaceId")).toBe("workspace-a");
     expect(listParams.get("status")).toBe("ready");
-    expect(listParams.get("quizId")).toBe("round-source");
+    expect(listParams.get("quizId")).toBe(roundSourceId);
     expect(listParams.get("from")).toBe(new Date("2026-10-01T00:00:00").toISOString());
     expect(listParams.get("to")).toBe(new Date("2026-10-31T23:59:59.999").toISOString());
 
@@ -890,7 +1041,7 @@ describe("Results workspace", () => {
       path: "/v1/reports",
       title: "First Round result",
       source: "Round",
-      sourceId: "round-source",
+      sourceId: roundSourceId,
       status: "Result Status",
       statusValue: "ready",
     },
@@ -899,7 +1050,7 @@ describe("Results workspace", () => {
       path: "/v1/followups",
       title: "First practice",
       source: "Round",
-      sourceId: "round-source",
+      sourceId: roundSourceId,
       status: "Practice Status",
       statusValue: "open",
     },
@@ -1267,6 +1418,17 @@ describe("Results workspace", () => {
         surveyResultsPath,
       ])
         expect(paths.some((url) => matchesRequest(url, other))).toBe(other === path);
+      expect(historyCalls(reportSourcesPath)).toHaveLength(view === "results" ? 1 : 0);
+      expect(historyCalls("/v1/quizzes")).toHaveLength(view === "practice" ? 1 : 0);
+      if (view === "practice") {
+        const [catalog] = historyCalls("/v1/quizzes")[0]!;
+        expect(Object.fromEntries(new URLSearchParams(catalog.split("?")[1]))).toEqual({
+          archived: "true",
+          summary: "true",
+          expectedWorkspaceId: "workspace-a",
+        });
+        expect(markup).toContain("Unused Library Round");
+      }
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`placeholder="${search}"`);
       expect(markup).toContain(`href="/library?type=${library}"`);
@@ -1544,7 +1706,7 @@ describe("Results workspace", () => {
       statusLabel: "Result Status",
       sourceLabel: "Round",
       sourceKey: "quizId",
-      sourceId: "round-source",
+      sourceId: roundSourceId,
       cursor: "report-next",
       analyticsPath: null,
       status: "ready",
@@ -1557,7 +1719,7 @@ describe("Results workspace", () => {
       statusLabel: "Practice Status",
       sourceLabel: "Round",
       sourceKey: "quizId",
-      sourceId: "round-source",
+      sourceId: roundSourceId,
       cursor: "practice-next",
       analyticsPath: practiceAnalyticsPath,
       status: "open",

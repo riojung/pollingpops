@@ -42,6 +42,8 @@ const resultsWorkspaceKeys = [
   "resultsOverview.reportTotalsLoading",
   "resultsOverview.reportTotalsUnavailable",
   "resultsOverview.retryReportTotals",
+  "resultsOverview.roundSourcesUnavailable",
+  "resultsOverview.retryRoundSources",
   "resultsOverview.allPracticeScope",
   "resultsOverview.matchingPractice",
   "resultsOverview.practiceAnalyticsLoading",

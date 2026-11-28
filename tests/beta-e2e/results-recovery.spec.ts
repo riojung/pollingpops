@@ -18,6 +18,7 @@ import {
 const api = `http://127.0.0.1:${Number(process.env.BETA_E2E_API_PORT ?? 4200)}`;
 const reportsPath = "/v1/reports";
 const reportTotalsPath = "/v1/reports/totals";
+const reportSourcesPath = "/v1/reports/sources";
 const practicePath = "/v1/followups";
 const practiceAnalyticsPath = "/v1/followups/analytics";
 const presentationResultsPath = "/v1/presentation-sessions/results";
@@ -253,6 +254,7 @@ async function installHistory(page: Page) {
   for (const path of [
     ...Object.keys(histories),
     reportTotalsPath,
+    reportSourcesPath,
     practiceAnalyticsPath,
     presentationAnalyticsPath,
     presentationSourcesPath,
@@ -305,6 +307,11 @@ async function installHistory(page: Page) {
     const search = url.searchParams.get("search")?.toLocaleLowerCase() ?? "";
     const matchesSearch = (row: { title: string }) =>
       row.title.toLocaleLowerCase().includes(search);
+    if (url.pathname === reportSourcesPath) {
+      return route.fulfill({
+        json: { sources: [{ id: quizId, title: "Synthetic source Round" }] },
+      });
+    }
     if (isReportTotals) {
       const ready = Number(matchesSearch(report));
       const periods = ready ? [{ start: "2026-10-01", count: ready }] : [];
@@ -742,10 +749,12 @@ for (const phone of [false, true]) {
           historyActivity(overview).getByRole("combobox", { name: "Group by", exact: true }),
         ).toBeFocused();
 
-        if (view.key === "presentations" || view.key === "surveys") {
-          const isSurvey = view.key === "surveys";
-          const sourceName = isSurvey ? "Survey" : "Presentation";
-          const sourcesPath = isSurvey ? surveySourcesPath : presentationSourcesPath;
+        if (view.key !== "practice") {
+          const { sourceName, sourcesPath } = {
+            results: { sourceName: "Round", sourcesPath: reportSourcesPath },
+            presentations: { sourceName: "Presentation", sourcesPath: presentationSourcesPath },
+            surveys: { sourceName: "Survey", sourcesPath: surveySourcesPath },
+          }[view.key];
           const sourcesRetry = panel.getByRole("button", {
             name: `Retry ${sourceName} options`,
             exact: true,

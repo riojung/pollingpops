@@ -5,16 +5,19 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
   type RefObject,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type {
-  SurveyResultSummary,
-  SurveyResultsPage,
-  SurveyResultsSources,
+import {
+  ReportHistorySourcesSchema,
+  type ReportHistorySources,
+  type SurveyResultSummary,
+  type SurveyResultsPage,
+  type SurveyResultsSources,
 } from "@openround/contracts";
 import { useLocale } from "../../components/locale-provider";
 import { apiFetch, humanError } from "../../lib/api";
@@ -581,7 +584,7 @@ function followupLifecycleLabel(report: ReportSummary, t: ReturnType<typeof useL
   });
 }
 
-function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
+function ReportList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId;
@@ -591,6 +594,19 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [sourceOptions, setSourceOptions] = useState<ReportHistorySources | "unavailable" | null>(
+    null,
+  );
+  const [sourcesAttempt, setSourcesAttempt] = useState(0);
+  const rounds = useMemo(
+    () =>
+      sourceOptions && sourceOptions !== "unavailable"
+        ? [...sourceOptions.sources].sort((left, right) =>
+            left.title.localeCompare(right.title, locale),
+          )
+        : [],
+    [locale, sourceOptions],
+  );
   const filters = {
     status,
     quizId,
@@ -613,6 +629,23 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
   const hasFilters = Boolean(
     status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
   );
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const controller = new AbortController();
+    void apiFetch<unknown>(
+      `/v1/reports/sources?expectedWorkspaceId=${encodeURIComponent(workspaceId)}`,
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        if (!controller.signal.aborted)
+          setSourceOptions(ReportHistorySourcesSchema.parse(response));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSourceOptions("unavailable");
+      });
+    return () => controller.abort();
+  }, [workspaceId, sourcesAttempt]);
 
   function clearFilters() {
     setStatus("all");
@@ -648,6 +681,22 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
         ]}
         toDate={toDate}
       />
+      {sourceOptions === "unavailable" ? (
+        <div className={resultStyles.loadError}>
+          <p role="alert">{t("resultsOverview.roundSourcesUnavailable")}</p>
+          <button
+            className="button-quiet"
+            type="button"
+            onClick={() => {
+              panel.current?.focus();
+              setSourceOptions(null);
+              setSourcesAttempt((current) => current + 1);
+            }}
+          >
+            {t("resultsOverview.retryRoundSources")}
+          </button>
+        </div>
+      ) : null}
       {workspaceId ? (
         <RoundResultsOverview
           key={totalsQuery}
@@ -788,7 +837,7 @@ function ReportList({ rounds, ...listControls }: ListControls & { rounds: RoundF
   );
 }
 
-function PracticeList({ rounds, ...listControls }: ListControls & { rounds: RoundFilterOption[] }) {
+function PracticeList(listControls: ListControls) {
   const { locale, t } = useLocale();
   const { creator } = useWorkspace();
   const workspaceId = creator?.workspaceId;
@@ -799,6 +848,7 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
   const [quizId, setQuizId] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [rounds, setRounds] = useState<RoundFilterOption[]>([]);
 
   const filters = {
     status,
@@ -822,6 +872,24 @@ function PracticeList({ rounds, ...listControls }: ListControls & { rounds: Roun
   const hasFilters = Boolean(
     status !== "all" || quizId !== "all" || fromDate || toDate || listControls.search,
   );
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const controller = new AbortController();
+    const query = new URLSearchParams({
+      archived: "true",
+      summary: "true",
+      expectedWorkspaceId: workspaceId,
+    });
+    void apiFetch<{ quizzes: RoundFilterOption[] }>(`/v1/quizzes?${query}`, {
+      signal: controller.signal,
+    })
+      .then(({ quizzes }) => {
+        if (!controller.signal.aborted) setRounds(quizzes);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [workspaceId]);
 
   function clearFilters() {
     setStatus("all");
@@ -1569,17 +1637,12 @@ function ResultsContent() {
           ? "surveys"
           : "results";
   const search = (params.get("q") ?? "").slice(0, 160);
-  const [sources, setSources] = useState<{ workspaceId: string; rounds: RoundFilterOption[] }>({
-    workspaceId: "",
-    rounds: [],
-  });
   const [preference, setPreference] = useState<{ workspaceId: string; layout: ResultsLayout }>({
     workspaceId: "",
     layout: "grid",
   });
   const layout = preference.workspaceId === workspaceId ? preference.layout : "grid";
   const storageKey = `openround:results-view:v1:${workspaceId}`;
-  const rounds = sources.workspaceId === workspaceId ? sources.rounds : [];
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -1591,19 +1654,6 @@ function ResultsContent() {
     }
     setPreference({ workspaceId, layout: saved === "list" ? "list" : "grid" });
   }, [storageKey, workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    const controller = new AbortController();
-    void apiFetch<{ quizzes: RoundFilterOption[] }>("/v1/quizzes?archived=true&summary=true", {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!controller.signal.aborted) setSources({ workspaceId, rounds: response.quizzes });
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [workspaceId]);
 
   function chooseLayout(value: ResultsLayout) {
     setPreference({ workspaceId, layout: value });
@@ -1720,13 +1770,13 @@ function ResultsContent() {
       </div>
       <div key={`${workspaceId}\u0000${view}`}>
         {view === "practice" ? (
-          <PracticeList {...listControls} rounds={rounds} />
+          <PracticeList {...listControls} />
         ) : view === "presentations" ? (
           <PresentationResultList {...listControls} />
         ) : view === "surveys" ? (
           <SurveyResultList {...listControls} />
         ) : (
-          <ReportList {...listControls} rounds={rounds} />
+          <ReportList {...listControls} />
         )}
       </div>
     </WorkspaceShell>

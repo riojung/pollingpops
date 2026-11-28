@@ -274,21 +274,36 @@ async function mockHistory(page: Page) {
   };
   const reads: Array<{ path: string; query: URLSearchParams }> = [];
   const totalsReads: URLSearchParams[] = [];
+  const roundSourceReads: URLSearchParams[] = [];
+  const catalogReads: URLSearchParams[] = [];
   const practiceAnalyticsReads: URLSearchParams[] = [];
   const presentationAnalyticsReads: URLSearchParams[] = [];
   const presentationSourceReads: URLSearchParams[] = [];
   const surveyAnalyticsReads: URLSearchParams[] = [];
   const surveySourceReads: URLSearchParams[] = [];
-  await page.route(`${api}/v1/quizzes?*`, (route) =>
-    route.fulfill({
+  await page.route(`${api}/v1/quizzes?*`, (route) => {
+    catalogReads.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({
       json: {
         quizzes: [
-          { id: quizId, title: "Synthetic source Round" },
-          { id: otherQuizId, title: "Synthetic other Round" },
+          { id: quizId, title: "Renamed in the Library" },
+          { id: otherQuizId, title: "Archived in the Library" },
+          { id: randomUUID(), title: "Draft without reports" },
         ],
       },
-    }),
-  );
+    });
+  });
+  await page.route(`${api}/v1/reports/sources?*`, (route) => {
+    roundSourceReads.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({
+      json: {
+        sources: [
+          { id: quizId, title: "Synthetic source Round" },
+          { id: otherQuizId, title: "Synthetic archived Round" },
+        ],
+      },
+    });
+  });
   for (const [path, items] of [
     ["/v1/reports", reports],
     ["/v1/followups", followups],
@@ -434,6 +449,8 @@ async function mockHistory(page: Page) {
     surveys,
     reads,
     totalsReads,
+    roundSourceReads,
+    catalogReads,
     practiceAnalyticsReads,
     presentationAnalyticsReads,
     presentationSources,
@@ -499,6 +516,16 @@ for (const mobile of [false, true]) {
     ).toHaveAttribute("href", "/library?type=rounds");
     const collection = page.getByRole("region", { name: "Results", exact: true });
     await expect(collection.getByRole("article")).toHaveCount(25);
+    const source = page.getByRole("combobox", { name: "Round", exact: true });
+    await expect(source.getByRole("option")).toHaveText([
+      "All Rounds",
+      "Synthetic archived Round",
+      "Synthetic source Round",
+    ]);
+    expect(fixture.roundSourceReads.map((query) => Object.fromEntries(query))).toEqual([
+      { expectedWorkspaceId },
+    ]);
+    expect(fixture.catalogReads).toHaveLength(0);
     const overview = page.getByRole("region", { name: "Results analytics", exact: true });
     await expectMatchingReports(overview, 26, 1, 1);
     await expect(overview).toContainText(
@@ -644,7 +671,6 @@ for (const mobile of [false, true]) {
     await expect(
       reportLinks.getByRole("link", { name: fixture.reports[25]!.title, exact: true }),
     ).toHaveAttribute("href", `/report/${fixture.reports[25]!.id}?view=analytics`);
-    const source = page.getByRole("combobox", { name: "Round", exact: true });
     await source.selectOption(fixture.otherQuizId);
     await expect(emptyActivity).toBeVisible();
     await source.selectOption(fixture.quizId);
@@ -811,6 +837,15 @@ for (const mobile of [false, true]) {
     await practiceSearch.fill("assignment practice");
     await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("assignment practice");
     const practiceSource = page.getByRole("combobox", { name: "Round", exact: true });
+    await expect(practiceSource.getByRole("option")).toContainText([
+      "All Rounds",
+      "Renamed in the Library",
+      "Archived in the Library",
+      "Draft without reports",
+    ]);
+    expect(fixture.catalogReads.map((query) => Object.fromEntries(query))).toEqual([
+      { archived: "true", summary: "true", expectedWorkspaceId },
+    ]);
     await practiceSource.selectOption(fixture.otherQuizId);
     await from.fill("2026-09-01");
     await page.getByLabel("To", { exact: true }).fill("2026-10-31");

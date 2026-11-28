@@ -1,13 +1,29 @@
 import type { PresentationOpinionResultSummary } from "@openround/contracts";
 import styles from "./opinion-results.module.css";
 
+function OpinionResultValue({ value, share }: { value: string | number; share?: number }) {
+  return share === undefined ? (
+    <td>{value}</td>
+  ) : (
+    <td className={styles.chartCell}>
+      {value}
+      <span aria-hidden="true" className={styles.chartTrack}>
+        <span className={styles.chartFill} data-opinion-result-bar style={{ width: `${share}%` }} />
+      </span>
+    </td>
+  );
+}
+
 export function PresentationOpinionResults({
   summary,
   compact = false,
+  showChart = false,
 }: {
   summary: PresentationOpinionResultSummary;
   compact?: boolean;
+  showChart?: boolean;
 }) {
+  const maximumWeightedPoints = Math.max(1, summary.responseCount * summary.choices.length);
   return (
     <section
       aria-label="Opinion results"
@@ -42,6 +58,7 @@ export function PresentationOpinionResults({
         aria-label="Opinion result table"
         tabIndex={0}
         className={styles.scroll}
+        data-opinion-results-scroll
         onKeyDown={(event) => {
           if (
             event.defaultPrevented ||
@@ -93,7 +110,10 @@ export function PresentationOpinionResults({
                       {choice.label}
                     </th>
                     <td>{choice.count}</td>
-                    <td>{Number(choice.percentOfRespondents.toFixed(2))}%</td>
+                    <OpinionResultValue
+                      value={`${Number(choice.percentOfRespondents.toFixed(2))}%`}
+                      share={showChart ? choice.percentOfRespondents : undefined}
+                    />
                   </tr>
                 ))
               : summary.choices.map((choice) => (
@@ -101,7 +121,12 @@ export function PresentationOpinionResults({
                     <th scope="row" lang="">
                       {choice.label}
                     </th>
-                    <td>{choice.weightedScore}</td>
+                    <OpinionResultValue
+                      value={choice.weightedScore}
+                      share={
+                        showChart ? (choice.weightedScore / maximumWeightedPoints) * 100 : undefined
+                      }
+                    />
                     <td>{choice.rankedRespondents}</td>
                     <td>
                       {choice.averageRank === null ? "—" : Number(choice.averageRank.toFixed(2))}

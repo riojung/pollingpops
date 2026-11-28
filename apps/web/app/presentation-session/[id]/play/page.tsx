@@ -500,8 +500,10 @@ export default function PresentationParticipantPage() {
                   ) : block.question.type === "ranking" ? (
                     snapshot?.responseSubmitted ? (
                       <>
-                        <p lang={locale}>{copy("rankingSaved")}</p>
-                        <ul aria-label={copy("rankingChoices")}>
+                        <p className={styles.responseText} lang={locale}>
+                          {copy("rankingSaved")}
+                        </p>
+                        <ul className={styles.responseChoices} aria-label={copy("rankingChoices")}>
                           {block.question.choices.map((choice) => (
                             <li key={choice.id} lang="">
                               {choice.label}
@@ -520,7 +522,7 @@ export default function PresentationParticipantPage() {
                   ) : block.question.choices.length ? (
                     <>
                       {block.question.type === "poll" && (block.question.maxSelections ?? 1) > 1 ? (
-                        <p lang={locale} role="status">
+                        <p className={styles.responseText} lang={locale} role="status">
                           {copy("selectionCount", {
                             max: formatNumber(locale, block.question.maxSelections ?? 1),
                             count: formatNumber(locale, selectedChoiceIds.length),

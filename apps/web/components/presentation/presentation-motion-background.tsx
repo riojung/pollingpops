@@ -6,6 +6,7 @@ import type {
   PresentationSceneDesign,
   SupportedLocale,
 } from "@openround/contracts";
+import { useExperienceMotionReduced } from "../../lib/experience-motion";
 import { motionBackgroundCopy } from "./motion-background-copy";
 import styles from "./presentation-motion-background.module.css";
 
@@ -55,40 +56,6 @@ export function setPresentationMotionPaused(paused: boolean) {
   window.dispatchEvent(new Event(pauseEvent));
 }
 
-export function getPresentationMotionReduced() {
-  if (typeof window === "undefined") return false;
-  if (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
-    (typeof document !== "undefined" &&
-      document.documentElement.dataset.openroundMotion === "reduced")
-  )
-    return true;
-  try {
-    const preferences = JSON.parse(
-      window.localStorage.getItem("openround:experience-preferences") ?? "null",
-    );
-    return preferences?.reducedMotion === true;
-  } catch {
-    return false;
-  }
-}
-
-function subscribeReduced(listener: () => void) {
-  const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  query?.addEventListener("change", listener);
-  window.addEventListener("storage", listener);
-  const observer = new MutationObserver(listener);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["data-openround-motion"],
-  });
-  return () => {
-    query?.removeEventListener("change", listener);
-    window.removeEventListener("storage", listener);
-    observer.disconnect();
-  };
-}
-
 function hiddenSnapshot() {
   return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
@@ -124,11 +91,7 @@ export function PresentationMotionBackground({
     enabled ? getPresentationMotionPaused : serverFalse,
     serverFalse,
   );
-  const reduced = useSyncExternalStore(
-    enabled ? subscribeReduced : noopSubscribe,
-    enabled ? getPresentationMotionReduced : serverFalse,
-    serverFalse,
-  );
+  const reduced = useExperienceMotionReduced(enabled);
   const hidden = useSyncExternalStore(
     enabled ? subscribeHidden : noopSubscribe,
     enabled ? hiddenSnapshot : serverFalse,
@@ -187,11 +150,7 @@ export function PresentationMotionControls({
     preset ? getPresentationMotionPaused : serverFalse,
     serverFalse,
   );
-  const reduced = useSyncExternalStore(
-    preset ? subscribeReduced : noopSubscribe,
-    preset ? getPresentationMotionReduced : serverFalse,
-    serverFalse,
-  );
+  const reduced = useExperienceMotionReduced(Boolean(preset));
   if (!preset) return null;
   const copy = motionBackgroundCopy(locale);
   return (

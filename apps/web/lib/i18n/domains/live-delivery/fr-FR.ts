@@ -288,6 +288,7 @@ const messages = {
   "live.joinAccess.sectionAria": "Rejoindre ce Round par code QR ou lien direct",
   "live.joinAccess.svgDownloaded": "Code QR téléchargé sous SVG.",
   "live.joinAccess.updateQr": "Mettre à jour le QR",
+  "live.preferences.enableSound": "Activer les signaux sonores",
   "live.preferences.highContrast": "Haut contraste",
   "live.preferences.muteSound": "Marques sonores",
   "live.preferences.reduceMotion": "Réduire le mouvement",

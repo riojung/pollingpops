@@ -20,6 +20,10 @@ import { QuestionMedia } from "../../../components/question-media";
 import { RecoveryPackLiveCardView } from "../../../components/recovery-pack-live-card";
 import { ResponseDistributionView } from "../../../components/response-distribution";
 import { TextLiveResults } from "../../../components/text-live-results";
+import {
+  getExperienceMotionReduced,
+  useExperienceMotionReduced,
+} from "../../../lib/experience-motion";
 import { isTextQuestion } from "../../../lib/text-response";
 import { formatNumber } from "../../../lib/i18n/format";
 import {
@@ -32,6 +36,7 @@ import { experienceThemeStyle, experienceColorScheme } from "../../../lib/theme"
 import { playPresenterCue } from "../../../lib/sound";
 import { clientUuid } from "../../../lib/uuid";
 import liveTheme from "../../../components/round-live-theme.module.css";
+import { presenterCueFor, presenterResponseDistribution } from "./presenter-effects";
 
 type Ack<T> = { data?: T; error?: { message: string } };
 
@@ -43,6 +48,8 @@ export default function PresenterPage() {
   const socket = useMemo(createRealtimeClient, []);
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const snapshotRef = useRef<SessionSnapshot | null>(null);
+  const [distributionReveal, setDistributionReveal] = useState<string | null>(null);
+  const reducedMotion = useExperienceMotionReduced();
   const [error, setError] = useState("");
   const [errorIsEnglish, setErrorIsEnglish] = useState(false);
   const [mediaCredential, setMediaCredential] = useState("");
@@ -59,8 +66,14 @@ export default function PresenterPage() {
   );
 
   useEffect(() => {
-    snapshotRef.current = snapshot;
-  }, [snapshot]);
+    if (!distributionReveal) return;
+    if (reducedMotion) {
+      setDistributionReveal(null);
+      return;
+    }
+    const timeout = window.setTimeout(() => setDistributionReveal(null), 600);
+    return () => window.clearTimeout(timeout);
+  }, [distributionReveal, reducedMotion]);
 
   useEffect(() => {
     setEmbedded(window.self !== window.top);
@@ -78,6 +91,7 @@ export default function PresenterPage() {
       return;
     }
     setMediaCredential(presenterToken);
+    let synchronized = false;
     const sync = () =>
       socket.emit(
         "sync.request",
@@ -86,12 +100,19 @@ export default function PresenterPage() {
           role: "presenter",
           clientCapabilities: currentRoundClientCapabilities(),
           hostToken: presenterToken,
-          lastSeq: snapshotRef.current?.seq ?? 0,
+          lastSeq: snapshotRef.current?.sessionId === sessionId ? snapshotRef.current.seq : 0,
         },
         (response: Ack<{ snapshot: SessionSnapshot }>) => {
+          if (!socket.connected) return;
           if (response.data) {
-            setTextReadAuthorized(socket.connected);
-            setSnapshot(response.data.snapshot);
+            const next = response.data.snapshot;
+            const previous = snapshotRef.current;
+            if (previous?.sessionId !== next.sessionId || next.seq >= previous.seq) {
+              snapshotRef.current = next;
+              setSnapshot(next);
+            }
+            synchronized = true;
+            setTextReadAuthorized(true);
           } else if (response.error) {
             setTextReadAuthorized(false);
             setTextReadEpoch((current) => current + 1);
@@ -104,13 +125,32 @@ export default function PresenterPage() {
         },
       );
     const update = withRealtimeReceipt((envelope: EventEnvelope<{ snapshot: SessionSnapshot }>) => {
-      playPresenterCue(envelope.payload.snapshot.experienceTheme, envelope.type);
+      const next = envelope.payload.snapshot;
+      const previous = snapshotRef.current;
       if (
-        audienceContextKey(envelope.payload.snapshot) !== audienceContextKey(snapshotRef.current)
+        next.sessionId !== sessionId ||
+        (previous?.sessionId === sessionId && next.seq < previous.seq)
       ) {
+        return;
+      }
+      const cue = synchronized ? presenterCueFor(previous, next, envelope.type) : undefined;
+      if (cue) playPresenterCue(next.experienceTheme, cue);
+      if (next.roundId !== previous?.roundId) setDistributionReveal(null);
+      if ((cue === "lock" || cue === "reveal") && !presenterResponseDistribution(previous)) {
+        const distribution = presenterResponseDistribution(next);
+        if (
+          (distribution?.kind === "choice" || distribution?.kind === "rating") &&
+          next.experienceTheme.motion !== "calm" &&
+          !getExperienceMotionReduced()
+        ) {
+          setDistributionReveal(next.roundId);
+        }
+      }
+      if (audienceContextKey(next) !== audienceContextKey(previous)) {
         setAudienceSyncRevision((current) => current + 1);
       }
-      setSnapshot(envelope.payload.snapshot);
+      snapshotRef.current = next;
+      setSnapshot(next);
       if (envelope.type === "response.moderated") setTextReadEpoch((current) => current + 1);
     });
     const audienceUpdate = createAudienceRealtimeReceipt((gap, envelope) =>
@@ -123,6 +163,8 @@ export default function PresenterPage() {
       setErrorIsEnglish(true);
     });
     socket.on("connect", () => {
+      synchronized = false;
+      setDistributionReveal(null);
       setTextReadAuthorized(false);
       setAudienceSyncRevision((current) => current + 1);
       sync();
@@ -153,6 +195,8 @@ export default function PresenterPage() {
     ])
       socket.on(event, audienceUpdate);
     socket.on("disconnect", () => {
+      synchronized = false;
+      setDistributionReveal(null);
       setTextReadAuthorized(false);
       setTextReadEpoch((current) => current + 1);
     });
@@ -174,6 +218,7 @@ export default function PresenterPage() {
     snapshot?.competitionStandings?.status !== "unscored" &&
     (snapshot?.phase === "leaderboard" || snapshot?.phase === "finished"),
   );
+  const distribution = presenterResponseDistribution(snapshot);
 
   return (
     <div
@@ -189,7 +234,12 @@ export default function PresenterPage() {
       <header className="shell live-topbar">
         <Brand inverted name={snapshot?.brandTheme?.organizationName} />
         <div className="button-row">
-          <ExperiencePreferences />
+          <ExperiencePreferences
+            presenterSound={Boolean(
+              snapshot?.experienceTheme.soundEnabled &&
+              snapshot.experienceTheme.soundCue !== "none",
+            )}
+          />
           {!embedded ? (
             <button
               className="button-quiet small-button"
@@ -396,11 +446,18 @@ export default function PresenterPage() {
                 role="presenter"
               />
             ) : null}
-            {(snapshot.uxBeta === true ||
-              snapshot.question?.type === "ranking" ||
-              (snapshot.question?.type === "poll" && (snapshot.question.maxSelections ?? 1) > 1)) &&
-            snapshot.responseDistribution ? (
-              <ResponseDistributionView distribution={snapshot.responseDistribution} />
+            {distribution ? (
+              <ResponseDistributionView
+                key={snapshot.roundId}
+                animate={
+                  !reducedMotion &&
+                  distributionReveal !== null &&
+                  distributionReveal === snapshot.roundId &&
+                  (snapshot.phase === "question_locked" || snapshot.phase === "question_reveal")
+                }
+                distribution={distribution}
+                variant="presenter"
+              />
             ) : null}
             {!snapshot.competitionStandings &&
             snapshot.phase === "leaderboard" &&

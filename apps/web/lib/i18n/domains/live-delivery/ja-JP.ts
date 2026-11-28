@@ -281,6 +281,7 @@ const messages = {
   "live.joinAccess.sectionAria": "QRコードまたは直接リンクでこのラウンドに参加する",
   "live.joinAccess.svgDownloaded": "SVGとしてダウンロードしたQRコード",
   "live.joinAccess.updateQr": "QRの更新",
+  "live.preferences.enableSound": "効果音を有効にする",
   "live.preferences.highContrast": "高コントラスト",
   "live.preferences.muteSound": "ミュートサウンドキューズ",
   "live.preferences.reduceMotion": "動きを減らす",

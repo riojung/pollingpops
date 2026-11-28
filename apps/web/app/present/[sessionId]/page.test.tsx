@@ -21,6 +21,11 @@ vi.mock("react", async (importOriginal) => {
     useRef: <T,>(initial: T) => ({ current: initial }),
     useMemo: <T,>(factory: () => T) => factory(),
     useEffect: vi.fn(),
+    useSyncExternalStore: <T,>(
+      _subscribe: (listener: () => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ) => (getServerSnapshot ?? getSnapshot)(),
   };
 });
 vi.mock("next/navigation", () => ({ useParams: () => ({ sessionId: "presenter-room" }) }));

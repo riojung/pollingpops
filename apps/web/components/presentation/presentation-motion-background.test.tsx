@@ -7,10 +7,10 @@ import {
 import { NativeSceneView } from "./native-scene-view";
 import { ContentSlideView } from "./content-slide-view";
 import { PresentationActivitySlide } from "./presentation-activity-slide";
+import { getExperienceMotionReduced } from "../../lib/experience-motion";
 import {
   PRESENTATION_MOTION_PAUSE_KEY,
   PresentationMotionBackground,
-  getPresentationMotionReduced,
   getPresentationMotionPaused,
   setPresentationMotionPaused,
 } from "./presentation-motion-background";
@@ -53,7 +53,7 @@ describe("Presentation background playback", () => {
       localStorage: { getItem: () => JSON.stringify({ reducedMotion: saved }) },
     });
     vi.stubGlobal("document", { documentElement: { dataset: { openroundMotion: app } } });
-    expect(getPresentationMotionReduced()).toBe(expected);
+    expect(getExperienceMotionReduced()).toBe(expected);
   });
 
   it.each(["denied", "malformed"])(
@@ -69,7 +69,7 @@ describe("Presentation background playback", () => {
         },
       });
       vi.stubGlobal("document", { documentElement: { dataset: {} } });
-      expect(getPresentationMotionReduced()).toBe(false);
+      expect(getExperienceMotionReduced()).toBe(false);
     },
   );
 

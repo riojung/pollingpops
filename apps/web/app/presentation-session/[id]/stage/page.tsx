@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   NATIVE_DESIGN_THEMES,
   NATIVE_DESIGN_FONTS,
@@ -34,6 +34,7 @@ import { RecoveryPackLiveCardView } from "../../../../components/recovery-pack-l
 import { Brand } from "../../../../components/brand";
 import { stageDisplayCopy } from "../../../../components/presentation-live/stage-display-copy";
 import { useStageSetupPopup } from "../../../../components/presentation-live/stage-setup-popup";
+import { useExperienceMotionReduced } from "../../../../lib/experience-motion";
 import display from "../../../../components/presentation-live/stage-display.module.css";
 import styles from "../../../../components/presentation-live/audience-workspace.module.css";
 
@@ -132,11 +133,15 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
   const screen = stageDisplayCopy(locale);
   const setup = useStageSetupPopup();
   const displayRef = useRef<HTMLElement>(null);
+  const slideRef = useRef<HTMLElement>(null);
+  const previousSlide = useRef<string | undefined>(undefined);
+  const previousOpinion = useRef<string | undefined>(undefined);
   const returnFocus = useRef<HTMLButtonElement | null>(null);
   const controlsTimer = useRef<number | undefined>(undefined);
   const activeFullScreen = useRef(false);
   const fullScreenRequest = useRef(0);
   const fullScreenBusy = useRef(false);
+  const reducedMotion = useExperienceMotionReduced();
 
   useEffect(() => {
     setSnapshot(null);
@@ -304,6 +309,50 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
 
   const remaining = presentationRemainingSeconds(snapshot, receivedAt.current, now);
   const opinionSummary = presentationOpinionSummaryFor(snapshot);
+  const slideBlockId =
+    snapshot?.phase === "lobby" || snapshot?.phase === "finished"
+      ? undefined
+      : snapshot?.currentBlock?.id;
+  const opinionBlockId = slideBlockId ? opinionSummary?.blockId : undefined;
+
+  useLayoutEffect(() => {
+    const changedSlide = previousSlide.current !== slideBlockId;
+    previousSlide.current = slideBlockId;
+    const slide = slideRef.current;
+    if (!slideBlockId || !changedSlide || !slide) return;
+
+    // Reset reused scroll containers while keeping the stage and its focus in place.
+    const origin = { top: 0, left: 0, behavior: "instant" } as const;
+    slide.scrollTo(origin);
+    for (const results of slide.querySelectorAll<HTMLElement>("[data-opinion-results-scroll]")) {
+      results.scrollTo(origin);
+    }
+    if (reducedMotion) return;
+
+    const entrance = slide.animate?.([{ opacity: 0.82 }, { opacity: 1 }], {
+      duration: 240,
+      easing: "ease-out",
+      id: "presentation-slide-enter",
+    });
+    return () => entrance?.cancel();
+  }, [slideBlockId, reducedMotion]);
+
+  useLayoutEffect(() => {
+    const revealedOpinion = previousOpinion.current !== opinionBlockId;
+    previousOpinion.current = opinionBlockId;
+    if (!opinionBlockId || !revealedOpinion || reducedMotion || !slideRef.current) return;
+
+    const bars = slideRef.current.querySelectorAll<HTMLElement>("[data-opinion-result-bar]");
+    const reveals = Array.from(bars, (bar) =>
+      bar.animate?.([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], {
+        duration: 420,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+        id: "presentation-opinion-reveal",
+      }),
+    );
+    return () => reveals.forEach((reveal) => reveal?.cancel());
+  }, [opinionBlockId, reducedMotion]);
+
   const questionDesign =
     snapshot?.currentBlock?.kind === "question" ? snapshot.currentBlock.design : undefined;
   const questionPalette = questionDesign ? NATIVE_DESIGN_THEMES[questionDesign.theme] : undefined;
@@ -325,6 +374,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
       className={`${styles.theaterPage} ${display.screen}`}
       data-audience-stage
       data-stage-focus={focusView ? "true" : "false"}
+      data-stage-motion={reducedMotion ? "reduced" : "full"}
       data-stage-controls-visible={controlsVisible ? "true" : "false"}
       tabIndex={-1}
       lang={locale}
@@ -468,6 +518,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
               />
             </div>
             <section
+              ref={slideRef}
               aria-label={copy("audienceSlide")}
               style={questionStyle}
               className={`${styles.theaterCanvas} ${display.canvas}`}
@@ -524,7 +575,7 @@ function PresentationAudienceStage({ sessionId: id }: { sessionId: string }) {
                   ) : opinionSummary && snapshot.currentBlock.kind === "question" ? (
                     <>
                       <h1 lang="">{snapshot.currentBlock.question.prompt}</h1>
-                      <PresentationOpinionResults summary={opinionSummary} compact />
+                      <PresentationOpinionResults summary={opinionSummary} compact showChart />
                       <StageMedia
                         key={`${snapshot.currentBlock.id}:${snapshot.currentBlock.question.mediaId}`}
                         sessionId={id}

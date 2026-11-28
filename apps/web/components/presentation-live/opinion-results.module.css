@@ -28,6 +28,7 @@
   min-width: 44rem;
 }
 .scroll caption {
+  color: var(--ui-text);
   text-align: left;
   font-weight: 700;
   padding: 8px 0;
@@ -64,7 +65,41 @@
 .compact caption {
   padding: 4px 0;
 }
+.compact .scroll {
+  overscroll-behavior-y: auto;
+}
 .compact th,
 .compact td {
   padding: 6px 8px;
+}
+
+.chartCell {
+  position: relative;
+}
+.chartTrack {
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 3px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ui-border);
+  pointer-events: none;
+}
+.chartFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-accent);
+  transform-origin: left center;
+}
+.chartFill:dir(rtl) {
+  transform-origin: right center;
+}
+
+@media (forced-colors: active) {
+  .chartFill {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
 }

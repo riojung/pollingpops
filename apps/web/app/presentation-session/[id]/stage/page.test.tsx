@@ -3,7 +3,10 @@ import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type * as ReactModule from "react";
 import type * as LocaleModule from "../../../../components/locale-provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PresentationStageSnapshotSchema } from "@openround/contracts";
+import {
+  PresentationStageSnapshotSchema,
+  type PresentationStageSnapshot,
+} from "@openround/contracts";
 import { withEnglishLocale } from "../../../../test-utils/english-locale";
 import PresentationAudienceStagePage from "./page";
 
@@ -21,6 +24,17 @@ vi.mock("../../../../components/locale-provider", async (original) => {
 
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof ReactModule>();
+  function queueEffect(run: Effect["run"], deps?: readonly unknown[]) {
+    const hooks = fixtures.hooks!;
+    const index = hooks.cursor++;
+    const previous = hooks.effects.get(index);
+    if (previous && deps?.every((value, position) => Object.is(value, previous.deps?.[position])))
+      return;
+    previous?.cleanup?.();
+    const effect = { run, deps };
+    hooks.effects.set(index, effect);
+    hooks.pending.push(effect);
+  }
   return {
     ...react,
     useState: <T,>(initial: T | (() => T)) => {
@@ -50,16 +64,20 @@ vi.mock("react", async (importOriginal) => {
       return hooks.slots[index];
     },
     useEffect: (run: Effect["run"], deps?: readonly unknown[]) => {
-      const hooks = fixtures.hooks;
-      if (!hooks) return react.useEffect(run, deps);
-      const index = hooks.cursor++;
-      const previous = hooks.effects.get(index);
-      if (previous && deps?.every((value, position) => Object.is(value, previous.deps?.[position])))
-        return;
-      previous?.cleanup?.();
-      const effect = { run, deps };
-      hooks.effects.set(index, effect);
-      hooks.pending.push(effect);
+      if (fixtures.hooks) queueEffect(run, deps);
+      else react.useEffect(run, deps);
+    },
+    useLayoutEffect: (run: Effect["run"], deps?: readonly unknown[]) => {
+      if (fixtures.hooks) queueEffect(run, deps);
+      else react.useLayoutEffect(run, deps);
+    },
+    useSyncExternalStore: <T,>(
+      subscribe: (onStoreChange: () => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ) => {
+      if (fixtures.hooks) return getSnapshot();
+      return react.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
   };
 });
@@ -82,16 +100,102 @@ function elements(node: ReactNode, visibleOnly = false): ReactElement<Record<str
   return [node, ...elements(node.props.children as ReactNode, visibleOnly)];
 }
 
-function displayHarness({ supported = true, reject = false, rejectExit = false } = {}) {
+const stageSnapshotBase = {
+  sessionId: "11111111-1111-4111-8111-111111111111",
+  artifactType: "presentation",
+  presentationId: "22222222-2222-4222-8222-222222222222",
+  presentationVersionId: "33333333-3333-4333-8333-333333333333",
+  projection: "stage",
+  title: "Authored presentation title",
+  code: "1234567",
+  status: "active",
+  serverTime: "2026-11-03T12:00:00.000Z",
+  questionOpenedAt: null,
+  questionClosesAt: null,
+  acceptingResponses: false,
+  settings: { timeMode: "flex", trustMode: "learning" },
+  participantCount: 2,
+  responseCount: 0,
+  revealedAnswer: null,
+  finishedAt: null,
+};
+
+function revealedRanking(blockId: string, prompt: string, index: number, revision: number) {
+  const choices = [
+    { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", label: "Examples" },
+    { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", label: "Practice" },
+  ];
+  return PresentationStageSnapshotSchema.parse({
+    ...stageSnapshotBase,
+    phase: "question_reveal",
+    currentBlockIndex: index,
+    blockCount: 2,
+    revision,
+    seq: revision,
+    currentBlock: {
+      id: blockId,
+      kind: "question",
+      question: {
+        id: blockId,
+        type: "ranking",
+        prompt,
+        rankCount: 2,
+        choices,
+        timeLimitSeconds: 30,
+        basePoints: 0,
+        mediaId: null,
+        mediaAlt: null,
+      },
+    },
+    opinionSummary: {
+      kind: "ranking",
+      blockId,
+      rankCount: 2,
+      responseCount: 0,
+      totalRankings: 0,
+      choices: choices.map(({ id, label }) => ({
+        choiceId: id,
+        label,
+        weightedScore: 0,
+        rankedRespondents: 0,
+        averageRank: null,
+        rankCounts: [0, 0],
+      })),
+    },
+  });
+}
+
+function displayHarness({
+  supported = true,
+  reject = false,
+  rejectExit = false,
+  snapshot,
+  reducedMotion = false,
+}: {
+  supported?: boolean;
+  reject?: boolean;
+  rejectExit?: boolean;
+  snapshot?: PresentationStageSnapshot;
+  reducedMotion?: boolean;
+} = {}) {
   const hooks: Hooks = { cursor: 0, slots: [], effects: new Map(), pending: [] };
   const listeners = new Map<string, () => void>();
   const animationFrames: Array<() => void> = [];
+  let nextPoll: (() => void) | undefined;
   const trigger = { focus: vi.fn() };
   const root = {
     focus: vi.fn(),
     requestFullscreen: vi.fn<(...args: unknown[]) => Promise<void>>(),
   };
+  const resultTable = { scrollTo: vi.fn() };
+  const canvas = {
+    scrollTo: vi.fn(),
+    animate: vi.fn(),
+    querySelectorAll: (selector: string) =>
+      selector === "[data-opinion-results-scroll]" ? [resultTable] : [],
+  };
   const document = {
+    documentElement: { dataset: { openroundMotion: reducedMotion ? "reduced" : undefined } },
     fullscreenElement: null as unknown,
     fullscreenEnabled: supported,
     addEventListener: vi.fn((event: string, callback: () => void) =>
@@ -110,13 +214,17 @@ function displayHarness({ supported = true, reject = false, rejectExit = false }
     listeners.get("fullscreenchange")?.();
   });
   vi.stubGlobal("document", document);
+  if (snapshot) vi.stubGlobal("fetch", async () => Response.json({ snapshot }));
   vi.stubGlobal("window", {
     location: { href: "https://example.test/presentation-session/session/stage" },
     history: { state: null, replaceState: vi.fn() },
-    sessionStorage: { getItem: () => null },
+    sessionStorage: { getItem: () => (snapshot ? "stage-pass" : null) },
     setInterval: vi.fn(() => 1),
     clearInterval: vi.fn(),
-    setTimeout: vi.fn(() => 2),
+    setTimeout: vi.fn((callback: () => void, delay: number) => {
+      if (delay === 2_000) nextPoll = callback;
+      return 2;
+    }),
     clearTimeout: vi.fn(),
     requestAnimationFrame: (callback: () => void) => {
       animationFrames.push(callback);
@@ -129,8 +237,11 @@ function displayHarness({ supported = true, reject = false, rejectExit = false }
     try {
       const wrapper = PresentationAudienceStagePage();
       const tree = (wrapper.type as (props: Record<string, unknown>) => ReactNode)(wrapper.props);
-      const main = elements(tree).find((element) => element.type === "main")!;
+      const nodes = elements(tree);
+      const main = nodes.find((element) => element.type === "main")!;
       (main.props.ref as { current: unknown }).current = root;
+      const slide = nodes.find((element) => "data-stage-slide" in element.props);
+      if (slide) (slide.props.ref as { current: unknown }).current = canvas;
       return tree;
     } finally {
       fixtures.hooks = null;
@@ -140,6 +251,8 @@ function displayHarness({ supported = true, reject = false, rejectExit = false }
   }
   const harness = {
     root,
+    canvas,
+    resultTable,
     document,
     trigger,
     render,
@@ -177,6 +290,17 @@ function displayHarness({ supported = true, reject = false, rejectExit = false }
       listeners.get("fullscreenchange")?.();
       render();
     },
+    async readSnapshot(next?: PresentationStageSnapshot) {
+      if (next) {
+        const poll = nextPoll;
+        expect(poll).toBeDefined();
+        nextPoll = undefined;
+        snapshot = next;
+        poll?.();
+      }
+      await vi.waitFor(() => expect(nextPoll).toBeDefined());
+      return render();
+    },
     markup: () => renderToStaticMarkup(render()),
     unmount: () => hooks.effects.forEach((effect) => effect.cleanup?.()),
   };
@@ -185,6 +309,41 @@ function displayHarness({ supported = true, reject = false, rejectExit = false }
 }
 
 describe("Presentation audience stage workspace", () => {
+  it.each([false, true])(
+    "resets both result scroll containers on a direct block change with reduced motion %s",
+    async (reducedMotion) => {
+      const initial = revealedRanking("55555555-5555-4555-8555-555555555555", "Rank ideas", 0, 1);
+      const target = revealedRanking("66666666-6666-4666-8666-666666666666", "Rank formats", 1, 3);
+      const stage = displayHarness({ snapshot: initial, reducedMotion });
+      const before = await stage.readSnapshot();
+      const beforeSlide = elements(before).find((element) => "data-stage-slide" in element.props);
+      expect(renderToStaticMarkup(withEnglishLocale(before))).toContain(
+        'data-opinion-results-scroll="true"',
+      );
+      stage.canvas.scrollTo.mockClear();
+      stage.resultTable.scrollTo.mockClear();
+      stage.canvas.animate.mockClear();
+
+      await stage.readSnapshot({ ...initial, seq: 2, participantCount: 3 });
+      expect(stage.canvas.scrollTo).not.toHaveBeenCalled();
+      expect(stage.resultTable.scrollTo).not.toHaveBeenCalled();
+
+      const after = await stage.readSnapshot(target);
+      const afterSlide = elements(after).find((element) => "data-stage-slide" in element.props);
+      expect(elements(after).find((element) => element.type === "h1")?.props.children).toBe(
+        "Rank formats",
+      );
+      expect(afterSlide?.key).toBe(beforeSlide?.key);
+      expect(afterSlide?.props.ref).toBe(beforeSlide?.props.ref);
+      const origin = { top: 0, left: 0, behavior: "instant" };
+      expect(stage.canvas.scrollTo).toHaveBeenCalledExactlyOnceWith(origin);
+      expect(stage.resultTable.scrollTo).toHaveBeenCalledExactlyOnceWith(origin);
+      expect(stage.canvas.animate).toHaveBeenCalledTimes(reducedMotion ? 0 : 1);
+      expect(stage.root.focus).not.toHaveBeenCalled();
+      stage.unmount();
+    },
+  );
+
   it("requests fullscreen only from the stage action and follows native Escape state", async () => {
     const stage = displayHarness();
     expect(stage.root.requestFullscreen).not.toHaveBeenCalled();
@@ -278,24 +437,12 @@ describe("Presentation audience stage workspace", () => {
   it("retains authored content design inside a dedicated frame with join access after the slide", () => {
     fixtures.states = [
       PresentationStageSnapshotSchema.parse({
-        sessionId: "11111111-1111-4111-8111-111111111111",
-        artifactType: "presentation",
-        presentationId: "22222222-2222-4222-8222-222222222222",
-        presentationVersionId: "33333333-3333-4333-8333-333333333333",
-        projection: "stage",
-        title: "Authored presentation title",
-        code: "1234567",
-        status: "active",
+        ...stageSnapshotBase,
         phase: "content",
         currentBlockIndex: 0,
         blockCount: 1,
         revision: 3,
         seq: 3,
-        serverTime: "2026-11-03T12:00:00.000Z",
-        questionOpenedAt: null,
-        questionClosesAt: null,
-        acceptingResponses: false,
-        settings: { timeMode: "flex", trustMode: "learning" },
         currentBlock: {
           id: "55555555-5555-4555-8555-555555555555",
           kind: "content",
@@ -313,10 +460,6 @@ describe("Presentation audience stage workspace", () => {
           mediaId: null,
           mediaAlt: null,
         },
-        participantCount: 2,
-        responseCount: 0,
-        revealedAnswer: null,
-        finishedAt: null,
       }),
       "stage-pass",
     ];

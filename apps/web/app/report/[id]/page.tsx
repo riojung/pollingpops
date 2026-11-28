@@ -797,6 +797,20 @@ function FollowupBuilder({
       ? { text: t("reportRound.assign.copyBlocked"), language: locale }
       : localizeFollowupMessage(locale, error);
   if (!unresolved.length) return null;
+  const managePracticeLabel = t("reportRound.assign.managePractice");
+  const practiceLink = followup ? (
+    <div className="button-row">
+      {busy ? (
+        <button className="button-quiet small-button" disabled type="button">
+          {managePracticeLabel}
+        </button>
+      ) : (
+        <Link className="button-quiet small-button" href={`/practice/${followup.id}`}>
+          {managePracticeLabel}
+        </Link>
+      )}
+    </div>
+  ) : null;
   return (
     <section className="panel" style={{ marginBottom: 26 }} aria-labelledby="followup-heading">
       <p className="eyebrow">{copy("Continue the recovery loop")}</p>
@@ -809,12 +823,15 @@ function FollowupBuilder({
         </p>
       ) : null}
       {!entitlement ? (
-        <p className="notice">
-          {secondary(
-            "Signed follow-up links and private feedback are available with Hosted Pro and in the Community edition.",
-          )}{" "}
-          <Link href="/pricing">{secondary("Compare editions")}</Link>.
-        </p>
+        <>
+          <p className="notice">
+            {secondary(
+              "Signed follow-up links and private feedback are available with Hosted Pro and in the Community edition.",
+            )}{" "}
+            <Link href="/pricing">{secondary("Compare editions")}</Link>.
+          </p>
+          {practiceLink}
+        </>
       ) : followup ? (
         <>
           <p>
@@ -880,6 +897,7 @@ function FollowupBuilder({
               )}
             </p>
           )}
+          {practiceLink}
 
           {canEdit && !ended ? (
             <form onSubmit={createPass} className="toolbar" style={{ marginTop: 20 }}>

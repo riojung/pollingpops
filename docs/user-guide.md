@@ -1916,6 +1916,8 @@ stay available. **Load More** expands the recovery and follow-up evidence and re
 The **Round** filter lists sources alphabetically from the workspace's report history, including
 archived Rounds with reports. Each choice uses the session title associated with the latest report.
 **Retry Round options** reloads those choices independently.
+When a report has a follow-up, **View Followup** opens that specific Practice item. In the report
+overview, **Manage practice** in the self-paced follow-up section opens the same item.
 
 In the **Practice** view, **Matching practice items**, its status counts, recorded attempts, and
 **Activity over time** cover every page matching the workspace and filters. The chart counts

@@ -97,11 +97,14 @@ async function expectMatchingPractice(
   ]);
 }
 
-async function mockHistory(page: Page) {
+async function mockHistory(page: Page, { olderRecovery = false } = {}) {
   const quizId = randomUUID();
   const otherQuizId = randomUUID();
   const versionId = randomUUID();
   const olderVersionId = randomUUID();
+  const followupId = randomUUID();
+  const recoveryIndex = olderRecovery ? 25 : 0;
+  const recoveryStatus = olderRecovery ? "closed" : "open";
   const createdAt = "2026-10-01T12:00:00.000Z";
   const recentReportDate = "2026-11-01T00:15:00.000Z";
   const expiresAt = "2099-10-01T12:00:00.000Z";
@@ -122,8 +125,8 @@ async function mockHistory(page: Page) {
     recovery: { recovered: 3, eligible: 4, percent: 75 },
     unresolvedConceptCount: 1,
     interventionCount: 2,
-    followupId: index === 0 ? randomUUID() : null,
-    followupStatus: index === 0 ? "open" : null,
+    followupId: index === recoveryIndex ? followupId : null,
+    followupStatus: index === recoveryIndex ? recoveryStatus : null,
     generatedAt: index === 0 ? recentReportDate : index < 26 ? createdAt : null,
     createdAt:
       index === 0
@@ -135,6 +138,7 @@ async function mockHistory(page: Page) {
             : "2026-08-31T12:00:00.000Z",
     expiresAt,
   }));
+  const sourceReport = reports[recoveryIndex]!;
   const olderPractice = [
     {
       createdAt: "2026-09-30T12:00:00.000Z",
@@ -174,10 +178,11 @@ async function mockHistory(page: Page) {
     (_, index) => {
       const older = olderPractice[index - 25];
       const pack = index === 24;
+      const recovery = index === recoveryIndex;
       const common = {
-        id: randomUUID(),
-        sourceQuizVersionId: pack ? null : older ? olderVersionId : versionId,
-        quizId: pack ? null : older ? otherQuizId : quizId,
+        id: recovery ? followupId : randomUUID(),
+        sourceQuizVersionId: pack ? null : older && !recovery ? olderVersionId : versionId,
+        quizId: pack ? null : older && !recovery ? otherQuizId : quizId,
         recoveryPackSource: pack
           ? {
               artifactType: "recovery_pack" as const,
@@ -192,12 +197,11 @@ async function mockHistory(page: Page) {
             }
           : null,
         trustMode: "learning" as const,
-        title:
-          index === 0
-            ? "Synthetic recovery practice"
-            : pack
-              ? "Synthetic Pack practice"
-              : `Synthetic assignment practice ${index}`,
+        title: recovery
+          ? "Synthetic recovery practice"
+          : pack
+            ? "Synthetic Pack practice"
+            : `Synthetic assignment practice ${index}`,
         status: older?.status ?? "open",
         checkpointCount: pack ? 1 : 2,
         attemptCount: older?.attemptCount ?? 12,
@@ -207,12 +211,12 @@ async function mockHistory(page: Page) {
         expiresAt,
         createdAt: older?.createdAt ?? (index === 0 ? recentReportDate : createdAt),
       };
-      return index === 0
+      return recovery
         ? {
             ...common,
             purpose: "recovery",
-            sourceSessionId: reports[0]!.sessionId,
-            sourceReportId: reports[0]!.id,
+            sourceSessionId: sourceReport.sessionId,
+            sourceReportId: sourceReport.id,
             conceptKeys: ["handover"],
           }
         : {
@@ -475,6 +479,8 @@ async function mockHistory(page: Page) {
     otherQuizId,
     reports,
     followups,
+    sourceReport,
+    recovery: followups[recoveryIndex]!,
     presentations,
     surveys,
     reads,
@@ -497,6 +503,53 @@ test.afterEach(async ({ page }) => {
 });
 
 for (const mobile of [false, true]) {
+  test(`${mobile ? "@mobile " : ""}Round Results opens an older follow-up directly`, async ({
+    page,
+  }) => {
+    const { recovery, sourceReport } = await mockHistory(page, { olderRecovery: true });
+    const practicePath = `/practice/${recovery.id}`;
+    await page.route(`${api}/v1/followups/${recovery.id}`, (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      return route.fulfill({
+        json: {
+          followup: { ...recovery, timeMode: "flex", closedAt: "2026-10-02T12:00:00.000Z" },
+          access: [],
+          context: {
+            quizId: sourceReport.quizId,
+            quizTitle: "Synthetic source Round",
+            version: 1,
+            publishedAt: sourceReport.createdAt,
+          },
+          attemptCount: recovery.attemptCount,
+          completedAttemptCount: recovery.completedAttemptCount,
+        },
+      });
+    });
+    await signInBeta(page, undefined, { returnTo: "/results?view=practice" });
+    const practice = page.getByRole("region", { name: "Practice assignments and follow-ups" });
+    await expect(practice.getByRole("article")).toHaveCount(25);
+    await expect(practice.getByRole("heading", { name: recovery.title, exact: true })).toHaveCount(
+      0,
+    );
+
+    const views = page.getByRole("navigation", { name: "Evidence views" });
+    await views.getByRole("link", { name: "Rounds", exact: true }).click();
+    await expect(page).toHaveURL(`${web}/results`);
+    const results = page.getByRole("region", { name: "Results", exact: true });
+    await expect(results.getByRole("article")).toHaveCount(25);
+    await page.getByRole("button", { name: "Load More", exact: true }).click();
+    const report = results.getByRole("article").filter({
+      has: page.getByRole("heading", { name: sourceReport.title, exact: true }),
+    });
+    await report.getByRole("link", { name: "View Followup", exact: true }).click();
+
+    await expect(page).toHaveURL(web + practicePath);
+    await expect(page.getByRole("heading", { name: recovery.title, level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "View source result", exact: true }),
+    ).toHaveAttribute("href", `/report/${sourceReport.id}`);
+  });
+
   test(`${mobile ? "@mobile " : ""}Results matches workspace history controls and preserves evidence workflows`, async ({
     page,
   }) => {
@@ -650,7 +703,7 @@ for (const mobile of [false, true]) {
     ).toHaveAttribute("href", `/report/${fixture.reports[0]!.id}`);
     await expect(ready.getByRole("link", { name: "View Followup", exact: true })).toHaveAttribute(
       "href",
-      "/results?view=practice",
+      `/practice/${fixture.recovery.id}`,
     );
     const resultStatus = page.getByRole("combobox", { name: "Result Status", exact: true });
     await expect(resultStatus.locator("option")).toHaveText([

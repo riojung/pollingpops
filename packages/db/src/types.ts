@@ -8,6 +8,7 @@ import type {
   ChatReaction,
   ConfidenceValue,
   FollowupHistoryAnalytics,
+  FollowupHistorySources,
   FollowupPurpose,
   FollowupTimeMode,
   FolderArtifactType,
@@ -1703,6 +1704,7 @@ export interface Repository {
     workspaceId: string,
     options: FollowupHistoryListOptions,
   ): Promise<HistoryPage<FollowupHistoryRecord>>;
+  listFollowupHistorySources(workspaceId: string): Promise<FollowupHistorySources["sources"]>;
   getFollowupHistoryAnalytics(
     workspaceId: string,
     filters: FollowupHistoryFilters,

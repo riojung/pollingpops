@@ -147,6 +147,7 @@ import ResultsPage from "./page";
 
 const reportTotalsPath = "/v1/reports/totals";
 const reportSourcesPath = "/v1/reports/sources";
+const practiceSourcesPath = "/v1/followups/sources";
 const practiceAnalyticsPath = "/v1/followups/analytics";
 const roundSourceId = "f12819a8-5395-4b89-a36a-e924a08791a3";
 const olderRoundSourceId = "fb50a942-41ae-4eaa-b367-1003d6952e70";
@@ -261,13 +262,6 @@ function surveyAnalytics(rooms = 2, surveys = 1, refreshAfterMs: number | null =
   return { rooms, surveys, activity: { month: periods, quarter: periods }, refreshAfterMs };
 }
 function response(path: string) {
-  if (path.startsWith("/v1/quizzes?"))
-    return {
-      quizzes: [
-        { id: roundSourceId, title: "Source Round" },
-        { id: "unused-library-round", title: "Unused Library Round" },
-      ],
-    };
   if (matchesRequest(path, reportSourcesPath))
     return {
       sources: [
@@ -281,9 +275,17 @@ function response(path: string) {
     return reportAnalytics(query.get("quizId") === olderRoundSourceId ? 1 : 2);
   }
   if (matchesRequest(path, practiceAnalyticsPath)) {
-    const search = new URLSearchParams(path.split("?")[1]).get("search");
-    return practiceAnalytics(search === "missing" ? 0 : 2);
+    const query = new URLSearchParams(path.split("?")[1]);
+    if (query.get("search") === "missing") return practiceAnalytics(0);
+    return practiceAnalytics(query.get("quizId") === olderRoundSourceId ? 1 : 2);
   }
+  if (matchesRequest(path, practiceSourcesPath))
+    return {
+      sources: [
+        { id: roundSourceId, title: "Source Round" },
+        { id: olderRoundSourceId, title: "Archived Round from older practice" },
+      ],
+    };
   if (path.startsWith("/v1/reports?")) {
     const query = new URLSearchParams(path.split("?")[1]);
     return query.has("cursor") || query.get("quizId") === olderRoundSourceId
@@ -293,10 +295,15 @@ function response(path: string) {
         }
       : { items: [report()], nextCursor: "report-next" };
   }
-  if (path.startsWith("/v1/followups?"))
-    return path.includes("cursor=")
-      ? { items: [practice("practice-later", "Later practice")], nextCursor: null }
+  if (path.startsWith("/v1/followups?")) {
+    const query = new URLSearchParams(path.split("?")[1]);
+    return query.has("cursor") || query.get("quizId") === olderRoundSourceId
+      ? {
+          items: [{ ...practice("practice-later", "Later practice"), quizId: olderRoundSourceId }],
+          nextCursor: null,
+        }
       : { items: [practice()], nextCursor: "practice-next" };
+  }
   if (matchesRequest(path, presentationAnalyticsPath)) {
     const search = new URLSearchParams(path.split("?")[1]).get("search");
     return search === "missing" ? presentationAnalytics(0, 0, 0) : presentationAnalytics(1, 1, 12);
@@ -503,14 +510,14 @@ describe("Results workspace", () => {
     harness.dispose();
   });
 
-  it("binds the Practice catalog to the displayed workspace during a switch in another tab", async () => {
+  it("binds Practice Round options to the displayed workspace during a switch in another tab", async () => {
     const activeWorkspace = "workspace-b";
     fixtures.apiFetch.mockImplementation(async (path: string) => {
-      if (!matchesRequest(path, "/v1/quizzes")) return response(path);
+      if (!matchesRequest(path, practiceSourcesPath)) return response(path);
       const expectedWorkspace = new URLSearchParams(path.split("?")[1]).get("expectedWorkspaceId");
       if (expectedWorkspace && expectedWorkspace !== activeWorkspace)
         throw new Error("The active workspace changed");
-      return { quizzes: [{ id: "workspace-b-round", title: "Workspace B catalog Round" }] };
+      return { sources: [{ id: roundSourceId, title: "Workspace B practice Round" }] };
     });
     const harness = resultsHarness();
     await harness.settle();
@@ -518,15 +525,104 @@ describe("Results workspace", () => {
     fixtures.query = "view=practice";
     const beforeReconciliation = await harness.settle();
     expect(beforeReconciliation).toContain("All Rounds");
-    expect(beforeReconciliation).not.toContain("Workspace B catalog Round");
+    expect(beforeReconciliation).toContain("Round filter options could not load.");
+    expect(beforeReconciliation).not.toContain("Workspace B practice Round");
 
     fixtures.workspaceId = activeWorkspace;
-    expect(await harness.settle()).toContain("Workspace B catalog Round");
+    const reconciled = await harness.settle();
+    expect(reconciled).toContain("Workspace B practice Round");
+    expect(reconciled).not.toContain("Round filter options could not load.");
     expect(
-      historyCalls("/v1/quizzes").map(([path]) =>
+      historyCalls(practiceSourcesPath).map(([path]) =>
         new URLSearchParams(path.split("?")[1]).get("expectedWorkspaceId"),
       ),
     ).toEqual(["workspace-a", "workspace-b"]);
+    harness.dispose();
+  });
+
+  it("filters Practice history and analytics by an older Round while All Rounds includes Pack practice", async () => {
+    fixtures.query = "view=practice";
+    const packPractice = {
+      ...practice(),
+      ...createdPackPractice().followup,
+      quizId: null,
+      title: "Source-less Pack practice",
+    };
+    fixtures.apiFetch.mockImplementation(async (path: string) => {
+      if (matchesRequest(path, "/v1/quizzes")) {
+        return { quizzes: [{ id: "unused-library-round", title: "Unused Library Round" }] };
+      }
+      if (matchesRequest(path, "/v1/followups")) {
+        const query = new URLSearchParams(path.split("?")[1]);
+        if (!query.has("quizId"))
+          return { items: [practice(), packPractice], nextCursor: "practice-next" };
+      }
+      return response(path);
+    });
+    const harness = resultsHarness();
+    const initial = await harness.settle();
+    expect(headings()).toEqual(["First practice", "Source-less Pack practice"]);
+    expect(initial).toContain("Archived Round from older practice");
+    expect(initial).not.toContain("Unused Library Round");
+    expect(field("Round")?.props.value).toBe("all");
+    const options = elements(field("Round")).filter((node) => node.type === "option");
+    expect(options.map(({ props }) => props.value)).toEqual([
+      "all",
+      olderRoundSourceId,
+      roundSourceId,
+    ]);
+
+    changeField("Round", olderRoundSourceId);
+    const filtered = await harness.settle();
+    expect(headings()).toEqual(["Later practice"]);
+    expect(filtered).toContain("<dt>Matching practice items</dt><dd>1</dd>");
+    changeField("Practice Status", "open");
+    changeField("From", "2026-10-01");
+    changeField("To", "2026-10-31");
+    changeSearch("Later");
+    elapseHistorySearchDelay(harness);
+    await harness.settle();
+    expect(field("Round")?.props.value).toBe(olderRoundSourceId);
+    for (const endpoint of ["/v1/followups", practiceAnalyticsPath]) {
+      const params = new URLSearchParams(historyCalls(endpoint).at(-1)![0].split("?")[1]);
+      expect(params.get("expectedWorkspaceId")).toBe("workspace-a");
+      expect(params.get("quizId")).toBe(olderRoundSourceId);
+      expect(params.get("status")).toBe("open");
+      expect(params.get("search")).toBe("Later");
+      expect(params.get("from")).toBe(new Date("2026-10-01T00:00:00").toISOString());
+      expect(params.get("to")).toBe(new Date("2026-10-31T23:59:59.999").toISOString());
+    }
+    expect(historyCalls(practiceSourcesPath).map(([url]) => url)).toEqual([
+      `${practiceSourcesPath}?expectedWorkspaceId=workspace-a`,
+    ]);
+    expect(historyCalls("/v1/quizzes")).toHaveLength(0);
+    harness.dispose();
+  });
+
+  it("reorders Practice Round options on locale changes without another source read", async () => {
+    fixtures.query = "view=practice";
+    fixtures.apiFetch.mockImplementation(async (path: string) =>
+      matchesRequest(path, practiceSourcesPath)
+        ? {
+            sources: [
+              { id: olderRoundSourceId, title: "漢字" },
+              { id: roundSourceId, title: "Source Round" },
+            ],
+          }
+        : response(path),
+    );
+    const harness = resultsHarness();
+    const optionIds = () =>
+      elements(field("Round"))
+        .filter((node) => node.type === "option")
+        .map(({ props }) => props.value);
+    await harness.settle();
+    expect(optionIds()).toEqual(["all", roundSourceId, olderRoundSourceId]);
+
+    fixtures.locale = "zh-CN";
+    await harness.settle();
+    expect(optionIds()).toEqual(["all", olderRoundSourceId, roundSourceId]);
+    expect(historyCalls(practiceSourcesPath)).toHaveLength(1);
     harness.dispose();
   });
 
@@ -614,73 +710,113 @@ describe("Results workspace", () => {
     harness.dispose();
   });
 
-  it.each(["network", "invalid payload"] as const)(
-    "retries Round source options independently after a failure from %s",
-    async (failure) => {
-      const pending = deferred<unknown>();
-      let sourceReads = 0;
-      fixtures.apiFetch.mockImplementation(async (path: string) => {
-        if (!matchesRequest(path, reportSourcesPath)) return response(path);
-        if (++sourceReads > 1) return pending.promise;
-        if (failure === "network") throw new Error("Source request failed");
-        return { sources: [{ id: "invalid", title: "Invalid source" }] };
-      });
-      const harness = resultsHarness();
-      const unavailable = await harness.settle();
-      expect(unavailable).toContain('role="alert">Round filter options could not load.');
-      expect(unavailable).toContain("First Round result");
-      expect(unavailable).toContain("<dt>Matching reports</dt><dd>2</dd>");
-      expect(unavailable).not.toContain("Invalid source");
-      const focus = attachFocus(resultsPanel());
-      clickButton("Retry Round options");
-      expect(focus).toHaveBeenCalledOnce();
-      const retrying = await harness.settle();
-      expect(retrying).not.toContain("Round filter options could not load.");
-      expect(retrying).toContain("First Round result");
-      expect(retrying).toContain("<dt>Matching reports</dt><dd>2</dd>");
-      pending.resolve(response(reportSourcesPath));
-      const recovered = await harness.settle();
-      expect(recovered).toContain("Archived Round from older reports");
-      expect(recovered).not.toContain("Retry Round options");
-      expect(historyCalls("/v1/reports")).toHaveLength(1);
-      expect(historyCalls(reportTotalsPath)).toHaveLength(1);
-      expect(historyCalls(reportSourcesPath).map(([url]) => url)).toEqual([
-        `${reportSourcesPath}?expectedWorkspaceId=workspace-a`,
-        `${reportSourcesPath}?expectedWorkspaceId=workspace-a`,
-      ]);
-      harness.dispose();
+  describe.each([
+    {
+      view: "results",
+      listPath: "/v1/reports",
+      analyticsPath: reportTotalsPath,
+      sourcesPath: reportSourcesPath,
+      firstTitle: "First Round result",
+      totalsLabel: "Matching reports",
+      archivedSource: "Archived Round from older reports",
+      nextView: "practice",
+      nextSource: "Archived Round from older practice",
     },
-  );
-
-  it.each(["view", "workspace"] as const)(
-    "aborts obsolete Round source options when the %s changes",
-    async (change) => {
-      const stale = deferred<unknown>();
-      let reads = 0;
-      fixtures.apiFetch.mockImplementation(async (path: string) =>
-        matchesRequest(path, reportSourcesPath) && ++reads === 1 ? stale.promise : response(path),
+    {
+      view: "practice",
+      listPath: "/v1/followups",
+      analyticsPath: practiceAnalyticsPath,
+      sourcesPath: practiceSourcesPath,
+      firstTitle: "First practice",
+      totalsLabel: "Matching practice items",
+      archivedSource: "Archived Round from older practice",
+      nextView: "results",
+      nextSource: "Archived Round from older reports",
+    },
+  ])(
+    "$view Round options",
+    ({
+      view,
+      listPath,
+      analyticsPath,
+      sourcesPath,
+      firstTitle,
+      totalsLabel,
+      archivedSource,
+      nextView,
+      nextSource,
+    }) => {
+      it.each(["network", "invalid payload"] as const)(
+        "retries independently after a failure from %s",
+        async (failure) => {
+          fixtures.query = `view=${view}`;
+          const pending = deferred<unknown>();
+          let sourceReads = 0;
+          fixtures.apiFetch.mockImplementation(async (path: string) => {
+            if (!matchesRequest(path, sourcesPath)) return response(path);
+            if (++sourceReads > 1) return pending.promise;
+            if (failure === "network") throw new Error("Source request failed");
+            return { sources: [{ id: "invalid", title: "Invalid source" }] };
+          });
+          const harness = resultsHarness();
+          const unavailable = await harness.settle();
+          expect(unavailable).toContain('role="alert">Round filter options could not load.');
+          expect(unavailable).toContain(firstTitle);
+          expect(unavailable).toContain(`<dt>${totalsLabel}</dt><dd>2</dd>`);
+          expect(unavailable).not.toContain("Invalid source");
+          const focus = attachFocus(resultsPanel());
+          clickButton("Retry Round options");
+          expect(focus).toHaveBeenCalledOnce();
+          const retrying = await harness.settle();
+          expect(retrying).not.toContain("Round filter options could not load.");
+          expect(retrying).toContain(firstTitle);
+          expect(retrying).toContain(`<dt>${totalsLabel}</dt><dd>2</dd>`);
+          pending.resolve(response(sourcesPath));
+          const recovered = await harness.settle();
+          expect(recovered).toContain(archivedSource);
+          expect(recovered).not.toContain("Retry Round options");
+          expect(historyCalls(listPath)).toHaveLength(1);
+          expect(historyCalls(analyticsPath)).toHaveLength(1);
+          expect(historyCalls(sourcesPath).map(([url]) => url)).toEqual([
+            `${sourcesPath}?expectedWorkspaceId=workspace-a`,
+            `${sourcesPath}?expectedWorkspaceId=workspace-a`,
+          ]);
+          harness.dispose();
+        },
       );
-      const harness = resultsHarness();
-      await harness.settle();
-      const obsolete = historyCalls(reportSourcesPath)[0]!;
-      if (change === "view") fixtures.query = "view=practice";
-      else fixtures.workspaceId = "workspace-b";
-      await harness.settle();
-      expect(obsolete[1].signal?.aborted).toBe(true);
-      stale.resolve({ sources: [{ id: olderRoundSourceId, title: "Obsolete Round source" }] });
-      const current = await harness.settle();
-      expect(current).not.toContain("Obsolete Round source");
-      expect(current).not.toContain("Round filter options could not load.");
-      if (change === "workspace") {
-        expect(historyCalls(reportSourcesPath).at(-1)![0]).toBe(
-          `${reportSourcesPath}?expectedWorkspaceId=workspace-b`,
-        );
-        expect(current).toContain("Archived Round from older reports");
-      } else {
-        expect(historyCalls(reportSourcesPath)).toHaveLength(1);
-        expect(current).toContain("Unused Library Round");
-      }
-      harness.dispose();
+
+      it.each(["view", "workspace"] as const)(
+        "aborts obsolete options when the %s changes",
+        async (change) => {
+          fixtures.query = `view=${view}`;
+          const stale = deferred<unknown>();
+          let reads = 0;
+          fixtures.apiFetch.mockImplementation(async (path: string) =>
+            matchesRequest(path, sourcesPath) && ++reads === 1 ? stale.promise : response(path),
+          );
+          const harness = resultsHarness();
+          await harness.settle();
+          const obsolete = historyCalls(sourcesPath)[0]!;
+          if (change === "view") fixtures.query = `view=${nextView}`;
+          else fixtures.workspaceId = "workspace-b";
+          await harness.settle();
+          expect(obsolete[1].signal?.aborted).toBe(true);
+          stale.resolve({ sources: [{ id: olderRoundSourceId, title: "Obsolete Round source" }] });
+          const current = await harness.settle();
+          expect(current).not.toContain("Obsolete Round source");
+          expect(current).not.toContain("Round filter options could not load.");
+          if (change === "workspace") {
+            expect(historyCalls(sourcesPath).at(-1)![0]).toBe(
+              `${sourcesPath}?expectedWorkspaceId=workspace-b`,
+            );
+            expect(current).toContain(archivedSource);
+          } else {
+            expect(historyCalls(sourcesPath)).toHaveLength(1);
+            expect(current).toContain(nextSource);
+          }
+          harness.dispose();
+        },
+      );
     },
   );
 
@@ -1419,15 +1555,13 @@ describe("Results workspace", () => {
       ])
         expect(paths.some((url) => matchesRequest(url, other))).toBe(other === path);
       expect(historyCalls(reportSourcesPath)).toHaveLength(view === "results" ? 1 : 0);
-      expect(historyCalls("/v1/quizzes")).toHaveLength(view === "practice" ? 1 : 0);
+      expect(historyCalls(practiceSourcesPath)).toHaveLength(view === "practice" ? 1 : 0);
+      expect(historyCalls("/v1/quizzes")).toHaveLength(0);
       if (view === "practice") {
-        const [catalog] = historyCalls("/v1/quizzes")[0]!;
-        expect(Object.fromEntries(new URLSearchParams(catalog.split("?")[1]))).toEqual({
-          archived: "true",
-          summary: "true",
-          expectedWorkspaceId: "workspace-a",
-        });
-        expect(markup).toContain("Unused Library Round");
+        expect(historyCalls(practiceSourcesPath)[0]![0]).toBe(
+          `${practiceSourcesPath}?expectedWorkspaceId=workspace-a`,
+        );
+        expect(markup).toContain("Archived Round from older practice");
       }
       expect(markup).toContain(`<h2 lang="">${title}</h2>`);
       expect(markup).toContain(`placeholder="${search}"`);

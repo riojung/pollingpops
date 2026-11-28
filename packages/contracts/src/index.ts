@@ -3630,6 +3630,11 @@ export const SurveyResultsSourcesSchema = z.strictObject({
 });
 export type SurveyResultsSources = z.infer<typeof SurveyResultsSourcesSchema>;
 
+export const FollowupHistorySourcesSchema = z.object({
+  sources: z.array(RoundFilterOptionSchema),
+});
+export type FollowupHistorySources = z.infer<typeof FollowupHistorySourcesSchema>;
+
 export const FollowupHistoryAnalyticsSchema = z.object({
   open: z.number().int().nonnegative(),
   scheduled: z.number().int().nonnegative(),

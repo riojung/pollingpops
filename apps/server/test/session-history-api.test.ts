@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
   FollowupHistoryAnalyticsSchema,
+  FollowupHistorySourcesSchema,
   ReportHistoryAnalyticsSchema,
   ReportHistorySourcesSchema,
   ReportHistoryTotalsSchema,
@@ -640,6 +641,122 @@ describe("Results history search APIs", () => {
     });
     expect((await request(analyticsPath, { search: "x".repeat(161) })).statusCode).toBe(400);
     expect((await request(analyticsPath, { status: "ready" })).statusCode).toBe(400);
+  });
+
+  it("returns private Practice Results Round sources, including older assignments without reports", async () => {
+    const f = await fixture();
+    const owner = f.owner.creator;
+    const outsider = f.outsider.creator;
+    const assignment = await f.seedRounds(owner, 0);
+    const recovery = await f.seedRounds(owner, 1);
+    const foreign = await f.seedRounds(outsider, 0);
+    await f.seedRounds(owner, 0);
+    const now = new Date();
+    const closesAt = new Date(now.getTime() + 86_400_000);
+    const practice = (actor: CreatorContext, versionId: string, createdAt: string) => ({
+      id: randomUUID(),
+      workspaceId: actor.workspaceId,
+      sourceQuizVersionId: versionId,
+      title: "Practice item title",
+      content: { ...f.content, title: "Practice checkpoint title" },
+      timeMode: "flex" as const,
+      genericTokenHash: randomUUID(),
+      opensAt: now,
+      closesAt,
+      expiresAt: closesAt,
+      closedAt: null,
+      createdBy: actor.userId,
+      createdAt: new Date(createdAt),
+    });
+    for (const [actor, source] of [
+      [owner, assignment],
+      [outsider, foreign],
+    ] as const) {
+      await expect(
+        f.repository.createPracticeAssignment(
+          source.quizId,
+          {
+            ...practice(actor, source.versionId, "2025-03-31T23:59:59.999Z"),
+            purpose: "assignment",
+            sourceSessionId: null,
+            sourceReportId: null,
+            conceptKeys: [],
+          },
+          [],
+        ),
+      ).resolves.toBe(true);
+    }
+    const recoverySessionId = recovery.rounds[0]!.id;
+    const recoveryReportId = await f.seedReport(owner.workspaceId, recoverySessionId, "ready");
+    await f.repository.createFollowup(
+      {
+        ...practice(owner, recovery.versionId, "2025-04-01T00:00:00.000Z"),
+        purpose: "recovery",
+        sourceSessionId: recoverySessionId,
+        sourceReportId: recoveryReportId,
+        conceptKeys: ["history-sources"],
+      },
+      [],
+    );
+    await f.repository.updateQuiz(owner.workspaceId, assignment.quizId, {
+      ...f.content,
+      title: "Current library title",
+    });
+
+    const path = "/v1/followups/sources";
+    const get = (expectedWorkspaceId?: string, headers = f.owner.headers) =>
+      f.app.inject({
+        url: path,
+        query: expectedWorkspaceId ? { expectedWorkspaceId } : {},
+        headers,
+      });
+    const sources = vi.spyOn(f.repository, "listFollowupHistorySources");
+    const history = vi.spyOn(f.repository, "listFollowupHistory");
+    const analytics = vi.spyOn(f.repository, "getFollowupHistoryAnalytics");
+    const quizzes = vi.spyOn(f.repository, "listQuizzes");
+    const unauthorized = await f.app.inject({ url: path });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(unauthorized.headers["cache-control"]).toBe("private, no-store");
+    const mismatch = await get(outsider.workspaceId);
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      error: { code: "CONFLICT", message: "The active workspace changed" },
+    });
+    expect(mismatch.headers["cache-control"]).toBe("private, no-store");
+    expect((await get("malformed")).statusCode).toBe(400);
+    expect(sources).not.toHaveBeenCalled();
+
+    const response = await get(owner.workspaceId);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("private, no-store");
+    expect(response.headers.pragma).toBe("no-cache");
+    expect(FollowupHistorySourcesSchema.safeParse(response.json()).success).toBe(true);
+    expect(response.json()).toEqual({
+      sources: [assignment.quizId, recovery.quizId]
+        .sort()
+        .map((id) => ({ id, title: f.content.title })),
+    });
+    expect(sources).toHaveBeenCalledExactlyOnceWith(owner.workspaceId);
+    expect(history).not.toHaveBeenCalled();
+    expect(analytics).not.toHaveBeenCalled();
+    expect(quizzes).not.toHaveBeenCalled();
+    expect((await get()).json()).toEqual(response.json());
+    expect((await get(outsider.workspaceId, f.outsider.headers)).json()).toEqual({
+      sources: [{ id: foreign.quizId, title: f.content.title }],
+    });
+
+    const page = await f.app.inject({ url: "/v1/followups?limit=1", headers: f.owner.headers });
+    expect(page.json()).toMatchObject({
+      items: [{ quizId: recovery.quizId, purpose: "recovery" }],
+      nextCursor: expect.any(String),
+    });
+    const roundSources = await f.app.inject({
+      url: "/v1/reports/sources",
+      headers: f.owner.headers,
+    });
+    expect(roundSources.json()).toEqual({
+      sources: [{ id: recovery.quizId, title: "Frozen needle 50%_" }],
+    });
   });
 
   it("returns private report totals and optional activity and participant joins across all pages", async () => {

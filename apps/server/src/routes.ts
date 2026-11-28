@@ -45,6 +45,7 @@ import {
   FollowupAnswerSubmitSchema,
   FollowupAdvanceSchema,
   FollowupHistoryAnalyticsSchema,
+  FollowupHistorySourcesSchema,
   FollowupHistoryStatusSchema,
   FollowupPurposeSchema,
   FederatedIdentitySchema,
@@ -3492,6 +3493,16 @@ export async function registerRoutes(
         followupHistoryFilters(query),
       ),
     );
+  });
+
+  app.get("/v1/followups/sources", async (request, reply) => {
+    reply.header("cache-control", "private, no-store").header("pragma", "no-cache");
+    const creator = await auth.requireCreator(request, reply);
+    if (!creator) return;
+    requireExpectedWorkspace(request.query, creator.workspaceId);
+    return FollowupHistorySourcesSchema.parse({
+      sources: await repository.listFollowupHistorySources(creator.workspaceId),
+    });
   });
 
   app.get("/v1/followups/:id", async (request, reply) => {

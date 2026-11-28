@@ -504,6 +504,13 @@ describe("Recovery Pack delayed-probe practice", () => {
         recoveryPackSource: expect.objectContaining({ packId: pack.id }),
       }),
     );
+    const sources = await paused.inject({
+      method: "GET",
+      url: `/v1/followups/sources?expectedWorkspaceId=${workspaceId}`,
+      headers: { cookie },
+    });
+    expect(sources.statusCode).toBe(200);
+    expect(sources.json()).toEqual({ sources: [] });
     const analytics = await paused.inject({
       method: "GET",
       url: `/v1/followups/analytics?purpose=assignment&expectedWorkspaceId=${workspaceId}`,

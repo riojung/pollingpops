@@ -1922,6 +1922,10 @@ In the **Practice** view, **Matching practice items**, its status counts, record
 practice items by UTC month or quarter of creation and shows the six most recent matching periods.
 **Retry practice analytics** retries the dashboard separately from the list. **Load More** adds
 rows. The practice shortcuts show up to three recent items from the list.
+The **Round** filter lists sources alphabetically across your practice history, including archived
+Rounds with assignments or recovery follow-ups. Each choice uses the published Round title tied
+to its latest practice item. **All Rounds** also includes Recovery Pack practice without a source
+Round. **Retry Round options** reloads the choices independently.
 
 In the **Presentations** view, **Matching sessions**, status counts, participant joins, and the
 activity chart include every page matching the workspace and filters. A join is a participant

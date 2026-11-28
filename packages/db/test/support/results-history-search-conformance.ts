@@ -3,8 +3,9 @@ import { expect } from "vitest";
 import { createGameState } from "@openround/game-engine";
 import { LegacyReportSchema, type QuizDraft } from "@openround/contracts";
 import type { CreatorContext, Repository } from "../../src/index.js";
+import { packPracticeFixture } from "./recovery-pack-practice-conformance.js";
 
-/** Search and analytics use retained history across pages. */
+/** Search, sources, and analytics use retained history across pages. */
 export async function expectResultsHistorySearchConformance(
   repository: Repository,
   owner: CreatorContext,
@@ -49,6 +50,7 @@ export async function expectResultsHistorySearchConformance(
     actor: CreatorContext,
     count: number,
     firstStatus: "pending" | "failed" = "pending",
+    expiredRecovery = false,
   ) {
     const quiz = await repository.createQuiz({
       id: randomUUID(),
@@ -124,6 +126,7 @@ export async function expectResultsHistorySearchConformance(
       });
       reports.push(reportId);
       const practiceDate = dates[index];
+      const expired = index === 0 && expiredRecovery;
       const base = {
         id: randomUUID(),
         workspaceId: actor.workspaceId,
@@ -133,9 +136,11 @@ export async function expectResultsHistorySearchConformance(
         conceptKeys: index === 0 ? ["history-search"] : [],
         timeMode: "flex" as const,
         genericTokenHash: randomUUID(),
-        opensAt: new Date(now.getTime() + (index === 0 ? 60_000 : index === 1 ? 0 : -60_000)),
-        closesAt: index === 2 || index === 3 ? now : expiresAt,
-        expiresAt: index === 3 ? now : expiresAt,
+        opensAt: new Date(
+          now.getTime() + (index === 0 && !expired ? 60_000 : index === 1 ? 0 : -60_000),
+        ),
+        closesAt: expired || index === 2 || index === 3 ? now : expiresAt,
+        expiresAt: expired || index === 3 ? now : expiresAt,
         closedAt: index === 3 || index === 4 ? now : null,
         createdBy: actor.userId,
         createdAt: practiceDate ? new Date(practiceDate) : latest,
@@ -156,7 +161,7 @@ export async function expectResultsHistorySearchConformance(
       }
       followups.push(base.id);
     }
-    return { quizId: quiz.id, reports, followups };
+    return { quizId: quiz.id, versionId: version.id, reports, followups };
   }
 
   const owned = await seed(owner, 28);
@@ -479,7 +484,7 @@ export async function expectResultsHistorySearchConformance(
   }
 
   const pending = await seed(owner, 1);
-  const failed = await seed(owner, 1, "failed");
+  const failed = await seed(owner, 1, "failed", true);
   await seed(owner, 0);
   await setReportDates(
     owner.workspaceId,
@@ -509,4 +514,85 @@ export async function expectResultsHistorySearchConformance(
   ]);
   expect(await repository.listReportHistorySources(randomUUID())).toEqual([]);
   await repository.saveReport(owner.workspaceId, latestReport);
+
+  const { workspaceId } = owner;
+  const pack = await packPracticeFixture(repository, workspaceId, owner.userId);
+  await repository.createRecoveryPackPracticeAssignment(
+    pack.pack.id,
+    pack.input,
+    pack.access,
+    pack.context,
+  );
+
+  const practicePage = await followups();
+  expect(practicePage.items.some(({ id }) => id === pack.input.id)).toBe(true);
+  expect(practicePage.items.some(({ quizId }) => quizId === pending.quizId)).toBe(false);
+  expect(practicePage.items.some(({ quizId }) => quizId === failed.quizId)).toBe(false);
+  const practiceSources = () => repository.listFollowupHistorySources(workspaceId);
+  const expectedSources = (title: string) =>
+    [
+      { id: owned.quizId, title },
+      { id: pending.quizId, title: content.title },
+      { id: failed.quizId, title: content.title },
+    ].sort((left, right) => left.id.localeCompare(right.id));
+  expect(await practiceSources()).toEqual(expectedSources(content.title));
+  expect(await repository.listFollowupHistorySources(outsider.workspaceId)).toEqual([
+    { id: foreign.quizId, title: content.title },
+  ]);
+  expect(await repository.listFollowupHistorySources(randomUUID())).toEqual([]);
+  expect((await followups({ quizId: failed.quizId })).items).toMatchObject([
+    { id: failed.followups[0], status: "expired", purpose: "recovery" },
+  ]);
+  expect(await practiceAnalytics({ quizId: failed.quizId })).toMatchObject({ expired: 1 });
+
+  const idPrefix = randomUUID().slice(0, 24);
+  const tiedAt = new Date(latest.getTime() + 1);
+  async function assign(versionId: string, idSuffix: string, createdAt: Date) {
+    await expect(
+      repository.createPracticeAssignment(
+        owned.quizId,
+        {
+          id: `${idPrefix}${idSuffix}`,
+          workspaceId,
+          purpose: "assignment",
+          sourceQuizVersionId: versionId,
+          sourceSessionId: null,
+          sourceReportId: null,
+          title: "Practice name",
+          content: { ...content, title: "Practice content title" },
+          conceptKeys: [],
+          timeMode: "flex",
+          genericTokenHash: randomUUID(),
+          opensAt: now,
+          closesAt: expiresAt,
+          expiresAt,
+          closedAt: null,
+          createdBy: owner.userId,
+          createdAt,
+        },
+        [],
+      ),
+    ).resolves.toBe(true);
+  }
+  const publish = (version: number, title: string) =>
+    repository.publishQuiz({
+      id: randomUUID(),
+      workspaceId,
+      quizId: owned.quizId,
+      version,
+      content: { ...content, title },
+      contentHash: randomUUID(),
+      publishedAt: now,
+    });
+
+  await assign(owned.versionId, "000000000003", tiedAt);
+  const publishedTitle = "Renamed published Round";
+  const renamed = await publish(2, publishedTitle);
+  await assign(renamed.id, "000000000002", tiedAt);
+  expect(await practiceSources()).toEqual(expectedSources(content.title));
+
+  await assign(renamed.id, "000000000001", new Date(tiedAt.getTime() + 1));
+  await publish(3, "Unused published version");
+  await repository.updateQuiz(workspaceId, owned.quizId, { ...content, title: "Current draft" });
+  expect(await practiceSources()).toEqual(expectedSources(publishedTitle));
 }

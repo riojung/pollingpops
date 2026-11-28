@@ -21,6 +21,7 @@ const reportTotalsPath = "/v1/reports/totals";
 const reportSourcesPath = "/v1/reports/sources";
 const practicePath = "/v1/followups";
 const practiceAnalyticsPath = "/v1/followups/analytics";
+const practiceSourcesPath = "/v1/followups/sources";
 const presentationResultsPath = "/v1/presentation-sessions/results";
 const presentationAnalyticsPath = `${presentationResultsPath}/analytics`;
 const presentationSourcesPath = `${presentationResultsPath}/sources`;
@@ -43,6 +44,8 @@ const historyAnalytics = {
     kind: "report",
     activityBasis: "Grouped by report creation date in UTC.",
     path: reportTotalsPath,
+    sourcesPath: reportSourcesPath,
+    sourceName: "Round",
     collectionLabel: "Results",
     countLabel: "Matching reports",
     shortcutLabel: "Reports to open",
@@ -57,6 +60,8 @@ const historyAnalytics = {
     kind: "practice",
     activityBasis: "Grouped by practice creation date in UTC.",
     path: practiceAnalyticsPath,
+    sourcesPath: practiceSourcesPath,
+    sourceName: "Round",
     collectionLabel: "Practice assignments and follow-ups",
     countLabel: "Matching practice items",
     shortcutLabel: "Practice to review",
@@ -71,6 +76,8 @@ const historyAnalytics = {
     kind: "session",
     activityBasis: "Grouped by session creation date in UTC.",
     path: presentationAnalyticsPath,
+    sourcesPath: presentationSourcesPath,
+    sourceName: "Presentation",
     collectionLabel: "Presentation Results",
     countLabel: "Matching sessions",
     shortcutLabel: "Reports to open",
@@ -85,6 +92,8 @@ const historyAnalytics = {
     kind: "Survey run",
     activityBasis: "Grouped by scheduled collection deadline in UTC.",
     path: surveyAnalyticsPath,
+    sourcesPath: surveySourcesPath,
+    sourceName: "Survey",
     collectionLabel: "Survey results",
     countLabel: "Matching Survey runs",
     shortcutLabel: "Reports to open",
@@ -253,13 +262,7 @@ async function installHistory(page: Page) {
   const gates = new Map<string, { promise: Promise<void>; release: () => void; held: boolean }>();
   for (const path of [
     ...Object.keys(histories),
-    reportTotalsPath,
-    reportSourcesPath,
-    practiceAnalyticsPath,
-    presentationAnalyticsPath,
-    presentationSourcesPath,
-    surveyAnalyticsPath,
-    surveySourcesPath,
+    ...Object.values(historyAnalytics).flatMap(({ path, sourcesPath }) => [path, sourcesPath]),
   ]) {
     let release!: () => void;
     const promise = new Promise<void>((done) => {
@@ -277,10 +280,6 @@ async function installHistory(page: Page) {
         mutations.push(`${request.method()} ${url.pathname}`);
       return route.continue();
     }
-    if (url.pathname === "/v1/quizzes")
-      return route.fulfill({
-        json: { quizzes: [{ id: quizId, title: "Synthetic source Round" }] },
-      });
     const history = histories[url.pathname];
     const isReportTotals = url.pathname === reportTotalsPath;
     const isPracticeAnalytics = url.pathname === practiceAnalyticsPath;
@@ -307,7 +306,7 @@ async function installHistory(page: Page) {
     const search = url.searchParams.get("search")?.toLocaleLowerCase() ?? "";
     const matchesSearch = (row: { title: string }) =>
       row.title.toLocaleLowerCase().includes(search);
-    if (url.pathname === reportSourcesPath) {
+    if (url.pathname === reportSourcesPath || url.pathname === practiceSourcesPath) {
       return route.fulfill({
         json: { sources: [{ id: quizId, title: "Synthetic source Round" }] },
       });
@@ -425,14 +424,8 @@ for (const [view, listPath] of [
     try {
       fixture.allow(listPath);
       fixture.allow(analytics.path);
-      if (view === "presentations") {
-        fixture.allow(presentationSourcesPath);
-        fixture.release(presentationSourcesPath);
-      }
-      if (view === "surveys") {
-        fixture.allow(surveySourcesPath);
-        fixture.release(surveySourcesPath);
-      }
+      fixture.allow(analytics.sourcesPath);
+      fixture.release(analytics.sourcesPath);
       await page.goto(
         `/results?${new URLSearchParams({
           ...(view === "results" ? {} : { view }),
@@ -440,6 +433,11 @@ for (const [view, listPath] of [
         })}`,
       );
       const panel = page.locator("#results-panel");
+      await expect(
+        panel
+          .getByRole("combobox", { name: analytics.sourceName, exact: true })
+          .getByRole("option"),
+      ).toHaveCount(2);
       const collection = panel.getByRole("region", {
         name: analytics.collectionLabel,
         exact: true,
@@ -638,6 +636,10 @@ for (const phone of [false, true]) {
         );
         const panel = page.locator("#results-panel");
         const analytics = historyAnalytics[view.key];
+        const { sourceName, sourcesPath } = analytics;
+        await expect(
+          panel.getByText(`${sourceName} filter options could not load.`, { exact: true }),
+        ).toBeVisible();
         const overview = panel.getByRole("region", { name: "Results analytics", exact: true });
         const analyticsStatus = overview.getByRole("status");
         const busyRegion = panel.getByRole("region", {
@@ -749,41 +751,31 @@ for (const phone of [false, true]) {
           historyActivity(overview).getByRole("combobox", { name: "Group by", exact: true }),
         ).toBeFocused();
 
-        if (view.key !== "practice") {
-          const { sourceName, sourcesPath } = {
-            results: { sourceName: "Round", sourcesPath: reportSourcesPath },
-            presentations: { sourceName: "Presentation", sourcesPath: presentationSourcesPath },
-            surveys: { sourceName: "Survey", sourcesPath: surveySourcesPath },
-          }[view.key];
-          const sourcesRetry = panel.getByRole("button", {
-            name: `Retry ${sourceName} options`,
-            exact: true,
-          });
-          const source = panel.getByRole("combobox", { name: sourceName, exact: true });
-          await expect(
-            panel.getByText(`${sourceName} filter options could not load.`, { exact: true }),
-          ).toBeVisible();
-          await expect(source.getByRole("option")).toHaveCount(1);
-          const readsBeforeRetry = fixture.reads.length;
-          await tabTo(page, sourcesRetry, true);
-          await expectVisibleKeyboardFocus(sourcesRetry);
-          fixture.allow(sourcesPath);
-          fixture.release(sourcesPath);
-          await page.keyboard.press("Enter");
-          await expect(panel).toBeFocused();
-          await expect(sourcesRetry).toHaveCount(0);
-          await expect(source.getByRole("option")).toHaveText([
-            `All ${sourceName}s`,
-            `Synthetic source ${sourceName}`,
-          ]);
-          await expect(busyRegion).toHaveAttribute("aria-busy", "false");
-          expect(fixture.reads.slice(readsBeforeRetry)).toEqual([
-            {
-              path: sourcesPath,
-              query: `?expectedWorkspaceId=${expectedWorkspaceId}`,
-            },
-          ]);
-        }
+        const sourcesRetry = panel.getByRole("button", {
+          name: `Retry ${sourceName} options`,
+          exact: true,
+        });
+        const source = panel.getByRole("combobox", { name: sourceName, exact: true });
+        await expect(source.getByRole("option")).toHaveCount(1);
+        const readsBeforeSourcesRetry = fixture.reads.length;
+        await tabTo(page, sourcesRetry, true);
+        await expectVisibleKeyboardFocus(sourcesRetry);
+        fixture.allow(sourcesPath);
+        fixture.release(sourcesPath);
+        await page.keyboard.press("Enter");
+        await expect(panel).toBeFocused();
+        await expect(sourcesRetry).toHaveCount(0);
+        await expect(source.getByRole("option")).toHaveText([
+          `All ${sourceName}s`,
+          `Synthetic source ${sourceName}`,
+        ]);
+        await expect(busyRegion).toHaveAttribute("aria-busy", "false");
+        expect(fixture.reads.slice(readsBeforeSourcesRetry)).toEqual([
+          {
+            path: sourcesPath,
+            query: `?expectedWorkspaceId=${expectedWorkspaceId}`,
+          },
+        ]);
 
         const search = page.getByRole("searchbox", { name: view.search, exact: true });
         await search.fill("no-matching-synthetic-evidence");

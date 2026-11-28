@@ -83,4 +83,33 @@ describe("ResponseDistributionView", () => {
     expect(markup).toContain("2 incorrect");
     expect(markup).toContain("60% correct");
   });
+
+  it("keeps exact values and zero-response options readable during the presenter reveal", () => {
+    const markup = renderToStaticMarkup(
+      withEnglishLocale(
+        <ResponseDistributionView
+          animate
+          variant="presenter"
+          distribution={{
+            kind: "choice",
+            respondents: 7,
+            totalSelections: 7,
+            percentBasis: "responses",
+            buckets: [
+              { value: "a", label: "Discussion", count: 5, percent: 71.43 },
+              { value: "b", label: "Practice", count: 2, percent: 28.57 },
+              { value: "c", label: "Examples", count: 0, percent: 0 },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(markup).toContain('data-testid="round-presenter-distribution"');
+    expect(markup).toContain('data-revealing="true"');
+    expect(markup).toContain('<span lang="">Discussion</span>');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('style="width:71.43%"');
+    expect(markup).toContain("5 · 71.43%");
+    expect(markup).toContain("0 · 0%");
+  });
 });

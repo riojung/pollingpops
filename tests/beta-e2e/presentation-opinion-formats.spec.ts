@@ -358,6 +358,26 @@ for (const suffix of ["", " @mobile"]) {
       expect(passResponse.status()).toBe(201);
       const pass = (await passResponse.json()) as PresentationStagePassResponse;
       const stage = await stageContext.newPage();
+      await stage.emulateMedia({ reducedMotion: "no-preference" });
+      await stage.addInitScript(() => {
+        const animate = Element.prototype.animate;
+        const counts: Record<string, number> = {};
+        Element.prototype.animate = function (keyframes, options) {
+          const animation = animate.call(this, keyframes, options);
+          queueMicrotask(() => {
+            if (!animation.id.startsWith("presentation-")) return;
+            counts[animation.id] = (counts[animation.id] ?? 0) + 1;
+            document.documentElement.dataset.stageAnimationCounts = JSON.stringify(counts);
+          });
+          return animation;
+        };
+      });
+      const stageAnimations = async (id: string) => {
+        const counts = await stage.locator("html").getAttribute("data-stage-animation-counts");
+        return Number(JSON.parse(counts ?? "{}")[id] ?? 0);
+      };
+      let animatedReveals = 0;
+      let animatedSlides = 0;
       await stage.goto(
         `/presentation-session/${sessionId}/stage#pass=${encodeURIComponent(pass.stageToken)}`,
       );
@@ -370,6 +390,9 @@ for (const suffix of ["", " @mobile"]) {
         if (authored.kind !== "question" || !("choices" in authored.question))
           throw new Error("Expected an opinion fixture");
         const question = authored.question;
+        if (blockIndex === 1) {
+          await expect.poll(() => stageAnimations("presentation-slide-enter")).toBeGreaterThan(0);
+        }
         for (const audience of [first, second, stage]) {
           await expect(
             audience.getByRole("heading", { name: question.prompt, exact: true }),
@@ -471,6 +494,34 @@ for (const suffix of ["", " @mobile"]) {
             blockIndex === 0 ? pollLabels[0]! : rankLabels[0]!,
             values,
           );
+        const chart = stage.getByRole("region", { name: "Opinion results", exact: true });
+        await expect(chart.locator("[data-opinion-result-bar]")).toHaveCount(
+          question.choices.length,
+        );
+        await expect(first.locator("[data-opinion-result-bar]")).toHaveCount(0);
+        const chartBar = chart
+          .getByRole("row")
+          .filter({
+            has: stage.getByRole("rowheader", {
+              name: blockIndex === 0 ? pollLabels[0]! : rankLabels[0]!,
+              exact: true,
+            }),
+          })
+          .locator("[data-opinion-result-bar]");
+        expect(
+          await chartBar.evaluate((bar: HTMLElement) => Number.parseFloat(bar.style.width)),
+        ).toBeCloseTo(blockIndex === 0 ? 100 : (11 / 12) * 100);
+        if (blockIndex < 2) {
+          await expect
+            .poll(() => stageAnimations("presentation-opinion-reveal"))
+            .toBeGreaterThan(animatedReveals);
+          animatedReveals = await stageAnimations("presentation-opinion-reveal");
+          animatedSlides = await stageAnimations("presentation-slide-enter");
+        } else {
+          await expect(stage.locator('[data-stage-motion="reduced"]')).toBeAttached();
+          expect(await stageAnimations("presentation-opinion-reveal")).toBe(animatedReveals);
+          expect(await stageAnimations("presentation-slide-enter")).toBe(animatedSlides);
+        }
         if (blockIndex > 0) {
           const canvas = stage.getByRole("region", { name: "Audience slide", exact: true });
           const rankingTable = canvas.getByRole("table", {
@@ -520,6 +571,10 @@ for (const suffix of ["", " @mobile"]) {
               path: info.outputPath(`opinion-ranking-${role}-${narrow ? "mobile" : "desktop"}.png`),
               fullPage: true,
             });
+        }
+        if (blockIndex === 1) {
+          await stage.emulateMedia({ reducedMotion: "reduce" });
+          await expect(stage.locator('[data-stage-motion="reduced"]')).toBeAttached();
         }
         if (blockIndex < 2)
           await page.getByRole("button", { name: "Next block", exact: true }).click();

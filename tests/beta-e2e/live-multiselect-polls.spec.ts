@@ -39,6 +39,8 @@ for (const suffix of ["desktop", "@mobile"]) {
           data: {
             title: "Live priorities",
             description: "",
+            category: "icebreaker",
+            experiencePreset: { id: "spark", version: 1 },
             questions: [
               {
                 id: randomUUID(),
@@ -75,9 +77,12 @@ for (const suffix of ["desktop", "@mobile"]) {
       page.getByRole("combobox", { name: "Maximum selections", exact: true }),
     ).toHaveValue("2");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
-    await expect(page.getByRole("checkbox", { name: "Examples", exact: true })).toBeDisabled();
     await expect(
       page.getByText("Select up to 2 options. 0 selected.", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("checkbox", { name: "Examples", exact: true }).check();
+    await expect(
+      page.getByText("Select up to 2 options. 1 selected.", { exact: true }),
     ).toBeVisible();
     await page.goto(`/quiz/${quizId}`);
     const publication = page.waitForResponse(
@@ -88,6 +93,8 @@ for (const suffix of ["desktop", "@mobile"]) {
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     expect((await publication).ok()).toBeTruthy();
     await page.goto(`/host/setup/${quizId}`);
+    await page.getByText("Review settings", { exact: true }).click();
+    await page.getByRole("checkbox", { name: "Enable optional presenter sound cues" }).check();
     const sessionResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
@@ -109,10 +116,48 @@ for (const suffix of ["desktop", "@mobile"]) {
       await guest.goto(`/join?code=${session.code}`);
       await joinBetaRound(guest);
       await expect(guest).toHaveURL(/\/play\//);
+      await page.context().addInitScript(() => {
+        // Some browsers initialize both the popup's initial and navigated documents.
+        const installed = Symbol.for("polling-pops:round-audio-fixture");
+        if (Reflect.get(OscillatorNode.prototype.start, installed)) return;
+        const NativeAudioContext = window.AudioContext;
+        window.AudioContext = class extends NativeAudioContext {
+          constructor(options?: AudioContextOptions) {
+            super(options);
+            const recordState = () => {
+              document.documentElement.dataset.roundAudioState = this.state;
+            };
+            this.addEventListener("statechange", recordState);
+            recordState();
+          }
+        };
+        const start = OscillatorNode.prototype.start;
+        OscillatorNode.prototype.start = function (when) {
+          const root = document.documentElement;
+          root.dataset.roundCueNotes = String(Number(root.dataset.roundCueNotes ?? 0) + 1);
+          return start.call(this, when);
+        };
+        Reflect.set(OscillatorNode.prototype.start, installed, true);
+      });
       const popup = page.waitForEvent("popup");
       await page.getByRole("button", { name: "Presenter view", exact: true }).click();
       const presenter = await popup;
+      const presenterRoot = presenter.locator("html");
+      await presenter.emulateMedia({ reducedMotion: "no-preference" });
+      await expect(presenterRoot).toHaveAttribute("data-openround-muted", "true");
+      await expect(presenterRoot).not.toHaveAttribute("data-round-cue-notes");
+      await presenter.getByText("Display & sound", { exact: true }).click();
+      await presenter.getByRole("checkbox", { name: "Mute sound cues" }).uncheck();
+      await expect(presenterRoot).toHaveAttribute("data-openround-muted", "false");
+      await presenter.reload();
+      const enableSound = presenter.getByRole("button", { name: "Enable sound cues", exact: true });
+      await expect(enableSound).toBeVisible();
+      await expect(presenterRoot).not.toHaveAttribute("data-round-cue-notes");
+      await enableSound.click();
+      await expect(presenterRoot).toHaveAttribute("data-round-audio-state", "running");
+      await expect(enableSound).toHaveCount(0);
       await page.getByRole("button", { name: "Start round", exact: true }).click();
+      await expect(presenterRoot).toHaveAttribute("data-round-cue-notes", "2");
       const first = guest.getByRole("checkbox", { name: "Examples", exact: true });
       const second = guest.getByRole("checkbox", { name: "Practice", exact: true });
       const third = guest.getByRole("checkbox", { name: "Discussion", exact: true });
@@ -165,17 +210,39 @@ for (const suffix of ["desktop", "@mobile"]) {
         );
         expect(answer.ok()).toBeTruthy();
       }
-      await page.getByRole("button", { name: "Lock answers", exact: true }).click();
+      await expect(presenterRoot).toHaveAttribute("data-round-cue-notes", "2");
+      const chart = presenter.getByTestId("round-presenter-distribution");
+      await expect(chart).toHaveCount(0);
+      await page.getByText("Display & sound", { exact: true }).click();
+      const reduceMotion = page.getByRole("checkbox", { name: "Reduce motion", exact: true });
+      await reduceMotion.check();
+      await expect(presenterRoot).toHaveAttribute("data-openround-motion", "reduced");
+      if (suffix === "@mobile") {
+        await reduceMotion.uncheck();
+        await expect(presenterRoot).toHaveAttribute("data-openround-motion", "theme");
+      }
+      await page.getByText("Display & sound", { exact: true }).click();
+      await Promise.all([
+        expect(chart.locator(".distribution-track > span").first()).toHaveCSS(
+          "animation-name",
+          suffix === "@mobile" ? /response-fill/ : "none",
+        ),
+        page.getByRole("button", { name: "Lock answers", exact: true }).click(),
+      ]);
+      if (suffix !== "@mobile") await expect(chart).not.toHaveAttribute("data-revealing", "true");
       await expect(
         page.getByRole("region", { name: "Post-lock response distribution", exact: true }),
       ).toContainText("5 respondents");
       await expect(
         presenter.getByRole("region", { name: "Post-lock response distribution", exact: true }),
       ).toContainText("percent of respondents");
+      await expect(presenterRoot).toHaveAttribute("data-round-cue-notes", "3");
       await page.getByRole("button", { name: "Reveal answer", exact: true }).click();
+      await expect(presenterRoot).toHaveAttribute("data-round-cue-notes", "5");
       await expect(guest.getByText("Correct", { exact: true })).toHaveCount(0);
       await expect(guest.getByText("Incorrect", { exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "Finish round", exact: true }).click();
+      await expect(presenterRoot).toHaveAttribute("data-round-cue-notes", "8");
       await expect(
         guest.getByText("Thanks for taking part. Your accepted responses were recorded.", {
           exact: true,

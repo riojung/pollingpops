@@ -281,6 +281,7 @@ const messages = {
   "live.joinAccess.sectionAria": "QR 코드 또는 직접 링크로이 라운드에 가입",
   "live.joinAccess.svgDownloaded": "QR 코드를 SVG로 다운로드했습니다.",
   "live.joinAccess.updateQr": "QR 업데이트",
+  "live.preferences.enableSound": "효과음 켜기",
   "live.preferences.highContrast": "높은 대비",
   "live.preferences.muteSound": "소리 신호 음소거",
   "live.preferences.reduceMotion": "동작 줄이기",

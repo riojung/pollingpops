@@ -279,6 +279,7 @@ const liveDeliveryEnglishMessages = {
   "live.joinAccess.sectionAria": "Join this round by QR code or direct link",
   "live.joinAccess.svgDownloaded": "QR code downloaded as SVG.",
   "live.joinAccess.updateQr": "Update QR",
+  "live.preferences.enableSound": "Enable sound cues",
   "live.preferences.highContrast": "High contrast",
   "live.preferences.muteSound": "Mute sound cues",
   "live.preferences.reduceMotion": "Reduce motion",

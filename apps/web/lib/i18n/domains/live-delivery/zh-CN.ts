@@ -267,6 +267,7 @@ const messages = {
   "live.joinAccess.sectionAria": "通过 QR 代码或直接链接加入此回合",
   "live.joinAccess.svgDownloaded": "QR代码作为SVG下载.",
   "live.joinAccess.updateQr": "更新 QR",
+  "live.preferences.enableSound": "启用提示音",
   "live.preferences.highContrast": "高对比度",
   "live.preferences.muteSound": "静音提示",
   "live.preferences.reduceMotion": "减少运动",

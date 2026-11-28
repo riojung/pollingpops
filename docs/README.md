@@ -25,6 +25,7 @@ the new logo assets, palette, Candy Pop preset, and the technical names kept for
 | Review the October competitor and customer-needs synthesis           | [October 27 competitor research](competitor-research-2026-10-27.md)                          |
 | Benchmark broad presentation creation, especially Genially and Prezi | [November presentation benchmark](presentation-benchmark-2026-11.md)                         |
 | Plan a low-priced presentation creator with Codex                    | [Presentation implementation plan](presentation-implementation-plan-2026-11.md)              |
+| Compare and plan live charts, motion, and sound                      | [Live experience roadmap](live-experience-roadmap.md)                                        |
 | Evaluate prioritized customer and differentiation increments         | [October 27 detailed backlog](competitor-backlog-2026-10-27.md)                              |
 | Review the existing gated roadmap and selection rules                | [2026 market research and development plan](market-research-and-development-plan-2026-09.md) |
 | Review the 2026 Kahoot-alternatives UX benchmark and plan            | [Kahoot-alternatives UX gap plan](kahoot-alternatives-2026-ux-gap-plan.md)                   |

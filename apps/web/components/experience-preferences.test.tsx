@@ -17,6 +17,13 @@ vi.mock("react", async (original) => {
   const react = await original<typeof ReactModule>();
   return {
     ...react,
+    useRef: <T,>(initial: T) => {
+      const hooks = fixture.hooks;
+      if (!hooks) return react.useRef(initial);
+      const index = hooks.cursor++;
+      if (!(index in hooks.slots)) hooks.slots[index] = { current: initial };
+      return hooks.slots[index];
+    },
     useState: <T,>(initial: T) => {
       const hooks = fixture.hooks;
       if (!hooks) return react.useState(initial);
@@ -71,9 +78,23 @@ function browser(saved: string | null) {
   };
   const getItem = vi.fn((key: string) => values.get(key) ?? null);
   const setItem = vi.fn((key: string, value: string) => values.set(key, value));
-  vi.stubGlobal("localStorage", { getItem, setItem });
+  const storage = { getItem, setItem };
+  const window = Object.assign(new EventTarget(), { localStorage: storage });
+  vi.stubGlobal("localStorage", storage);
+  vi.stubGlobal("window", window);
   vi.stubGlobal("document", { documentElement: { dataset } });
-  return { values, dataset, getItem, setItem };
+  return {
+    values,
+    dataset,
+    getItem,
+    setItem,
+    setInOtherTab(preferences: unknown) {
+      values.set(storageKey, JSON.stringify(preferences));
+      window.dispatchEvent(
+        Object.assign(new Event("storage"), { key: storageKey, storageArea: storage }),
+      );
+    },
+  };
 }
 
 function inputs(node: ReactNode): ReactElement<InputHTMLAttributes<HTMLInputElement>>[] {
@@ -116,6 +137,26 @@ function preferences() {
 }
 
 describe("experience preference persistence", () => {
+  it("updates from another tab without writing the change back", () => {
+    const environment = browser(null);
+    const view = preferences();
+    view.render();
+    view.commit();
+    view.render();
+    view.commit();
+
+    environment.setInOtherTab({ highContrast: false, reducedMotion: true, muted: false });
+    expect(inputs(view.render()).map((input) => input.props.checked)).toEqual([false, true, false]);
+    view.commit();
+    expect(environment.dataset.openroundMotion).toBe("reduced");
+
+    environment.setInOtherTab({ highContrast: true, reducedMotion: false, muted: true });
+    expect(inputs(view.render()).map((input) => input.props.checked)).toEqual([true, false, true]);
+    view.commit();
+    expect(environment.dataset.openroundMotion).toBe("theme");
+    expect(environment.setItem).not.toHaveBeenCalled();
+  });
+
   it("retains saved accessibility choices when Strict Mode replays the initial mount effects", () => {
     const saved = { highContrast: true, reducedMotion: true, muted: false };
     const environment = browser(JSON.stringify(saved));

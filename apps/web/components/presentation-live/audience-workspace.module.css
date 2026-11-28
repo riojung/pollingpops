@@ -225,6 +225,7 @@
   border-radius: 16px;
   padding: clamp(18px, 2.5vw, 32px);
   background: var(--ui-surface);
+  color: var(--ui-text);
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -245,6 +246,11 @@
 .canvasContent > p {
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.responseText,
+.responseChoices > li {
+  color: var(--ui-text);
 }
 
 .canvas[data-kind="content"] {
@@ -613,6 +619,10 @@
     padding: 0 10px 10px;
   }
 
+  .theaterLayout:has(> .theaterCanvas[data-results="true"]) {
+    height: 100dvh;
+  }
+
   .theaterHeader {
     flex-wrap: wrap;
     gap: 8px 12px;
@@ -644,6 +654,12 @@
 
   .theaterCanvas[data-kind="content"] {
     min-height: 0;
+  }
+
+  .theaterCanvas[data-results="true"] {
+    min-height: 200px;
+    overflow: auto;
+    container-type: size;
   }
 
   .theaterFrame,
